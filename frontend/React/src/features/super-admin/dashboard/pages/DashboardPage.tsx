@@ -1,9 +1,14 @@
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+
+import { clinicService } from '../../clinics/services/clinic.service'
+import type { ClinicStats } from '../../clinics/services/clinic.service'
 import { DashboardLayout } from '../components/DashboardLayout'
 
-const STATS = [
+const STAT_CARDS = [
   {
     label: 'Total Clinics',
-    value: '0',
+    key: 'total' as const,
     subtitle: 'Active clinics on the platform',
     icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
     accent: 'from-amber-500 to-amber-700',
@@ -12,37 +17,35 @@ const STATS = [
     iconColor: 'text-amber-700',
   },
   {
-    label: 'Clinic Admins',
-    value: '0',
-    subtitle: 'Registered clinic administrators',
-    icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
-    accent: 'from-blue-500 to-blue-700',
-    bg: 'bg-blue-50',
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-700',
+    label: 'Active',
+    key: 'active' as const,
+    subtitle: 'Clinics currently active',
+    icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+    accent: 'from-emerald-500 to-emerald-700',
+    bg: 'bg-emerald-50',
+    iconBg: 'bg-emerald-100',
+    iconColor: 'text-emerald-700',
   },
   {
-    label: 'Pending Approvals',
-    value: '0',
-    subtitle: 'Clinics awaiting onboarding',
-    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-    accent: 'from-violet-500 to-violet-700',
-    bg: 'bg-violet-50',
-    iconBg: 'bg-violet-100',
-    iconColor: 'text-violet-700',
+    label: 'Suspended',
+    key: 'suspended' as const,
+    subtitle: 'Clinics currently suspended',
+    icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z',
+    accent: 'from-red-500 to-red-700',
+    bg: 'bg-red-50',
+    iconBg: 'bg-red-100',
+    iconColor: 'text-red-700',
   },
-]
-
-const QUICK_ACTIONS = [
-  { label: 'Register New Clinic', description: 'Onboard a new veterinary clinic', color: 'bg-amber-900 hover:bg-amber-950', href: '/super-admin/clinics/new' },
-  { label: 'View All Clinics', description: 'Browse and manage existing clinics', color: 'bg-white border border-stone-300 text-stone-700 hover:bg-stone-50', href: '#' },
-]
-
-const RECENT_ACTIVITY = [
-  { action: 'No recent activity', time: '', type: 'empty' as const },
 ]
 
 export function DashboardPage() {
+  const navigate = useNavigate()
+  const [stats, setStats] = useState<ClinicStats | null>(null)
+
+  useEffect(() => {
+    clinicService.getStats().then(setStats).catch(() => {})
+  }, [])
+
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-6xl">
@@ -58,7 +61,7 @@ export function DashboardPage() {
         </div>
 
         <div className="mb-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {STATS.map((stat) => (
+          {STAT_CARDS.map((stat) => (
             <div
               key={stat.label}
               className="group relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-shadow hover:shadow-md"
@@ -69,7 +72,7 @@ export function DashboardPage() {
                     {stat.label}
                   </p>
                   <p className="text-4xl font-extrabold tracking-tight text-stone-900">
-                    {stat.value}
+                    {stats?.[stat.key] ?? 0}
                   </p>
                 </div>
                 <div className={`grid size-11 shrink-0 place-items-center rounded-xl ${stat.iconBg}`}>
@@ -89,40 +92,70 @@ export function DashboardPage() {
             <h2 className="text-base font-bold text-stone-900">Quick Actions</h2>
             <p className="mt-1 text-sm text-stone-500">Common tasks to get started.</p>
             <div className="mt-5 space-y-3">
-              {QUICK_ACTIONS.map((action) => (
-                <a
-                  key={action.label}
-                  className={`flex items-center justify-between rounded-xl px-5 py-4 text-sm font-semibold shadow-sm transition ${action.color}`}
-                  href={action.href}
-                >
-                  <div>
-                    <p className={action.color.includes('bg-amber') ? 'text-white' : 'text-stone-900'}>{action.label}</p>
-                    <p className={`mt-0.5 text-xs font-normal ${action.color.includes('bg-amber') ? 'text-amber-200' : 'text-stone-500'}`}>
-                      {action.description}
-                    </p>
-                  </div>
-                  <svg className={`size-5 shrink-0 ${action.color.includes('bg-amber') ? 'text-amber-200' : 'text-stone-400'}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </a>
-              ))}
+              <button
+                className="flex w-full items-center justify-between rounded-xl bg-amber-900 px-5 py-4 text-left text-sm font-semibold text-white shadow-sm transition hover:bg-amber-950"
+                type="button"
+                onClick={() => navigate('/super-admin/clinics/new')}
+              >
+                <div>
+                  <p className="text-white">Register New Clinic</p>
+                  <p className="mt-0.5 text-xs font-normal text-amber-200">Onboard a new veterinary clinic</p>
+                </div>
+                <svg className="size-5 shrink-0 text-amber-200" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                className="flex w-full items-center justify-between rounded-xl border border-stone-300 bg-white px-5 py-4 text-left text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50"
+                type="button"
+                onClick={() => navigate('/super-admin/clinics')}
+              >
+                <div>
+                  <p className="text-stone-900">View All Clinics</p>
+                  <p className="mt-0.5 text-xs font-normal text-stone-500">Browse and manage existing clinics</p>
+                </div>
+                <svg className="size-5 shrink-0 text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
             </div>
           </div>
 
           <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
             <h2 className="text-base font-bold text-stone-900">Recent Activity</h2>
-            <p className="mt-1 text-sm text-stone-500">Latest platform events.</p>
+            <p className="mt-1 text-sm text-stone-500">Latest clinics registered.</p>
             <div className="mt-5">
-              {RECENT_ACTIVITY.map((item, i) => (
-                <div key={i} className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-5">
+              {stats && stats.recent.length > 0 ? (
+                <div className="space-y-2">
+                  {stats.recent.map((clinic) => (
+                    <button
+                      key={clinic.id}
+                      className="flex w-full items-center gap-3 rounded-xl bg-stone-50 px-4 py-3 text-left transition hover:bg-amber-50"
+                      type="button"
+                      onClick={() => navigate(`/super-admin/clinics/${clinic.id}`)}
+                    >
+                      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-100">
+                        <svg className="size-4 text-amber-700" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-stone-900">{clinic.name}</p>
+                        <p className="text-xs text-stone-400">{new Date(clinic.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 rounded-xl bg-stone-50 px-4 py-5">
                   <div className="grid size-9 shrink-0 place-items-center rounded-full bg-stone-200">
                     <svg className="size-4 text-stone-400" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
-                  <p className="text-sm font-medium text-stone-500">{item.action}</p>
+                  <p className="text-sm font-medium text-stone-500">No recent activity</p>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from users.models import User
+from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
 class AuthService:
@@ -40,3 +40,31 @@ class AuthService:
                 'must_change_password': user.usr_must_change_password,
             },
         }
+
+    @staticmethod
+    def create_clinic_admin(
+        email: str,
+        password: str,
+        first_name: str,
+        last_name: str,
+        clinic,
+    ) -> User:
+        user = User(
+            usr_email=email,
+            usr_role=UserRole.CLINIC_ADMIN,
+            usr_first_name=first_name,
+            usr_last_name=last_name,
+            usr_must_change_password=True,
+        )
+        user.set_password(password)
+        user.save()
+
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=clinic,
+            stf_first_name=first_name,
+            stf_last_name=last_name,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+
+        return user

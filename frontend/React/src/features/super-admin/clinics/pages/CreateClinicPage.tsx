@@ -26,6 +26,12 @@ export function CreateClinicPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    if (!form.email.trim()) {
+      setError('Email address is required — the clinic admin account credentials will be sent there.')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -86,6 +92,7 @@ export function CreateClinicPage() {
                   name="email"
                   onChange={handleChange}
                   placeholder="clinic@example.com"
+                  required
                   type="email"
                   value={form.email}
                 />

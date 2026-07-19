@@ -1,32 +1,69 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { SessionWatcher } from './components/SessionWatcher'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
-import { CreateClinicPage } from './features/super-admin/clinics'
-import { DashboardPage } from './features/super-admin/dashboard'
-import { LoginPage } from './features/auth/login'
+
+const LoginPage = lazy(() => import('./features/auth/login').then(m => ({ default: m.LoginPage })))
+const DashboardPage = lazy(() => import('./features/super-admin/dashboard').then(m => ({ default: m.DashboardPage })))
+const ClinicListPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.ClinicListPage })))
+const CreateClinicPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.CreateClinicPage })))
+const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.ClinicDetailPage })))
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-stone-50">
+      <div className="flex flex-col items-center gap-3">
+        <div className="size-8 animate-spin rounded-full border-4 border-amber-600 border-t-transparent" />
+        <p className="text-sm text-stone-500">Loading…</p>
+      </div>
+    </div>
+  )
+}
 
 function App() {
   return (
-    <Routes>
-      <Route element={<Navigate replace to="/login" />} path="/" />
-      <Route element={<LoginPage />} path="/login" />
-      <Route
-        element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-            <DashboardPage />
-          </ProtectedRoute>
-        }
-        path="/super-admin/dashboard"
-      />
-      <Route
-        element={
-          <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-            <CreateClinicPage />
-          </ProtectedRoute>
-        }
-        path="/super-admin/clinics/new"
-      />
-    </Routes>
+    <>
+      <SessionWatcher />
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
+          <Route element={<Navigate replace to="/login" />} path="/" />
+          <Route element={<LoginPage />} path="/login" />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/dashboard"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <ClinicListPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/clinics"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <CreateClinicPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/clinics/new"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <ClinicDetailPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/clinics/:id"
+          />
+        </Routes>
+      </Suspense>
+    </>
   )
 }
 

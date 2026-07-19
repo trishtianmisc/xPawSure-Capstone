@@ -26,11 +26,11 @@ class Clinic(models.Model):
     )
     cln_status = models.CharField(
         max_length=20, choices=ClinicStatus.choices,
-        default=ClinicStatus.ACTIVE, db_column='CLN_STATUS',
+        default=ClinicStatus.ACTIVE, db_index=True, db_column='CLN_STATUS',
     )
     cln_created_at = models.DateTimeField(auto_now_add=True, db_column='CLN_CREATED_AT')
     cln_updated_at = models.DateTimeField(auto_now=True, db_column='CLN_UPDATED_AT')
-    cln_deleted_at = models.DateTimeField(null=True, blank=True, db_column='CLN_DELETED_AT')
+    cln_deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, db_column='CLN_DELETED_AT')
 
     class Meta:
         managed = True

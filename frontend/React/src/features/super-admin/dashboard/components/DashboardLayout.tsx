@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../../../auth/context/AuthContext'
 
@@ -25,7 +26,20 @@ const NAV_SECTIONS = [
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useAuth()
+  const { pathname } = useLocation()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+
+  function isActive(path: string): boolean {
+    if (path === '/super-admin/dashboard') return pathname === path
+    return pathname.startsWith(path)
+  }
+
+  const breadcrumb = pathname
+    .replace('/super-admin/', '')
+    .split('/')
+    .filter(Boolean)
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join(' / ') || 'Dashboard'
 
   return (
     <div className="flex min-h-screen bg-stone-50">
@@ -53,19 +67,20 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </p>
               <div className="space-y-0.5">
                 {section.items.map((item) => {
-                  const isActive = item.path === '/super-admin/dashboard'
+                  const active = isActive(item.path)
                   return (
-                    <a
+                    <Link
                       key={item.path}
                       className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold transition ${
-                        isActive
+                        active
                           ? 'bg-amber-50 text-amber-900'
                           : 'text-stone-500 hover:bg-stone-100 hover:text-stone-800'
                       }`}
-                      href={item.path}
+                      to={item.path}
+                      onClick={() => setIsMobileNavOpen(false)}
                     >
                       <svg
-                        className={`size-5 shrink-0 ${isActive ? 'text-amber-700' : 'text-stone-400'}`}
+                        className={`size-5 shrink-0 ${active ? 'text-amber-700' : 'text-stone-400'}`}
                         fill="none"
                         stroke="currentColor"
                         strokeWidth={1.75}
@@ -74,7 +89,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                       </svg>
                       {item.label}
-                    </a>
+                    </Link>
                   )
                 })}
               </div>
@@ -120,7 +135,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="hidden items-center gap-2 text-sm text-stone-500 sm:flex">
             <span className="font-medium text-stone-900">Super Admin</span>
             <span className="text-stone-300">/</span>
-            <span>Dashboard</span>
+            <span>{breadcrumb}</span>
           </div>
 
           <div className="flex items-center gap-3 ml-auto">

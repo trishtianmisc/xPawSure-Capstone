@@ -3,11 +3,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from users.serializers import LoginSerializer
+from users.throttles import LoginRateThrottle
 
 
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [LoginRateThrottle]
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
