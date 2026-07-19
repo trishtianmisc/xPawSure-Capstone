@@ -1,0 +1,666 @@
+Project XPawSure {
+  database_type: "PostgreSQL"
+  Note: '''
+  XPawSure Veterinary Management System
+  Final Database Design v1.0
+  '''
+}
+
+Enum UserRole {
+  SUPER_ADMIN
+  CLINIC_ADMIN
+  VETERINARIAN
+  RECEPTIONIST
+  OWNER
+}
+
+Enum ClinicStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+Table USER {
+  USR_ID uuid [pk]
+
+  USR_EMAIL varchar(255) [not null, unique]
+
+  USR_PASSWORD_HASH varchar(255) [not null]
+
+  USR_ROLE UserRole [not null]
+
+  USR_FIRST_NAME varchar(100) [not null]
+
+  USR_LAST_NAME varchar(100) [not null]
+
+  USR_PHONE varchar(20)
+
+  USR_IS_ACTIVE boolean
+
+  USR_EMAIL_VERIFIED boolean
+
+  USR_MUST_CHANGE_PASSWORD boolean
+
+  USR_LAST_LOGIN timestamp
+
+  USR_CREATED_AT timestamp
+
+  USR_UPDATED_AT timestamp
+
+  USR_DELETED_AT timestamp
+}
+
+Table CLINIC {
+
+  CLN_ID uuid [pk]
+
+  CLN_NAME varchar(255) [not null, unique]
+
+  CLN_EMAIL varchar(255) [unique]
+
+  CLN_PHONE varchar(20)
+
+  CLN_ADDRESS text
+
+  CLN_LOGO_URL text
+
+  CLN_LICENSE_NO varchar(100)
+
+  CLN_STATUS ClinicStatus
+
+  CLN_CREATED_AT timestamp
+
+  CLN_UPDATED_AT timestamp
+
+  CLN_DELETED_AT timestamp
+
+}
+
+Table CLINIC_SETTINGS {
+
+  CLS_ID uuid [pk]
+
+  CLN_ID uuid [not null]
+
+  CLS_OPENING_TIME time
+
+  CLS_CLOSING_TIME time
+
+  CLS_APPOINTMENT_DURATION integer
+
+  CLS_MAX_APPOINTMENTS_PER_DAY integer
+
+  CLS_ALLOW_OWNER_BOOKING boolean
+
+  CLS_CREATED_AT timestamp
+
+  CLS_UPDATED_AT timestamp
+
+}
+
+Table STAFF_PROFILE {
+
+  STF_ID uuid [pk]
+
+  USR_ID uuid [not null]
+
+  CLN_ID uuid [not null]
+
+  STF_LICENSE_NUMBER varchar(100)
+
+  STF_CREATED_AT timestamp
+
+  STF_UPDATED_AT timestamp
+
+}
+
+Table OWNER_PROFILE {
+
+  OWN_ID uuid [pk]
+
+  USR_ID uuid [not null]
+
+  OWN_ADDRESS text
+
+  OWN_PROFILE_IMAGE text
+
+  OWN_CREATED_AT timestamp
+
+  OWN_UPDATED_AT timestamp
+
+}
+
+Ref: STAFF_PROFILE.USR_ID > USER.USR_ID
+
+Ref: OWNER_PROFILE.USR_ID > USER.USR_ID
+
+Ref: STAFF_PROFILE.CLN_ID > CLINIC.CLN_ID
+
+Ref: CLINIC_SETTINGS.CLN_ID > CLINIC.CLN_ID
+
+Enum PetSex {
+  MALE
+  FEMALE
+}
+
+Enum PetStatus {
+  ACTIVE
+  DECEASED
+  MISSING
+  ADOPTED
+  ARCHIVED
+}
+
+Enum PetImageType {
+  PROFILE
+  MEDICAL
+  AI_SCREENING
+  FOLLOW_UP
+  OTHER
+}
+
+Table BREED {
+
+  BRD_ID uuid [pk]
+
+  BRD_NAME varchar(100) [not null, unique]
+
+  BRD_DESCRIPTION text
+
+  BRD_CREATED_AT timestamp
+
+  BRD_UPDATED_AT timestamp
+
+}
+
+Table PET {
+
+  PET_ID uuid [pk]
+
+  OWN_ID uuid [not null]
+
+  BRD_ID uuid [not null]
+
+  PET_NAME varchar(100) [not null]
+
+  PET_SEX PetSex [not null]
+
+  PET_STATUS PetStatus [not null]
+
+  PET_BIRTH_DATE date
+
+  PET_WEIGHT decimal(5,2)
+
+  PET_COLOR varchar(100)
+
+  PET_MICROCHIP_NO varchar(100) [unique]
+
+  PET_CREATED_AT timestamp
+
+  PET_UPDATED_AT timestamp
+
+  PET_DELETED_AT timestamp
+
+}
+
+Table PET_IMAGE {
+
+  PTI_ID uuid [pk]
+
+  PET_ID uuid [not null]
+
+  PTI_IMAGE_URL text [not null]
+
+  PTI_IMAGE_TYPE PetImageType [not null]
+
+  PTI_IS_PRIMARY boolean
+
+  PTI_CREATED_AT timestamp
+
+}
+
+Ref: PET.OWN_ID > OWNER_PROFILE.OWN_ID
+
+Ref: PET.BRD_ID > BREED.BRD_ID
+
+Ref: PET_IMAGE.PET_ID > PET.PET_ID
+
+Enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+Enum AppointmentType {
+  CONSULTATION
+  FOLLOW_UP
+  VACCINATION
+  AI_REVIEW
+  EMERGENCY
+}
+
+Table APPOINTMENT {
+
+  APT_ID uuid [pk]
+
+  PET_ID uuid [not null]
+
+  CLN_ID uuid [not null]
+
+  STF_ID uuid
+
+  APT_TYPE AppointmentType [not null]
+
+  APT_STATUS AppointmentStatus [not null]
+
+  APT_SCHEDULED_AT timestamp [not null]
+
+  APT_REASON text
+
+  APT_CREATED_BY uuid [not null]
+
+  APT_CONFIRMED_AT timestamp
+
+  APT_COMPLETED_AT timestamp
+
+  APT_CANCELLED_AT timestamp
+
+  APT_CREATED_AT timestamp
+
+  APT_UPDATED_AT timestamp
+
+  APT_DELETED_AT timestamp
+
+}
+
+Enum DiagnosisStatus {
+
+  PRELIMINARY
+
+  CONFIRMED
+
+  CHRONIC
+
+  RESOLVED
+
+}
+
+Table CONSULTATION {
+
+  CON_ID uuid [pk]
+
+  APT_ID uuid [not null, unique]
+
+  STF_ID uuid [not null]
+
+  CON_CHIEF_COMPLAINT text
+
+  CON_SUBJECTIVE text
+
+  CON_OBJECTIVE text
+
+  CON_ASSESSMENT text
+
+  CON_PLAN text
+
+  CON_DIAGNOSIS text [not null]
+
+  CON_DIAGNOSIS_STATUS DiagnosisStatus
+
+  CON_TREATMENT text
+
+  CON_NOTES text
+
+  CON_CREATED_AT timestamp
+
+  CON_UPDATED_AT timestamp
+
+}
+
+Enum AttachmentType {
+
+  IMAGE
+
+  PDF
+
+  XRAY
+
+  LAB_RESULT
+
+  DOCUMENT
+
+  OTHER
+
+}
+
+Table CONSULTATION_ATTACHMENT {
+
+  CAT_ID uuid [pk]
+
+  CON_ID uuid [not null]
+
+  CAT_FILE_URL text [not null]
+
+  CAT_FILE_NAME varchar(255)
+
+  CAT_FILE_TYPE AttachmentType
+
+  CAT_FILE_SIZE integer
+
+  CAT_UPLOADED_AT timestamp
+
+}
+
+Ref: APPOINTMENT.PET_ID > PET.PET_ID
+
+Ref: APPOINTMENT.CLN_ID > CLINIC.CLN_ID
+
+Ref: APPOINTMENT.STF_ID > STAFF_PROFILE.STF_ID
+
+Ref: APPOINTMENT.APT_CREATED_BY > USER.USR_ID
+
+Ref: CONSULTATION.APT_ID > APPOINTMENT.APT_ID
+
+Ref: CONSULTATION.STF_ID > STAFF_PROFILE.STF_ID
+
+Ref: CONSULTATION_ATTACHMENT.CON_ID > CONSULTATION.CON_ID
+
+Enum MedicineType {
+  ANTIBIOTIC
+  ANTIFUNGAL
+  ANTI_PARASITIC
+  ANTI_INFLAMMATORY
+  VITAMIN
+  SHAMPOO
+  TOPICAL
+  OTHER
+}
+
+Enum AdministrationRoute {
+  ORAL
+  TOPICAL
+  INJECTION
+  SUBCUTANEOUS
+  INTRAMUSCULAR
+  INTRAVENOUS
+  EAR
+  EYE
+  OTHER
+}
+
+Table PRESCRIPTION {
+
+  PRS_ID uuid [pk]
+
+  CON_ID uuid [not null]
+
+  STF_ID uuid [not null]
+
+  PRS_INSTRUCTIONS text
+
+  PRS_CREATED_AT timestamp
+
+  PRS_UPDATED_AT timestamp
+
+}
+
+Table PRESCRIPTION_ITEM {
+
+  PRI_ID uuid [pk]
+
+  PRS_ID uuid [not null]
+
+  PRI_MEDICINE_NAME varchar(255) [not null]
+
+  PRI_MEDICINE_TYPE MedicineType
+
+  PRI_DOSAGE varchar(100) [not null]
+
+  PRI_FREQUENCY varchar(100) [not null]
+
+  PRI_DURATION varchar(100) [not null]
+
+  PRI_ROUTE AdministrationRoute
+
+  PRI_QUANTITY integer
+
+  PRI_NOTES text
+
+  PRI_CREATED_AT timestamp
+
+}
+
+Table VACCINE {
+
+  VCC_ID uuid [pk]
+
+  VCC_NAME varchar(255) [not null, unique]
+
+  VCC_MANUFACTURER varchar(255)
+
+  VCC_DESCRIPTION text
+
+  VCC_CREATED_AT timestamp
+
+  VCC_UPDATED_AT timestamp
+
+}
+
+Table VACCINATION_RECORD {
+
+  VAC_ID uuid [pk]
+
+  CON_ID uuid [not null]
+
+  PET_ID uuid [not null]
+
+  STF_ID uuid [not null]
+
+  VCC_ID uuid [not null]
+
+  VAC_BATCH_NO varchar(100)
+
+  VAC_DOSE varchar(100)
+
+  VAC_ROUTE AdministrationRoute
+
+  VAC_DATE_GIVEN date [not null]
+
+  VAC_NEXT_DUE date
+
+  VAC_NOTES text
+
+  VAC_CREATED_AT timestamp
+
+  VAC_UPDATED_AT timestamp
+
+}
+
+Ref: PRESCRIPTION.CON_ID > CONSULTATION.CON_ID
+
+Ref: PRESCRIPTION.STF_ID > STAFF_PROFILE.STF_ID
+
+Ref: PRESCRIPTION_ITEM.PRS_ID > PRESCRIPTION.PRS_ID
+
+Ref: VACCINATION_RECORD.CON_ID > CONSULTATION.CON_ID
+
+Ref: VACCINATION_RECORD.PET_ID > PET.PET_ID
+
+Ref: VACCINATION_RECORD.STF_ID > STAFF_PROFILE.STF_ID
+
+Ref: VACCINATION_RECORD.VCC_ID > VACCINE.VCC_ID
+
+Enum DiseaseSeverity {
+  LOW
+  MODERATE
+  HIGH
+  UNKNOWN
+}
+
+Enum AIScreeningStatus {
+  PENDING_REVIEW
+  REVIEWED
+  CONFIRMED
+  DISMISSED
+}
+
+Enum AIImageType {
+  ORIGINAL
+  CROPPED
+  PREPROCESSED
+  ANNOTATED
+}
+
+Enum NotificationType {
+  APPOINTMENT_CREATED
+  APPOINTMENT_CONFIRMED
+  APPOINTMENT_CANCELLED
+  APPOINTMENT_REMINDER
+  CONSULTATION_AVAILABLE
+  PRESCRIPTION_AVAILABLE
+  VACCINATION_REMINDER
+  AI_SCREENING_COMPLETED
+  AI_SCREENING_REVIEWED
+  SYSTEM
+}
+
+Enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  REGISTER
+  PASSWORD_CHANGE
+  PASSWORD_RESET
+  AI_SCREENING
+  BOOK_APPOINTMENT
+  EXPORT_REPORT
+}
+
+Table DISEASE {
+
+  DIS_ID uuid [pk]
+
+  DIS_NAME varchar(150) [not null, unique]
+
+  DIS_DESCRIPTION text
+
+  DIS_SEVERITY DiseaseSeverity
+
+  DIS_CREATED_AT timestamp
+
+}
+
+Table AI_SCREENING {
+
+  AIS_ID uuid [pk]
+
+  PET_ID uuid [not null]
+
+  USR_ID uuid [not null]
+
+  CON_ID uuid
+
+  AIS_PRIMARY_DISEASE_ID uuid [not null]
+
+  AIS_PRIMARY_CONFIDENCE decimal(5,2)
+
+  AIS_TOP_PREDICTIONS jsonb
+
+  AIS_MODEL_VERSION varchar(50)
+
+  AIS_INFERENCE_TIME_MS integer
+
+  AIS_DEVICE varchar(150)
+
+  AIS_STATUS AIScreeningStatus
+
+  AIS_CREATED_AT timestamp
+
+}
+
+Table AI_SCREENING_IMAGE {
+
+  ASI_ID uuid [pk]
+
+  AIS_ID uuid [not null]
+
+  ASI_IMAGE_URL text [not null]
+
+  ASI_IMAGE_TYPE AIImageType
+
+  ASI_CREATED_AT timestamp
+
+}
+
+Table NOTIFICATION {
+
+  NTF_ID uuid [pk]
+
+  USR_ID uuid [not null]
+
+  NTF_TITLE varchar(255)
+
+  NTF_MESSAGE text
+
+  NTF_TYPE NotificationType
+
+  NTF_IS_READ boolean
+
+  NTF_REFERENCE_TABLE varchar(100)
+
+  NTF_REFERENCE_ID uuid
+
+  NTF_CREATED_AT timestamp
+
+  NTF_READ_AT timestamp
+
+}
+
+Table AUDIT_LOG {
+
+  ADL_ID uuid [pk]
+
+  USR_ID uuid [not null]
+
+  ADL_ACTION AuditAction
+
+  ADL_MODULE varchar(100)
+
+  ADL_TABLE_NAME varchar(100)
+
+  ADL_RECORD_ID uuid
+
+  ADL_DESCRIPTION text
+
+  ADL_OLD_VALUES jsonb
+
+  ADL_NEW_VALUES jsonb
+
+  ADL_IP_ADDRESS varchar(50)
+
+  ADL_DEVICE varchar(255)
+
+  ADL_CREATED_AT timestamp
+
+}
+
+Ref: AI_SCREENING.PET_ID > PET.PET_ID
+
+Ref: AI_SCREENING.USR_ID > USER.USR_ID
+
+Ref: AI_SCREENING.CON_ID > CONSULTATION.CON_ID
+
+Ref: AI_SCREENING.AIS_PRIMARY_DISEASE_ID > DISEASE.DIS_ID
+
+Ref: AI_SCREENING_IMAGE.AIS_ID > AI_SCREENING.AIS_ID
+
+Ref: NOTIFICATION.USR_ID > USER.USR_ID
+
+Ref: AUDIT_LOG.USR_ID > USER.USR_ID

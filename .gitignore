@@ -1,0 +1,45 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+coverage/
+.next/
+.expo/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# Mobile
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/build/
+
+# Databases and local storage
+*.sqlite
+*.sqlite3
+data/
+uploads/
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+.cache/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
