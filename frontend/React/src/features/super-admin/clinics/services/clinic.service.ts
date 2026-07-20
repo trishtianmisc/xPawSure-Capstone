@@ -2,7 +2,7 @@ import http from '../../../../services/http'
 
 export interface CreateClinicPayload {
   name: string
-  email?: string
+  email: string
   phone?: string
   address?: string
   license_number?: string
