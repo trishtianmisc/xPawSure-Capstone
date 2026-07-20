@@ -8,9 +8,11 @@
 
 # 1. Overview
 
-The XPawSure mobile application is a React Native (Expo) application designed for pet owners.
+The XPawSure mobile application is a React Native (Expo) application serving two user groups:
 
-It allows owners to register accounts, manage pets, perform AI-assisted canine skin screening, book appointments, and view medical records.
+**Pet Owners** — register accounts, manage pets, perform AI-assisted canine skin screening, book appointments, and view medical records.
+
+**Veterinarians** — view their schedule, check upcoming appointments, and review consultation details.
 
 The application never provides a diagnosis. It provides a preliminary screening result that must be reviewed by a veterinarian.
 
@@ -18,9 +20,12 @@ The application never provides a diagnosis. It provides a preliminary screening 
 
 # 2. Target Users
 
-The mobile application is intended exclusively for pet owners (User role: OWNER).
+The mobile application serves two user roles:
 
-Clinicians, clinic administrators, and receptionists do not use the mobile application. They use the web application.
+- **Pet Owners (OWNER)** — register, manage pets, perform AI screening, book appointments, view medical history.
+- **Veterinarians (VETERINARIAN)** — view their schedule, check appointments, and review consultation details.
+
+Clinic administrators and receptionists do not use the mobile application. They use the web application.
 
 ---
 
@@ -150,6 +155,20 @@ The mobile application may receive push notifications for:
 
 ---
 
+## Veterinarian Features
+
+Veterinarians have read-only access to:
+
+**Schedule** — view their daily/weekly appointment schedule.
+
+**Appointments** — view appointment list and details (pet, owner, reason, status).
+
+**Consultations** — view consultation records associated with their appointments.
+
+Veterinarians cannot register owners, manage pets, perform AI screening, or book appointments through the mobile app.
+
+---
+
 # 5. Architecture
 
 The mobile application follows a standard React Native + Expo architecture.
@@ -192,7 +211,7 @@ SecureStore for sensitive data
 
 Expo Router for file-based routing.
 
-Navigation structure:
+## Owners
 
 Root
 
@@ -205,8 +224,7 @@ Root
 │   └── ForgotPassword
 
 │
-
-└── Main Tab Navigator
+└── Owner Tab Navigator
 
     ├── Home
 
@@ -241,6 +259,39 @@ Root
     │   ├── PrescriptionDetail
 
     │   └── VaccinationDetail
+
+    └── Profile (Stack)
+
+        ├── ProfileView
+
+        └── ProfileEdit
+
+## Veterinarians
+
+Root
+
+├── Auth Stack
+
+│   └── Login
+
+│
+└── Vet Tab Navigator
+
+    ├── Schedule
+
+    │   └── TodaySchedule
+
+    ├── Appointments (Stack)
+
+    │   ├── AppointmentList
+
+    │   └── AppointmentDetail
+
+    ├── Consultations (Stack)
+
+    │   ├── ConsultationList
+
+    │   └── ConsultationDetail
 
     └── Profile (Stack)
 
