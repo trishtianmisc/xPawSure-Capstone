@@ -15,8 +15,18 @@ class BreedListView(APIView):
         return Response(serializer.data)
 
 
-class PetCreateView(APIView):
+class PetListCreateView(APIView):
     permission_classes = [IsOwner]
+
+    def get(self, request):
+        try:
+            owner_profile = OwnerProfile.objects.get(usr_id=request.user)
+        except OwnerProfile.DoesNotExist:
+            return Response([], status=status.HTTP_200_OK)
+
+        pets = PetService.list_by_owner(owner_profile)
+        serializer = PetResponseSerializer(pets, many=True)
+        return Response(serializer.data)
 
     def post(self, request):
         try:

@@ -35,6 +35,11 @@ export async function getBreeds(): Promise<Breed[]> {
   return data
 }
 
+export async function getPets(): Promise<Pet[]> {
+  const { data } = await http.get('/pets/')
+  return data
+}
+
 export async function createPet(payload: PetCreatePayload): Promise<Pet> {
   const { data } = await http.post('/pets/', payload)
   return data

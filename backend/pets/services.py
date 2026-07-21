@@ -13,6 +13,14 @@ class PetService:
         return Breed.objects.all().order_by('brd_name')
 
     @staticmethod
+    def list_by_owner(owner_profile: OwnerProfile) -> list[Pet]:
+        return Pet.objects.filter(
+            own_id=owner_profile,
+            pet_deleted_at__isnull=True,
+            pet_is_active=True,
+        ).select_related('brd_id').order_by('-pet_created_at')
+
+    @staticmethod
     @transaction.atomic
     def create(
         owner_profile: OwnerProfile,

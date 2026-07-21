@@ -12,7 +12,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <View style={styles.header}>
-        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
+        {/* <Text style={[styles.title, { color: colors.text }]}>Profile</Text> */}
       </View>
 
       <View style={[styles.card, { backgroundColor: colors.surface }]}>
