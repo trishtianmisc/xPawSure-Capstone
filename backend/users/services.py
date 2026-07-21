@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
+from owners.models import OwnerProfile
 
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
@@ -75,6 +76,10 @@ class AuthService:
         user.set_password(password)
         user.save()
 
+        OwnerProfile.objects.create(
+            usr_id=user,
+        )
+
         AuditService.log(
             user_id=str(user.usr_id),
             action=AuditAction.REGISTER,
@@ -109,8 +114,6 @@ class AuthService:
         StaffProfile.objects.create(
             usr_id=user,
             cln_id=clinic,
-            stf_first_name=first_name,
-            stf_last_name=last_name,
             stf_position=StaffPosition.CLINIC_ADMIN,
         )
 
