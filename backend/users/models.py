@@ -1,6 +1,6 @@
 import uuid
 
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.db import models
 
 
@@ -23,6 +23,7 @@ class User(models.Model):
     usr_is_active = models.BooleanField(default=True, db_index=True, db_column='USR_IS_ACTIVE')
     usr_email_verified = models.BooleanField(default=False, db_column='USR_EMAIL_VERIFIED')
     usr_must_change_password = models.BooleanField(default=False, db_column='USR_MUST_CHANGE_PASSWORD')
+    usr_token_version = models.IntegerField(default=0, db_column='USR_TOKEN_VERSION')
     usr_last_login = models.DateTimeField(null=True, blank=True, db_column='USR_LAST_LOGIN')
     usr_created_at = models.DateTimeField(auto_now_add=True, db_column='USR_CREATED_AT')
     usr_updated_at = models.DateTimeField(auto_now=True, db_column='USR_UPDATED_AT')
@@ -37,6 +38,9 @@ class User(models.Model):
 
     def set_password(self, raw_password: str) -> None:
         self.usr_password_hash = make_password(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        return check_password(raw_password, self.usr_password_hash)
 
 
 class StaffPosition(models.TextChoices):
@@ -63,3 +67,17 @@ class StaffProfile(models.Model):
 
     def __str__(self):
         return f'{self.stf_first_name} {self.stf_last_name} ({self.stf_position})'
+
+
+class RevokedToken(models.Model):
+    rvt_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_column='RVT_ID')
+    usr_id = models.UUIDField(db_index=True, db_column='USR_ID')
+    rvt_jti = models.CharField(max_length=255, unique=True, db_column='RVT_JTI')
+    rvt_created_at = models.DateTimeField(auto_now_add=True, db_column='RVT_CREATED_AT')
+
+    class Meta:
+        managed = True
+        db_table = 'REVOKED_TOKEN'
+
+    def __str__(self):
+        return f'Revoked token {self.rvt_jti} for user {self.usr_id}'

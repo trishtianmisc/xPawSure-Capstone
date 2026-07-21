@@ -20,4 +20,8 @@ class CustomJWTAuthentication(JWTAuthentication):
         if not user.usr_is_active:
             raise InvalidToken('User account is inactive')
 
+        token_version = validated_token.get('token_version', 0)
+        if token_version != user.usr_token_version:
+            raise InvalidToken('Token has been revoked. Please log in again.')
+
         return user

@@ -15,8 +15,12 @@ interface AuthContextValue {
   user: AuthUser | null
   isAuthenticated: boolean
   login: (credentials: LoginCredentials) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   getAccessToken: () => string | null
+  changePassword: (oldPassword: string, newPassword: string) => Promise<void>
+  getProfile: () => Promise<AuthUser>
+  updateProfile: (data: { first_name?: string; last_name?: string; phone?: string }) => Promise<AuthUser>
+  revokeAllSessions: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -71,6 +75,12 @@ function removeFromStorage(key: string): void {
   }
 }
 
+function clearAuthStorage(): void {
+  removeFromStorage(STORAGE_KEY_USER)
+  removeFromStorage(STORAGE_KEY_ACCESS)
+  removeFromStorage(STORAGE_KEY_REFRESH)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -96,10 +106,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [navigate],
   )
 
-  const logout = useCallback(() => {
-    removeFromStorage(STORAGE_KEY_USER)
-    removeFromStorage(STORAGE_KEY_ACCESS)
-    removeFromStorage(STORAGE_KEY_REFRESH)
+  const logout = useCallback(async () => {
+    const refreshToken = loadFromStorage(STORAGE_KEY_REFRESH)
+    if (refreshToken) {
+      await authService.logout(refreshToken)
+    }
+    clearAuthStorage()
     setUser(null)
     navigate('/login', { replace: true })
   }, [navigate])
@@ -108,9 +120,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return loadFromStorage(STORAGE_KEY_ACCESS)
   }, [])
 
+  const changePassword = useCallback(async (oldPassword: string, newPassword: string) => {
+    await authService.changePassword(oldPassword, newPassword)
+  }, [])
+
+  const getProfile = useCallback(async () => {
+    const data = await authService.getProfile()
+    return data
+  }, [])
+
+  const updateProfile = useCallback(async (data: { first_name?: string; last_name?: string; phone?: string }) => {
+    const result = await authService.updateProfile(data)
+    return result
+  }, [])
+
+  const revokeAllSessions = useCallback(async () => {
+    await authService.revokeAllSessions()
+  }, [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, isAuthenticated: user !== null, login, logout, getAccessToken }),
-    [user, login, logout, getAccessToken],
+    () => ({
+      user,
+      isAuthenticated: user !== null,
+      login,
+      logout,
+      getAccessToken,
+      changePassword,
+      getProfile,
+      updateProfile,
+      revokeAllSessions,
+    }),
+    [user, login, logout, getAccessToken, changePassword, getProfile, updateProfile, revokeAllSessions],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
