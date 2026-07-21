@@ -36,6 +36,10 @@ class User(models.Model):
     def __str__(self):
         return self.usr_email
 
+    @property
+    def is_authenticated(self):
+        return True
+
     def set_password(self, raw_password: str) -> None:
         self.usr_password_hash = make_password(raw_password)
 
@@ -53,9 +57,6 @@ class StaffProfile(models.Model):
     stf_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_column='STF_ID')
     usr_id = models.OneToOneField(User, on_delete=models.CASCADE, db_column='USR_ID')
     cln_id = models.ForeignKey('clinics.Clinic', on_delete=models.CASCADE, db_column='CLN_ID')
-    stf_first_name = models.CharField(max_length=100, db_column='STF_FIRST_NAME')
-    stf_last_name = models.CharField(max_length=100, db_column='STF_LAST_NAME')
-    stf_phone = models.CharField(max_length=20, null=True, blank=True, db_column='STF_PHONE')
     stf_license_number = models.CharField(max_length=100, null=True, blank=True, db_column='STF_LICENSE_NUMBER')
     stf_position = models.CharField(max_length=20, choices=StaffPosition.choices, db_column='STF_POSITION')
     stf_created_at = models.DateTimeField(auto_now_add=True, db_column='STF_CREATED_AT')
@@ -66,7 +67,7 @@ class StaffProfile(models.Model):
         db_table = 'STAFF_PROFILE'
 
     def __str__(self):
-        return f'{self.stf_first_name} {self.stf_last_name} ({self.stf_position})'
+        return f'{self.usr_id.usr_first_name} {self.usr_id.usr_last_name} ({self.stf_position})'
 
 
 class RevokedToken(models.Model):

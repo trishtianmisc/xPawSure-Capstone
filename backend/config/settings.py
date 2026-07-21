@@ -28,6 +28,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'users',
+    'owners',
+    'pets',
     'clinics',
     'audit_log',
     'rest_framework_simplejwt.token_blacklist',

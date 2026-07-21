@@ -128,9 +128,6 @@ Authentication information remains in USER.
 | STF_ID | UUID | PK |
 | USR_ID | UUID | FK → USER |
 | CLN_ID | UUID | FK → CLINIC |
-| STF_FIRST_NAME | VARCHAR(100) | NOT NULL |
-| STF_LAST_NAME | VARCHAR(100) | NOT NULL |
-| STF_PHONE | VARCHAR(20) | NULL |
 | STF_LICENSE_NUMBER | VARCHAR(100) | NULL |
 | STF_POSITION | ENUM | NOT NULL |
 | STF_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
@@ -206,9 +203,6 @@ They interact with clinics through appointments.
 |---------|------|-------------|
 | OWN_ID | UUID | PK |
 | USR_ID | UUID | FK → USER |
-| OWN_FIRST_NAME | VARCHAR(100) | NOT NULL |
-| OWN_LAST_NAME | VARCHAR(100) | NOT NULL |
-| OWN_PHONE | VARCHAR(20) | NULL |
 | OWN_ADDRESS | TEXT | NULL |
 | OWN_PROFILE_IMAGE | TEXT | NULL |
 | OWN_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
