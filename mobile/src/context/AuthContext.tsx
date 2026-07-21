@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 
+import { queryClient } from '../lib/queryClient'
 import * as authService from '../services/auth'
 import { getItem, removeItem, setItem } from '../utils/storage'
 
@@ -66,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Proceed with local cleanup even if server call fails
     }
+    queryClient.clear()
     await removeItem(STORAGE_USER)
     await removeItem('xpawsure_access_token')
     await removeItem('xpawsure_refresh_token')

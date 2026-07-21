@@ -1,8 +1,8 @@
 from django.urls import path
 
-from pets.views import BreedListView, PetCreateView
+from pets.views import BreedListView, PetListCreateView
 
 urlpatterns = [
     path('breeds/', BreedListView.as_view(), name='breed-list'),
-    path('pets/', PetCreateView.as_view(), name='pet-create'),
+    path('pets/', PetListCreateView.as_view(), name='pet-list-create'),
 ]

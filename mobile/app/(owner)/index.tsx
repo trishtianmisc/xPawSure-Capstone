@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, type ComponentProps } from 'react'
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { usePets } from '../../features/pet/hooks/usePets'
 
 type Shortcut = {
   label: string
@@ -22,9 +23,10 @@ const shortcuts: Shortcut[] = [
 export default function HomeScreen() {
   const router = useRouter()
   const { user } = useAuth()
-  const { colors, isDark, toggleTheme } = useTheme()
+  const { colors, isDark } = useTheme()
   const firstName = user?.first_name?.trim() || 'Pet Parent'
   const styles = useMemo(() => createStyles(colors), [colors])
+  const { data: pets, isLoading: petsLoading } = usePets(user?.id)
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -34,17 +36,6 @@ export default function HomeScreen() {
           <View>
             <Text style={styles.welcome}>Welcome Back {firstName}!</Text>
             <Text style={styles.subtitle}>Let&apos;s keep your pet happy and healthy.</Text>
-          </View>
-          <View style={styles.headerActions}>
-            <Pressable accessibilityLabel="Toggle theme" hitSlop={8} onPress={toggleTheme} style={styles.headerIcon}>
-              <MaterialCommunityIcons color={colors.iconColor} name={isDark ? 'weather-sunny' : 'weather-night'} size={19} />
-            </Pressable>
-            <Pressable accessibilityLabel="Notifications" hitSlop={8} style={styles.headerIcon}>
-              <MaterialCommunityIcons color={colors.iconColor} name="bell-outline" size={19} />
-            </Pressable>
-            <Pressable accessibilityLabel="Profile" hitSlop={8} onPress={() => router.push('/(owner)/profile')} style={styles.headerIcon}>
-              <MaterialCommunityIcons color={colors.iconColor} name="account-circle-outline" size={20} />
-            </Pressable>
           </View>
         </View>
 
@@ -79,12 +70,37 @@ export default function HomeScreen() {
           <Text style={styles.sectionTitle}>My Pets</Text>
           <Pressable onPress={() => router.push('/(owner)/pets')}><Text style={styles.seeAll}>See All</Text></Pressable>
         </View>
-        <Pressable onPress={() => router.push('/(owner)/pets/new')} style={styles.emptyPets}>
-          <View style={styles.addPetIcon}>
-            <MaterialCommunityIcons color="#9A532F" name="paw" size={18} />
+        {petsLoading ? (
+          <View style={styles.emptyPets}>
+            <Text style={styles.emptyPetsText}>Loading...</Text>
           </View>
-          <Text style={styles.emptyPetsText}>Register your first pet to get started</Text>
-        </Pressable>
+        ) : pets && pets.length > 0 ? (
+          <View style={styles.petList}>
+            {pets.slice(0, 3).map((pet) => (
+              <Pressable key={pet.id} onPress={() => router.push(`/(owner)/pets/${pet.id}`)} style={[styles.petCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}>
+                {pet.profile_picture ? (
+                  <Image source={{ uri: pet.profile_picture }} style={styles.petAvatar} />
+                ) : (
+                  <View style={[styles.petAvatarPlaceholder, { backgroundColor: colors.iconBg }]}>
+                    <MaterialCommunityIcons color={colors.iconColor} name="paw" size={18} />
+                  </View>
+                )}
+                <View style={styles.petInfo}>
+                  <Text style={styles.petName}>{pet.name}</Text>
+                  <Text style={styles.petMeta}>{pet.breed_name} · {pet.sex === 'MALE' ? '♂' : '♀'}</Text>
+                </View>
+                <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={18} />
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <Pressable onPress={() => router.push('/(owner)/pets/new')} style={styles.emptyPets}>
+            <View style={styles.addPetIcon}>
+              <MaterialCommunityIcons color="#9A532F" name="paw" size={18} />
+            </View>
+            <Text style={styles.emptyPetsText}>Register your first pet to get started</Text>
+          </Pressable>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Screenings</Text>
@@ -110,9 +126,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   welcome: { color: colors.text, fontSize: 22, fontWeight: '800', lineHeight: 28 },
   subtitle: { color: colors.textSecondary, fontSize: 13, marginTop: 4, lineHeight: 18 },
-  headerActions: { flexDirection: 'row', gap: 12 },
-  headerIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 12, height: 36, justifyContent: 'center', width: 36 },
-
   screeningCard: { backgroundColor: '#D27A40', borderRadius: 20, height: 180, overflow: 'hidden', padding: 22, position: 'relative' },
   cardContent: { zIndex: 1 },
   cardPaw: { alignItems: 'center', backgroundColor: '#F2C49B', borderRadius: 24, height: 48, justifyContent: 'center', marginBottom: 12, width: 48 },
@@ -132,6 +145,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
   seeAll: { color: colors.primary, fontSize: 12, fontWeight: '600' },
 
+  petList: { gap: 8, marginBottom: 24 },
+  petCard: { alignItems: 'center', borderRadius: 14, borderWidth: 1, flexDirection: 'row', padding: 12, gap: 12 },
+  petAvatar: { borderRadius: 22, height: 44, width: 44 },
+  petAvatarPlaceholder: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
+  petInfo: { flex: 1 },
+  petName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  petMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   emptyPets: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, borderRadius: 16, borderStyle: 'dashed', borderWidth: 1.5, gap: 10, justifyContent: 'center', marginBottom: 24, minHeight: 120, padding: 20 },
   addPetIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
   emptyPetsText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, textAlign: 'center' },

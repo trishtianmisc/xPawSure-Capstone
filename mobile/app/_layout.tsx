@@ -1,11 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { Stack } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 
 import { AuthProvider } from '../src/context/AuthContext'
+import { queryClient } from '../src/lib/queryClient'
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext'
-
-const queryClient = new QueryClient()
 
 function RootLayoutInner() {
   const { isDark } = useTheme()

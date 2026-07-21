@@ -14,7 +14,7 @@ import { useBreeds } from '../hooks/useBreeds'
 
 interface BreedPickerProps {
   value: string
-  onSelect: (breedId: string, breedName: string) => void
+  onSelect: (breedId: string) => void
 }
 
 export function BreedPicker({ value, onSelect }: BreedPickerProps) {
@@ -37,16 +37,17 @@ export function BreedPicker({ value, onSelect }: BreedPickerProps) {
     <>
       <Pressable
         onPress={() => setOpen(true)}
-        style={[styles.trigger, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        style={[styles.trigger, { backgroundColor: colors.bg, borderColor: colors.border }]}
       >
         <Text style={[styles.triggerText, { color: value ? colors.text : colors.textMuted }]}>
-          {selectedBreed?.name || 'Select breed'}
+          {selectedBreed?.name || 'Select a breed'}
         </Text>
+        <Text style={[styles.chevron, { color: colors.textMuted }]}>⌵</Text>
       </Pressable>
 
       <Modal animationType="slide" transparent={false} visible={open} onRequestClose={() => setOpen(false)}>
         <View style={[styles.screen, { backgroundColor: colors.bg }]}>
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Pressable onPress={() => { setOpen(false); setSearch('') }}>
               <Text style={[styles.cancel, { color: colors.primary }]}>Cancel</Text>
             </Pressable>
@@ -59,15 +60,23 @@ export function BreedPicker({ value, onSelect }: BreedPickerProps) {
             </Pressable>
           </View>
 
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            onChangeText={setSearch}
-            placeholder="Search breeds..."
-            placeholderTextColor={colors.textMuted}
-            style={[styles.search, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-            value={search}
-          />
+          <View style={[styles.searchWrap, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.searchIcon, { color: colors.textMuted }]}>🔍</Text>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setSearch}
+              placeholder="Search breeds..."
+              placeholderTextColor={colors.textMuted}
+              style={[styles.searchInput, { color: colors.text }]}
+              value={search}
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')}>
+                <Text style={[styles.clearBtn, { color: colors.textMuted }]}>✕</Text>
+              </Pressable>
+            )}
+          </View>
 
           <FlatList
             data={filtered}
@@ -76,17 +85,25 @@ export function BreedPicker({ value, onSelect }: BreedPickerProps) {
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => {
-                  onSelect(item.id, item.name)
+                  onSelect(item.id)
                   setOpen(false)
                   setSearch('')
                 }}
                 style={[styles.item, item.id === value && { backgroundColor: colors.primaryLight }]}
               >
-                <Text style={[styles.itemText, { color: colors.text }]}>{item.name}</Text>
-                {item.id === value && <Text style={[styles.check, { color: colors.primary }]}>✓</Text>}
+                <View style={styles.itemLeft}>
+                  <Text style={[styles.itemEmoji, { color: colors.textMuted }]}>🐾</Text>
+                  <Text style={[styles.itemText, { color: colors.text }]}>{item.name}</Text>
+                </View>
+                {item.id === value && (
+                  <View style={[styles.checkCircle, { backgroundColor: colors.primary }]}>
+                    <Text style={styles.checkMark}>✓</Text>
+                  </View>
+                )}
               </Pressable>
             )}
             style={styles.list}
+            contentContainerStyle={styles.listContent}
           />
         </View>
       </Modal>
@@ -95,17 +112,64 @@ export function BreedPicker({ value, onSelect }: BreedPickerProps) {
 }
 
 const styles = StyleSheet.create({
-  trigger: { borderRadius: 10, borderWidth: 1, height: 48, justifyContent: 'center', paddingHorizontal: 14 },
-  triggerText: { fontSize: 15 },
+  trigger: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 50,
+    paddingHorizontal: 16,
+  },
+  triggerText: { flex: 1, fontSize: 15 },
+  chevron: { fontSize: 18, fontWeight: '700' },
   screen: { flex: 1, paddingTop: 60 },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 12 },
+  header: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+  },
   cancel: { fontSize: 15, fontWeight: '600' },
   title: { fontSize: 17, fontWeight: '700' },
   doneWrap: { minWidth: 50, alignItems: 'flex-end' },
   done: { fontSize: 15, fontWeight: '600' },
-  search: { borderRadius: 10, borderWidth: 1, fontSize: 15, height: 40, marginHorizontal: 16, marginBottom: 8, paddingHorizontal: 12 },
-  list: { flex: 1, marginHorizontal: 16 },
-  item: { alignItems: 'center', borderRadius: 8, flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 14 },
+  searchWrap: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 44,
+    marginHorizontal: 20,
+    marginTop: 14,
+    marginBottom: 8,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  searchIcon: { fontSize: 14 },
+  searchInput: { flex: 1, fontSize: 15, height: '100%', padding: 0 },
+  clearBtn: { fontSize: 16, fontWeight: '600', paddingLeft: 4 },
+  list: { flex: 1 },
+  listContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 24 },
+  item: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  itemLeft: { alignItems: 'center', flexDirection: 'row', gap: 10, flex: 1 },
+  itemEmoji: { fontSize: 16 },
   itemText: { flex: 1, fontSize: 15 },
-  check: { fontSize: 16, fontWeight: '700' },
+  checkCircle: {
+    borderRadius: 12,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+    alignItems: 'center',
+  },
+  checkMark: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 })
