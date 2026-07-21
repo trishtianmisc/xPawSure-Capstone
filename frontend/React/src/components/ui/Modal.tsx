@@ -32,7 +32,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl"
+        className="w-full max-w-lg overflow-hidden rounded-md bg-white shadow-xl dark:bg-stone-800"
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -50,7 +50,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
             </svg>
           </button>
         </div>
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5 dark:text-stone-200">{children}</div>
       </div>
     </div>
   )

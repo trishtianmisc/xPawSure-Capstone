@@ -2,9 +2,11 @@ import { Redirect, Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
 import { useAuth } from '../../src/context/AuthContext'
+import { useTheme } from '../../src/context/ThemeContext'
 
 export default function VetTabLayout() {
   const { isAuthenticated, isLoading, user } = useAuth()
+  const { colors } = useTheme()
 
   if (isLoading) return null
 
@@ -13,7 +15,12 @@ export default function VetTabLayout() {
   if (user?.role !== 'VETERINARIAN') return <Redirect href="/(owner)/" />
 
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: '#b45309' }}>
+    <Tabs screenOptions={{
+      tabBarActiveTintColor: colors.tabActive,
+      tabBarInactiveTintColor: colors.tabInactive,
+      tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+      tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 64, paddingTop: 5 },
+    }}>
       <Tabs.Screen
         name="schedule"
         options={{

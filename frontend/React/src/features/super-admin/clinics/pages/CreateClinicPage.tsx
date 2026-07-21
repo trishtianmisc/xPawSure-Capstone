@@ -65,8 +65,8 @@ export function CreateClinicPage() {
 
         <form className="space-y-6" noValidate onSubmit={handleSubmit(onSubmit)}>
           <Card padding="lg">
-            <h2 className="text-lg font-bold text-stone-900">Clinic Information</h2>
-            <p className="mt-1 text-sm text-stone-500">
+            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">Clinic Information</h2>
+            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
               Basic details about the veterinary clinic.
             </p>
 
