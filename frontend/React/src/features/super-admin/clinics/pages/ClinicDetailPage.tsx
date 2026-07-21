@@ -19,8 +19,8 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
-      <dt className="text-sm font-medium text-stone-500">{label}</dt>
-      <dd className="mt-1 text-sm text-stone-900 sm:col-span-2 sm:mt-0">{value}</dd>
+      <dt className="text-sm font-medium text-stone-500 dark:text-stone-400">{label}</dt>
+      <dd className="mt-1 text-sm text-stone-900 dark:text-stone-100 sm:col-span-2 sm:mt-0">{value}</dd>
     </div>
   )
 }
@@ -154,7 +154,7 @@ export function ClinicDetailPage() {
     <DashboardLayout>
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <div className="rounded-2xl bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
+          <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
             <div>
               <h1 className="truncate text-3xl font-bold tracking-tight text-white">
                 {clinic.name}
@@ -182,8 +182,8 @@ export function ClinicDetailPage() {
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <Card padding="lg">
-              <h2 className="text-base font-semibold text-stone-900">Clinic Information</h2>
-              <dl className="mt-6 divide-y divide-stone-100">
+              <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Clinic Information</h2>
+              <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
                 <div className="py-4 sm:py-5">
                   <InfoRow label="Name" value={clinic.name} />
                 </div>
@@ -203,8 +203,8 @@ export function ClinicDetailPage() {
             </Card>
 
             <Card padding="lg">
-              <h2 className="text-base font-semibold text-stone-900">Timeline</h2>
-              <dl className="mt-6 divide-y divide-stone-100">
+              <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Timeline</h2>
+              <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
                 <div className="py-4 sm:py-5">
                   <InfoRow
                     label="Created"
@@ -223,20 +223,20 @@ export function ClinicDetailPage() {
 
           <div className="space-y-6">
             <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                 Status
               </h3>
-              <p className="mt-1 text-xs text-stone-400">Change the clinic's current status.</p>
+              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Change the clinic's current status.</p>
               <div className="mt-4 space-y-2">
                 {STATUS_OPTIONS.map((option) => {
                   const isCurrent = clinic.status === option
                   return (
                     <button
                       key={option}
-                      className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium transition ${
+                      className={`flex w-full items-center gap-3 rounded-md border px-4 py-3 text-left text-sm font-medium transition ${
                         isCurrent
-                          ? 'border-amber-200 bg-amber-50 text-amber-700'
-                          : 'border-transparent text-stone-600 hover:border-stone-200 hover:bg-stone-50'
+                          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                          : 'border-transparent text-stone-600 hover:border-stone-200 hover:bg-stone-50 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-stone-800'
                       }`}
                       disabled={statusUpdating || isCurrent}
                       type="button"
@@ -252,7 +252,7 @@ export function ClinicDetailPage() {
                       />
                       <span className="flex-1">{option.charAt(0) + option.slice(1).toLowerCase()}</span>
                       {isCurrent && (
-                        <span className="text-[11px] font-semibold uppercase text-amber-600">Current</span>
+                        <span className="text-[11px] font-semibold uppercase text-amber-600 dark:text-amber-400">Current</span>
                       )}
                     </button>
                   )
@@ -261,10 +261,10 @@ export function ClinicDetailPage() {
             </Card>
 
             <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                 Edit
               </h3>
-              <p className="mt-1 text-xs text-stone-400">Modify clinic information.</p>
+              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Modify clinic information.</p>
               <div className="mt-4">
                 <Button
                   size="sm"
@@ -277,10 +277,10 @@ export function ClinicDetailPage() {
             </Card>
 
             <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-red-500">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-red-500 dark:text-red-400">
                 Danger Zone
               </h3>
-              <p className="mt-1 text-xs text-stone-400">Irreversible action — proceed with caution.</p>
+              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Irreversible action — proceed with caution.</p>
               <div className="mt-4">
                 <Button
                   size="sm"

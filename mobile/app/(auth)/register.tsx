@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { Link, router } from 'expo-router'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import {
   ActivityIndicator,
@@ -18,6 +18,7 @@ import {
 import { z } from 'zod'
 
 import { useAuth } from '../../src/context/AuthContext'
+import { useTheme, type AppColors } from '../../src/context/ThemeContext'
 
 const registerSchema = z.object({
   first_name: z.string().min(1, 'First name is required').max(100),
@@ -35,21 +36,28 @@ const registerSchema = z.object({
 type RegisterForm = z.infer<typeof registerSchema>
 
 function DecorativeBlob({ color, style }: { color: string; style: object }) {
-  return <View pointerEvents="none" style={[styles.blob, { backgroundColor: color }, style]} />
+  return <View pointerEvents="none" style={[blobStyle, { backgroundColor: color }, style]} />
 }
 
-function PawPattern() {
+const blobStyle = { borderRadius: 999, position: 'absolute' } as const
+
+function PawPattern({ style }: { style: ReturnType<typeof StyleSheet.create> }) {
+  const { isDark } = useTheme()
+  const pawColor = isDark ? '#5A4A40' : '#D3B29A'
+  const pawColor2 = isDark ? '#4A3A30' : '#B8957E'
+  const pawColor3 = isDark ? '#6A5A50' : '#E9CDB7'
   return (
-    <View pointerEvents="none" style={styles.pawPattern}>
-      <MaterialCommunityIcons color="#D3B29A" name="paw" size={28} style={styles.pawOne} />
-      <MaterialCommunityIcons color="#B8957E" name="paw" size={20} style={styles.pawTwo} />
-      <MaterialCommunityIcons color="#E9CDB7" name="paw" size={16} style={styles.pawThree} />
+    <View pointerEvents="none" style={style.pawPattern}>
+      <MaterialCommunityIcons color={pawColor} name="paw" size={28} style={style.pawOne} />
+      <MaterialCommunityIcons color={pawColor2} name="paw" size={20} style={style.pawTwo} />
+      <MaterialCommunityIcons color={pawColor3} name="paw" size={16} style={style.pawThree} />
     </View>
   )
 }
 
 export default function RegisterScreen() {
   const { register } = useAuth()
+  const { colors, isDark } = useTheme()
   const [serverError, setServerError] = useState<string | null>(null)
 
   const { control, handleSubmit, formState: { errors, isSubmitting }, setValue, watch } = useForm<RegisterForm>({
@@ -66,6 +74,7 @@ export default function RegisterScreen() {
   })
 
   const acceptedTerms = watch('acceptTerms')
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const onSubmit = async (data: RegisterForm) => {
     setServerError(null)
@@ -113,16 +122,19 @@ export default function RegisterScreen() {
     }
   }
 
+  const blobColor1 = isDark ? '#3A2518' : '#F6DFC1'
+  const blobColor2 = isDark ? '#2A1A10' : '#F1D4AF'
+
   return (
     <SafeAreaView style={styles.screen}>
-      <DecorativeBlob color="#F6DFC1" style={styles.topBlob} />
-      <DecorativeBlob color="#F1D4AF" style={styles.bottomBlob} />
-      <PawPattern />
+      <DecorativeBlob color={blobColor1} style={styles.topBlob} />
+      <DecorativeBlob color={blobColor2} style={styles.bottomBlob} />
+      <PawPattern style={styles} />
 
       <View style={styles.topBar}>
         <Link asChild href="/(auth)/">
           <Pressable accessibilityRole="link" style={styles.backLink}>
-            <MaterialCommunityIcons color="#3A2112" name="chevron-left" size={22} />
+            <MaterialCommunityIcons color={colors.text} name="chevron-left" size={22} />
             <Text style={styles.backText}>Back</Text>
           </Pressable>
         </Link>
@@ -133,7 +145,7 @@ export default function RegisterScreen() {
           <View style={styles.formContainer}>
             <View style={styles.brandSection}>
               <View style={styles.brandIconWrap}>
-                <MaterialCommunityIcons color="#8B4324" name="dog" size={30} />
+                <MaterialCommunityIcons color={colors.primary} name="dog" size={30} />
               </View>
               <Text style={styles.brandName}>XPawSure</Text>
               <Text style={styles.brandTagline}>Veterinary Management System</Text>
@@ -144,7 +156,7 @@ export default function RegisterScreen() {
 
             {serverError && (
               <View style={styles.errorBanner}>
-                <MaterialCommunityIcons color="#FFFFFF" name="alert-circle" size={16} />
+                <MaterialCommunityIcons color={colors.inverse} name="alert-circle" size={16} />
                 <Text style={styles.errorBannerText}>{serverError}</Text>
               </View>
             )}
@@ -161,7 +173,7 @@ export default function RegisterScreen() {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     placeholder="First Name"
-                    placeholderTextColor="#A89A91"
+                    placeholderTextColor={colors.textMuted}
                     style={[styles.input, errors.first_name && styles.inputError]}
                     value={value}
                   />
@@ -180,7 +192,7 @@ export default function RegisterScreen() {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     placeholder="Last Name"
-                    placeholderTextColor="#A89A91"
+                    placeholderTextColor={colors.textMuted}
                     style={[styles.input, errors.last_name && styles.inputError]}
                     value={value}
                   />
@@ -200,7 +212,7 @@ export default function RegisterScreen() {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     placeholder="john@example.com"
-                    placeholderTextColor="#A89A91"
+                    placeholderTextColor={colors.textMuted}
                     style={[styles.input, errors.email && styles.inputError]}
                     value={value}
                   />
@@ -219,7 +231,7 @@ export default function RegisterScreen() {
                     onBlur={onBlur}
                     onChangeText={onChange}
                     placeholder="Phone Number"
-                    placeholderTextColor="#A89A91"
+                    placeholderTextColor={colors.textMuted}
                     style={styles.input}
                     value={value}
                   />
@@ -237,7 +249,7 @@ export default function RegisterScreen() {
                       onBlur={onBlur}
                       onChangeText={onChange}
                       placeholder="Min. 8 characters"
-                      placeholderTextColor="#A89A91"
+                      placeholderTextColor={colors.textMuted}
                       secureTextEntry
                       style={styles.passwordInput}
                       value={value}
@@ -258,7 +270,7 @@ export default function RegisterScreen() {
                       onBlur={onBlur}
                       onChangeText={onChange}
                       placeholder="Repeat your password"
-                      placeholderTextColor="#A89A91"
+                      placeholderTextColor={colors.textMuted}
                       secureTextEntry
                       style={styles.passwordInput}
                       value={value}
@@ -275,7 +287,7 @@ export default function RegisterScreen() {
                 style={styles.termsRow}
               >
                 <View style={[styles.checkbox, acceptedTerms ? styles.checkboxSelected : null]}>
-                  {acceptedTerms ? <MaterialCommunityIcons color="#FFFFFF" name="check" size={12} /> : null}
+                  {acceptedTerms ? <MaterialCommunityIcons color={colors.inverse} name="check" size={12} /> : null}
                 </View>
                 <Text style={styles.termsText}>I have read the <Text style={styles.termsStrong}>Terms &amp; Conditions</Text></Text>
               </Pressable>
@@ -288,7 +300,7 @@ export default function RegisterScreen() {
                 style={({ pressed }) => [styles.submitButton, pressed && !isSubmitting && styles.submitButtonPressed, isSubmitting && styles.submitButtonDisabled]}
               >
                 {isSubmitting ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ActivityIndicator color={colors.inverse} size="small" />
                 ) : (
                   <Text style={styles.submitText}>Create account</Text>
                 )}
@@ -306,11 +318,10 @@ export default function RegisterScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  screen: { backgroundColor: '#FFFCF8', flex: 1 },
+const createStyles = (colors: AppColors) => StyleSheet.create({
+  screen: { backgroundColor: colors.bg, flex: 1 },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1 },
-  blob: { borderRadius: 999, position: 'absolute' },
   topBlob: { height: 190, left: -95, top: -94, width: 225 },
   bottomBlob: { bottom: -118, height: 220, right: -92, width: 220 },
   pawPattern: { height: 160, position: 'absolute', right: 0, top: 90, width: 130 },
@@ -319,33 +330,33 @@ const styles = StyleSheet.create({
   pawThree: { bottom: 5, position: 'absolute', right: 6, transform: [{ rotate: '12deg' }] },
   topBar: { left: 20, position: 'absolute', top: 8, zIndex: 10 },
   backLink: { alignItems: 'center', flexDirection: 'row' },
-  backText: { color: '#3A2112', fontSize: 15, fontWeight: '500' },
+  backText: { color: colors.text, fontSize: 15, fontWeight: '500' },
   formContainer: { paddingHorizontal: 28, paddingTop: 60, paddingBottom: 40 },
   brandSection: { alignItems: 'center', marginBottom: 28 },
-  brandIconWrap: { alignItems: 'center', backgroundColor: '#F8E6D0', borderRadius: 22, height: 44, justifyContent: 'center', marginBottom: 8, width: 44 },
-  brandName: { color: '#4D2515', fontSize: 26, fontWeight: '800', letterSpacing: -0.7 },
-  brandTagline: { color: '#806C60', fontSize: 10, fontWeight: '500', marginTop: 2 },
-  heading: { color: '#1A0E08', fontSize: 22, fontWeight: '700', marginBottom: 2, textAlign: 'center' },
-  subtitle: { color: '#806C60', fontSize: 14, marginBottom: 24, textAlign: 'center' },
-  errorBanner: { alignItems: 'center', backgroundColor: '#C0392B', borderRadius: 8, flexDirection: 'row', gap: 8, marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10 },
-  errorBannerText: { color: '#FFFFFF', flex: 1, fontSize: 13, fontWeight: '500' },
+  brandIconWrap: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: 22, height: 44, justifyContent: 'center', marginBottom: 8, width: 44 },
+  brandName: { color: colors.primaryDark, fontSize: 26, fontWeight: '800', letterSpacing: -0.7 },
+  brandTagline: { color: colors.textSecondary, fontSize: 10, fontWeight: '500', marginTop: 2 },
+  heading: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: 2, textAlign: 'center' },
+  subtitle: { color: colors.textSecondary, fontSize: 14, marginBottom: 24, textAlign: 'center' },
+  errorBanner: { alignItems: 'center', backgroundColor: colors.errorBg, borderRadius: 8, flexDirection: 'row', gap: 8, marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10 },
+  errorBannerText: { color: colors.inverse, flex: 1, fontSize: 13, fontWeight: '500' },
   form: { width: '100%' },
-  label: { color: '#3A2112', fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 14 },
-  input: { backgroundColor: '#FFFFFF', borderColor: '#E5DFDA', borderRadius: 10, borderWidth: 1, color: '#1A0E08', fontSize: 15, height: 48, paddingHorizontal: 14 },
-  inputError: { borderColor: '#C0392B' },
-  fieldError: { color: '#C0392B', fontSize: 12, marginTop: 4 },
-  passwordField: { backgroundColor: '#FFFFFF', borderColor: '#E5DFDA', borderRadius: 10, borderWidth: 1, flexDirection: 'row', height: 48 },
-  passwordInput: { color: '#1A0E08', flex: 1, fontSize: 15, paddingHorizontal: 14 },
+  label: { color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 14 },
+  input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
+  inputError: { borderColor: colors.error },
+  fieldError: { color: colors.error, fontSize: 12, marginTop: 4 },
+  passwordField: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, flexDirection: 'row', height: 48 },
+  passwordInput: { color: colors.text, flex: 1, fontSize: 15, paddingHorizontal: 14 },
   termsRow: { alignItems: 'center', flexDirection: 'row', marginTop: 18, paddingLeft: 2 },
-  checkbox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#B8A99E', borderRadius: 4, borderWidth: 1.5, height: 18, justifyContent: 'center', marginRight: 8, width: 18 },
-  checkboxSelected: { backgroundColor: '#8B4324', borderColor: '#8B4324' },
-  termsText: { color: '#5A4539', fontSize: 13 },
+  checkbox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 4, borderWidth: 1.5, height: 18, justifyContent: 'center', marginRight: 8, width: 18 },
+  checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  termsText: { color: colors.linkMuted, fontSize: 13 },
   termsStrong: { fontWeight: '700' },
-  submitButton: { alignItems: 'center', backgroundColor: '#8B4324', borderRadius: 12, height: 52, justifyContent: 'center', marginTop: 24 },
+  submitButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, height: 52, justifyContent: 'center', marginTop: 24 },
   submitButtonPressed: { opacity: 0.85 },
   submitButtonDisabled: { opacity: 0.6 },
-  submitText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  submitText: { color: colors.inverse, fontSize: 16, fontWeight: '800' },
   switchRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  switchText: { color: '#5A4539', fontSize: 14 },
-  switchLink: { color: '#8B4324', fontSize: 14, fontWeight: '700' },
+  switchText: { color: colors.linkMuted, fontSize: 14 },
+  switchLink: { color: colors.primary, fontSize: 14, fontWeight: '700' },
 })

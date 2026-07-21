@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { router } from 'expo-router'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Pressable,
   SafeAreaView,
@@ -9,6 +9,8 @@ import {
   View,
   type ColorValue,
 } from 'react-native'
+
+import { useTheme, type AppColors } from '../../src/context/ThemeContext'
 
 const SPLASH_DURATION_MS = 1300
 
@@ -42,35 +44,43 @@ type DecorativeBlobProps = {
 }
 
 function DecorativeBlob({ backgroundColor, style }: DecorativeBlobProps) {
-  return <View pointerEvents="none" style={[styles.blob, { backgroundColor }, style]} />
+  return <View pointerEvents="none" style={[blobStyle, { backgroundColor }, style]} />
 }
 
-function PawPattern() {
+const blobStyle = { borderRadius: 999, position: 'absolute' } as const
+
+function PawPattern({ style }: { style: ReturnType<typeof StyleSheet.create> }) {
+  const { isDark } = useTheme()
+  const c1 = isDark ? '#5A4A40' : '#D3B29A'
+  const c2 = isDark ? '#4A3A30' : '#B8957E'
+  const c3 = isDark ? '#6A5A50' : '#E9CDB7'
+  const c4 = isDark ? '#55453B' : '#C49C81'
   return (
-    <View pointerEvents="none" style={styles.pawPattern}>
-      <MaterialCommunityIcons color="#D3B29A" name="paw" size={31} style={styles.pawOne} />
-      <MaterialCommunityIcons color="#B8957E" name="paw" size={24} style={styles.pawTwo} />
-      <MaterialCommunityIcons color="#E9CDB7" name="paw" size={19} style={styles.pawThree} />
-      <MaterialCommunityIcons color="#C49C81" name="paw" size={27} style={styles.pawFour} />
+    <View pointerEvents="none" style={style.pawPattern}>
+      <MaterialCommunityIcons color={c1} name="paw" size={31} style={style.pawOne} />
+      <MaterialCommunityIcons color={c2} name="paw" size={24} style={style.pawTwo} />
+      <MaterialCommunityIcons color={c3} name="paw" size={19} style={style.pawThree} />
+      <MaterialCommunityIcons color={c4} name="paw" size={27} style={style.pawFour} />
     </View>
   )
 }
 
-function BrandMark({ light = false }: { light?: boolean }) {
+function BrandMark({ light = false, style }: { light?: boolean; style: ReturnType<typeof StyleSheet.create> }) {
   const color = light ? '#2D190E' : '#8B4324'
 
   return (
-    <View style={styles.brandMark}>
+    <View style={style.brandMark}>
       <MaterialCommunityIcons color={color} name="dog" size={43} />
       <View>
-        <Text style={[styles.brandName, light && styles.brandNameDark]}>XPawSure</Text>
-        <Text style={styles.brandTagline}>Veterinary Management System</Text>
+        <Text style={[style.brandName, light && style.brandNameDark]}>XPawSure</Text>
+        <Text style={style.brandTagline}>Veterinary Management System</Text>
       </View>
     </View>
   )
 }
 
 export default function WelcomeScreen() {
+  const { colors, isDark } = useTheme()
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [pageIndex, setPageIndex] = useState(0)
 
@@ -78,6 +88,8 @@ export default function WelcomeScreen() {
     const timeoutId = setTimeout(() => setShowOnboarding(true), SPLASH_DURATION_MS)
     return () => clearTimeout(timeoutId)
   }, [])
+
+  const styles = useMemo(() => createStyles(colors), [colors])
 
   const page = onboardingPages[pageIndex]
   const isFinalPage = pageIndex === onboardingPages.length - 1
@@ -101,20 +113,23 @@ export default function WelcomeScreen() {
           <View style={styles.splashLogoCircle}>
             <MaterialCommunityIcons color="#FFF7EB" name="dog" size={74} />
           </View>
-          <BrandMark light />
+          <BrandMark light style={styles} />
         </View>
       </SafeAreaView>
     )
   }
 
+  const blobColor1 = isDark ? '#3A2518' : '#F6DFC1'
+  const blobColor2 = isDark ? '#2A1A10' : '#F1D4AF'
+
   return (
     <SafeAreaView style={styles.screen}>
-      <DecorativeBlob backgroundColor="#F6DFC1" style={styles.topBlob} />
-      <DecorativeBlob backgroundColor="#F1D4AF" style={styles.bottomBlob} />
-      <PawPattern />
+      <DecorativeBlob backgroundColor={blobColor1} style={styles.topBlob} />
+      <DecorativeBlob backgroundColor={blobColor2} style={styles.bottomBlob} />
+      <PawPattern style={styles} />
 
       <View style={styles.content}>
-        <BrandMark />
+        <BrandMark style={styles} />
 
         <View style={[styles.illustration, { backgroundColor: page.iconBackground }]}>
           <View style={[styles.illustrationCircle, { borderColor: page.accent }]}>
@@ -163,15 +178,15 @@ export default function WelcomeScreen() {
   )
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#FFFCF8', overflow: 'hidden' },
+const createStyles = (colors: AppColors) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   splashScreen: { flex: 1, backgroundColor: '#FFE1B8', overflow: 'hidden' },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 28, paddingTop: 18, paddingBottom: 20 },
   splashContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20 },
   brandMark: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  brandName: { color: '#4D2515', fontSize: 23, fontWeight: '800', letterSpacing: -0.7 },
+  brandName: { color: colors.primaryDark, fontSize: 23, fontWeight: '800', letterSpacing: -0.7 },
   brandNameDark: { color: '#2D190E' },
-  brandTagline: { color: '#806C60', fontSize: 9, fontWeight: '500', marginTop: 1 },
+  brandTagline: { color: colors.textSecondary, fontSize: 9, fontWeight: '500', marginTop: 1 },
   splashLogoCircle: {
     alignItems: 'center', backgroundColor: '#8B4324', borderColor: '#F8C98F', borderRadius: 60,
     borderWidth: 6, height: 120, justifyContent: 'center', width: 120,
@@ -184,20 +199,19 @@ const styles = StyleSheet.create({
   illustrationPaw: { bottom: 17, position: 'absolute', right: 26, transform: [{ rotate: '-15deg' }] },
   copyContainer: { alignItems: 'center', marginTop: 35, minHeight: 86 },
   title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.7, textAlign: 'center' },
-  description: { color: '#75675F', fontSize: 13, lineHeight: 19, marginTop: 10, maxWidth: 275, textAlign: 'center' },
+  description: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10, maxWidth: 275, textAlign: 'center' },
   footer: { alignItems: 'center', marginTop: 'auto', width: '100%' },
   pagination: { flexDirection: 'row', gap: 7, marginBottom: 22 },
-  paginationDot: { backgroundColor: '#C7BEB8', borderRadius: 5, height: 5, width: 17 },
-  paginationDotActive: { backgroundColor: '#8B4324', width: 28 },
-  primaryButton: { alignItems: 'center', backgroundColor: '#8B4324', borderRadius: 12, justifyContent: 'center', minHeight: 52, width: '100%' },
+  paginationDot: { backgroundColor: colors.border, borderRadius: 5, height: 5, width: 17 },
+  paginationDotActive: { backgroundColor: colors.primary, width: 28 },
+  primaryButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, justifyContent: 'center', minHeight: 52, width: '100%' },
   primaryButtonPressed: { opacity: 0.85 },
-  primaryButtonText: { color: '#FFF9F2', fontSize: 16, fontWeight: '800' },
+  primaryButtonText: { color: colors.inverse, fontSize: 16, fontWeight: '800' },
   skipLink: { paddingTop: 14, paddingBottom: 2 },
-  skipText: { color: '#806C60', fontSize: 13, fontWeight: '600' },
+  skipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   signInLink: { paddingTop: 14, paddingBottom: 2 },
-  signInText: { color: '#806C60', fontSize: 12 },
-  signInTextStrong: { color: '#8B4324', fontWeight: '800' },
-  blob: { borderRadius: 999, position: 'absolute' },
+  signInText: { color: colors.textSecondary, fontSize: 12 },
+  signInTextStrong: { color: colors.primary, fontWeight: '800' },
   topBlob: { height: 190, left: -95, top: -94, width: 225 },
   bottomBlob: { bottom: -118, height: 220, right: -92, width: 220 },
   splashTopBlob: { height: 175, left: -70, top: -92, width: 255 },

@@ -1,13 +1,17 @@
 @import 'tailwindcss';
+@variant dark (&:is(.dark *));
 
 :root {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #1c1917;
-  background: #f5f5f4;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.dark {
+  color-scheme: dark;
 }
 
 body {
