@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
+import { useDebounce } from '../../../../hooks/useDebounce'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import {
   clinicService,
 } from '../services/clinic.service'
-import type { ClinicListResponse, ListParams } from '../services/clinic.service'
 
 const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
   ACTIVE: 'success',
@@ -19,38 +20,28 @@ const PAGE_SIZE = 20
 
 export function ClinicListPage() {
   const navigate = useNavigate()
-  const [data, setData] = useState<ClinicListResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [sort, setSort] = useState('-created_at')
   const [page, setPage] = useState(1)
 
-  const params: ListParams = {
-    search: search || undefined,
+  const debouncedSearch = useDebounce(search, 300)
+
+  const params = useMemo(() => ({
+    search: debouncedSearch || undefined,
     status: statusFilter || undefined,
     sort,
     page,
     page_size: PAGE_SIZE,
-  }
+  }), [debouncedSearch, statusFilter, sort, page])
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const result = await clinicService.list(params)
-      setData(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load clinics.')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, statusFilter, sort, page])
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['clinics', params],
+    queryFn: () => clinicService.list(params),
+    staleTime: 30_000,
+  })
 
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
+  const queryError = error instanceof Error ? error.message : null
 
   return (
     <DashboardLayout>
@@ -73,9 +64,9 @@ export function ClinicListPage() {
           </div>
         </div>
 
-        {error && (
+        {queryError && (
           <div className="mb-6">
-            <Alert variant="error">{error}</Alert>
+            <Alert variant="error">{queryError}</Alert>
           </div>
         )}
 
@@ -108,7 +99,7 @@ export function ClinicListPage() {
         </Card>
 
         <div className="mt-6 overflow-hidden rounded-md border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
-          {loading ? (
+          {isLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-200 border-t-amber-600" />
             </div>

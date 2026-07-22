@@ -8,7 +8,7 @@ from django.utils import timezone
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import Clinic, ClinicStatus
-from core.email_service import send_templated_email
+from clinics.tasks import send_clinic_welcome_email
 from users.services import AuthService
 
 logger = logging.getLogger(__name__)
@@ -62,30 +62,21 @@ class ClinicService:
                     ip_address=ip_address,
                 )
 
-        email_sent = False
         if clinic_email:
             login_url = f'{settings.FRONTEND_URL}/login'
-            result = send_templated_email(
-                subject=f'Welcome to XPawSure — {clinic_name}',
-                to_email=clinic_email,
-                template_name='emails/clinic_welcome.html',
-                context={
-                    'clinic_name': clinic_name,
-                    'login_url': login_url,
-                    'email': admin_email,
-                    'temporary_password': temp_password,
-                    'support_email': settings.SUPPORT_EMAIL,
-                },
-            )
-            email_sent = result.success
-            if not result.success:
-                logger.warning(
-                    'Clinic %s created but welcome email to %s failed: %s',
-                    clinic.cln_id, clinic_email, result.error,
-                )
+            transaction.on_commit(lambda: send_clinic_welcome_email.delay(
+                clinic_name=clinic.cln_name,
+                clinic_email=clinic_email,
+                admin_email=admin_email,
+                temp_password=temp_password,
+                login_url=login_url,
+                support_email=settings.SUPPORT_EMAIL,
+            ))
+            clinic._email_sent = True
+        else:
+            clinic._email_sent = False
 
-        clinic._email_sent = email_sent
-        clinic._temp_password = temp_password if not email_sent else None
+        clinic._temp_password = temp_password
 
         return clinic
 

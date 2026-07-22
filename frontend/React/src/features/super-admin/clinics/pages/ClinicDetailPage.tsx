@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
+import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Alert, Badge, Button, Card, Input, Modal, Textarea } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../services/clinic.service'
-import type { ClinicResponse } from '../services/clinic.service'
 
 const STATUS_OPTIONS = ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'ARCHIVED'] as const
 
@@ -25,105 +26,86 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+interface EditFormValues {
+  name: string
+  email: string
+  phone: string
+  address: string
+  license_number: string
+}
+
 export function ClinicDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { showToast } = useToast()
+  const queryClient = useQueryClient()
 
-  const [clinic, setClinic] = useState<ClinicResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [statusUpdating, setStatusUpdating] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [editForm, setEditForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    license_number: '',
+
+  const { data: clinic, isLoading, error } = useQuery({
+    queryKey: ['clinic', id],
+    queryFn: () => clinicService.getById(id!),
+    enabled: Boolean(id),
+    staleTime: 30_000,
   })
 
-  const fetchClinic = useCallback(async () => {
-    if (!id) return
-    setLoading(true)
-    setError(null)
-    try {
-      const result = await clinicService.getById(id)
-      setClinic(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load clinic.')
-    } finally {
-      setLoading(false)
-    }
-  }, [id])
+  const {
+    formState: { errors },
+    handleSubmit,
+    register,
+    reset,
+  } = useForm<EditFormValues>()
 
-  useEffect(() => {
-    fetchClinic()
-  }, [fetchClinic])
-
-  const handleStatusChange = async (newStatus: string) => {
+  const openEdit = useCallback(() => {
     if (!clinic) return
-    if (!window.confirm(`Change status of "${clinic.name}" to ${newStatus}?`)) return
-    setStatusUpdating(true)
-    setError(null)
-    try {
-      const updated = await clinicService.changeStatus(clinic.id, newStatus)
-      setClinic(updated)
-      showToast(`Status changed to ${newStatus}.`, 'success')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update status.')
-    } finally {
-      setStatusUpdating(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!clinic) return
-    if (!window.confirm(`Delete "${clinic.name}"? This action cannot be undone.`)) return
-    try {
-      await clinicService.delete(clinic.id)
-      showToast('Clinic deleted.', 'success')
-      navigate('/super-admin/clinics', { replace: true })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete clinic.')
-    }
-  }
-
-  const openEdit = () => {
-    if (!clinic) return
-    setEditForm({
+    reset({
       name: clinic.name,
       email: clinic.email,
       phone: clinic.phone,
       address: clinic.address,
       license_number: clinic.license_number,
     })
-    setError(null)
     setEditOpen(true)
-  }
+  }, [clinic, reset])
 
-  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setEditForm((prev) => ({ ...prev, [e.target.name]: e.target.value }))
-  }
+  const statusMutation = useMutation({
+    mutationFn: (newStatus: string) => clinicService.changeStatus(clinic!.id, newStatus),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['clinic', id], updated)
+      showToast(`Status changed to ${updated.status}.`, 'success')
+    },
+    onError: (err) => {
+      showToast(err instanceof Error ? err.message : 'Failed to update status.', 'error')
+    },
+  })
 
-  const handleEditSave = async () => {
-    if (!clinic) return
-    setSaving(true)
-    setError(null)
-    try {
-      const updated = await clinicService.update(clinic.id, editForm)
-      setClinic(updated)
+  const updateMutation = useMutation({
+    mutationFn: (data: EditFormValues) => clinicService.update(clinic!.id, data),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(['clinic', id], updated)
       setEditOpen(false)
       showToast('Clinic updated successfully.', 'success')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update clinic.')
-    } finally {
-      setSaving(false)
-    }
-  }
+    },
+    onError: (err) => {
+      showToast(err instanceof Error ? err.message : 'Failed to update clinic.', 'error')
+    },
+  })
 
-  if (loading) {
+  const deleteMutation = useMutation({
+    mutationFn: () => clinicService.delete(clinic!.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clinics'] })
+      showToast('Clinic deleted.', 'success')
+      navigate('/super-admin/clinics', { replace: true })
+    },
+    onError: (err) => {
+      showToast(err instanceof Error ? err.message : 'Failed to delete clinic.', 'error')
+    },
+  })
+
+  const queryError = error instanceof Error ? error.message : null
+
+  if (isLoading) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center py-32">
@@ -133,12 +115,12 @@ export function ClinicDetailPage() {
     )
   }
 
-  if (error && !clinic) {
+  if (queryError && !clinic) {
     return (
       <DashboardLayout>
         <div className="mx-auto max-w-6xl">
           <div className="mb-6">
-            <Alert variant="error">{error}</Alert>
+            <Alert variant="error">{queryError}</Alert>
           </div>
           <Button onClick={() => navigate('/super-admin/clinics')} variant="secondary">
             ← Back to clinics
@@ -173,9 +155,9 @@ export function ClinicDetailPage() {
           </div>
         </div>
 
-        {error && (
+        {queryError && (
           <div className="mb-6">
-            <Alert variant="error">{error}</Alert>
+            <Alert variant="error">{queryError}</Alert>
           </div>
         )}
 
@@ -238,9 +220,12 @@ export function ClinicDetailPage() {
                           ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
                           : 'border-transparent text-stone-600 hover:border-stone-200 hover:bg-stone-50 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-stone-800'
                       }`}
-                      disabled={statusUpdating || isCurrent}
+                      disabled={statusMutation.isPending || isCurrent}
                       type="button"
-                      onClick={() => handleStatusChange(option)}
+                      onClick={() => {
+                        if (!window.confirm(`Change status of "${clinic.name}" to ${option}?`)) return
+                        statusMutation.mutate(option)
+                      }}
                     >
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
@@ -283,9 +268,13 @@ export function ClinicDetailPage() {
               <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Irreversible action — proceed with caution.</p>
               <div className="mt-4">
                 <Button
+                  loading={deleteMutation.isPending}
                   size="sm"
                   variant="danger"
-                  onClick={handleDelete}
+                  onClick={() => {
+                    if (!window.confirm(`Delete "${clinic.name}"? This action cannot be undone.`)) return
+                    deleteMutation.mutate()
+                  }}
                 >
                   Delete Clinic
                 </Button>
@@ -296,22 +285,47 @@ export function ClinicDetailPage() {
       </div>
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Clinic">
-        <div className="space-y-4">
-          <Input label="Clinic name" name="name" value={editForm.name} onChange={handleEditChange} />
+        <form className="space-y-4" noValidate onSubmit={handleSubmit((data) => updateMutation.mutate(data))}>
+          <Input
+            {...register('name', { required: 'Clinic name is required.' })}
+            error={errors.name?.message}
+            label="Clinic name"
+          />
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="Email" name="email" type="email" value={editForm.email} onChange={handleEditChange} />
-            <Input label="Phone" name="phone" type="tel" value={editForm.phone} onChange={handleEditChange} />
+            <Input
+              {...register('email')}
+              error={errors.email?.message}
+              label="Email"
+              type="email"
+            />
+            <Input
+              {...register('phone')}
+              error={errors.phone?.message}
+              label="Phone"
+              type="tel"
+            />
           </div>
-          <Textarea label="Address" name="address" rows={3} value={editForm.address} onChange={handleEditChange} />
-          <Input label="License number" name="license_number" value={editForm.license_number} onChange={handleEditChange} />
-          {error && (
-            <Alert variant="error">{error}</Alert>
+          <Textarea
+            {...register('address')}
+            error={errors.address?.message}
+            label="Address"
+            rows={3}
+          />
+          <Input
+            {...register('license_number')}
+            error={errors.license_number?.message}
+            label="License number"
+          />
+          {updateMutation.isError && (
+            <Alert variant="error">
+              {updateMutation.error instanceof Error ? updateMutation.error.message : 'Failed to update clinic.'}
+            </Alert>
           )}
           <div className="flex items-center justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button loading={saving} onClick={handleEditSave}>Save Changes</Button>
+            <Button loading={updateMutation.isPending} type="submit">Save Changes</Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </DashboardLayout>
   )

@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 
 import { clinicService } from '../../clinics/services/clinic.service'
-import type { ClinicStats } from '../../clinics/services/clinic.service'
 import { DashboardLayout } from '../components/DashboardLayout'
 
 const STAT_CARDS = [
@@ -40,11 +39,12 @@ const STAT_CARDS = [
 
 export function DashboardPage() {
   const navigate = useNavigate()
-  const [stats, setStats] = useState<ClinicStats | null>(null)
 
-  useEffect(() => {
-    clinicService.getStats().then(setStats).catch(() => {})
-  }, [])
+  const { data: stats } = useQuery({
+    queryKey: ['clinic-stats'],
+    queryFn: clinicService.getStats,
+    staleTime: 30_000,
+  })
 
   return (
     <DashboardLayout>

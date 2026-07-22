@@ -8,7 +8,16 @@ import { AuthProvider } from './features/auth/context/AuthContext.tsx'
 import { ThemeProvider } from './context/ThemeContext'
 import { ToastProvider } from './components/ui/ToastContext.tsx'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60 * 1000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

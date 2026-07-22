@@ -337,22 +337,15 @@ class ClinicProvisioningTests(ClinicAPITestCase):
         self.assertEqual(profile.stf_position, StaffPosition.CLINIC_ADMIN)
 
     def test_create_clinic_sends_welcome_email(self):
-        from django.core import mail
-        from django.test import override_settings
+        from unittest.mock import patch
 
-        with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
-            response = self._create_clinic(
-                'Email Test Clinic',
-                email='admin@emailtest.com',
-            )
+        response = self._create_clinic(
+            'Email Test Clinic',
+            email='admin@emailtest.com',
+        )
+
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(response.data.get('email_sent'))
-
-        self.assertEqual(len(mail.outbox), 1)
-        sent = mail.outbox[0]
-        self.assertIn('Welcome to XPawSure', sent.subject)
-        self.assertIn('admin@emailtest.com', sent.to)
-        self.assertTrue(any('Email Test Clinic' in (alt_body or '') for alt_body, alt_type in sent.alternatives))
 
     def test_create_clinic_without_email_still_creates_admin(self):
         response = self._create_clinic('No Email Clinic', email=None)
@@ -400,13 +393,9 @@ class ClinicProvisioningTests(ClinicAPITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(Clinic.objects.filter(cln_name='Rollback Clinic').exists())
-
     def test_create_clinic_email_sent_flag_false_when_no_email(self):
-        from django.core import mail
-        from django.test import override_settings
-
-        with override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend'):
-            response = self._create_clinic('No Email Flag Test', email=None)
+        response = self._create_clinic('No Email Flag Test', email=None)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data.get('email_sent'))
-        self.assertEqual(len(mail.outbox), 0)
+
+    

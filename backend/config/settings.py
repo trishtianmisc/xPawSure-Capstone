@@ -71,8 +71,10 @@ DATABASES = {
     'default': env.db_url(
         'DATABASE_URL',
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        engine='django.db.backends.postgresql',
     ),
 }
+DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=60)
 
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
@@ -86,6 +88,12 @@ SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='antpayton12@gmail.com.com')
 
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
+
+CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 
 AUTH_PASSWORD_VALIDATORS = [
     {

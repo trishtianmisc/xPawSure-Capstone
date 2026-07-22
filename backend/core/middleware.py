@@ -3,7 +3,7 @@ from django.urls import resolve
 
 
 class MustChangePasswordMiddleware:
-    ALLOWED_PATHS = ['auth-change-password', 'auth-logout']
+    ALLOWED_PATHS = ['auth-change-password', 'auth-logout', 'auth-profile']
 
     def __init__(self, get_response):
         self.get_response = get_response
