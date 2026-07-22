@@ -219,6 +219,8 @@ CREATE TABLE "PET" (
   "PET_WEIGHT" decimal(5,2),
   "PET_COLOR" varchar(100),
   "PET_MICROCHIP_NO" varchar(100) UNIQUE,
+  "PET_QR_CODE" varchar(255),
+  "PET_QR_CODE_URL" text,
   "PET_CREATED_AT" timestamp,
   "PET_UPDATED_AT" timestamp,
   "PET_DELETED_AT" timestamp

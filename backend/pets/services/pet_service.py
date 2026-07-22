@@ -4,6 +4,8 @@ from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from owners.models import OwnerProfile
 from pets.models import Breed, Pet
+from pets.services.qr_service import QRStorageService
+from pets.utils.qr_generator import generate_qr_code
 
 
 class PetService:
@@ -19,6 +21,18 @@ class PetService:
             pet_deleted_at__isnull=True,
             pet_is_active=True,
         ).select_related('brd_id').order_by('-pet_created_at')
+
+    @staticmethod
+    def get_by_id(pet_id: str, owner_profile: OwnerProfile) -> Pet | None:
+        try:
+            return Pet.objects.select_related('brd_id').get(
+                pet_id=pet_id,
+                own_id=owner_profile,
+                pet_deleted_at__isnull=True,
+                pet_is_active=True,
+            )
+        except Pet.DoesNotExist:
+            return None
 
     @staticmethod
     @transaction.atomic
@@ -40,12 +54,21 @@ class PetService:
             pet_profile_image=validated_data.get('pet_profile_image'),
         )
 
+        pet_id_str = str(pet.pet_id)
+        qr_code_data = pet_id_str
+        qr_image_bytes = generate_qr_code(qr_code_data)
+        qr_code_url = QRStorageService.save(pet_id_str, qr_image_bytes)
+
+        pet.pet_qr_code = qr_code_data
+        pet.pet_qr_code_url = qr_code_url
+        pet.save(update_fields=['pet_qr_code', 'pet_qr_code_url'])
+
         AuditService.log(
             user_id=user_id,
             action=AuditAction.CREATE,
             module='pets',
             table_name='PET',
-            record_id=str(pet.pet_id),
+            record_id=pet_id_str,
             description=f'Pet created: {pet.pet_name}',
             ip_address=ip_address,
         )

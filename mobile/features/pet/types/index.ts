@@ -25,5 +25,7 @@ export interface Pet {
   color: string | null
   microchip_number: string | null
   profile_picture: string | null
+  qr_code: string | null
+  qr_code_url: string | null
   created_at: string
 }

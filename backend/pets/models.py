@@ -34,6 +34,8 @@ class Pet(models.Model):
     pet_color = models.CharField(max_length=100, null=True, blank=True, db_column='PET_COLOR')
     pet_microchip_no = models.CharField(max_length=100, null=True, blank=True, unique=True, db_column='PET_MICROCHIP_NO')
     pet_profile_image = models.TextField(null=True, blank=True, db_column='PET_PROFILE_IMAGE')
+    pet_qr_code = models.CharField(max_length=255, null=True, blank=True, db_column='PET_QR_CODE')
+    pet_qr_code_url = models.TextField(null=True, blank=True, db_column='PET_QR_CODE_URL')
     pet_is_active = models.BooleanField(default=True, db_column='PET_IS_ACTIVE')
     pet_created_at = models.DateTimeField(auto_now_add=True, db_column='PET_CREATED_AT')
     pet_updated_at = models.DateTimeField(auto_now=True, db_column='PET_UPDATED_AT')
