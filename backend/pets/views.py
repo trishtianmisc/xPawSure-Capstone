@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
 from pets.serializers import BreedSerializer, PetCreateSerializer, PetResponseSerializer
-from pets.services import PetService
+from pets.services.pet_service import PetService
 
 
 class BreedListView(APIView):
@@ -48,3 +48,26 @@ class PetListCreateView(APIView):
         )
         result = PetResponseSerializer(pet).data
         return Response(result, status=status.HTTP_201_CREATED)
+
+
+class PetDetailView(APIView):
+    permission_classes = [IsOwner]
+
+    def get(self, request, pet_id):
+        try:
+            owner_profile = OwnerProfile.objects.get(usr_id=request.user)
+        except OwnerProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pet = PetService.get_by_id(pet_id, owner_profile)
+        if pet is None:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = PetResponseSerializer(pet)
+        return Response(serializer.data)

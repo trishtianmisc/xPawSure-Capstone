@@ -1,11 +1,11 @@
 import { http } from './http'
 
-interface Breed {
+export interface Breed {
   id: string
   name: string
 }
 
-interface PetCreatePayload {
+export interface PetCreatePayload {
   name: string
   sex: 'MALE' | 'FEMALE'
   breed_id: string
@@ -16,7 +16,7 @@ interface PetCreatePayload {
   profile_picture?: string
 }
 
-interface Pet {
+export interface Pet {
   id: string
   name: string
   sex: string
@@ -27,6 +27,8 @@ interface Pet {
   color: string | null
   microchip_number: string | null
   profile_picture: string | null
+  qr_code: string | null
+  qr_code_url: string | null
   created_at: string
 }
 
@@ -37,6 +39,11 @@ export async function getBreeds(): Promise<Breed[]> {
 
 export async function getPets(): Promise<Pet[]> {
   const { data } = await http.get('/pets/')
+  return data
+}
+
+export async function getPet(id: string): Promise<Pet> {
+  const { data } = await http.get(`/pets/${id}/`)
   return data
 }
 

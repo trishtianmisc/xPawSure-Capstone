@@ -106,6 +106,8 @@ Medical records, appointments, vaccinations, prescriptions, and AI screenings ar
 | PET_WEIGHT | DECIMAL(5,2) | NULL |
 | PET_COLOR | VARCHAR(100) | NULL |
 | PET_MICROCHIP_NO | VARCHAR(100) | NULL, UNIQUE |
+| PET_QR_CODE | VARCHAR(255) | NULL, default = PET_ID |
+| PET_QR_CODE_URL | TEXT | NULL |
 | PET_PROFILE_IMAGE | TEXT | NULL |
 | PET_IS_ACTIVE | BOOLEAN | DEFAULT TRUE |
 | PET_CREATED_AT | TIMESTAMP | DEFAULT NOW() |

@@ -6,3 +6,5 @@ django-environ==0.13.0
 dj-database-url==3.1.2
 psycopg2-binary==2.9.10
 gunicorn==25.3.0
+qrcode[pil]==8.2
+Pillow==11.2.1

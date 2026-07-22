@@ -86,6 +86,8 @@ Each table uses a unique prefix.
 | CLINIC_SETTINGS | CLS |
 | BREED | BRD |
 | PET | PET |
+| PET_QR_CODE | PQC |
+| PET_QR_CODE_URL | PQR |
 | PET_IMAGE | PTI |
 | APPOINTMENT | APT |
 | CONSULTATION | CON |

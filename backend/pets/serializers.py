@@ -56,6 +56,8 @@ class PetResponseSerializer(serializers.ModelSerializer):
     color = serializers.CharField(source='pet_color', read_only=True)
     microchip_number = serializers.CharField(source='pet_microchip_no', read_only=True)
     profile_picture = serializers.CharField(source='pet_profile_image', read_only=True)
+    qr_code = serializers.CharField(source='pet_qr_code', read_only=True)
+    qr_code_url = serializers.CharField(source='pet_qr_code_url', read_only=True)
     created_at = serializers.DateTimeField(source='pet_created_at', read_only=True)
 
     class Meta:
@@ -63,5 +65,5 @@ class PetResponseSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'sex', 'breed_id', 'breed_name',
             'date_of_birth', 'weight', 'color', 'microchip_number',
-            'profile_picture', 'created_at',
+            'profile_picture', 'qr_code', 'qr_code_url', 'created_at',
         ]

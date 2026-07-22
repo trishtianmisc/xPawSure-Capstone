@@ -1,11 +1,5 @@
-import { View, Text } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import PetProfileScreen from '../../../features/pet/screens/PetProfileScreen'
 
 export default function PetDetailScreen() {
-  const { id } = useLocalSearchParams();
-  return (
-    <View>
-      <Text>Pet Detail - {id}</Text>
-    </View>
-  );
+  return <PetProfileScreen />
 }
