@@ -21,6 +21,7 @@ interface AuthContextValue {
   getProfile: () => Promise<AuthUser>
   updateProfile: (data: { first_name?: string; last_name?: string; phone?: string }) => Promise<AuthUser>
   revokeAllSessions: () => Promise<void>
+  updateUser: (updated: AuthUser) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -138,6 +139,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await authService.revokeAllSessions()
   }, [])
 
+  const updateUser = useCallback((updated: AuthUser) => {
+    setUser(updated)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_USER)
+      if (raw) {
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated))
+      } else {
+        sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updated))
+      }
+    } catch {
+      /* storage unavailable */
+    }
+  }, [])
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -149,8 +164,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getProfile,
       updateProfile,
       revokeAllSessions,
+      updateUser,
     }),
-    [user, login, logout, getAccessToken, changePassword, getProfile, updateProfile, revokeAllSessions],
+    [user, login, logout, getAccessToken, changePassword, getProfile, updateProfile, revokeAllSessions, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

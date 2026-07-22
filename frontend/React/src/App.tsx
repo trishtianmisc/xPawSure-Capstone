@@ -4,11 +4,13 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { SessionWatcher } from './components/SessionWatcher'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
-const LoginPage = lazy(() => import('./features/auth/login').then(m => ({ default: m.LoginPage })))
-const DashboardPage = lazy(() => import('./features/super-admin/dashboard').then(m => ({ default: m.DashboardPage })))
-const ClinicListPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.ClinicListPage })))
-const CreateClinicPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.CreateClinicPage })))
-const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics').then(m => ({ default: m.ClinicDetailPage })))
+const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
+const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
+const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
+const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
+const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
 
 function PageLoader() {
   return (
@@ -29,6 +31,7 @@ function App() {
         <Routes>
           <Route element={<Navigate replace to="/login" />} path="/" />
           <Route element={<LoginPage />} path="/login" />
+          <Route element={<ChangePasswordPage />} path="/change-password" />
           <Route
             element={
               <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
@@ -60,6 +63,14 @@ function App() {
               </ProtectedRoute>
             }
             path="/super-admin/clinics/:id"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
+                <ClinicAdminDashboardPage />
+              </ProtectedRoute>
+            }
+            path="/clinic/dashboard"
           />
         </Routes>
       </Suspense>
