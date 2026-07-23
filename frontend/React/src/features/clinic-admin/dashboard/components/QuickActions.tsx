@@ -6,7 +6,7 @@ interface QuickAction {
 }
 
 const actions: QuickAction[] = [
-  { label: 'Register Staff', icon: '👥', href: '/clinic/staff/new', description: 'Add veterinarian or receptionist' },
+  { label: 'Veterinarians', icon: '👨‍⚕️', href: '/clinic/veterinarians', description: 'Manage veterinarian accounts' },
   { label: 'Add Appointment', icon: '📅', href: '/clinic/appointments/new', description: 'Schedule a new appointment' },
   { label: 'View Pet Owners', icon: '👤', href: '/clinic/owners', description: 'Browse registered owners' },
   { label: 'View Pets', icon: '🐾', href: '/clinic/pets', description: 'Browse registered pets' },
