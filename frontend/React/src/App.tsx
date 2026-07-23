@@ -8,6 +8,7 @@ const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').the
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const VeterinarianListPage = lazy(() => import('./features/veterinarians/pages/VeterinarianListPage').then(m => ({ default: m.VeterinarianListPage })))
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
@@ -71,6 +72,14 @@ function App() {
               </ProtectedRoute>
             }
             path="/clinic/dashboard"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
+                <VeterinarianListPage />
+              </ProtectedRoute>
+            }
+            path="/clinic/veterinarians"
           />
         </Routes>
       </Suspense>
