@@ -58,6 +58,7 @@ class StaffProfile(models.Model):
     usr_id = models.OneToOneField(User, on_delete=models.CASCADE, db_column='USR_ID')
     cln_id = models.ForeignKey('clinics.Clinic', on_delete=models.CASCADE, db_column='CLN_ID')
     stf_license_number = models.CharField(max_length=100, null=True, blank=True, db_column='STF_LICENSE_NUMBER')
+    stf_license_expiration_date = models.DateField(null=True, blank=True, db_column='STF_LICENSE_EXPIRATION_DATE')
     stf_position = models.CharField(max_length=20, choices=StaffPosition.choices, db_column='STF_POSITION')
     stf_created_at = models.DateTimeField(auto_now_add=True, db_column='STF_CREATED_AT')
     stf_updated_at = models.DateTimeField(auto_now=True, db_column='STF_UPDATED_AT')
