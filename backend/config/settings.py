@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'clinics',
     'staff',
     'audit_log',
+    'veterinarians',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
