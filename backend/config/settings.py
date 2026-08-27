@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     'owners',
     'pets',
     'clinics',
+    'staff',
     'audit_log',
     'veterinarians',
     'rest_framework_simplejwt.token_blacklist',
