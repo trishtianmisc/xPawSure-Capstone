@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import IsClinicAdmin
-from staff.serializers import CreateStaffSerializer, StaffDetailSerializer, StaffListSerializer
+from staff.serializers import CreateStaffSerializer, StaffDetailSerializer, StaffListSerializer, UpdateStaffSerializer
 from staff.services import StaffService
 from users.models import StaffProfile
 
@@ -18,6 +18,15 @@ CSV_MAX_ROWS = 500
 CSV_MAX_SIZE_BYTES = 2 * 1024 * 1024
 
 
+class StaffStatsView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def get(self, request):
+        clinic = request.user.staffprofile.cln_id
+        data = StaffService.get_stats(clinic_id=str(clinic.cln_id))
+        return Response(data)
+
+
 class StaffListCreateView(APIView):
     permission_classes = [IsClinicAdmin]
 
@@ -25,13 +34,21 @@ class StaffListCreateView(APIView):
         clinic = request.user.staffprofile.cln_id
         role = request.query_params.get('role', '')
         search = request.query_params.get('search', '').strip()
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        staff_status = request.query_params.get('status', '').strip()
+        try:
+            page = max(int(request.query_params.get('page', 1) or 1), 1)
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 20) or 20), 1), 100)
+        except (ValueError, TypeError):
+            page_size = 20
 
         result = StaffService.list_staff(
             clinic_id=str(clinic.cln_id),
             role=role if role else None,
             search=search,
+            status=staff_status if staff_status else None,
             page=page,
             page_size=page_size,
         )
@@ -41,7 +58,7 @@ class StaffListCreateView(APIView):
         return Response(result)
 
     def post(self, request):
-        serializer = CreateStaffSerializer(data=request.data)
+        serializer = CreateStaffSerializer(data=request.data, context={'clinic': request.user.staffprofile.cln_id})
         serializer.is_valid(raise_exception=True)
 
         clinic = request.user.staffprofile.cln_id
@@ -70,6 +87,36 @@ class StaffDetailView(APIView):
 
         serializer = StaffDetailSerializer(staff)
         return Response(serializer.data)
+
+    def patch(self, request, staff_id):
+        try:
+            staff = StaffService.get_by_id(staff_id)
+        except StaffProfile.DoesNotExist:
+            return Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        clinic = request.user.staffprofile.cln_id
+        if staff.cln_id != clinic:
+            return Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = UpdateStaffSerializer(
+            data=request.data,
+            context={
+                'role': staff.usr_id.usr_role,
+                'license_number': staff.stf_license_number,
+                'license_expiration_date': staff.stf_license_expiration_date,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+
+        StaffService.update_staff(
+            staff=staff,
+            data=serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        updated_staff = StaffService.get_by_id(staff_id)
+        return Response(StaffDetailSerializer(updated_staff).data)
 
 
 class StaffBulkUploadView(APIView):
@@ -153,3 +200,55 @@ class StaffBulkUploadView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
         )
         return Response(result, status=status.HTTP_200_OK)
+
+
+class StaffActionView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def _get_staff(self, request, staff_id):
+        try:
+            staff = StaffService.get_by_id(staff_id)
+        except StaffProfile.DoesNotExist:
+            return None, Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if staff.cln_id != request.user.staffprofile.cln_id:
+            return None, Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return staff, None
+
+    def post(self, request, staff_id, action):
+        staff, error_response = self._get_staff(request, staff_id)
+        if error_response:
+            return error_response
+
+        if action == 'reset-password':
+            result = StaffService.reset_password(
+                staff=staff,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            return Response({'detail': 'Password reset. New temp password sent via email.'}, status=status.HTTP_200_OK)
+
+        if action == 'resend-welcome':
+            StaffService.resend_welcome(
+                staff=staff,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            return Response({'detail': 'Welcome email resent with new temp password.'}, status=status.HTTP_200_OK)
+
+        if action == 'activate':
+            StaffService.activate_staff(
+                staff=staff,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            return Response({'detail': 'Staff member activated.'}, status=status.HTTP_200_OK)
+
+        if action == 'deactivate':
+            StaffService.deactivate_staff(
+                staff=staff,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+            return Response({'detail': 'Staff member deactivated.'}, status=status.HTTP_200_OK)
+
+        return Response({'detail': f'Unknown action: {action}'}, status=status.HTTP_400_BAD_REQUEST)

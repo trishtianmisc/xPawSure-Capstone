@@ -6,7 +6,8 @@ interface StatCardProps {
   value: number | string
   trend?: { direction: 'up' | 'down'; value: string }
   className?: string
-}
+};
+
 
 export function StatCard({ icon, label, value, trend, className = '' }: StatCardProps) {
   return (
@@ -24,7 +25,7 @@ export function StatCard({ icon, label, value, trend, className = '' }: StatCard
           </span>
         )}
       </div>
-      <p className="mt-4 text-2xl font-extrabold tracking-tight text-stone-950 dark:text-stone-100">
+      <p className="mt-4 text-4xl font-extrabold tracking-tight text-stone-950 dark:text-stone-100">
         {value}
       </p>
       <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">

@@ -33,7 +33,6 @@ INSTALLED_APPS = [
     'clinics',
     'staff',
     'audit_log',
-    'veterinarians',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -125,7 +124,7 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 MEDIA_ROOT = BASE_DIR / 'media'
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

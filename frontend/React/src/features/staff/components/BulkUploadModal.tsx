@@ -59,6 +59,7 @@ export function BulkUploadModal({ isOpen, onClose }: BulkUploadModalProps) {
       const response = await bulkUploadStaff(file)
       setResult(response)
       queryClient.invalidateQueries({ queryKey: ['staff'] })
+      queryClient.invalidateQueries({ queryKey: ['staff-stats'] })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload CSV file.')
     } finally {

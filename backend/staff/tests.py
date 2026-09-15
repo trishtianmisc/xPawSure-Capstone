@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.urls import reverse
 from rest_framework import status
@@ -203,7 +203,7 @@ class PermissionTests(StaffAPITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_rejects_other_clinic_admin(self):
+    def test_other_clinic_admin_can_create_for_own_clinic(self):
         payload = {
             'email': 'test@test.com',
             'first_name': 'Test',
@@ -408,7 +408,7 @@ class StaffDetailTests(StaffAPITestCase):
         )
 
         response = self.client.get(
-            self._detail_url(profile.stf_id),
+            self._detail_url(str(profile.usr_id.usr_id)),
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -439,7 +439,7 @@ class StaffDetailTests(StaffAPITestCase):
         )
 
         response = self.client.get(
-            self._detail_url(other_profile.stf_id),
+            self._detail_url(str(other_profile.usr_id.usr_id)),
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -601,3 +601,398 @@ class BulkUploadTests(StaffAPITestCase):
             **self._auth_header(self.super_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class StaffUpdateTests(StaffAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.vet_user = User.objects.create(
+            usr_email='update_vet@test.com',
+            usr_first_name='Update',
+            usr_last_name='Vet',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        self.vet_user.set_password('VetPass123!')
+        self.vet_user.save()
+        self.vet_profile = StaffProfile.objects.create(
+            usr_id=self.vet_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+            stf_license_number='LIC-UPD',
+            stf_license_expiration_date=date(2028, 6, 30),
+        )
+        self.vet_url = self._detail_url(str(self.vet_user.usr_id))
+
+    def _action_url(self, staff_id, action):
+        return reverse('staff-action', args=[staff_id, action])
+
+    def test_update_first_name(self):
+        response = self.client.patch(
+            self.vet_url, {'first_name': 'Updated'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['first_name'], 'Updated')
+
+    def test_update_last_name(self):
+        response = self.client.patch(
+            self.vet_url, {'last_name': 'NewLastName'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['last_name'], 'NewLastName')
+
+    def test_update_phone(self):
+        response = self.client.patch(
+            self.vet_url, {'phone': '09171234567'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['phone'], '+639171234567')
+
+    def test_update_license_fields(self):
+        response = self.client.patch(
+            self.vet_url, {
+                'license_number': 'LIC-NEW',
+                'license_expiration_date': '2030-12-31',
+            }, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['license_number'], 'LIC-NEW')
+        self.assertEqual(response.data['license_expiration_date'], '2030-12-31')
+
+    def test_update_rejects_empty_license_for_vet(self):
+        response = self.client.patch(
+            self.vet_url, {'license_number': ''}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_empty_license_date_for_vet(self):
+        response = self.client.patch(
+            self.vet_url, {'license_expiration_date': ''}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_past_license_date(self):
+        response = self.client.patch(
+            self.vet_url, {'license_expiration_date': '2020-01-01'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_invalid_name_with_numbers(self):
+        response = self.client.patch(
+            self.vet_url, {'first_name': 'John123'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_invalid_name_with_symbols(self):
+        response = self.client.patch(
+            self.vet_url, {'last_name': '@Doe#'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_invalid_phone(self):
+        response = self.client.patch(
+            self.vet_url, {'phone': '12345'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_not_found(self):
+        response = self.client.patch(
+            self._detail_url('00000000-0000-0000-0000-000000000000'),
+            {'first_name': 'Test'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_clinic_isolation(self):
+        other_user = User.objects.create(
+            usr_email='other_vet@test.com',
+            usr_first_name='Other',
+            usr_last_name='Vet',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        other_profile = StaffProfile.objects.create(
+            usr_id=other_user,
+            cln_id=self.other_clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+        response = self.client.patch(
+            self._detail_url(str(other_user.usr_id)),
+            {'first_name': 'Hacked'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_receptionist_can_clear_license_fields(self):
+        rec_user = User.objects.create(
+            usr_email='rec_update@test.com',
+            usr_first_name='Rec',
+            usr_last_name='Update',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=rec_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.patch(
+            self._detail_url(str(rec_user.usr_id)),
+            {'license_number': '', 'license_expiration_date': ''}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class StaffActionTests(StaffAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.active_user = User.objects.create(
+            usr_email='active_staff@test.com',
+            usr_first_name='Active',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        self.active_user.set_password('StaffPass123!')
+        self.active_user.save()
+        self.active_profile = StaffProfile.objects.create(
+            usr_id=self.active_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        self.deactivated_user = User.objects.create(
+            usr_email='deact_staff@test.com',
+            usr_first_name='Deactivated',
+            usr_last_name='Staff',
+            usr_role=UserRole.VETERINARIAN,
+            usr_is_active=False,
+        )
+        self.deactivated_user.set_password('StaffPass123!')
+        self.deactivated_user.save()
+        self.deactivated_profile = StaffProfile.objects.create(
+            usr_id=self.deactivated_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+            stf_license_number='LIC-DA',
+            stf_license_expiration_date=date(2028, 12, 31),
+        )
+
+    def _action_url(self, staff_id, action):
+        return reverse('staff-action', args=[staff_id, action])
+
+    def test_deactivate_staff(self):
+        response = self.client.post(
+            self._action_url(str(self.active_user.usr_id), 'deactivate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.active_user.refresh_from_db()
+        self.assertFalse(self.active_user.usr_is_active)
+
+    def test_activate_staff(self):
+        response = self.client.post(
+            self._action_url(str(self.deactivated_user.usr_id), 'activate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.deactivated_user.refresh_from_db()
+        self.assertTrue(self.deactivated_user.usr_is_active)
+
+    def test_reset_password(self):
+        old_hash = self.active_user.usr_password_hash
+        response = self.client.post(
+            self._action_url(str(self.active_user.usr_id), 'reset-password'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.active_user.refresh_from_db()
+        self.assertNotEqual(self.active_user.usr_password_hash, old_hash)
+        self.assertTrue(self.active_user.usr_must_change_password)
+
+    def test_resend_welcome(self):
+        response = self.client.post(
+            self._action_url(str(self.active_user.usr_id), 'resend-welcome'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.active_user.refresh_from_db()
+        self.assertTrue(self.active_user.usr_must_change_password)
+
+    def test_unknown_action_returns_400(self):
+        response = self.client.post(
+            self._action_url(str(self.active_user.usr_id), 'bogus-action'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_action_not_found(self):
+        response = self.client.post(
+            self._action_url('00000000-0000-0000-0000-000000000000', 'activate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_action_clinic_isolation(self):
+        other_user = User.objects.create(
+            usr_email='other_act@test.com',
+            usr_first_name='Other',
+            usr_last_name='Act',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=False,
+        )
+        StaffProfile.objects.create(
+            usr_id=other_user,
+            cln_id=self.other_clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.post(
+            self._action_url(str(other_user.usr_id), 'activate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class StaffStatsTests(StaffAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.stats_url = reverse('staff-stats')
+
+    def test_stats_empty_clinic(self):
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['active'], 1)
+        self.assertEqual(response.data['pending_setup'], 0)
+        self.assertEqual(response.data['deactivated'], 0)
+
+    def test_stats_counts_active(self):
+        user = User.objects.create(
+            usr_email='stat_active@test.com',
+            usr_first_name='Active',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=True,
+            usr_must_change_password=False,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.data['active'], 2)
+
+    def test_stats_counts_pending_setup(self):
+        user = User.objects.create(
+            usr_email='stat_pending@test.com',
+            usr_first_name='Pending',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=True,
+            usr_must_change_password=True,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.data['pending_setup'], 1)
+
+    def test_stats_counts_deactivated(self):
+        user = User.objects.create(
+            usr_email='stat_deact@test.com',
+            usr_first_name='Deact',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=False,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.data['deactivated'], 1)
+
+    def test_stats_overlap_fix(self):
+        user = User.objects.create(
+            usr_email='stat_overlap@test.com',
+            usr_first_name='Overlap',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=False,
+            usr_must_change_password=True,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.data['deactivated'], 1)
+        self.assertEqual(response.data['pending_setup'], 0)
+
+    def test_stats_licenses_expiring_soon(self):
+        user = User.objects.create(
+            usr_email='stat_exp@test.com',
+            usr_first_name='Expiring',
+            usr_last_name='Vet',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+            stf_license_number='LIC-EXP',
+            stf_license_expiration_date=date.today() + timedelta(days=30),
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertGreaterEqual(response.data['licenses_expiring_soon'], 1)
+
+    def test_stats_clinic_isolation(self):
+        other_user = User.objects.create(
+            usr_email='stat_other@test.com',
+            usr_first_name='Other',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=other_user,
+            cln_id=self.other_clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        response = self.client.get(
+            self.stats_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.data['total'], 1)

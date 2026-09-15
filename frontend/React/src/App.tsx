@@ -8,10 +8,13 @@ const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').the
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ClinicProfilePage = lazy(() => import('./features/clinic-profile/pages/ClinicProfilePage').then(m => ({ default: m.ClinicProfilePage })))
 const StaffListPage = lazy(() => import('./features/staff/pages/StaffListPage').then(m => ({ default: m.StaffListPage })))
+const StaffDetailPage = lazy(() => import('./features/staff/pages/StaffDetailPage').then(m => ({ default: m.StaffDetailPage })))
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
+const ClinicAdminLayout = lazy(() => import('./features/clinic-admin/components/ClinicAdminLayout').then(m => ({ default: m.ClinicAdminLayout })))
 
 function PageLoader() {
   return (
@@ -68,19 +71,17 @@ function App() {
           <Route
             element={
               <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
-                <ClinicAdminDashboardPage />
+                <ClinicAdminLayout />
               </ProtectedRoute>
             }
-            path="/clinic/dashboard"
-          />
-          <Route
-            element={
-              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
-                <StaffListPage />
-              </ProtectedRoute>
-            }
-            path="/clinic/staff"
-          />
+            path="/clinic"
+          >
+            <Route index element={<ClinicAdminDashboardPage />} />
+            <Route element={<ClinicAdminDashboardPage />} path="dashboard" />
+            <Route element={<StaffListPage />} path="staff" />
+            <Route element={<StaffDetailPage />} path="staff/:id" />
+            <Route element={<ClinicProfilePage />} path="profile" />
+          </Route>
         </Routes>
       </Suspense>
     </>

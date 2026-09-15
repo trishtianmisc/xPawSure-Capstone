@@ -1,8 +1,12 @@
+from io import BytesIO
+
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from clinics.models import Clinic, ClinicStatus
+from clinics.models import Clinic, ClinicSettings, ClinicStatus
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
@@ -398,4 +402,276 @@ class ClinicProvisioningTests(ClinicAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data.get('email_sent'))
 
-    
+
+class ClinicSettingsAutoCreationTests(ClinicAPITestCase):
+
+    def test_create_clinic_auto_creates_settings(self):
+        response = self._create_clinic('Settings Test Clinic', email='settings@test.com')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        clinic = Clinic.objects.get(cln_name='Settings Test Clinic')
+        settings_obj = ClinicSettings.objects.get(cln_id=clinic)
+        self.assertEqual(str(settings_obj.cls_opening_time), '09:00:00')
+        self.assertEqual(str(settings_obj.cls_closing_time), '17:00:00')
+        self.assertEqual(settings_obj.cls_appointment_duration, 30)
+        self.assertEqual(settings_obj.cls_max_appointments_per_day, 50)
+        self.assertTrue(settings_obj.cls_allow_owner_booking)
+        self.assertEqual(settings_obj.cls_timezone, 'UTC')
+
+
+class ClinicProfileTests(ClinicAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.profile_url = reverse('clinic-profile')
+        self.settings_url = reverse('clinic-settings')
+        self.logo_url = reverse('clinic-logo')
+
+        create_resp = self._create_clinic('Profile Test Clinic', email='profile@test.com')
+        clinic_id = create_resp.data['id']
+        clinic = Clinic.objects.get(cln_id=clinic_id)
+
+        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
+        self.clinic_admin.refresh_from_db()
+
+    def test_get_profile(self):
+        response = self.client.get(
+            self.profile_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], 'Profile Test Clinic')
+        self.assertEqual(response.data['status'], 'ACTIVE')
+        self.assertIn('id', response.data)
+
+    def test_get_profile_rejects_unauthenticated(self):
+        response = self.client.get(self.profile_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_get_profile_rejects_super_admin(self):
+        response = self.client.get(
+            self.profile_url, **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_profile(self):
+        response = self.client.put(
+            self.profile_url,
+            {'name': 'Updated Profile Clinic', 'phone': '09171234567'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], 'Updated Profile Clinic')
+        self.assertEqual(response.data['phone'], '09171234567')
+
+    def test_update_profile_invalid_phone(self):
+        response = self.client.put(
+            self.profile_url,
+            {'name': 'Test', 'phone': '12345'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_profile_license_number_read_only(self):
+        clinic = self.clinic_admin.staffprofile.cln_id
+        clinic.cln_license_no = 'LDN-2026-001'
+        clinic.save()
+
+        response = self.client.put(
+            self.profile_url,
+            {'name': 'Test', 'license_number': 'HACKED'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_profile_creates_audit_log(self):
+        from audit_log.models import AuditLog
+
+        self.client.put(
+            self.profile_url,
+            {'name': 'Audited Clinic'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        audit = AuditLog.objects.filter(
+            adl_action='UPDATE_CLINIC_PROFILE',
+            adl_module='CLINIC',
+        ).last()
+        self.assertIsNotNone(audit)
+        self.assertIn('old_values', audit.adl_old_values.__class__.__name__ if hasattr(audit.adl_old_values, '__class__') else '')
+
+
+class ClinicSettingsTests(ClinicAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.settings_url = reverse('clinic-settings')
+
+        create_resp = self._create_clinic('Settings Test', email='settings@test.com')
+        clinic_id = create_resp.data['id']
+        clinic = Clinic.objects.get(cln_id=clinic_id)
+
+        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
+        self.clinic_admin.refresh_from_db()
+
+    def test_get_settings(self):
+        response = self.client.get(
+            self.settings_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('opening_time', response.data)
+        self.assertIn('closing_time', response.data)
+        self.assertIn('appointment_duration', response.data)
+
+    def test_update_settings(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '08:00:00',
+                'closing_time': '18:00:00',
+                'appointment_duration': 45,
+                'max_appointments_per_day': 30,
+                'allow_owner_booking': False,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['opening_time'], '08:00:00')
+        self.assertEqual(response.data['closing_time'], '18:00:00')
+        self.assertEqual(response.data['appointment_duration'], 45)
+        self.assertEqual(response.data['max_appointments_per_day'], 30)
+        self.assertFalse(response.data['allow_owner_booking'])
+
+    def test_update_settings_invalid_time_order(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '18:00:00',
+                'closing_time': '08:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_settings_invalid_duration(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'appointment_duration': 0,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_settings_rejects_super_admin(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+            },
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_update_settings_creates_audit_log(self):
+        from audit_log.models import AuditLog
+
+        self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '07:00:00',
+                'closing_time': '19:00:00',
+                'appointment_duration': 60,
+                'max_appointments_per_day': 100,
+                'allow_owner_booking': False,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        audit = AuditLog.objects.filter(
+            adl_action='UPDATE_CLINIC_SETTINGS',
+            adl_module='CLINIC_SETTINGS',
+        ).last()
+        self.assertIsNotNone(audit)
+
+
+class ClinicLogoTests(ClinicAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.logo_url = reverse('clinic-logo')
+
+        create_resp = self._create_clinic('Logo Test', email='logo@test.com')
+        clinic_id = create_resp.data['id']
+        clinic = Clinic.objects.get(cln_id=clinic_id)
+
+        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
+        self.clinic_admin.refresh_from_db()
+
+    def _make_image(self, name='logo.png', content_type='image/png', size=1024):
+        content = BytesIO(b'\x89PNG\r\n\x1a\n' + b'\x00' * (size - 8))
+        return SimpleUploadedFile(name, content.read(), content_type=content_type)
+
+    @override_settings(MEDIA_ROOT='test_media')
+    def test_upload_logo(self):
+        from shutil import rmtree
+
+        logo_file = self._make_image()
+        response = self.client.post(
+            self.logo_url, {'logo': logo_file}, format='multipart',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNotNone(response.data['logo_url'])
+        rmtree('test_media', ignore_errors=True)
+
+    def test_upload_logo_invalid_type(self):
+        logo_file = SimpleUploadedFile(
+            'file.txt', b'hello', content_type='text/plain',
+        )
+        response = self.client.post(
+            self.logo_url, {'logo': logo_file}, format='multipart',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_logo_rejects_super_admin(self):
+        logo_file = self._make_image()
+        response = self.client.post(
+            self.logo_url, {'logo': logo_file}, format='multipart',
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_upload_logo_creates_audit_log(self):
+        from audit_log.models import AuditLog
+        from shutil import rmtree
+
+        logo_file = self._make_image()
+        self.client.post(
+            self.logo_url, {'logo': logo_file}, format='multipart',
+            **self._auth_header(self.clinic_admin),
+        )
+        audit = AuditLog.objects.filter(
+            adl_action='UPLOAD_LOGO',
+            adl_module='CLINIC',
+        ).last()
+        self.assertIsNotNone(audit)
+        rmtree('test_media', ignore_errors=True)
