@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to XPawSure — Veterinarian Account</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f4;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f4;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#78350f,#451a03);border-radius:16px 16px 0 0;padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.025em;">XPawSure</h1>
+              <p style="margin:8px 0 0;font-size:14px;color:#fde68a;">AI-Assisted Veterinary Management</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color:#ffffff;padding:40px;border-radius:0 0 16px 16px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+              <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#1c1917;">Welcome to {{ clinic_name }}</h2>
+              <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#57534e;">
+                A veterinarian account has been created for you at <strong style="color:#1c1917;">{{ clinic_name }}</strong>.
+                You can now log in and start managing consultations, prescriptions, and medical records.
+              </p>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#fafaf9;border-radius:12px;padding:20px;margin-bottom:24px;">
+                <tr>
+                  <td>
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#a8a29e;">Login URL</p>
+                    <p style="margin:0 0 16px;font-size:14px;color:#1c1917;"><a href="{{ login_url }}" style="color:#d97706;text-decoration:none;">{{ login_url }}</a></p>
+
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#a8a29e;">Username</p>
+                    <p style="margin:0 0 16px;font-size:14px;color:#1c1917;">{{ email }}</p>
+
+                    <p style="margin:0 0 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:#a8a29e;">Temporary Password</p>
+                    <p style="margin:0 0 0;font-size:16px;font-weight:700;color:#1c1917;font-family:Menlo,Consolas,monospace;letter-spacing:0.05em;">{{ temporary_password }}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="background-color:#fef3c7;border-radius:12px;padding:16px 20px;margin-bottom:24px;">
+                <p style="margin:0;font-size:13px;line-height:1.5;color:#92400e;">
+                  <strong>Important:</strong> You must change your password on first login.
+                  This temporary password expires immediately after you set a new one.
+                </p>
+              </div>
+
+              <p style="margin:0 0 0;font-size:13px;color:#a8a29e;text-align:center;">
+                Need help? Contact <a href="mailto:{{ support_email }}" style="color:#d97706;text-decoration:none;">{{ support_email }}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 0 0;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#a8a29e;">&copy; 2026 XPawSure. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
