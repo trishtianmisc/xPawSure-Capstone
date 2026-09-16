@@ -55,6 +55,7 @@ class AuthService:
                 'role': user.usr_role,
                 'first_name': user.usr_first_name,
                 'last_name': user.usr_last_name,
+                'phone': user.usr_phone or '',
                 'must_change_password': user.usr_must_change_password,
             },
         }

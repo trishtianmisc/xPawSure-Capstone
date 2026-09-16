@@ -12,6 +12,13 @@ const StaffListPage = lazy(() => import('./features/staff/pages/StaffListPage').
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
+const VetDashboardLayout = lazy(() => import('./features/veterinarian/dashboard/components/VetDashboardLayout').then(m => ({ default: m.VetDashboardLayout })))
+const VetDashboardPage = lazy(() => import('./features/veterinarian/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationsPage').then(m => ({ default: m.ConsultationsPage })))
+const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
+const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
+const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
+const VetProfilePage = lazy(() => import('./features/veterinarian/dashboard/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 
 function PageLoader() {
   return (
@@ -73,6 +80,14 @@ function App() {
             }
             path="/clinic/dashboard"
           />
+          <Route element={<VetDashboardLayout />} path="/veterinarian">
+            <Route element={<VetDashboardPage />} path="dashboard" />
+            <Route element={<VetConsultationsPage />} path="consultations" />
+            <Route element={<VetConsultationFormPage />} path="consultations/:id" />
+            <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
+            <Route element={<VetSchedulePage />} path="schedule" />
+            <Route element={<VetProfilePage />} path="profile" />
+          </Route>
           <Route
             element={
               <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
