@@ -1,6 +1,5 @@
-import { Tabs } from 'expo-router'
-import { Ionicons } from '@expo/vector-icons'
 import { Redirect, Tabs } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { View } from 'react-native'
 
 import { AppHeader } from '../../src/components/AppHeader'
@@ -9,6 +8,7 @@ import { useTheme } from '../../src/context/ThemeContext'
 
 export default function VetTabLayout() {
   const { colors } = useTheme()
+  const { isLoading, isAuthenticated, user } = useAuth()
 
   if (isLoading) return null
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />
