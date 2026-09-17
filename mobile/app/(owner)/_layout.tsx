@@ -1,18 +1,12 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Redirect, Tabs } from 'expo-router'
+import { Tabs } from 'expo-router'
 import { View } from 'react-native'
 
 import { AppHeader } from '../../src/components/AppHeader'
-import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 
 export default function OwnerTabLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth()
   const { colors } = useTheme()
-
-  if (isLoading) return null
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
-  if (user?.role !== 'OWNER') return <Redirect href="/(vet)/" />
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>

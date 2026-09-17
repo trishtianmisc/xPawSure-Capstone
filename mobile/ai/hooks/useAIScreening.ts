@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 
-import { loadModel, runScreening, isReady, disposeModel } from '../services/tensorflow.service'
+import { loadModel, runScreening, isReady } from '../services/tensorflow.service'
 import type { ScreeningResult } from '../types/ai.types'
 
 interface UseAIScreeningReturn {
@@ -15,35 +15,32 @@ interface UseAIScreeningReturn {
 }
 
 export function useAIScreening(): UseAIScreeningReturn {
-  const [isModelLoading, setIsModelLoading] = useState(true)
+  const [isModelLoading, setIsModelLoading] = useState(false)
   const [modelError, setModelError] = useState<string | null>(null)
   const [isScreening, setIsScreening] = useState(false)
   const [result, setResult] = useState<ScreeningResult | null>(null)
   const [screeningError, setScreeningError] = useState<string | null>(null)
+  const loadingRef = useRef(false)
 
-  useEffect(() => {
-    let mounted = true
+  const ensureModel = useCallback(async () => {
+    if (isReady()) return
+    if (loadingRef.current) return
 
-    async function init() {
-      try {
-        await loadModel()
-        if (mounted) {
-          setIsModelLoading(false)
-        }
-      } catch (error) {
-        if (mounted) {
-          setModelError(`Failed to load AI model: ${error}`)
-          setIsModelLoading(false)
-        }
-      }
+    loadingRef.current = true
+    setIsModelLoading(true)
+    setModelError(null)
+
+    try {
+      await loadModel()
+    } catch (error) {
+      setModelError(`Failed to load AI model: ${error}`)
+      loadingRef.current = false
+      setIsModelLoading(false)
+      throw error
     }
 
-    init()
-
-    return () => {
-      mounted = false
-      disposeModel()
-    }
+    loadingRef.current = false
+    setIsModelLoading(false)
   }, [])
 
   const screenImage = useCallback(async (imageUri: string): Promise<ScreeningResult> => {
@@ -52,6 +49,7 @@ export function useAIScreening(): UseAIScreeningReturn {
     setResult(null)
 
     try {
+      await ensureModel()
       const screeningResult = await runScreening(imageUri)
       setResult(screeningResult)
       return screeningResult
@@ -62,7 +60,7 @@ export function useAIScreening(): UseAIScreeningReturn {
     } finally {
       setIsScreening(false)
     }
-  }, [])
+  }, [ensureModel])
 
   const reset = useCallback(() => {
     setResult(null)

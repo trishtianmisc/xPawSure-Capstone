@@ -1,18 +1,10 @@
-import { Redirect, Tabs } from 'expo-router'
+import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 
-import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 
 export default function VetTabLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth()
   const { colors } = useTheme()
-
-  if (isLoading) return null
-
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
-
-  if (user?.role !== 'VETERINARIAN') return <Redirect href="/(owner)/" />
 
   return (
     <Tabs screenOptions={{

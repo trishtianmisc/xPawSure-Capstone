@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, type ComponentProps } from 'react'
-import { Image, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'

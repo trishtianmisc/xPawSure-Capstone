@@ -128,15 +128,40 @@ MEDIA_URL = 'media/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
 if DEBUG:
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
     CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS', default=[
         'http://localhost:5173',
         'http://localhost:3000',
+        'http://localhost:8081',
+        'http://localhost:8082',
+        'http://192.168.137.1:8081',
+        'http://192.168.137.1:8082',
     ])
-
-CORS_ALLOW_CREDENTIALS = True
+else:
+    CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS')
 
 
 REST_FRAMEWORK = {
