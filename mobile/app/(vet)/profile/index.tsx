@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image } from 'react-native'
 import { useEffect, useMemo, useState } from 'react'
 import * as ImagePicker from 'expo-image-picker'

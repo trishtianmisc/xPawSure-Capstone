@@ -1,3 +1,4 @@
+import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Redirect, Tabs } from 'expo-router'
 import { View } from 'react-native'
@@ -7,7 +8,6 @@ import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 
 export default function VetTabLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth()
   const { colors } = useTheme()
 
   if (isLoading) return null

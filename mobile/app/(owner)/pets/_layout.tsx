@@ -5,7 +5,8 @@ export default function PetsLayout() {
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="[id]" options={{ headerShown: false }} />
-<Stack.Screen name="new" options={{ headerShown: false }} />
+      <Stack.Screen name="new" options={{ headerShown: false }} />
+      <Stack.Screen name="screening" options={{ headerShown: false }} />
     </Stack>
   );
 }
