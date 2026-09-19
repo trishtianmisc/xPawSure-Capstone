@@ -38,3 +38,68 @@ class Clinic(models.Model):
 
     def __str__(self):
         return self.cln_name
+
+
+class ClinicSettings(models.Model):
+    cls_id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, db_column='CLS_ID',
+    )
+    cln_id = models.OneToOneField(
+        Clinic, on_delete=models.CASCADE, db_column='CLN_ID',
+        related_name='settings',
+    )
+    cls_opening_time = models.TimeField(db_column='CLS_OPENING_TIME')
+    cls_closing_time = models.TimeField(db_column='CLS_CLOSING_TIME')
+    cls_appointment_duration = models.IntegerField(default=30, db_column='CLS_APPOINTMENT_DURATION')
+    cls_max_appointments_per_day = models.IntegerField(default=50, db_column='CLS_MAX_APPOINTMENTS_PER_DAY')
+    cls_allow_owner_booking = models.BooleanField(default=True, db_column='CLS_ALLOW_OWNER_BOOKING')
+    cls_created_at = models.DateTimeField(auto_now_add=True, db_column='CLS_CREATED_AT')
+    cls_updated_at = models.DateTimeField(auto_now=True, db_column='CLS_UPDATED_AT')
+
+    class Meta:
+        managed = True
+        db_table = 'CLINIC_SETTINGS'
+
+    def __str__(self):
+        return f'Settings for {self.cln_id}'
+
+
+class DayOfWeek(models.TextChoices):
+    MON = 'MON'
+    TUE = 'TUE'
+    WED = 'WED'
+    THU = 'THU'
+    FRI = 'FRI'
+    SAT = 'SAT'
+    SUN = 'SUN'
+
+
+class ClinicOperatingHours(models.Model):
+    coh_id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False, db_column='COA_ID',
+    )
+    cln_id = models.ForeignKey(
+        Clinic, on_delete=models.CASCADE, db_column='CLN_ID',
+        related_name='operating_hours',
+    )
+    day_of_week = models.CharField(
+        max_length=3, choices=DayOfWeek.choices, db_column='DAY_OF_WEEK',
+    )
+    day_index = models.IntegerField(db_column='DAY_INDEX')
+    opening_time = models.TimeField(null=True, blank=True, db_column='OPENING_TIME')
+    closing_time = models.TimeField(null=True, blank=True, db_column='CLOSING_TIME')
+    is_closed = models.BooleanField(default=False, db_column='IS_CLOSED')
+
+    class Meta:
+        managed = True
+        db_table = 'CLINIC_OPERATING_HOURS'
+        ordering = ['day_index']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cln_id', 'day_of_week'],
+                name='uq_clinic_operating_hours_clinic_day',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.cln_id} - {self.day_of_week}'

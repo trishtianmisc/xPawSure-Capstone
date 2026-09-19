@@ -527,6 +527,30 @@ These features must not break existing workflows.
 
 ---
 
+---
+
+# Receptionist Schedule Management Rules
+
+Receptionists can view and manage veterinarian schedules for their clinic.
+
+Receptionists can generate time slots for veterinarians based on clinic operating hours.
+
+Receptionists can toggle slot status between AVAILABLE and BLOCKED for any slot that has no appointment.
+
+BOOKED slots cannot be blocked — the appointment must be cancelled first, notifying the owner.
+
+Receptionists can bulk-block all remaining available slots for a vet on a specific date.
+
+Bulk block operations skip BOOKED slots and return a count of skipped slots so the receptionist knows which appointments still need individual handling.
+
+When an appointment is cancelled or marked no-show, the slot automatically returns to AVAILABLE status.
+
+Slot generation uses ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+
+The mobile app's booking flow queries slots with status = AVAILABLE. Blocked slots are not visible to owners.
+
+---
+
 # 26. Rules for AI Coding Assistants
 
 When implementing features:

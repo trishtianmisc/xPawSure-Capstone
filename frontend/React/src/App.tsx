@@ -7,11 +7,22 @@ import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
-const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const StaffListPage = lazy(() => import('./features/staff/pages/StaffListPage').then(m => ({ default: m.StaffListPage })))
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
+const ReceptionistLayout = lazy(() => import('./features/receptionist/components/ReceptionistLayout').then(m => ({ default: m.ReceptionistLayout })))
+const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ReceptionistAppointmentsPage = lazy(() => import('./features/receptionist/pages/AppointmentsPage').then(m => ({ default: m.AppointmentsPage })))
+const ReceptionistAppointmentDetailPage = lazy(() => import('./features/receptionist/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
+const ReceptionistCreateAppointmentPage = lazy(() => import('./features/receptionist/pages/CreateAppointmentPage').then(m => ({ default: m.CreateAppointmentPage })))
+const ReceptionistOwnersPage = lazy(() => import('./features/receptionist/pages/OwnersPage').then(m => ({ default: m.OwnersPage })))
+const ReceptionistOwnerDetailPage = lazy(() => import('./features/receptionist/pages/OwnerDetailPage').then(m => ({ default: m.OwnerDetailPage })))
+const ReceptionistPetsPage = lazy(() => import('./features/receptionist/pages/PetsPage').then(m => ({ default: m.PetsPage })))
+const ReceptionistPetDetailPage = lazy(() => import('./features/receptionist/pages/PetDetailPage').then(m => ({ default: m.PetDetailPage })))
+const ReceptionistSchedulePage = lazy(() => import('./features/receptionist/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
+const ReceptionistVetScheduleListPage = lazy(() => import('./features/receptionist/pages/VetScheduleListPage').then(m => ({ default: m.VetScheduleListPage })))
+const ReceptionistProfilePage = lazy(() => import('./features/receptionist/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 const VetDashboardLayout = lazy(() => import('./features/veterinarian/dashboard/components/VetDashboardLayout').then(m => ({ default: m.VetDashboardLayout })))
 const VetDashboardPage = lazy(() => import('./features/veterinarian/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationsPage').then(m => ({ default: m.ConsultationsPage })))
@@ -74,11 +85,11 @@ function App() {
           />
           <Route
             element={
-              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
-                <ClinicAdminDashboardPage />
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <StaffListPage />
               </ProtectedRoute>
             }
-            path="/clinic/dashboard"
+            path="/super-admin/staff"
           />
           <Route element={<VetDashboardLayout />} path="/veterinarian">
             <Route element={<VetDashboardPage />} path="dashboard" />
@@ -90,12 +101,25 @@ function App() {
           </Route>
           <Route
             element={
-              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
-                <StaffListPage />
+              <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
+                <ReceptionistLayout />
               </ProtectedRoute>
             }
-            path="/clinic/staff"
-          />
+            path="/receptionist"
+          >
+            <Route index element={<ReceptionistDashboardPage />} />
+            <Route element={<ReceptionistDashboardPage />} path="dashboard" />
+            <Route element={<ReceptionistAppointmentsPage />} path="appointments" />
+            <Route element={<ReceptionistCreateAppointmentPage />} path="appointments/new" />
+            <Route element={<ReceptionistAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<ReceptionistOwnersPage />} path="owners" />
+            <Route element={<ReceptionistOwnerDetailPage />} path="owners/:id" />
+            <Route element={<ReceptionistPetsPage />} path="pets" />
+            <Route element={<ReceptionistPetDetailPage />} path="pets/:id" />
+            <Route element={<ReceptionistVetScheduleListPage />} path="schedule" />
+            <Route element={<ReceptionistSchedulePage />} path="schedule/:vetId" />
+            <Route element={<ReceptionistProfilePage />} path="profile" />
+          </Route>
         </Routes>
       </Suspense>
     </>

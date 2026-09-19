@@ -100,6 +100,8 @@ Each table uses a unique prefix.
 | AI_SCREENING_IMAGE | ASI |
 | NOTIFICATION | NTF |
 | AUDIT_LOG | ADL |
+| VET_SLOT | VSL |
+| CLINIC_OPERATING_HOURS | COH |
 
 ---
 
@@ -133,6 +135,13 @@ The database is divided into the following modules.
 ## Appointment Management
 
 - Appointment
+
+---
+
+## Schedule Management
+
+- Vet Slot
+- Clinic Operating Hours
 
 ---
 
