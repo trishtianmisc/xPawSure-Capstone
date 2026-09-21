@@ -268,12 +268,15 @@ class ClinicOperatingHoursView(APIView):
         serializer = ClinicOperatingHoursSerializer(data=request.data, many=True)
         serializer.is_valid(raise_exception=True)
 
-        hours = ClinicProfileService.update_operating_hours(
-            clinic,
-            serializer.validated_data,
-            user_id=str(request.user.usr_id),
-            ip_address=request.META.get('REMOTE_ADDR'),
-        )
+        try:
+            hours = ClinicProfileService.update_operating_hours(
+                clinic,
+                serializer.validated_data,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+        except ValueError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         result = ClinicOperatingHoursSerializer(hours, many=True)
         return Response(result.data)

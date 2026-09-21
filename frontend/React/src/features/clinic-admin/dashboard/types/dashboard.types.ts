@@ -1,11 +1,8 @@
 export interface DashboardStats {
-  total_owners: number
-  total_pets: number
-  today_appointments: number
-  pending_appointments: number
-  completed_appointments: number
   total_veterinarians: number
-  total_receptionists: number
+  total_pets: number
+  appointments_this_month: number
+  appointments_last_month: number
   screenings_pending_review: number
 }
 
@@ -17,8 +14,6 @@ export interface ChartDataPoint {
 export interface DashboardCharts {
   appointments_by_month: ChartDataPoint[]
   screenings_by_disease: ChartDataPoint[]
-  pet_registration_trend: ChartDataPoint[]
-  vaccination_trend: ChartDataPoint[]
 }
 
 export interface RecentItem {

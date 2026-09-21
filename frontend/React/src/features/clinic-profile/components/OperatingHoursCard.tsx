@@ -25,7 +25,11 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
   const [draft, setDraft] = useState<OperatingHoursDay[]>([])
 
   function openEdit() {
-    setDraft(hours.map((h) => ({ ...h })))
+    setDraft(hours.map((h) => ({
+      ...h,
+      opening_time: h.opening_time || null,
+      closing_time: h.closing_time || null,
+    })))
     setEditing(true)
   }
 
@@ -97,8 +101,8 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
               </div>
             ))}
           </div>
-          <div className="mt-6">
-            <Button variant="secondary" size="sm" onClick={openEdit}>
+          <div className="mt-6 flex justify-end">
+            <Button className="transition hover:bg-[#913712]" size="md" onClick={openEdit}>
               Edit Hours
             </Button>
           </div>
@@ -175,4 +179,10 @@ function formatTime(time: string | null): string {
   const ampm = hour >= 12 ? 'PM' : 'AM'
   const displayHour = hour % 12 || 12
   return `${displayHour}:${m} ${ampm}`
+}
+
+function toTimeInputValue(timeStr: string | null): string {
+  if (!timeStr) return ''
+  const parts = timeStr.split(':')
+  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
 }

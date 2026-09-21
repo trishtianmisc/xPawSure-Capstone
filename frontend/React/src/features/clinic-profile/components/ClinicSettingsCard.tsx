@@ -78,8 +78,8 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
         </div>
       </dl>
 
-      <div className="mt-6">
-        <Button variant="secondary" size="sm" onClick={openEdit}>
+      <div className="mt-6 flex justify-end">
+        <Button className="transition hover:bg-[#913712]" size="md" onClick={openEdit}>
           Edit Settings
         </Button>
       </div>
