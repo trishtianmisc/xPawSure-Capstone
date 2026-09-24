@@ -370,7 +370,176 @@ Soft delete.
 
 ---
 
-# 6. Consultation Endpoints
+# 6. Schedule Management
+
+## GET /api/schedule/
+
+Receptionist only.
+
+Returns vet schedule for a date range.
+
+Query params:
+
+- start_date (required): YYYY-MM-DD
+- end_date (required): YYYY-MM-DD, max 7 days from start
+- vet_id (optional): filter to a single vet
+
+Response (200):
+
+{
+  "start_date": "2026-09-18",
+  "end_date": "2026-09-20",
+  "vets": [
+    {
+      "stf_id": "uuid",
+      "full_name": "Dr. Smith",
+      "days": [
+        {
+          "date": "2026-09-18",
+          "is_working": true,
+          "slots": [
+            {
+              "vsl_id": "uuid",
+              "vsl_start_time": "09:00",
+              "vsl_end_time": "09:30",
+              "status": "AVAILABLE",
+              "appointment": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+---
+
+## GET /api/schedule/vet-list/
+
+Receptionist only.
+
+Returns list of veterinarians with today's slot summary.
+
+Response (200):
+
+{
+  "vets": [
+    {
+      "stf_id": "uuid",
+      "full_name": "Dr. Smith",
+      "today_summary": {
+        "total_slots": 16,
+        "booked": 3,
+        "available": 10,
+        "blocked": 3,
+        "is_working": true,
+        "has_slots": true
+      }
+    }
+  ]
+}
+
+---
+
+## POST /api/generate-slots/
+
+Receptionist only.
+
+Pre-generates time slots for vets based on clinic operating hours.
+
+Request:
+
+{
+  "start_date": "2026-09-18",
+  "end_date": "2026-09-24",
+  "vet_id": "uuid (optional)"
+}
+
+Response (200):
+
+{
+  "generated": true,
+  "slots_created": 96
+}
+
+---
+
+## PATCH /api/schedule/slots/{slot_id}/status/
+
+Receptionist only.
+
+Toggles a slot's status between AVAILABLE and BLOCKED.
+
+Request:
+
+{
+  "status": "BLOCKED"
+}
+
+Response (200):
+
+{
+  "vsl_id": "uuid",
+  "status": "BLOCKED"
+}
+
+Errors:
+
+- 400: Slot has an appointment (cannot block)
+- 400: Invalid status value
+- 404: Slot not found
+
+---
+
+## POST /api/schedule/vets/{vet_id}/block-remaining/
+
+Receptionist only.
+
+Blocks all available slots for a vet on a specific date. Skips booked slots.
+
+Query params:
+
+- date (required): YYYY-MM-DD
+
+Response (200):
+
+{
+  "blocked": 12,
+  "skipped_booked": 3
+}
+
+---
+
+## GET /api/available-slots/
+
+Receptionist only.
+
+Returns available slots for a specific vet on a specific date.
+
+Query params:
+
+- vet_id (required): UUID
+- date (required): YYYY-MM-DD
+
+Response (200): Array of VetSlot objects with status = AVAILABLE
+
+---
+
+## GET /api/vets/
+
+Receptionist only.
+
+Returns veterinarians working on a specific date.
+
+Query params:
+
+- date (required): YYYY-MM-DD
+
+Response (200): Array of { stf_id, full_name, email }
+
+---
+
+# 7. Consultation Endpoints
 
 ## GET /api/consultations/
 

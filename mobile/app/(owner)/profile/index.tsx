@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { Pressable, SafeAreaView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme } from '../../../src/context/ThemeContext'
