@@ -81,3 +81,17 @@ export interface ScheduleDayAppointment {
   breed: string
   owner_name: string
 }
+
+export interface ScheduleMonthAppointment {
+  id: string
+  date: string
+  time: string
+  pet_name: string
+  breed: string
+  owner_name: string
+}
+
+export interface ScheduleWeekDay {
+  dayLabel: string
+  appointments: ScheduleDayAppointment[]
+}
