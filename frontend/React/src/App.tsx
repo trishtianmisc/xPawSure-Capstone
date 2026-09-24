@@ -88,24 +88,28 @@ function App() {
             path="/super-admin/clinics/:id"
           />
           <Route
-            element={
-              <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
-                <ClinicAdminLayout />
-              </ProtectedRoute>
-            }
-            path="/clinic"
-          >
-            <Route index element={<ClinicAdminDashboardPage />} />
-            <Route element={<ClinicAdminDashboardPage />} path="dashboard" />
-            <Route element={<StaffListPage />} path="staff" />
-            <Route element={<StaffDetailPage />} path="staff/:id" />
-            <Route element={<ClinicProfilePage />} path="profile" />
-              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-                <StaffListPage />
-              </ProtectedRoute>
-            }
-            path="/super-admin/staff"
-          />
+  path="/clinic"
+  element={
+    <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
+      <ClinicAdminLayout />
+    </ProtectedRoute>
+  }
+>
+  <Route index element={<ClinicAdminDashboardPage />} />
+  <Route path="dashboard" element={<ClinicAdminDashboardPage />} />
+  <Route path="staff" element={<StaffListPage />} />
+  <Route path="staff/:id" element={<StaffDetailPage />} />
+  <Route path="profile" element={<ClinicProfilePage />} />
+</Route>
+
+<Route
+  path="/super-admin/staff"
+  element={
+    <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+      <StaffListPage />
+    </ProtectedRoute>
+  }
+/>
           <Route element={<VetDashboardLayout />} path="/veterinarian">
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
