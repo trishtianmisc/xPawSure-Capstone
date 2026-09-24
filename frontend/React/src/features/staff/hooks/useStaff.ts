@@ -4,6 +4,7 @@ import { listStaff } from '../services/staff.service'
 export function useStaff(params?: {
   role?: string
   search?: string
+  status?: string
   page?: number
   page_size?: number
 }) {

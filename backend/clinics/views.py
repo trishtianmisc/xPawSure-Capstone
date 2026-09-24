@@ -1,17 +1,23 @@
 from django.db.models import Q
 
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from clinics.models import Clinic
 from clinics.serializers import (
+    ClinicOperatingHoursSerializer,
+    ClinicProfileSerializer,
+    ClinicProfileUpdateSerializer,
     ClinicSerializer,
+    ClinicSettingsSerializer,
     ClinicStatusSerializer,
     ClinicUpdateSerializer,
+    LogoUploadSerializer,
 )
-from clinics.services import ClinicService
-from core.permissions import IsSuperAdmin
+from clinics.services import ClinicProfileService, ClinicService
+from core.permissions import IsClinicAdmin, IsSuperAdmin
 
 
 class ClinicListCreateView(APIView):
@@ -153,3 +159,121 @@ class ClinicStatsView(APIView):
     def get(self, request):
         stats = ClinicService.get_stats()
         return Response(stats)
+
+
+class ClinicProfileView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def _get_clinic(self, request):
+        return request.user.staffprofile.cln_id
+
+    def get(self, request):
+        clinic = self._get_clinic(request)
+        serializer = ClinicProfileSerializer(clinic, context={'request': request})
+        return Response(serializer.data)
+
+    def put(self, request):
+        clinic = self._get_clinic(request)
+
+        if clinic.cln_license_no and 'license_number' in request.data:
+            return Response(
+                {'detail': 'License number cannot be changed. Contact Super Admin.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = ClinicProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        clinic = ClinicProfileService.update_profile(
+            clinic,
+            serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        result = ClinicProfileSerializer(clinic, context={'request': request})
+        return Response(result.data)
+
+
+class ClinicSettingsView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def _get_clinic(self, request):
+        return request.user.staffprofile.cln_id
+
+    def get(self, request):
+        clinic = self._get_clinic(request)
+        settings_obj = ClinicProfileService.get_settings(clinic)
+        serializer = ClinicSettingsSerializer(settings_obj)
+        return Response(serializer.data)
+
+    def put(self, request):
+        clinic = self._get_clinic(request)
+
+        serializer = ClinicSettingsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        settings_obj = ClinicProfileService.update_settings(
+            clinic,
+            serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        result = ClinicSettingsSerializer(settings_obj)
+        return Response(result.data)
+
+
+class ClinicLogoView(APIView):
+    permission_classes = [IsClinicAdmin]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def _get_clinic(self, request):
+        return request.user.staffprofile.cln_id
+
+    def post(self, request):
+        clinic = self._get_clinic(request)
+
+        serializer = LogoUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        logo_file = serializer.validated_data['logo']
+
+        clinic = ClinicProfileService.upload_logo(
+            clinic,
+            logo_file,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        result = ClinicProfileSerializer(clinic, context={'request': request})
+        return Response(result.data)
+
+
+class ClinicOperatingHoursView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def _get_clinic(self, request):
+        return request.user.staffprofile.cln_id
+
+    def get(self, request):
+        clinic = self._get_clinic(request)
+        hours = ClinicProfileService.get_operating_hours(clinic)
+        serializer = ClinicOperatingHoursSerializer(hours, many=True)
+        return Response(serializer.data)
+
+    def put(self, request):
+        clinic = self._get_clinic(request)
+
+        serializer = ClinicOperatingHoursSerializer(data=request.data, many=True)
+        serializer.is_valid(raise_exception=True)
+
+        hours = ClinicProfileService.update_operating_hours(
+            clinic,
+            serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+
+        result = ClinicOperatingHoursSerializer(hours, many=True)
+        return Response(result.data)

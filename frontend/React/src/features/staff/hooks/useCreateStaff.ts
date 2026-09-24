@@ -9,6 +9,7 @@ export function useCreateStaff() {
     mutationFn: (payload: CreateStaffPayload) => createStaff(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff'] })
+      queryClient.invalidateQueries({ queryKey: ['staff-stats'] })
     },
   })
 }
