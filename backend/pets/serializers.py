@@ -2,6 +2,9 @@ from rest_framework import serializers
 
 from pets.models import Breed, Pet, Sex
 
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
+MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2 MB
+
 
 class BreedSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(source='brd_id', read_only=True)
@@ -20,7 +23,7 @@ class PetCreateSerializer(serializers.ModelSerializer):
     weight = serializers.DecimalField(source='pet_weight', max_digits=5, decimal_places=2, required=False, allow_null=True)
     color = serializers.CharField(source='pet_color', required=False, allow_blank=True, allow_null=True)
     microchip_number = serializers.CharField(source='pet_microchip_no', required=False, allow_blank=True, allow_null=True, max_length=100)
-    profile_picture = serializers.CharField(source='pet_profile_image', required=False, allow_blank=True, allow_null=True)
+    profile_picture = serializers.ImageField(source='pet_profile_image', required=False, allow_null=True)
 
     class Meta:
         model = Pet
@@ -42,6 +45,15 @@ class PetCreateSerializer(serializers.ModelSerializer):
     def validate_weight(self, value):
         if value is not None and value <= 0:
             raise serializers.ValidationError('Weight must be greater than 0.')
+        return value
+
+    def validate_profile_picture(self, value):
+        if value is None:
+            return value
+        if hasattr(value, 'content_type') and value.content_type not in ALLOWED_IMAGE_TYPES:
+            raise serializers.ValidationError('Accepted formats: jpg, jpeg, png, webp.')
+        if hasattr(value, 'size') and value.size > MAX_IMAGE_SIZE:
+            raise serializers.ValidationError('File size must be 2 MB or less.')
         return value
 
 

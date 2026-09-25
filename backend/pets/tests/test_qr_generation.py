@@ -1,10 +1,8 @@
 import io
 import uuid
-from pathlib import Path
 from unittest.mock import patch
 
-from django.conf import settings
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from PIL import Image
 
 from owners.models import OwnerProfile
@@ -12,6 +10,8 @@ from pets.models import Breed, Pet, Sex
 from pets.services.pet_service import PetService
 from pets.utils.qr_generator import generate_qr_code
 from users.models import User, UserRole
+
+SUPABASE_MOCK_URL = 'https://test-project.supabase.co/storage/v1/object/public/qr-codes/test/abc.png'
 
 
 class QRGeneratorTest(TestCase):
@@ -39,27 +39,45 @@ class QRGeneratorTest(TestCase):
 
 class QRStorageServiceTest(TestCase):
 
-    def tearDown(self):
-        from django.conf import settings as s
-        subdir = Path(s.MEDIA_ROOT) / 'qr_codes'
-        if subdir.exists():
-            import shutil
-            shutil.rmtree(subdir)
+    @patch('core.storage_service.SupabaseStorageService.upload')
+    def test_uploads_to_supabase_and_returns_url(self, mock_upload):
+        mock_upload.return_value = SUPABASE_MOCK_URL
 
-    def test_saves_png_to_disk_and_returns_url(self):
         from pets.services.qr_service import QRStorageService
 
         qr_bytes = generate_qr_code(str(uuid.uuid4()))
         url = QRStorageService.save('pet-123', qr_bytes)
 
-        expected_prefix = f'{settings.MEDIA_URL}qr_codes/'
-        self.assertTrue(url.startswith(expected_prefix), f'URL {url} does not start with {expected_prefix}')
-        self.assertTrue(url.endswith('.png'))
+        self.assertEqual(url, SUPABASE_MOCK_URL)
+        mock_upload.assert_called_once()
+        call_kwargs = mock_upload.call_args
+        self.assertEqual(call_kwargs.kwargs['file_bytes'], qr_bytes)
+        self.assertEqual(call_kwargs.kwargs['content_type'], 'image/png')
 
-        relative_path = url[len(settings.MEDIA_URL):]
-        filepath = Path(settings.MEDIA_ROOT) / relative_path
-        self.assertTrue(filepath.exists(), f'File not found at {filepath}')
-        self.assertGreater(filepath.stat().st_size, 100)
+    @patch('core.storage_service.SupabaseStorageService.upload')
+    def test_object_path_contains_pet_id_and_png_extension(self, mock_upload):
+        mock_upload.return_value = SUPABASE_MOCK_URL
+
+        from pets.services.qr_service import QRStorageService
+
+        qr_bytes = generate_qr_code('pet-abc-123')
+        QRStorageService.save('pet-abc-123', qr_bytes)
+
+        call_kwargs = mock_upload.call_args
+        object_path = call_kwargs.kwargs['object_path']
+        self.assertTrue(object_path.startswith('pet-abc-123/'))
+        self.assertTrue(object_path.endswith('.png'))
+
+    @patch('core.storage_service.SupabaseStorageService.upload')
+    def test_upload_failure_raises_exception(self, mock_upload):
+        from core.storage_service import SupabaseStorageError
+        mock_upload.side_effect = SupabaseStorageError('upload failed')
+
+        from pets.services.qr_service import QRStorageService
+
+        qr_bytes = generate_qr_code(str(uuid.uuid4()))
+        with self.assertRaises(SupabaseStorageError):
+            QRStorageService.save('pet-123', qr_bytes)
 
 
 class PetServiceQRIntegrationTest(TestCase):
@@ -77,13 +95,10 @@ class PetServiceQRIntegrationTest(TestCase):
         )
         self.breed = Breed.objects.create(brd_name='Labrador')
 
-    def tearDown(self):
-        subdir = Path(settings.MEDIA_ROOT) / 'qr_codes'
-        if subdir.exists():
-            import shutil
-            shutil.rmtree(subdir)
+    @patch('pets.services.qr_service.QRStorageService.save')
+    def test_create_pet_generates_qr_code(self, mock_save):
+        mock_save.return_value = SUPABASE_MOCK_URL
 
-    def test_create_pet_generates_qr_code(self):
         pet = PetService.create(
             owner_profile=self.owner_profile,
             validated_data={
@@ -97,20 +112,14 @@ class PetServiceQRIntegrationTest(TestCase):
 
         self.assertIsNotNone(pet.pet_qr_code)
         self.assertEqual(pet.pet_qr_code, str(pet.pet_id))
-        self.assertIsNotNone(pet.pet_qr_code_url)
-        expected_prefix = f'{settings.MEDIA_URL}qr_codes/'
-        self.assertTrue(
-            pet.pet_qr_code_url.startswith(expected_prefix),
-            f'URL {pet.pet_qr_code_url} does not start with {expected_prefix}',
-        )
-        self.assertTrue(pet.pet_qr_code_url.endswith('.png'))
+        self.assertEqual(pet.pet_qr_code_url, SUPABASE_MOCK_URL)
+        mock_save.assert_called_once()
+        self.assertEqual(mock_save.call_args.args[0], str(pet.pet_id))
 
-        relative_path = pet.pet_qr_code_url[len(settings.MEDIA_URL):]
-        filepath = Path(settings.MEDIA_ROOT) / relative_path
-        self.assertTrue(filepath.exists(), f'File not found at {filepath}')
-        self.assertGreater(filepath.stat().st_size, 100)
+    @patch('pets.services.qr_service.QRStorageService.save')
+    def test_qr_image_is_valid_png(self, mock_save):
+        mock_save.return_value = SUPABASE_MOCK_URL
 
-    def test_qr_image_is_valid_png(self):
         pet = PetService.create(
             owner_profile=self.owner_profile,
             validated_data={
@@ -121,12 +130,17 @@ class PetServiceQRIntegrationTest(TestCase):
             user_id=str(self.user.usr_id),
         )
 
-        relative_path = pet.pet_qr_code_url[len(settings.MEDIA_URL):]
-        filepath = Path(settings.MEDIA_ROOT) / relative_path
-        img = Image.open(filepath)
+        qr_image_bytes = generate_qr_code(pet.pet_qr_code)
+        img = Image.open(io.BytesIO(qr_image_bytes))
         self.assertEqual(img.format, 'PNG')
 
-    def test_multiple_pets_get_unique_qr_codes(self):
+    @patch('pets.services.qr_service.QRStorageService.save')
+    def test_multiple_pets_get_unique_qr_codes(self, mock_save):
+        mock_save.side_effect = [
+            'https://test.supabase.co/storage/v1/object/public/qr-codes/a.png',
+            'https://test.supabase.co/storage/v1/object/public/qr-codes/b.png',
+        ]
+
         pet1 = PetService.create(
             owner_profile=self.owner_profile,
             validated_data={'brd_id': self.breed.brd_id, 'pet_name': 'A', 'pet_sex': Sex.MALE},
@@ -179,12 +193,6 @@ class PetAPITest(TestCase):
         )
         self.breed = Breed.objects.create(brd_name='Beagle')
 
-    def tearDown(self):
-        subdir = Path(settings.MEDIA_ROOT) / 'qr_codes'
-        if subdir.exists():
-            import shutil
-            shutil.rmtree(subdir)
-
     def _login(self):
         response = self.client.post('/api/auth/login/', {
             'email': 'owner2@example.com',
@@ -195,7 +203,10 @@ class PetAPITest(TestCase):
     def _auth_header(self):
         return f'Bearer {self._login()}'
 
-    def test_api_create_pet_returns_qr_fields(self):
+    @patch('pets.services.qr_service.QRStorageService.save')
+    def test_api_create_pet_returns_qr_fields(self, mock_save):
+        mock_save.return_value = SUPABASE_MOCK_URL
+
         response = self.client.post(
             '/api/pets/',
             {
@@ -213,7 +224,10 @@ class PetAPITest(TestCase):
         self.assertIsNotNone(response.data['qr_code'])
         self.assertIsNotNone(response.data['qr_code_url'])
 
-    def test_api_list_pets_includes_qr_fields(self):
+    @patch('pets.services.qr_service.QRStorageService.save')
+    def test_api_list_pets_includes_qr_fields(self, mock_save):
+        mock_save.return_value = SUPABASE_MOCK_URL
+
         PetService.create(
             owner_profile=self.owner_profile,
             validated_data={
