@@ -12,6 +12,14 @@ from appointments.views import (
     VetScheduleListView,
 )
 from appointments.views_dashboard import DashboardStatsView
+from appointments.views_owner import (
+    OwnerAppointmentCancelView,
+    OwnerAppointmentDetailView,
+    OwnerAppointmentListCreateView,
+    OwnerAvailableSlotsView,
+    OwnerClinicListView,
+    OwnerVetListView,
+)
 from owners.views import OwnerDetailView, OwnerListView
 from pets.views_receptionist import ReceptionistPetDetailView, ReceptionistPetListCreateView
 
@@ -30,4 +38,10 @@ urlpatterns = [
     path('owners/<uuid:own_id>/', OwnerDetailView.as_view(), name='owner-detail'),
     path('receptionist/pets/', ReceptionistPetListCreateView.as_view(), name='receptionist-pet-list-create'),
     path('receptionist/pets/<uuid:pet_id>/', ReceptionistPetDetailView.as_view(), name='receptionist-pet-detail'),
+    path('owner/clinics/', OwnerClinicListView.as_view(), name='owner-clinic-list'),
+    path('owner/vets/', OwnerVetListView.as_view(), name='owner-vet-list'),
+    path('owner/slots/', OwnerAvailableSlotsView.as_view(), name='owner-available-slots'),
+    path('owner/appointments/', OwnerAppointmentListCreateView.as_view(), name='owner-appointment-list-create'),
+    path('owner/appointments/<uuid:apt_id>/', OwnerAppointmentDetailView.as_view(), name='owner-appointment-detail'),
+    path('owner/appointments/<uuid:apt_id>/cancel/', OwnerAppointmentCancelView.as_view(), name='owner-appointment-cancel'),
 ]

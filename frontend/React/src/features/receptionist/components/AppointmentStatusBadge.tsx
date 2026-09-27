@@ -1,13 +1,21 @@
 import type { AppointmentStatus } from '../types/receptionist.types'
 
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: string }> = {
-  BOOKED: {
-    label: 'Booked',
+  PENDING: {
+    label: 'Pending',
+    className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
+  },
+  CONFIRMED: {
+    label: 'Confirmed',
     className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
   },
   CHECKED_IN: {
     label: 'Checked In',
     className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  },
+  IN_PROGRESS: {
+    label: 'In Progress',
+    className: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400',
   },
   COMPLETED: {
     label: 'Completed',
@@ -24,7 +32,7 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: strin
 }
 
 export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
-  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.BOOKED
+  const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>
       {config.label}

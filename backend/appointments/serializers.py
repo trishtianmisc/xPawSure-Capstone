@@ -1,6 +1,15 @@
 from rest_framework import serializers
 
+from ai_screenings.serializers import ScreeningSummarySerializer
 from appointments.models import Appointment, AppointmentType, VetSlot
+from clinics.models import Clinic
+
+
+class OwnerClinicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Clinic
+        fields = ['cln_id', 'cln_name', 'cln_address', 'cln_phone', 'cln_logo_url']
+        read_only_fields = fields
 
 
 class VetSlotSerializer(serializers.ModelSerializer):
@@ -27,6 +36,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
     vet_name = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
+    screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
 
     class Meta:
         model = Appointment
@@ -34,7 +44,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             'apt_id', 'pet_id', 'pet_name', 'pet_species',
             'cln_id', 'stf_id', 'vet_name', 'owner_name',
             'apt_type', 'apt_status', 'apt_scheduled_at',
-            'apt_reason', 'created_by_name',
+            'apt_reason', 'created_by_name', 'screening',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_created_at',
         ]
@@ -71,13 +81,14 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     vet_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
+    screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
 
     class Meta:
         model = Appointment
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
-            'owner_name', 'owner_phone',
+            'owner_name', 'owner_phone', 'screening',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name',
             'apt_checked_in_at', 'apt_completed_at',
@@ -118,6 +129,7 @@ class CreateAppointmentSerializer(serializers.Serializer):
     slot_id = serializers.UUIDField()
     apt_type = serializers.ChoiceField(choices=AppointmentType.choices)
     reason = serializers.CharField(required=False, allow_blank=True, default='')
+    screening_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class ScheduleAppointmentSerializer(serializers.Serializer):

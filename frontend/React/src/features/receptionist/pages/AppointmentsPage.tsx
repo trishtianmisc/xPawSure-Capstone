@@ -7,8 +7,10 @@ import type { AppointmentStatus } from '../types/receptionist.types'
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All' },
-  { value: 'BOOKED', label: 'Booked' },
+  { value: 'PENDING', label: 'Pending' },
+  { value: 'CONFIRMED', label: 'Confirmed' },
   { value: 'CHECKED_IN', label: 'Checked In' },
+  { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'COMPLETED', label: 'Completed' },
   { value: 'CANCELLED', label: 'Cancelled' },
   { value: 'NO_SHOW', label: 'No Show' },

@@ -12,8 +12,10 @@ class AppointmentType(models.TextChoices):
 
 
 class AppointmentStatus(models.TextChoices):
-    BOOKED = 'BOOKED', 'Booked'
+    PENDING = 'PENDING', 'Pending'
+    CONFIRMED = 'CONFIRMED', 'Confirmed'
     CHECKED_IN = 'CHECKED_IN', 'Checked In'
+    IN_PROGRESS = 'IN_PROGRESS', 'In Progress'
     COMPLETED = 'COMPLETED', 'Completed'
     CANCELLED = 'CANCELLED', 'Cancelled'
     NO_SHOW = 'NO_SHOW', 'No Show'
@@ -31,7 +33,7 @@ class Appointment(models.Model):
     cln_id = models.ForeignKey('clinics.Clinic', on_delete=models.CASCADE, related_name='appointments', db_column='CLN_ID')
     stf_id = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments', db_column='STF_ID')
     apt_type = models.CharField(max_length=20, choices=AppointmentType.choices, db_column='APT_TYPE')
-    apt_status = models.CharField(max_length=20, choices=AppointmentStatus.choices, default=AppointmentStatus.BOOKED, db_index=True, db_column='APT_STATUS')
+    apt_status = models.CharField(max_length=20, choices=AppointmentStatus.choices, default=AppointmentStatus.PENDING, db_index=True, db_column='APT_STATUS')
     apt_scheduled_at = models.DateTimeField(db_column='APT_SCHEDULED_AT')
     apt_reason = models.TextField(null=True, blank=True, db_column='APT_REASON')
     apt_checked_in_at = models.DateTimeField(null=True, blank=True, db_column='APT_CHECKED_IN_AT')
@@ -42,6 +44,7 @@ class Appointment(models.Model):
     apt_updated_at = models.DateTimeField(auto_now=True, db_column='APT_UPDATED_AT')
     apt_deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, db_column='APT_DELETED_AT')
     apt_created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, related_name='created_appointments', db_column='APT_CREATED_BY')
+    apt_screening = models.ForeignKey('ai_screenings.AiScreening', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments', db_column='APT_SCREENING_ID')
 
     class Meta:
         managed = True

@@ -28,6 +28,24 @@ def _audit(**kwargs):
         logger.warning('Audit log failed: %s', e)
 
 
+def _notify(user_id, title, message, ntf_type, ref_id=None):
+    if not user_id:
+        return
+    try:
+        from notifications.services import NotificationService
+
+        NotificationService.create_notification(
+            user_id=user_id,
+            title=title,
+            message=message,
+            ntf_type=ntf_type,
+            ref_table='APPOINTMENT',
+            ref_id=str(ref_id) if ref_id else None,
+        )
+    except Exception as e:
+        logger.warning('Notification failed: %s', e)
+
+
 DAY_MAP = {
     0: 'MON',
     1: 'TUE',
@@ -331,12 +349,22 @@ class VetSlotService:
 class AppointmentService:
 
     VALID_TRANSITIONS = {
-        AppointmentStatus.BOOKED: [
+        AppointmentStatus.PENDING: [
+            AppointmentStatus.CONFIRMED,
+            AppointmentStatus.CANCELLED,
+        ],
+        AppointmentStatus.CONFIRMED: [
             AppointmentStatus.CHECKED_IN,
             AppointmentStatus.CANCELLED,
             AppointmentStatus.NO_SHOW,
         ],
         AppointmentStatus.CHECKED_IN: [
+            AppointmentStatus.IN_PROGRESS,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.CANCELLED,
+            AppointmentStatus.NO_SHOW,
+        ],
+        AppointmentStatus.IN_PROGRESS: [
             AppointmentStatus.COMPLETED,
             AppointmentStatus.CANCELLED,
         ],
@@ -347,7 +375,7 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
-    def create_appointment(clinic_id, pet_id, slot_id, apt_type, reason, created_by):
+    def create_appointment(clinic_id, pet_id, slot_id, apt_type, reason, created_by, screening=None):
         try:
             slot = VetSlot.objects.select_for_update().get(
                 vsl_id=slot_id,
@@ -372,10 +400,11 @@ class AppointmentService:
             cln_id_id=clinic_id,
             stf_id=slot.stf_id,
             apt_type=apt_type,
-            apt_status=AppointmentStatus.BOOKED,
+            apt_status=AppointmentStatus.PENDING,
             apt_scheduled_at=scheduled_at,
             apt_reason=reason,
             apt_created_by_id=created_by,
+            apt_screening=screening,
         )
 
         slot.vsl_appointment = appointment
@@ -395,6 +424,20 @@ class AppointmentService:
                 'slot_date': str(slot.vsl_date),
                 'apt_type': apt_type,
             },
+        )
+
+        from notifications.models import NotificationType
+
+        _notify(
+            user_id=pet.own_id.usr_id_id,
+            title='Appointment Request Sent',
+            message=(
+                f'Your appointment request for {pet.pet_name} on '
+                f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
+                f'is awaiting clinic confirmation.'
+            ),
+            ntf_type=NotificationType.APPOINTMENT_CREATED,
+            ref_id=appointment.apt_id,
         )
 
         return appointment
@@ -426,15 +469,13 @@ class AppointmentService:
         elif new_status == AppointmentStatus.CANCELLED:
             appointment.apt_cancelled_at = now
             appointment.apt_cancellation_reason = cancellation_reason
-            if appointment.vsl_id:
-                appointment.vsl_id.vsl_appointment = None
-                appointment.vsl_id.vsl_status = SlotStatus.AVAILABLE
-                appointment.vsl_id.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
-        elif new_status == AppointmentStatus.NO_SHOW:
-            if appointment.vsl_id:
-                appointment.vsl_id.vsl_appointment = None
-                appointment.vsl_id.vsl_status = SlotStatus.AVAILABLE
-                appointment.vsl_id.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
+
+        if new_status in (AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW):
+            slot = getattr(appointment, 'vet_slot', None)
+            if slot is not None:
+                slot.vsl_appointment = None
+                slot.vsl_status = SlotStatus.AVAILABLE
+                slot.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
 
         appointment.save()
 
@@ -448,6 +489,40 @@ class AppointmentService:
             old_values={'apt_status': old_status},
             new_values={'apt_status': new_status},
         )
+
+        from notifications.models import NotificationType
+
+        owner_user_id = None
+        if appointment.pet_id and appointment.pet_id.own_id:
+            owner_user_id = appointment.pet_id.own_id.usr_id_id
+
+        if new_status == AppointmentStatus.CONFIRMED:
+            _notify(
+                user_id=owner_user_id,
+                title='Appointment Confirmed',
+                message=(
+                    f'Your appointment for {appointment.pet_id.pet_name} on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                    f'has been confirmed.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ref_id=appointment.apt_id,
+            )
+        elif new_status == AppointmentStatus.CANCELLED:
+            reason_text = (
+                f' Reason: {cancellation_reason}' if cancellation_reason else ''
+            )
+            _notify(
+                user_id=owner_user_id,
+                title='Appointment Cancelled',
+                message=(
+                    f'Your appointment for {appointment.pet_id.pet_name} on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                    f'has been cancelled.{reason_text}'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CANCELLED,
+                ref_id=appointment.apt_id,
+            )
 
         return appointment
 
@@ -519,8 +594,11 @@ class DashboardService:
             apt_deleted_at__isnull=True,
         )
 
-        booked_count = appointments_today.filter(
-            apt_status=AppointmentStatus.BOOKED,
+        pending_count = appointments_today.filter(
+            apt_status=AppointmentStatus.PENDING,
+        ).count()
+        confirmed_count = appointments_today.filter(
+            apt_status=AppointmentStatus.CONFIRMED,
         ).count()
         checked_in_count = appointments_today.filter(
             apt_status=AppointmentStatus.CHECKED_IN,
@@ -559,7 +637,8 @@ class DashboardService:
 
         return {
             'today': {
-                'booked': booked_count,
+                'pending': pending_count,
+                'confirmed': confirmed_count,
                 'checked_in': checked_in_count,
                 'completed': completed_count,
                 'cancelled': cancelled_count,
