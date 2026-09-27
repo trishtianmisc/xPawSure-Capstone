@@ -1,5 +1,15 @@
 export type AppointmentType = 'CONSULTATION' | 'FOLLOW_UP' | 'VACCINATION' | 'AI_REVIEW' | 'EMERGENCY'
-export type AppointmentStatus = 'BOOKED' | 'CHECKED_IN' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+
+export interface ScreeningSummary {
+  ais_id: string
+  disease: string
+  ais_confidence: string
+  ais_model_version: string
+  ais_status: string
+  ais_source: 'MOCK' | 'DEVICE'
+  ais_created_at: string
+}
 
 export interface VetSlot {
   vsl_id: string
@@ -33,6 +43,7 @@ export interface Appointment {
   apt_scheduled_at: string
   apt_reason: string | null
   created_by_name: string | null
+  screening: ScreeningSummary | null
   apt_checked_in_at: string | null
   apt_completed_at: string | null
   apt_cancelled_at: string | null
@@ -154,7 +165,8 @@ export interface NotificationListResponse {
 
 export interface DashboardStats {
   today: {
-    booked: number
+    pending: number
+    confirmed: number
     checked_in: number
     completed: number
     cancelled: number

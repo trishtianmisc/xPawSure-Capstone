@@ -209,7 +209,11 @@ class AppointmentDetailView(APIView):
         from users.models import StaffProfile
 
         new_status = request.data.get('apt_status')
-        cancellation_reason = request.data.get('apt_cancellation_reason', '')
+        cancellation_reason = (
+            request.data.get('apt_cancellation_reason')
+            or request.data.get('cancellation_reason')
+            or ''
+        )
 
         if not new_status:
             return Response(

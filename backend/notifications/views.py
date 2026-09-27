@@ -2,13 +2,16 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsReceptionist
+from core.permissions import HasRole
 from notifications.serializers import NotificationSerializer
 from notifications.services import NotificationService
+from users.models import UserRole
+
+IsNotificationRecipient = HasRole(UserRole.OWNER, UserRole.RECEPTIONIST)
 
 
 class NotificationListView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [IsNotificationRecipient]
 
     def get(self, request):
         unread_only = request.query_params.get('unread_only', 'false').lower() == 'true'
@@ -33,7 +36,7 @@ class NotificationListView(APIView):
 
 
 class NotificationUnreadCountView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [IsNotificationRecipient]
 
     def get(self, request):
         count = NotificationService.get_unread_count(request.user.usr_id)
@@ -41,7 +44,7 @@ class NotificationUnreadCountView(APIView):
 
 
 class NotificationMarkReadView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [IsNotificationRecipient]
 
     def patch(self, request, ntf_id):
         ntf = NotificationService.mark_read(ntf_id, request.user.usr_id)
@@ -55,7 +58,7 @@ class NotificationMarkReadView(APIView):
 
 
 class NotificationMarkAllReadView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [IsNotificationRecipient]
 
     def patch(self, request):
         NotificationService.mark_all_read(request.user.usr_id)

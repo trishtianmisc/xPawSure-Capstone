@@ -4,6 +4,7 @@ export default function AppointmentsLayout() {
   return (
     <Stack>
       <Stack.Screen name="index" options={{ title: 'Appointments' }} />
+      <Stack.Screen name="book" options={{ title: 'Book Appointment' }} />
       <Stack.Screen name="[id]" options={{ title: 'Appointment Detail' }} />
     </Stack>
   );

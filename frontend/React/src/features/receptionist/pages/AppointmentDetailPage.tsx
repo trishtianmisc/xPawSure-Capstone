@@ -47,10 +47,15 @@ export function AppointmentDetailPage() {
     )
   }
 
-  const canCheckIn = appointment.apt_status === 'BOOKED'
-  const canComplete = appointment.apt_status === 'CHECKED_IN'
-  const canCancel = appointment.apt_status === 'BOOKED' || appointment.apt_status === 'CHECKED_IN'
-  const canNoShow = appointment.apt_status === 'BOOKED'
+  const canConfirm = appointment.apt_status === 'PENDING'
+  const canCheckIn = appointment.apt_status === 'CONFIRMED'
+  const canComplete =
+    appointment.apt_status === 'CHECKED_IN' || appointment.apt_status === 'IN_PROGRESS'
+  const canCancel =
+    appointment.apt_status === 'PENDING' ||
+    appointment.apt_status === 'CONFIRMED' ||
+    appointment.apt_status === 'CHECKED_IN'
+  const canNoShow = appointment.apt_status === 'CONFIRMED'
 
   return (
     <div className="p-6">
@@ -75,6 +80,15 @@ export function AppointmentDetailPage() {
 
       {/* Actions */}
       <div className="mb-6 flex flex-wrap gap-3">
+        {canConfirm && (
+          <button
+            onClick={() => handleStatusChange('CONFIRMED')}
+            disabled={updateStatus.isPending}
+            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+          >
+            Confirm
+          </button>
+        )}
         {canCheckIn && (
           <button
             onClick={() => handleStatusChange('CHECKED_IN')}
@@ -179,6 +193,46 @@ export function AppointmentDetailPage() {
           </dl>
         </div>
       </div>
+
+      {/* Skin Scan Result */}
+      {appointment.screening && (
+        <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Skin Scan Result</h2>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                appointment.screening.ais_source === 'MOCK'
+                  ? 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
+                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+              }`}
+            >
+              {appointment.screening.ais_source === 'MOCK' ? 'Demo' : 'On-device AI'}
+            </span>
+          </div>
+          <dl className="grid gap-3 sm:grid-cols-4">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Prediction</dt>
+              <dd className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">{appointment.screening.disease}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Confidence</dt>
+              <dd className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">
+                {Math.round(Number(appointment.screening.ais_confidence))}%
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Model</dt>
+              <dd className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">{appointment.screening.ais_model_version}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Status</dt>
+              <dd className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">
+                {appointment.screening.ais_status.replace('_', ' ')}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
 
       {/* Cancel Modal */}
       {showCancelModal && (

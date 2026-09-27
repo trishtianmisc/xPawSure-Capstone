@@ -333,17 +333,25 @@ Query parameters:
 
 Requires authentication. Owner or receptionist.
 
-Owner: Books appointment for own pet.
-Receptionist: Books appointment for any pet at clinic.
+Owner: Books appointment for own pet (`POST /api/owner/appointments/`).
+Receptionist: Books appointment for any pet at clinic (`POST /api/appointments/`).
 
-Request:
+Owner booking rule: the owner must attach a skin screening result for the booked pet.
+If `screening_id` is missing, does not belong to the pet, or the pet has no screening,
+the API responds `403` with:
+
+{ "detail": "A skin scan result is required for this pet before booking." }
+
+Receptionist bookings are not gated by screenings.
+
+Request (owner):
 
 {
   "pet_id": "uuid",
-  "date": "date",
-  "time": "time",
+  "slot_id": "uuid",
+  "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
   "reason": "string (optional)",
-  "veterinarian_id": "uuid"
+  "screening_id": "uuid (required for owner bookings)"
 }
 
 ---
@@ -616,7 +624,82 @@ Requires authentication. Veterinarian only.
 
 # 9. AI Screening Endpoints
 
-## GET /api/screenings/
+Owner screening endpoints are implemented under `/api/owner/screenings/`.
+The generic staff-facing routes below remain the spec for a future release.
+
+## GET /api/owner/screenings/
+
+Requires authentication (Owner role).
+
+Returns screenings for the owner's pets, newest first.
+
+Query parameters:
+
+- pet_id (optional uuid filter; must belong to the owner, otherwise 404)
+- page, page_size
+
+Response:
+
+{
+  "total": 1,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "results": [
+    {
+      "ais_id": "uuid",
+      "pet_id": "uuid",
+      "pet_name": "Rex",
+      "disease": "Fungal",
+      "disease_code": "FUNGAL",
+      "ais_confidence": "87.40",
+      "ais_model_version": "mock-0.0.1",
+      "ais_inference_time_ms": null,
+      "ais_device": "server-mock",
+      "ais_status": "PENDING_REVIEW",
+      "ais_source": "MOCK",
+      "ais_created_at": "..."
+    }
+  ]
+}
+
+---
+
+## POST /api/owner/screenings/
+
+Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
+
+`source: "MOCK"` — development placeholder while the on-device AI ships.
+The server fabricates the prediction/confidence and stamps `ais_model_version = mock-0.0.1`,
+`ais_source = MOCK`. Used by the mobile booking wizard ("Run demo scan").
+
+`source: "DEVICE"` — contract for the future on-device TFLite/tfjs result upload.
+Requires `prediction` (disease code or name, resolved against DISEASE) and `model_version`.
+Optional: `confidence` (0-100), `inference_time_ms`, `device`.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "source": "MOCK | DEVICE",
+  "prediction": "string (DEVICE only)",
+  "confidence": "number 0-100 (DEVICE only)",
+  "model_version": "string (DEVICE only)",
+  "inference_time_ms": "integer (optional)",
+  "device": "string (optional)"
+}
+
+Response `201` with the screening object (see GET above).
+
+Business rules:
+
+- Only veterinarians may later change `ais_status` (vet review UI is future work).
+- AI predictions are immutable after creation.
+- `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
+
+---
+
+## GET /api/screenings/  (spec only, not implemented)
 
 Requires authentication.
 
@@ -625,7 +708,7 @@ Clinic staff: Returns screenings at their clinic.
 
 ---
 
-## POST /api/screenings/
+## POST /api/screenings/  (spec only, not implemented)
 
 Requires authentication. Owner or veterinarian.
 
@@ -646,7 +729,7 @@ Request (multipart/form-data):
 
 ---
 
-## GET /api/screenings/{id}/
+## GET /api/screenings/{id}/  (spec only, not implemented)
 
 Requires authentication.
 
