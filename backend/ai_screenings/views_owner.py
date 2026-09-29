@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from ai_screenings.models import AiScreening, ScreeningSource
 from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
-from ai_screenings.services import ScreeningService
+from ai_screenings.services import ScreeningService, SecondCheckService
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
 from pets.models import Pet
@@ -127,6 +127,7 @@ class OwnerScreeningListCreateView(APIView):
                     inference_time_ms=validated.get('inference_time_ms'),
                     device=validated.get('device'),
                 )
+                SecondCheckService.run(screening, image=validated.get('image'))
         except ValueError as e:
             return Response(
                 {'detail': str(e)},

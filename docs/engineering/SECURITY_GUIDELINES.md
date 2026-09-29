@@ -201,6 +201,7 @@ Never commit:
 - Database passwords
 - SMTP credentials
 - Cloud credentials
+- LLM provider keys (e.g. GEMINI_API_KEY)
 
 Use environment variables or a secure secret manager.
 
@@ -377,6 +378,15 @@ The AI module:
 - Must not overwrite diagnoses
 
 All predictions must be reviewed by a veterinarian.
+
+LLM second check:
+
+- The Gemini API key (GEMINI_API_KEY) lives only in environment variables; it is never committed, logged, or returned by APIs.
+- The screening image may be forwarded to Google Gemini over HTTPS for a single advisory call and is never stored server-side.
+- Images are capped at 2 MB and validated (data URL / base64) before any egress.
+- LLM calls use a short timeout; failures degrade to UNAVAILABLE and never block saving the screening.
+- The second check can never change screening status; only a human reviewer may CONFIRM or DISMISS.
+- The LLM prompt enforces: no diagnosis, advisory only, strict JSON output.
 
 ---
 

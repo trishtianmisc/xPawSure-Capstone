@@ -318,6 +318,17 @@ The backend receives:
 
 The backend stores these values without modification and stores the captured image in Supabase Storage.
 
+Second Check (LLM)
+
+After a DEVICE screening is created, the backend runs an advisory second check with Google Gemini:
+
+- Trigger: automatically on save. MOCK screenings skip it.
+- Input: prediction, confidence, model version, pet signalment (breed, sex, age), prompt guardrails, and the captured image as an inline data URL (max 2 MB). The image is forwarded to the LLM for that single call and is never stored.
+- Prompt guardrails: the LLM acts as a veterinary assistant performing a consistency check; it must never provide a diagnosis, and it must return strict JSON.
+- Output: verdict AGREE, DISAGREE, UNCERTAIN, or UNAVAILABLE with explanatory notes; stored as ais_check_verdict, ais_check_notes, ais_check_model, ais_check_at.
+- Rules: advisory only. The second check can never change ais_status (stays PENDING_REVIEW; only a human may CONFIRM or DISMISS). Failures return UNAVAILABLE and the screening still saves.
+- Configuration: GEMINI_API_KEY, GEMINI_MODEL (default gemini-3.5-flash), GEMINI_TIMEOUT_SECONDS (default 4).
+
 ---
 
 # 15. Database Storage
@@ -331,6 +342,7 @@ Each screening record stores:
 - Timestamp
 - Veterinarian
 - Consultation
+- Second-check verdict, notes, model, and timestamp
 
 Historical predictions are preserved permanently.
 

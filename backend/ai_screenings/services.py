@@ -1,8 +1,14 @@
+import base64
+import json
 import logging
 import random
 from decimal import Decimal
 
-from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus
+import requests
+from django.conf import settings
+from django.utils import timezone
+
+from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus, SecondCheckVerdict
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 
@@ -109,3 +115,119 @@ class ScreeningService:
         )
 
         return screening
+
+
+class SecondCheckService:
+    """Advisory LLM consistency check for device screenings.
+
+    Never diagnoses, never recommends treatment, never changes ais_status.
+    run() is failure-safe: it must not raise.
+    """
+
+    GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
+    MAX_IMAGE_BYTES = 2 * 1024 * 1024
+    VALID_VERDICTS = frozenset({'AGREE', 'DISAGREE', 'UNCERTAIN'})
+    DEFAULT_MIME = 'image/jpeg'
+
+    @classmethod
+    def run(cls, screening: AiScreening, image: str | None = None) -> None:
+        if not settings.GEMINI_API_KEY:
+            return
+
+        verdict, notes = SecondCheckVerdict.UNAVAILABLE, ''
+        try:
+            verdict, notes = cls._call_gemini(screening, image)
+        except Exception as e:
+            logger.warning('Second check failed for %s: %s', screening.ais_id, e)
+
+        try:
+            screening.ais_check_verdict = verdict
+            screening.ais_check_notes = notes
+            screening.ais_check_model = settings.GEMINI_MODEL
+            screening.ais_check_at = timezone.now()
+            screening.save(update_fields=[
+                'ais_check_verdict', 'ais_check_notes',
+                'ais_check_model', 'ais_check_at',
+            ])
+        except Exception as e:
+            logger.warning('Could not persist second check for %s: %s', screening.ais_id, e)
+
+    @classmethod
+    def _call_gemini(cls, screening: AiScreening, image: str | None):
+        parts = [{'text': cls._build_prompt(screening, has_image=bool(image))}]
+        if image:
+            data, mime = cls._split_image(image)
+            parts.append({'inline_data': {'mime_type': mime, 'data': data}})
+
+        payload = {
+            'contents': [{'parts': parts}],
+            'generationConfig': {
+                'responseMimeType': 'application/json',
+                'temperature': 0.1,
+            },
+        }
+
+        response = requests.post(
+            cls.GEMINI_URL.format(model=settings.GEMINI_MODEL),
+            json=payload,
+            headers={'x-goog-api-key': settings.GEMINI_API_KEY},
+            timeout=settings.GEMINI_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+
+        body = response.json()
+        text = body['candidates'][0]['content']['parts'][0]['text']
+        parsed = json.loads(text)
+
+        verdict = str(parsed.get('verdict', '')).upper()
+        if verdict not in cls.VALID_VERDICTS:
+            raise ValueError(f'Unexpected verdict from model: {verdict!r}')
+        notes = str(parsed.get('notes', '')).strip()[:500]
+        return verdict, notes
+
+    @classmethod
+    def _build_prompt(cls, screening: AiScreening, has_image: bool) -> str:
+        pet = screening.pet_id
+        breed = getattr(getattr(pet, 'brd_id', None), 'brd_name', None) or 'unknown'
+        sex = getattr(pet, 'pet_sex', None) or 'unknown'
+
+        age = 'unknown'
+        birth = getattr(pet, 'pet_birth_date', None)
+        if birth:
+            days = (timezone.now().date() - birth).days
+            years = days // 365
+            age = f'{years} year(s)' if years >= 1 else 'under 1 year'
+
+        image_line = (
+            'Image: provided below.'
+            if has_image else
+            'Image: not provided; judge from signalment only.'
+        )
+
+        return (
+            'You are a veterinary assistant performing an advisory consistency check of an '
+            'on-device AI skin screening result. This is NOT a diagnosis. Do not diagnose, '
+            'do not recommend treatment, and do not name medications. Assess only whether '
+            'the model prediction is plausible for this pet given the signalment and image.\n\n'
+            f'Pet: breed {breed}, sex {sex}, age {age}.\n'
+            f'Model prediction: {screening.dis_id.dis_name} at '
+            f'{screening.ais_confidence}% confidence '
+            f'(model {screening.ais_model_version}).\n'
+            f'{image_line}\n\n'
+            'Respond with strict JSON only:\n'
+            '{"verdict": "AGREE", "notes": "..."}\n'
+            'Allowed verdicts:\n'
+            '- AGREE: prediction is consistent with the pet and image.\n'
+            '- DISAGREE: prediction appears inconsistent with the pet and image.\n'
+            '- UNCERTAIN: evidence is ambiguous or insufficient.\n'
+            'notes: at most two short plain-language sentences; no diagnosis, '
+            'no treatment advice.'
+        )
+
+    @classmethod
+    def _split_image(cls, image: str):
+        if image.startswith('data:'):
+            header, _, data = image.partition(',')
+            mime = header[5:].split(';')[0] or cls.DEFAULT_MIME
+            return data, mime
+        return image, cls.DEFAULT_MIME

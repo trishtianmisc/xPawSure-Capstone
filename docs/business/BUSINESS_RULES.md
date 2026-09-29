@@ -315,6 +315,16 @@ The AI only provides a preliminary screening.
 
 The veterinarian makes the final diagnosis.
 
+Second check (LLM):
+
+- On save of a device screening, an advisory LLM second check (Gemini) may run automatically.
+- The second check is advisory only. It never provides a diagnosis.
+- The second check can never change `ais_status`; only a human reviewer may CONFIRM or DISMISS.
+- Verdicts: AGREE, DISAGREE, UNCERTAIN, UNAVAILABLE.
+- If the second check fails or is unavailable, the screening still saves (`UNAVAILABLE`).
+- MOCK screenings skip the second check.
+- The image may be forwarded to the LLM for a single call and is never stored server-side.
+
 ---
 
 # 16. Prescription Rules

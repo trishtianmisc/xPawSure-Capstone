@@ -1,3 +1,4 @@
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -137,6 +138,14 @@ SUPABASE_SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY', default='')
 SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', default='pet-images')
 SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
 SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
+
+GEMINI_API_KEY = env('GEMINI_API_KEY', default='')
+GEMINI_MODEL = env('GEMINI_MODEL', default='gemini-3.5-flash')
+GEMINI_TIMEOUT_SECONDS = env.int('GEMINI_TIMEOUT_SECONDS', default=4)
+
+if 'test' in sys.argv:
+    # Never call the real LLM from tests; second-check tests re-enable via override_settings.
+    GEMINI_API_KEY = ''
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

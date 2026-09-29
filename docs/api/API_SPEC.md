@@ -776,7 +776,11 @@ Response:
       "ais_device": "server-mock",
       "ais_status": "PENDING_REVIEW",
       "ais_source": "MOCK",
-      "ais_created_at": "..."
+      "ais_created_at": "...",
+      "ais_check_verdict": "AGREE | DISAGREE | UNCERTAIN | UNAVAILABLE",
+      "ais_check_notes": "string",
+      "ais_check_model": "gemini-3.5-flash",
+      "ais_check_at": "timestamp or null"
     }
   ]
 }
@@ -793,7 +797,16 @@ The server fabricates the prediction/confidence and stamps `ais_model_version = 
 
 `source: "DEVICE"` — contract for the future on-device TFLite/tfjs result upload.
 Requires `prediction` (disease code or name, resolved against DISEASE) and `model_version`.
-Optional: `confidence` (0-100), `inference_time_ms`, `device`.
+Optional: `confidence` (0-100), `inference_time_ms`, `device`, `image`.
+
+`image` (optional) — the screened photo as a data URL (`data:image/jpeg;base64,...`) or raw
+base64 string, max 2 MB. When present on a `DEVICE` screening, the server runs an advisory
+LLM second check (Gemini) with the image and returns the verdict in the response
+(`ais_check_verdict`, `ais_check_notes`, `ais_check_model`, `ais_check_at`).
+The image is forwarded to the LLM for that single call and is never stored.
+The second check is advisory only: it never changes `ais_status` (always `PENDING_REVIEW`).
+If the LLM is unconfigured, times out, or errors, the screening still saves with
+`ais_check_verdict = "UNAVAILABLE"`. An invalid or oversized `image` returns `400`.
 
 Request:
 
@@ -804,16 +817,19 @@ Request:
   "confidence": "number 0-100 (DEVICE only)",
   "model_version": "string (DEVICE only)",
   "inference_time_ms": "integer (optional)",
-  "device": "string (optional)"
+  "device": "string (optional)",
+  "image": "data-url or base64, max 2 MB (optional, DEVICE only)"
 }
 
-Response `201` with the screening object (see GET above).
+Response `201` with the screening object (see GET above), including the second-check fields.
 
 Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
+- The LLM second check can never change `ais_status`; only a human may CONFIRM/DISMISS.
 - AI predictions are immutable after creation.
 - `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
+  MOCK screenings skip the second check.
 
 ---
 

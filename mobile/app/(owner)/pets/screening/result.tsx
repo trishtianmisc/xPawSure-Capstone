@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -12,10 +12,12 @@ import {
   Text,
   View,
 } from 'react-native'
+import { File } from 'expo-file-system'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../../src/utils/error'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import type { SecondCheckVerdict } from '../../../../features/screening/types'
 import type { Prediction } from '../../../../ai/types/ai.types'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
@@ -24,6 +26,12 @@ const DISEASE_META: Record<string, { color: string; icon: string }> = {
   FUNGAL: { color: '#8E44AD', icon: 'flower-tulip-outline' },
   HOTSPOT: { color: '#D35400', icon: 'fire' },
   MANGE: { color: '#27AE60', icon: 'bug-outline' },
+}
+
+const CHECK_META: Record<string, { label: string; color: string; bg: string }> = {
+  AGREE: { label: 'CONSISTENT', color: '#2E7D32', bg: '#E8F5E9' },
+  DISAGREE: { label: 'INCONSISTENT', color: '#B26A00', bg: '#FFF3E0' },
+  UNCERTAIN: { label: 'UNCERTAIN', color: '#616161', bg: '#EEEEEE' },
 }
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
@@ -81,8 +89,26 @@ export default function ResultScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const saveScreening = useCreateScreening()
   const [consented, setConsented] = useState(false)
+  const [imageBase64, setImageBase64] = useState<string | null>(null)
 
   const saved = saveScreening.isSuccess
+
+  useEffect(() => {
+    const uri = params.imageUri
+    if (!uri) return
+    let cancelled = false
+    new File(uri)
+      .base64()
+      .then((b64) => {
+        if (!cancelled) setImageBase64(b64)
+      })
+      .catch(() => {
+        if (!cancelled) setImageBase64(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [params.imageUri])
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -106,8 +132,13 @@ export default function ResultScreen() {
       confidence: Number(top.confidence.toFixed(2)),
       model_version: params.modelVersion || 'unknown',
       inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+      image: imageBase64 ?? undefined,
     })
   }
+
+  const check = saved ? saveScreening.data : undefined
+  const checkVerdict = check?.ais_check_verdict as SecondCheckVerdict | null | undefined
+  const checkMeta = checkVerdict ? CHECK_META[checkVerdict] : undefined
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -161,6 +192,25 @@ export default function ResultScreen() {
             )
           })}
         </View>
+
+        {saved && checkMeta && check && (
+          <View style={styles.checkCard}>
+            <View style={styles.checkHeader}>
+              <MaterialCommunityIcons color={checkMeta.color} name="shield-check-outline" size={18} />
+              <Text style={styles.checkTitle}>Second Check</Text>
+              <View style={[styles.checkChip, { backgroundColor: checkMeta.bg }]}>
+                <Text style={[styles.checkChipText, { color: checkMeta.color }]}>{checkMeta.label}</Text>
+              </View>
+            </View>
+            {!!check.ais_check_notes && (
+              <Text style={styles.checkNotes}>{check.ais_check_notes}</Text>
+            )}
+            <Text style={styles.checkDisclaimer}>
+              Advisory second check {check.ais_check_model ? `(${check.ais_check_model})` : ''}
+              {' \u2014'} not a diagnosis. Consult a veterinarian.
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
@@ -297,6 +347,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 18,
   },
   breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+
+  checkCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 18,
+  },
+  checkHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  checkTitle: { color: colors.text, flex: 1, fontSize: 15, fontWeight: '700' },
+  checkChip: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  checkChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
+  checkNotes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10 },
+  checkDisclaimer: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 10 },
 
   infoCard: {
     alignItems: 'flex-start',

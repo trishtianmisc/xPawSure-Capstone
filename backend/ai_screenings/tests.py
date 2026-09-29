@@ -1,6 +1,10 @@
-from django.test import TestCase
+import base64
+from unittest import mock
 
-from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus
+import requests
+from django.test import TestCase, override_settings
+
+from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus, SecondCheckVerdict
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
 from users.models import User, UserRole
@@ -184,3 +188,115 @@ class ScreeningModelTests(OwnerScreeningBase):
         )
         self.assertEqual(screening.ais_status, ScreeningStatus.PENDING_REVIEW)
         self.assertEqual(screening.ais_source, ScreeningSource.MOCK)
+
+
+TINY_IMAGE = base64.b64encode(b'\xff\xd8\xff\xe0test-jpeg').decode()
+
+
+def _gemini_response(text='{"verdict": "AGREE", "notes": "Consistent with the pet."}'):
+    response = mock.Mock()
+    response.status_code = 200
+    response.json.return_value = {
+        'candidates': [{'content': {'parts': [{'text': text}]}}],
+    }
+    response.raise_for_status.return_value = None
+    return response
+
+
+@override_settings(GEMINI_API_KEY='test-key', GEMINI_MODEL='test-model')
+class SecondCheckTests(OwnerScreeningBase):
+
+    def _post_device(self, **extra):
+        payload = {
+            'pet_id': str(self.pet.pet_id),
+            'source': 'DEVICE',
+            'prediction': 'MANGE',
+            'confidence': 88.0,
+            'model_version': '2.0.0',
+        }
+        payload.update(extra)
+        return self.client.post(
+            '/api/owner/screenings/', payload, format='json', **self._auth(OWNER_EMAIL),
+        )
+
+    def test_agree_verdict_saved_and_returned(self):
+        with mock.patch('ai_screenings.services.requests.post', return_value=_gemini_response()) as post:
+            response = self._post_device(image=TINY_IMAGE)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
+        self.assertEqual(response.data['ais_check_notes'], 'Consistent with the pet.')
+        self.assertEqual(response.data['ais_check_model'], 'test-model')
+        self.assertIsNotNone(response.data['ais_check_at'])
+        self.assertEqual(response.data['ais_status'], ScreeningStatus.PENDING_REVIEW)
+        self.assertEqual(post.call_count, 1)
+
+        sent = post.call_args.kwargs['json']
+        inline = [p for p in sent['contents'][0]['parts'] if 'inline_data' in p]
+        self.assertEqual(len(inline), 1)
+        self.assertEqual(inline[0]['inline_data']['data'], TINY_IMAGE)
+
+    def test_timeout_marks_unavailable_but_screening_created(self):
+        with mock.patch('ai_screenings.services.requests.post', side_effect=requests.Timeout('slow')):
+            response = self._post_device(image=TINY_IMAGE)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+        self.assertEqual(response.data['ais_check_notes'], '')
+
+    def test_malformed_llm_output_marks_unavailable(self):
+        with mock.patch('ai_screenings.services.requests.post', return_value=_gemini_response('not-json')):
+            response = self._post_device()
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+
+    def test_http_error_marks_unavailable(self):
+        response_mock = mock.Mock()
+        response_mock.raise_for_status.side_effect = requests.HTTPError('500')
+        with mock.patch('ai_screenings.services.requests.post', return_value=response_mock):
+            response = self._post_device()
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_no_api_key_skips_check_without_calling_llm(self):
+        with mock.patch('ai_screenings.services.requests.post') as post:
+            response = self._post_device(image=TINY_IMAGE)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['ais_check_verdict'])
+        post.assert_not_called()
+
+    def test_mock_screening_never_calls_llm(self):
+        with mock.patch('ai_screenings.services.requests.post') as post:
+            response = self.client.post(
+                '/api/owner/screenings/',
+                {'pet_id': str(self.pet.pet_id), 'source': 'MOCK'},
+                format='json',
+                **self._auth(OWNER_EMAIL),
+            )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['ais_check_verdict'])
+        post.assert_not_called()
+
+    def test_data_url_image_mime_preserved(self):
+        data_url = f'data:image/png;base64,{TINY_IMAGE}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_gemini_response()) as post:
+            response = self._post_device(image=data_url)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        sent = post.call_args.kwargs['json']
+        inline = [p for p in sent['contents'][0]['parts'] if 'inline_data' in p][0]
+        self.assertEqual(inline['inline_data']['mime_type'], 'image/png')
+
+    def test_invalid_base64_image_returns_400(self):
+        response = self._post_device(image='!!!not-base64!!!')
+        self.assertEqual(response.status_code, 400)
+
+    def test_oversized_image_returns_400(self):
+        huge = base64.b64encode(b'a' * (2 * 1024 * 1024 + 1)).decode()
+        response = self._post_device(image=huge)
+        self.assertEqual(response.status_code, 400)

@@ -38,6 +38,13 @@ class ScreeningSource(models.TextChoices):
     DEVICE = 'DEVICE', 'On-device AI'
 
 
+class SecondCheckVerdict(models.TextChoices):
+    AGREE = 'AGREE', 'Agree'
+    DISAGREE = 'DISAGREE', 'Disagree'
+    UNCERTAIN = 'UNCERTAIN', 'Uncertain'
+    UNAVAILABLE = 'UNAVAILABLE', 'Unavailable'
+
+
 class AiScreening(models.Model):
     ais_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_column='AIS_ID')
     pet_id = models.ForeignKey('pets.Pet', on_delete=models.CASCADE, related_name='screenings', db_column='PET_ID')
@@ -49,6 +56,10 @@ class AiScreening(models.Model):
     ais_device = models.CharField(max_length=100, null=True, blank=True, db_column='AIS_DEVICE')
     ais_status = models.CharField(max_length=20, choices=ScreeningStatus.choices, default=ScreeningStatus.PENDING_REVIEW, db_column='AIS_STATUS')
     ais_source = models.CharField(max_length=10, choices=ScreeningSource.choices, default=ScreeningSource.MOCK, db_column='AIS_SOURCE')
+    ais_check_verdict = models.CharField(max_length=20, choices=SecondCheckVerdict.choices, null=True, blank=True, db_column='AIS_CHECK_VERDICT')
+    ais_check_notes = models.TextField(blank=True, default='', db_column='AIS_CHECK_NOTES')
+    ais_check_model = models.CharField(max_length=50, blank=True, default='', db_column='AIS_CHECK_MODEL')
+    ais_check_at = models.DateTimeField(null=True, blank=True, db_column='AIS_CHECK_AT')
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')
 
     class Meta:
