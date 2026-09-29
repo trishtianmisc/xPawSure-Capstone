@@ -46,3 +46,56 @@ class OwnerDetailSerializer(serializers.ModelSerializer):
         from pets.serializers import PetResponseSerializer
         pets = obj.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True)
         return PetResponseSerializer(pets, many=True).data
+
+
+class OwnerProfileUserSerializer(serializers.Serializer):
+    id = serializers.UUIDField(source='usr_id')
+    email = serializers.EmailField(source='usr_email')
+    full_name = serializers.SerializerMethodField()
+    phone = serializers.CharField(source='usr_phone', allow_null=True)
+
+    def get_full_name(self, obj):
+        return f'{obj.usr_first_name} {obj.usr_last_name}'.strip()
+
+
+class OwnerProfileSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source='own_id', read_only=True)
+    user = OwnerProfileUserSerializer(source='usr_id', read_only=True)
+    clinic = serializers.SerializerMethodField()
+    address = serializers.SerializerMethodField()
+    profile_picture = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OwnerProfile
+        fields = ['id', 'user', 'clinic', 'address', 'profile_picture']
+
+    def get_clinic(self, obj):
+        # Owners are not permanently attached to a clinic (see AUTHENTICATION.md).
+        # Kept as null so the documented spec shape stays stable.
+        return None
+
+    def get_address(self, obj):
+        return obj.own_address or ''
+
+    def get_profile_picture(self, obj):
+        return obj.own_profile_image or ''
+
+
+class OwnerProfileUpdateSerializer(serializers.Serializer):
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
+
+    def validate_profile_picture(self, value):
+        if value is None:
+            return value
+
+        allowed_types = {'image/jpeg', 'image/png', 'image/webp'}
+        if getattr(value, 'content_type', None) not in allowed_types:
+            raise serializers.ValidationError(
+                'Profile picture must be a JPEG, PNG, or WebP image.',
+            )
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError(
+                'Profile picture must be 2 MB or less.',
+            )
+        return value
