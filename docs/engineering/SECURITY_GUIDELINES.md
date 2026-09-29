@@ -384,7 +384,7 @@ LLM second check:
 - The Gemini API key (GEMINI_API_KEY) lives only in environment variables; it is never committed, logged, or returned by APIs.
 - The screening image may be forwarded to Google Gemini over HTTPS for a single advisory call and is never stored server-side.
 - Images are capped at 2 MB and validated (data URL / base64) before any egress.
-- LLM calls use a bounded timeout (default 20s) with one retry on transient 429/503; failures degrade to UNAVAILABLE and never block saving the screening.
+- LLM calls use a bounded timeout (default 20s) with one retry on transient 503; HTTP 429 fails fast with a rate-limit detail. Failures degrade to UNAVAILABLE and never block saving the screening.
 - The second check can never change screening status; only a human reviewer may CONFIRM or DISMISS.
 - The prompt enforces: no diagnosis, advisory only, strict JSON output.
 - The symptom quiz sends the same validated image (max 2 MB) and question/answer data to Gemini; a screening uses at most 3 outbound Gemini calls and the image is never stored server-side.

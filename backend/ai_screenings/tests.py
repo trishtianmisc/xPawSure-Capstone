@@ -333,10 +333,10 @@ class SecondCheckTests(OwnerScreeningBase):
         self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
         self.assertEqual(post.call_count, 2)
 
-    def test_429_then_success_retries_once_and_saves_verdict(self):
+    def test_429_fails_fast_without_retry(self):
         rate_limited = mock.Mock()
         rate_limited.status_code = 429
-        rate_limited.raise_for_status.side_effect = requests.HTTPError('429')
+        rate_limited.raise_for_status.side_effect = requests.HTTPError('429', response=rate_limited)
         with mock.patch(
             'ai_screenings.services.requests.post',
             side_effect=[rate_limited, _gemini_response()],
@@ -344,8 +344,8 @@ class SecondCheckTests(OwnerScreeningBase):
             response = self._post_device()
 
         self.assertEqual(response.status_code, 201, response.data)
-        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
-        self.assertEqual(post.call_count, 2)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+        self.assertEqual(post.call_count, 1)
 
     def test_persistent_503_marks_unavailable_after_single_retry(self):
         saturated = mock.Mock()

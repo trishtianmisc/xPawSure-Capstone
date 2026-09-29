@@ -49,8 +49,10 @@ def signalment(pet) -> str:
 
 
 def gemini_generate(parts: list, log_ref: str = 'request') -> dict:
-    """POST parts to Gemini (strict JSON mode) with timeout + one 429/503 retry.
+    """POST parts to Gemini (strict JSON mode) with timeout + one retry on 503.
 
+    429s fail fast: the free-tier rate-limit window lasts tens of seconds, so an
+    immediate retry is doomed and rejected calls appear to refresh the window.
     Raises on any failure; callers decide the fallback policy.
     """
     if not settings.GEMINI_API_KEY:
@@ -69,11 +71,8 @@ def gemini_generate(parts: list, log_ref: str = 'request') -> dict:
             headers={'x-goog-api-key': settings.GEMINI_API_KEY},
             timeout=settings.GEMINI_TIMEOUT_SECONDS,
         )
-        if attempt == 0 and response.status_code in (429, 503):
-            logger.info(
-                'Gemini returned %s for %s; retrying once',
-                response.status_code, log_ref,
-            )
+        if attempt == 0 and response.status_code == 503:
+            logger.info('Gemini returned 503 for %s; retrying once', log_ref)
             continue
         break
     response.raise_for_status()
