@@ -466,6 +466,16 @@ class QuizTests(OwnerScreeningBase):
 
         self.assertEqual(response.status_code, 503)
 
+    def test_questions_rate_limited_returns_specific_detail(self):
+        limited = mock.Mock()
+        limited.status_code = 429
+        limited.raise_for_status.side_effect = requests.HTTPError('429', response=limited)
+        with mock.patch('ai_screenings.services.requests.post', side_effect=[limited, limited]):
+            response = self._post_questions()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('rate limit', response.data['detail'])
+
     def test_validate_returns_refined_result(self):
         fungal_name = Disease.objects.get(dis_code='FUNGAL').dis_name
         text = '{"disease_code": "FUNGAL", "confidence": 72, "rationale": "Answers fit fungal more."}'

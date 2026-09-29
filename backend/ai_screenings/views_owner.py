@@ -2,6 +2,7 @@ from uuid import UUID
 
 import logging
 
+import requests
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,6 +20,16 @@ from owners.models import OwnerProfile
 from pets.models import Pet
 
 logger = logging.getLogger(__name__)
+
+
+def _llm_error_detail(e: Exception) -> str:
+    if (
+        isinstance(e, requests.HTTPError)
+        and e.response is not None
+        and e.response.status_code == 429
+    ):
+        return 'AI service rate limit reached. Wait about a minute and try again.'
+    return 'AI question service unavailable. Continue with the model result.'
 
 
 def _parse_uuid(value):
@@ -185,7 +196,7 @@ class OwnerScreeningQuizQuestionsView(APIView):
         except Exception as e:
             logger.warning('Quiz question generation failed for pet %s: %s', pet.pet_id, e)
             return Response(
-                {'detail': 'AI question service unavailable. Continue with the model result.'},
+                {'detail': _llm_error_detail(e)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response({'questions': questions})
@@ -229,7 +240,7 @@ class OwnerScreeningQuizValidateView(APIView):
         except Exception as e:
             logger.warning('Quiz validation failed for pet %s: %s', pet.pet_id, e)
             return Response(
-                {'detail': 'AI question service unavailable. Continue with the model result.'},
+                {'detail': _llm_error_detail(e)},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         return Response(result)
