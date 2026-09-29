@@ -134,19 +134,20 @@ class SecondCheckService:
         if not settings.GEMINI_API_KEY:
             return
 
-        verdict, notes = SecondCheckVerdict.UNAVAILABLE, ''
+        verdict, notes, remedy = SecondCheckVerdict.UNAVAILABLE, '', ''
         try:
-            verdict, notes = cls._call_gemini(screening, image)
+            verdict, notes, remedy = cls._call_gemini(screening, image)
         except Exception as e:
             logger.warning('Second check failed for %s: %s', screening.ais_id, e)
 
         try:
             screening.ais_check_verdict = verdict
             screening.ais_check_notes = notes
+            screening.ais_check_remedy = remedy
             screening.ais_check_model = settings.GEMINI_MODEL
             screening.ais_check_at = timezone.now()
             screening.save(update_fields=[
-                'ais_check_verdict', 'ais_check_notes',
+                'ais_check_verdict', 'ais_check_notes', 'ais_check_remedy',
                 'ais_check_model', 'ais_check_at',
             ])
         except Exception as e:
@@ -192,7 +193,8 @@ class SecondCheckService:
         if verdict not in cls.VALID_VERDICTS:
             raise ValueError(f'Unexpected verdict from model: {verdict!r}')
         notes = str(parsed.get('notes', '')).strip()[:500]
-        return verdict, notes
+        remedy = str(parsed.get('home_remedy', '')).strip()[:400]
+        return verdict, notes, remedy
 
     @classmethod
     def _build_prompt(cls, screening: AiScreening, has_image: bool) -> str:
@@ -224,13 +226,18 @@ class SecondCheckService:
             f'(model {screening.ais_model_version}).\n'
             f'{image_line}\n\n'
             'Respond with strict JSON only:\n'
-            '{"verdict": "AGREE", "notes": "..."}\n'
+            '{"verdict": "AGREE", "notes": "...", "home_remedy": "..."}\n'
             'Allowed verdicts:\n'
             '- AGREE: prediction is consistent with the pet and image.\n'
             '- DISAGREE: prediction appears inconsistent with the pet and image.\n'
             '- UNCERTAIN: evidence is ambiguous or insufficient.\n'
             'notes: at most two short plain-language sentences; no diagnosis, '
-            'no treatment advice.'
+            'no treatment advice.\n'
+            'home_remedy: one or two short, safe, general home-care suggestions while '
+            'waiting for the veterinary visit (for example keeping the area clean and '
+            'dry, preventing licking or scratching). No medications, no doses, no '
+            'home treatments applied to the skin, no diagnosis. If nothing safe and '
+            'general can be suggested, return an empty string.'
         )
 
     @classmethod

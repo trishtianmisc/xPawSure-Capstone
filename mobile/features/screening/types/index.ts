@@ -19,6 +19,7 @@ export interface Screening {
   ais_created_at: string
   ais_check_verdict: SecondCheckVerdict | null
   ais_check_notes: string
+  ais_check_remedy: string
   ais_check_model: string
   ais_check_at: string | null
 }

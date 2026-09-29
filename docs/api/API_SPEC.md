@@ -779,6 +779,7 @@ Response:
       "ais_created_at": "...",
       "ais_check_verdict": "AGREE | DISAGREE | UNCERTAIN | UNAVAILABLE",
       "ais_check_notes": "string",
+      "ais_check_remedy": "string (general home-care tip, may be empty)",
       "ais_check_model": "gemini-3.5-flash",
       "ais_check_at": "timestamp or null"
     }

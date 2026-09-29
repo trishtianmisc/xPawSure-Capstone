@@ -24,7 +24,7 @@ class ScreeningSerializer(serializers.ModelSerializer):
             'ais_id', 'pet_id', 'pet_name', 'disease', 'disease_code',
             'ais_confidence', 'ais_model_version', 'ais_inference_time_ms',
             'ais_device', 'ais_status', 'ais_source', 'ais_created_at',
-            'ais_check_verdict', 'ais_check_notes', 'ais_check_model',
+            'ais_check_verdict', 'ais_check_notes', 'ais_check_remedy', 'ais_check_model',
             'ais_check_at',
         ]
         read_only_fields = fields

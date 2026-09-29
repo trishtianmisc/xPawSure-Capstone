@@ -224,6 +224,12 @@ export default function ResultScreen() {
                 <Text style={styles.checkNotes}>{check.ais_check_notes}</Text>
               )
             )}
+            {!!check.ais_check_remedy && checkVerdict !== 'UNAVAILABLE' && (
+              <View style={styles.remedyBox}>
+                <Text style={styles.remedyLabel}>Home care while you wait</Text>
+                <Text style={styles.remedyText}>{check.ais_check_remedy}</Text>
+              </View>
+            )}
             <Text style={styles.checkDisclaimer}>
               Advisory second check {check.ais_check_model ? `(${check.ais_check_model})` : ''}
               {' \u2014'} not a diagnosis. Consult a veterinarian.
@@ -381,6 +387,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   checkChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.4 },
   checkNotes: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10 },
   checkDisclaimer: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 10 },
+  remedyBox: {
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 10,
+    marginTop: 12,
+    padding: 10,
+  },
+  remedyLabel: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  remedyText: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 4 },
 
   infoCard: {
     alignItems: 'flex-start',

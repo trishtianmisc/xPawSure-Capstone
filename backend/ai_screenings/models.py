@@ -58,6 +58,7 @@ class AiScreening(models.Model):
     ais_source = models.CharField(max_length=10, choices=ScreeningSource.choices, default=ScreeningSource.MOCK, db_column='AIS_SOURCE')
     ais_check_verdict = models.CharField(max_length=20, choices=SecondCheckVerdict.choices, null=True, blank=True, db_column='AIS_CHECK_VERDICT')
     ais_check_notes = models.TextField(blank=True, default='', db_column='AIS_CHECK_NOTES')
+    ais_check_remedy = models.TextField(blank=True, default='', db_column='AIS_CHECK_REMEDY')
     ais_check_model = models.CharField(max_length=50, blank=True, default='', db_column='AIS_CHECK_MODEL')
     ais_check_at = models.DateTimeField(null=True, blank=True, db_column='AIS_CHECK_AT')
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')

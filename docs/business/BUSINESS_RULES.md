@@ -321,6 +321,7 @@ Second check (LLM):
 - The second check is advisory only. It never provides a diagnosis.
 - The second check can never change `ais_status`; only a human reviewer may CONFIRM or DISMISS.
 - Verdicts: AGREE, DISAGREE, UNCERTAIN, UNAVAILABLE.
+- Any home-care tip is general guidance only: no medications, no doses, no treatment, never a diagnosis.
 - If the second check fails or is unavailable, the screening still saves (`UNAVAILABLE`).
 - MOCK screenings skip the second check.
 - The image may be forwarded to the LLM for a single call and is never stored server-side.

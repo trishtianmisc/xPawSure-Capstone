@@ -193,7 +193,10 @@ class ScreeningModelTests(OwnerScreeningBase):
 TINY_IMAGE = base64.b64encode(b'\xff\xd8\xff\xe0test-jpeg').decode()
 
 
-def _gemini_response(text='{"verdict": "AGREE", "notes": "Consistent with the pet."}'):
+def _gemini_response(
+    text='{"verdict": "AGREE", "notes": "Consistent with the pet.", '
+         '"home_remedy": "Keep the area clean and dry and prevent licking."}',
+):
     response = mock.Mock()
     response.status_code = 200
     response.json.return_value = {
@@ -226,6 +229,10 @@ class SecondCheckTests(OwnerScreeningBase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
         self.assertEqual(response.data['ais_check_notes'], 'Consistent with the pet.')
+        self.assertEqual(
+            response.data['ais_check_remedy'],
+            'Keep the area clean and dry and prevent licking.',
+        )
         self.assertEqual(response.data['ais_check_model'], 'test-model')
         self.assertIsNotNone(response.data['ais_check_at'])
         self.assertEqual(response.data['ais_status'], ScreeningStatus.PENDING_REVIEW)
@@ -243,6 +250,7 @@ class SecondCheckTests(OwnerScreeningBase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
         self.assertEqual(response.data['ais_check_notes'], '')
+        self.assertEqual(response.data['ais_check_remedy'], '')
 
     def test_malformed_llm_output_marks_unavailable(self):
         with mock.patch('ai_screenings.services.requests.post', return_value=_gemini_response('not-json')):
@@ -250,6 +258,15 @@ class SecondCheckTests(OwnerScreeningBase):
 
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+
+    def test_missing_home_remedy_defaults_to_empty(self):
+        text = '{"verdict": "AGREE", "notes": "Consistent with the pet."}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_gemini_response(text)):
+            response = self._post_device()
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
+        self.assertEqual(response.data['ais_check_remedy'], '')
 
     def test_http_error_marks_unavailable(self):
         response_mock = mock.Mock()

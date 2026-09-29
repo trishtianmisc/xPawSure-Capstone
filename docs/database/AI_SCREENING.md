@@ -155,6 +155,7 @@ If the owner later visits a clinic, the screening may be linked to a Consultatio
 | AIS_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | AIS_CHECK_VERDICT | ENUM | NULL (AGREE / DISAGREE / UNCERTAIN / UNAVAILABLE) |
 | AIS_CHECK_NOTES | TEXT | NULL |
+| AIS_CHECK_REMEDY | TEXT | NULL |
 | AIS_CHECK_MODEL | VARCHAR(50) | NULL |
 | AIS_CHECK_AT | TIMESTAMP | NULL |
 
