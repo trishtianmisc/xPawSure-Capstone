@@ -369,12 +369,18 @@ GET /consultations/{id}/prescriptions
 ```
 GET /vaccinations
 
+GET /vaccinations/{id}
+
 POST /vaccinations
 
 PUT /vaccinations/{id}
 
+DELETE /vaccinations/{id}
+
 GET /pets/{id}/vaccinations
 ```
+
+POST/PUT/DELETE apply to owner-reported records only (see API_SPEC section 8).
 
 ---
 
