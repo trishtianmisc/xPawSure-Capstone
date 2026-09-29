@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -37,7 +38,10 @@ export default function CaptureScreen() {
   const isBusy = isScreening || isModelLoading
 
   useEffect(() => {
-    preloadModel()
+    const task = InteractionManager.runAfterInteractions(() => {
+      preloadModel()
+    })
+    return () => task.cancel()
   }, [])
 
   useEffect(() => {

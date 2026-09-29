@@ -70,19 +70,18 @@ export async function loadModel(): Promise<void> {
 
   modelLoadPromise = (async () => {
     try {
-      await tf.ready()
+      const tStart = Date.now()
 
-      const backends = tf.engine().findBackend('webgl')
-        ? ['webgl', 'cpu'] as const
-        : ['cpu'] as const
-
-      for (const backend of backends) {
-        try {
-          await tf.setBackend(backend)
-          break
-        } catch {}
+      try {
+        await tf.setBackend('rn-webgl')
+      } catch (error) {
+        console.log(`[TF] rn-webgl unavailable (${error}); falling back to cpu`)
+        await tf.setBackend('cpu')
       }
+      await tf.ready()
+      console.log(`[TF] backend=${tf.getBackend()} in ${Date.now() - tStart}ms`)
 
+      const tWeights = Date.now()
       const modelJSON = require('../../assets/model/model.json')
 
       const weightsAsset = await Asset.loadAsync(
@@ -92,7 +91,9 @@ export async function loadModel(): Promise<void> {
       const weightsUri = weightsAsset[0].localUri
       const weightsFile = new File(weightsUri!)
       const weightsBytes = await weightsFile.bytes()
+      console.log(`[TF] weights loaded in ${Date.now() - tWeights}ms`)
 
+      const tModel = Date.now()
       model = await tf.loadLayersModel(
         tf.io.fromMemory({
           modelTopology: modelJSON.modelTopology,
@@ -100,10 +101,18 @@ export async function loadModel(): Promise<void> {
           weightData: weightsBytes.buffer,
         })
       )
+      console.log(`[TF] model parsed in ${Date.now() - tModel}ms`)
 
-      const warmup = model.predict(tf.zeros([1, 224, 224, 3])) as tf.Tensor
-      warmup.dispose()
+      if (tf.getBackend() !== 'cpu') {
+        const tWarmup = Date.now()
+        const warmup = model.predict(tf.zeros([1, 224, 224, 3])) as tf.Tensor
+        warmup.dispose()
+        console.log(`[TF] warmup in ${Date.now() - tWarmup}ms`)
+      } else {
+        console.log('[TF] warmup skipped (cpu backend)')
+      }
 
+      console.log(`[TF] model ready in ${Date.now() - tStart}ms total`)
       isModelLoaded = true
     } catch (error) {
       modelLoadPromise = null
