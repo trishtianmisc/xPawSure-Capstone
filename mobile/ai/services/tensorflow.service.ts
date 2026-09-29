@@ -101,24 +101,6 @@ export async function loadModel(): Promise<void> {
         })
       )
 
-      let fixedCount = 0
-      for (const layer of model.layers) {
-        if (layer.getClassName() !== 'BatchNormalization') continue
-        const weights = layer.getWeights()
-        if (weights.length < 4) continue
-        const variance = weights[3]
-        const varianceData = Array.from(variance.dataSync() as Float32Array)
-        const hasNegative = varianceData.some(v => v < 0)
-        if (hasNegative) {
-          const fixedData = varianceData.map(v => Math.max(v, 0))
-          const fixed = tf.tensor(fixedData, variance.shape, 'float32')
-          weights[3] = fixed
-          layer.setWeights(weights)
-          fixedCount++
-        }
-      }
-      console.log(`[TF] Clamped negative moving_variance in ${fixedCount} BN layers`)
-
       const warmup = model.predict(tf.zeros([1, 224, 224, 3])) as tf.Tensor
       warmup.dispose()
 
@@ -134,6 +116,10 @@ export async function loadModel(): Promise<void> {
 
 export function isReady(): boolean {
   return isModelLoaded
+}
+
+export function preloadModel(): void {
+  loadModel().catch(() => {})
 }
 
 export async function preprocessImage(
@@ -165,9 +151,8 @@ export async function runInference(
 
   const startTime = Date.now()
   const output = model.predict(imageTensor) as tf.Tensor
-  const inferenceTimeMs = Date.now() - startTime
-
   const probabilities = (await output.data()) as Float32Array
+  const inferenceTimeMs = Date.now() - startTime
   output.dispose()
 
   const predictions: Prediction[] = Array.from(probabilities).map((prob, i) => ({

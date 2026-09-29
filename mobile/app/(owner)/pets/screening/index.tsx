@@ -19,6 +19,7 @@ import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { usePets } from '../../../../features/pet/hooks/usePets'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
+import { preloadModel } from '../../../../ai/services/tensorflow.service'
 
 export default function CaptureScreen() {
   const router = useRouter()
@@ -34,6 +35,10 @@ export default function CaptureScreen() {
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
   const isBusy = isScreening || isModelLoading
+
+  useEffect(() => {
+    preloadModel()
+  }, [])
 
   useEffect(() => {
     if (pets && pets.length === 1 && !selectedPetId) {
