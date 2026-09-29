@@ -21,8 +21,17 @@ export interface ScreeningQuiz {
   allAnswered: boolean
   refined: QuizValidateResult | null
   imageBase64: string | null
+  error: string | null
   setAnswer: (id: number, answer: QuizAnswer) => void
   submit: () => Promise<void>
+}
+
+function extractDetail(error: unknown): string {
+  const err = error as {
+    response?: { data?: { detail?: string } }
+    message?: string
+  }
+  return err?.response?.data?.detail || err?.message || 'Request failed.'
 }
 
 export function useScreeningQuiz(options: {
@@ -35,6 +44,7 @@ export function useScreeningQuiz(options: {
   const [answers, setAnswers] = useState<Record<number, QuizAnswer>>({})
   const [refined, setRefined] = useState<QuizValidateResult | null>(null)
   const [imageBase64, setImageBase64] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const top3: QuizPredictionInput[] = useMemo(
     () =>
@@ -71,8 +81,12 @@ export function useScreeningQuiz(options: {
         if (cancelled) return
         setQuestions(res.questions)
         setStatus('ready')
-      } catch {
-        if (!cancelled) setStatus('failed')
+      } catch (e) {
+        console.warn('[quiz] questions failed:', e)
+        if (!cancelled) {
+          setError(extractDetail(e))
+          setStatus('failed')
+        }
       }
     })()
     return () => {
@@ -89,6 +103,7 @@ export function useScreeningQuiz(options: {
 
   const submit = useCallback(async () => {
     if (!allAnswered) return
+    setError(null)
     setStatus('validating')
     try {
       const result = await screeningService.validateQuizAnswers({
@@ -101,8 +116,10 @@ export function useScreeningQuiz(options: {
       })
       setRefined(result)
       setStatus('refined')
-    } catch {
-      setStatus('failed')
+    } catch (e) {
+      console.warn('[quiz] validate failed:', e)
+      setError(extractDetail(e))
+      setStatus('ready')
     }
   }, [allAnswered, answers, petId, questions, top3])
 
@@ -113,6 +130,7 @@ export function useScreeningQuiz(options: {
     allAnswered,
     refined,
     imageBase64,
+    error,
     setAnswer,
     submit,
   }

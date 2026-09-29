@@ -233,6 +233,9 @@ export default function ResultScreen() {
                 Questions unavailable {'\u2014'} continue with the model result.
               </Text>
             )}
+            {quiz.status === 'failed' && quiz.error && (
+              <Text style={styles.quizError}>{quiz.error}</Text>
+            )}
 
             {(quiz.status === 'ready' || quiz.status === 'validating') && (
               <>
@@ -277,6 +280,12 @@ export default function ResultScreen() {
                     {quiz.status === 'validating' ? 'Checking…' : 'Get refined result'}
                   </Text>
                 </Pressable>
+                {!quiz.allAnswered && quiz.status === 'ready' && !quiz.error && (
+                  <Text style={styles.quizHint}>Answer all questions to continue.</Text>
+                )}
+                {quiz.error && (
+                  <Text style={styles.quizError}>{quiz.error}</Text>
+                )}
               </>
             )}
 
@@ -506,6 +515,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   quizLoading: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 12 },
   quizLoadingText: { color: colors.textSecondary, fontSize: 13 },
   quizWarn: { color: colors.textMuted, fontSize: 13, lineHeight: 19, paddingVertical: 6 },
+  quizHint: { color: colors.textMuted, fontSize: 12, marginTop: 8 },
+  quizError: { color: colors.error, fontSize: 12, lineHeight: 17, marginTop: 8 },
   quizDone: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, paddingTop: 6 },
   questionBlock: { marginBottom: 14 },
   questionText: { color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 20 },
