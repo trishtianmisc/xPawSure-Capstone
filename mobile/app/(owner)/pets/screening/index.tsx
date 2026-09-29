@@ -81,7 +81,7 @@ export default function CaptureScreen() {
   }
 
   const handleRunScreening = async () => {
-    if (!imageUri) return
+    if (!imageUri || !selectedPet) return
 
     try {
       const result = await screenImage(imageUri)
@@ -89,9 +89,11 @@ export default function CaptureScreen() {
         pathname: '/(owner)/pets/screening/result',
         params: {
           imageUri,
-          petId: selectedPet?.id ?? 'unknown',
-          petName: selectedPet?.name ?? 'Unknown Pet',
+          petId: selectedPet.id,
+          petName: selectedPet.name,
           predictions: JSON.stringify(result.predictions),
+          modelVersion: result.modelVersion,
+          inferenceTimeMs: String(result.inferenceTimeMs),
         },
       })
     } catch {
@@ -199,8 +201,8 @@ export default function CaptureScreen() {
       <View style={styles.bottomBar}>
         <Pressable
           onPress={handleRunScreening}
-          disabled={!imageUri || isBusy}
-          style={[styles.screenBtn, (!imageUri || isBusy) && styles.screenBtnDisabled]}
+          disabled={!imageUri || !selectedPetId || isBusy}
+          style={[styles.screenBtn, (!imageUri || !selectedPetId || isBusy) && styles.screenBtnDisabled]}
         >
           {isBusy ? (
             <>
