@@ -203,3 +203,28 @@ export async function runScreening(
   }
 }
 
+export function disposeModel(): void {
+  if (model) {
+    model.dispose()
+    model = null
+    isModelLoaded = false
+    modelLoadPromise = null
+  }
+}
+
+export async function warmUpModel(): Promise<void> {
+  if (!model) return
+  try {
+    const zeroTensor = tf.zeros([1, 224, 224, 3]) as tf.Tensor4D
+    console.log('[TF] warmup running...')
+    const output = model.predict(zeroTensor) as tf.Tensor
+    const outData = await output.data()
+    console.log('[TF] warmup output:', Array.from(outData).map(v => v.toFixed(6)))
+    output.dispose()
+    zeroTensor.dispose()
+  } catch (e) {
+    console.error('[TF] warmup failed:', e)
+  }
+}
+
+
