@@ -167,12 +167,21 @@ class SecondCheckService:
             },
         }
 
-        response = requests.post(
-            cls.GEMINI_URL.format(model=settings.GEMINI_MODEL),
-            json=payload,
-            headers={'x-goog-api-key': settings.GEMINI_API_KEY},
-            timeout=settings.GEMINI_TIMEOUT_SECONDS,
-        )
+        response = None
+        for attempt in range(2):
+            response = requests.post(
+                cls.GEMINI_URL.format(model=settings.GEMINI_MODEL),
+                json=payload,
+                headers={'x-goog-api-key': settings.GEMINI_API_KEY},
+                timeout=settings.GEMINI_TIMEOUT_SECONDS,
+            )
+            if attempt == 0 and response.status_code in (429, 503):
+                logger.info(
+                    'Gemini returned %s for %s; retrying once',
+                    response.status_code, screening.ais_id,
+                )
+                continue
+            break
         response.raise_for_status()
 
         body = response.json()

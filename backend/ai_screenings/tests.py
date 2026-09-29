@@ -300,3 +300,45 @@ class SecondCheckTests(OwnerScreeningBase):
         huge = base64.b64encode(b'a' * (2 * 1024 * 1024 + 1)).decode()
         response = self._post_device(image=huge)
         self.assertEqual(response.status_code, 400)
+
+    def test_503_then_success_retries_once_and_saves_verdict(self):
+        saturated = mock.Mock()
+        saturated.status_code = 503
+        saturated.raise_for_status.side_effect = requests.HTTPError('503')
+        with mock.patch(
+            'ai_screenings.services.requests.post',
+            side_effect=[saturated, _gemini_response()],
+        ) as post:
+            response = self._post_device(image=TINY_IMAGE)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
+        self.assertEqual(post.call_count, 2)
+
+    def test_429_then_success_retries_once_and_saves_verdict(self):
+        rate_limited = mock.Mock()
+        rate_limited.status_code = 429
+        rate_limited.raise_for_status.side_effect = requests.HTTPError('429')
+        with mock.patch(
+            'ai_screenings.services.requests.post',
+            side_effect=[rate_limited, _gemini_response()],
+        ) as post:
+            response = self._post_device()
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.AGREE)
+        self.assertEqual(post.call_count, 2)
+
+    def test_persistent_503_marks_unavailable_after_single_retry(self):
+        saturated = mock.Mock()
+        saturated.status_code = 503
+        saturated.raise_for_status.side_effect = requests.HTTPError('503')
+        with mock.patch(
+            'ai_screenings.services.requests.post',
+            side_effect=[saturated, saturated],
+        ) as post:
+            response = self._post_device()
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
+        self.assertEqual(post.call_count, 2)

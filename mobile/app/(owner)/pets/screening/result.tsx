@@ -34,6 +34,8 @@ const CHECK_META: Record<string, { label: string; color: string; bg: string }> =
   UNCERTAIN: { label: 'UNCERTAIN', color: '#616161', bg: '#EEEEEE' },
 }
 
+const MAX_IMAGE_B64_LENGTH = Math.floor((2 * 1024 * 1024) * 4 / 3)
+
 function ConfidenceBar({ label, confidence, isTop, color }: {
   label: string
   confidence: number
@@ -132,7 +134,10 @@ export default function ResultScreen() {
       confidence: Number(top.confidence.toFixed(2)),
       model_version: params.modelVersion || 'unknown',
       inference_time_ms: Number(params.inferenceTimeMs) || undefined,
-      image: imageBase64 ?? undefined,
+      image:
+        imageBase64 && imageBase64.length <= MAX_IMAGE_B64_LENGTH
+          ? imageBase64
+          : undefined,
     })
   }
 
@@ -193,17 +198,31 @@ export default function ResultScreen() {
           })}
         </View>
 
-        {saved && checkMeta && check && (
+        {saved && checkVerdict && check && (
           <View style={styles.checkCard}>
             <View style={styles.checkHeader}>
-              <MaterialCommunityIcons color={checkMeta.color} name="shield-check-outline" size={18} />
+              <MaterialCommunityIcons
+                color={checkMeta?.color ?? colors.textSecondary}
+                name="shield-check-outline"
+                size={18}
+              />
               <Text style={styles.checkTitle}>Second Check</Text>
-              <View style={[styles.checkChip, { backgroundColor: checkMeta.bg }]}>
-                <Text style={[styles.checkChipText, { color: checkMeta.color }]}>{checkMeta.label}</Text>
-              </View>
+              {checkMeta && (
+                <View style={[styles.checkChip, { backgroundColor: checkMeta.bg }]}>
+                  <Text style={[styles.checkChipText, { color: checkMeta.color }]}>
+                    {checkMeta.label}
+                  </Text>
+                </View>
+              )}
             </View>
-            {!!check.ais_check_notes && (
-              <Text style={styles.checkNotes}>{check.ais_check_notes}</Text>
+            {checkVerdict === 'UNAVAILABLE' ? (
+              <Text style={styles.checkNotes}>
+                Second check unavailable {'\u2014'} try again later.
+              </Text>
+            ) : (
+              !!check.ais_check_notes && (
+                <Text style={styles.checkNotes}>{check.ais_check_notes}</Text>
+              )
             )}
             <Text style={styles.checkDisclaimer}>
               Advisory second check {check.ais_check_model ? `(${check.ais_check_model})` : ''}
