@@ -61,6 +61,7 @@ class AiScreening(models.Model):
     ais_check_remedy = models.TextField(blank=True, default='', db_column='AIS_CHECK_REMEDY')
     ais_check_model = models.CharField(max_length=50, blank=True, default='', db_column='AIS_CHECK_MODEL')
     ais_check_at = models.DateTimeField(null=True, blank=True, db_column='AIS_CHECK_AT')
+    ais_refinement = models.JSONField(null=True, blank=True, db_column='AIS_REFINEMENT')
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')
 
     class Meta:

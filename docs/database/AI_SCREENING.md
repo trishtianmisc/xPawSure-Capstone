@@ -158,6 +158,7 @@ If the owner later visits a clinic, the screening may be linked to a Consultatio
 | AIS_CHECK_REMEDY | TEXT | NULL |
 | AIS_CHECK_MODEL | VARCHAR(50) | NULL |
 | AIS_CHECK_AT | TIMESTAMP | NULL |
+| AIS_REFINEMENT | JSONB | NULL (symptom-quiz audit: original, questions, answers, refined) |
 
 ---
 

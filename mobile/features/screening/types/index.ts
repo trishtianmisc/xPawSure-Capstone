@@ -22,6 +22,44 @@ export interface Screening {
   ais_check_remedy: string
   ais_check_model: string
   ais_check_at: string | null
+  ais_refinement: RefinementAudit | null
+}
+
+export interface QuizPredictionInput {
+  disease_code: string
+  confidence: number
+}
+
+export interface QuizQuestion {
+  id: number
+  text: string
+}
+
+export type QuizAnswer = 'YES' | 'NO' | 'NOT_SURE'
+
+export interface QuizQuestionsPayload {
+  pet_id: string
+  predictions: QuizPredictionInput[]
+  image?: string
+}
+
+export interface QuizValidatePayload extends QuizQuestionsPayload {
+  questions: QuizQuestion[]
+  answers: Record<string, QuizAnswer>
+}
+
+export interface QuizValidateResult {
+  disease_code: string
+  disease_name: string
+  confidence: number
+  rationale: string
+}
+
+export interface RefinementAudit {
+  original: { disease: string; confidence: number }[]
+  questions?: QuizQuestion[]
+  answers?: Record<string, QuizAnswer>
+  refined?: { disease: string; confidence: number; rationale: string }
 }
 
 export interface ScreeningSummary {
@@ -51,4 +89,5 @@ export interface CreateScreeningPayload {
   inference_time_ms?: number
   device?: string
   image?: string
+  refinement?: RefinementAudit
 }

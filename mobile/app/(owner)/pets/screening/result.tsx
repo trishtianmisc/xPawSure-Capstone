@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -12,12 +12,12 @@ import {
   Text,
   View,
 } from 'react-native'
-import { File } from 'expo-file-system'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../../src/utils/error'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
-import type { SecondCheckVerdict } from '../../../../features/screening/types'
+import { useScreeningQuiz } from '../../../../features/screening/hooks/useScreeningQuiz'
+import type { QuizAnswer, RefinementAudit, SecondCheckVerdict } from '../../../../features/screening/types'
 import type { Prediction } from '../../../../ai/types/ai.types'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
@@ -34,7 +34,11 @@ const CHECK_META: Record<string, { label: string; color: string; bg: string }> =
   UNCERTAIN: { label: 'UNCERTAIN', color: '#616161', bg: '#EEEEEE' },
 }
 
-const MAX_IMAGE_B64_LENGTH = Math.floor((2 * 1024 * 1024) * 4 / 3)
+const ANSWER_OPTIONS: { value: QuizAnswer; label: string }[] = [
+  { value: 'YES', label: 'Yes' },
+  { value: 'NO', label: 'No' },
+  { value: 'NOT_SURE', label: 'Not sure' },
+]
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
   label: string
@@ -91,26 +95,8 @@ export default function ResultScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const saveScreening = useCreateScreening()
   const [consented, setConsented] = useState(false)
-  const [imageBase64, setImageBase64] = useState<string | null>(null)
 
   const saved = saveScreening.isSuccess
-
-  useEffect(() => {
-    const uri = params.imageUri
-    if (!uri) return
-    let cancelled = false
-    new File(uri)
-      .base64()
-      .then((b64) => {
-        if (!cancelled) setImageBase64(b64)
-      })
-      .catch(() => {
-        if (!cancelled) setImageBase64(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [params.imageUri])
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -120,24 +106,56 @@ export default function ResultScreen() {
     }
   }, [params.predictions])
 
+  const quiz = useScreeningQuiz({
+    petId: params.petId,
+    predictions,
+    imageUri: params.imageUri,
+  })
+
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
-  const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = top ? Math.round(top.confidence) : 0
+  const refined = quiz.refined
+  const displayDiseaseCode = refined?.disease_code ?? top?.disease
+  const displayLabel = refined?.disease_name ?? top?.label
+  const displayConfidence = refined?.confidence ?? top?.confidence
+  const topMeta = displayDiseaseCode
+    ? DISEASE_META[displayDiseaseCode] ?? { color: colors.primary, icon: 'help-circle-outline' }
+    : null
+  const confidencePct = Math.round(displayConfidence ?? 0)
+  const quizReady = quiz.status === 'refined' || quiz.status === 'failed'
 
   const handleSave = () => {
-    if (!consented || !top || saved || saveScreening.isPending) return
+    if (!consented || !top || !quizReady || saved || saveScreening.isPending) return
+
+    const original = sorted.slice(0, 3).map((p) => ({
+      disease: p.disease,
+      confidence: p.confidence,
+    }))
+    const answersAudit = Object.fromEntries(
+      Object.entries(quiz.answers).map(([id, answer]) => [String(id), answer]),
+    )
+    const refinement: RefinementAudit | undefined = refined
+      ? {
+          original,
+          questions: quiz.questions,
+          answers: answersAudit,
+          refined: {
+            disease: refined.disease_code,
+            confidence: refined.confidence,
+            rationale: refined.rationale,
+          },
+        }
+      : undefined
+
     saveScreening.mutate({
       pet_id: params.petId,
       source: 'DEVICE',
-      prediction: top.disease,
-      confidence: Number(top.confidence.toFixed(2)),
+      prediction: refined?.disease_code ?? top.disease,
+      confidence: Number((refined?.confidence ?? top.confidence).toFixed(2)),
       model_version: params.modelVersion || 'unknown',
       inference_time_ms: Number(params.inferenceTimeMs) || undefined,
-      image:
-        imageBase64 && imageBase64.length <= MAX_IMAGE_B64_LENGTH
-          ? imageBase64
-          : undefined,
+      image: quiz.imageBase64 ?? undefined,
+      refinement,
     })
   }
 
@@ -174,11 +192,99 @@ export default function ResultScreen() {
               <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
             </View>
             <Text style={styles.topLabel}>Predicted Condition</Text>
-            <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
+            <Text style={[styles.topDisease, { color: topMeta.color }]}>{displayLabel}</Text>
             <View style={styles.confidenceBadge}>
               <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
               <Text style={styles.confidenceLabel}>confidence</Text>
             </View>
+            {refined && (
+              <View style={[styles.refinedChip, { backgroundColor: topMeta.color + '18' }]}>
+                <MaterialCommunityIcons color={topMeta.color} name="account-check-outline" size={13} />
+                <Text style={[styles.refinedChipText, { color: topMeta.color }]}>
+                  Refined by symptom check
+                </Text>
+              </View>
+            )}
+            {refined && <Text style={styles.refinedRationale}>{refined.rationale}</Text>}
+          </View>
+        )}
+
+        {!saved && (
+          <View style={styles.quizCard}>
+            <View style={styles.checkHeader}>
+              <MaterialCommunityIcons color={colors.primary} name="clipboard-check-outline" size={18} />
+              <Text style={styles.checkTitle}>Symptom Check</Text>
+              {quiz.status === 'refined' && (
+                <View style={[styles.checkChip, { backgroundColor: '#E8F5E9' }]}>
+                  <Text style={[styles.checkChipText, { color: '#2E7D32' }]}>DONE</Text>
+                </View>
+              )}
+            </View>
+
+            {quiz.status === 'loading' && (
+              <View style={styles.quizLoading}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={styles.quizLoadingText}>Preparing your questions…</Text>
+              </View>
+            )}
+
+            {quiz.status === 'failed' && (
+              <Text style={styles.quizWarn}>
+                Questions unavailable {'\u2014'} continue with the model result.
+              </Text>
+            )}
+
+            {(quiz.status === 'ready' || quiz.status === 'validating') && (
+              <>
+                {quiz.questions.map((q, index) => (
+                  <View key={q.id} style={styles.questionBlock}>
+                    <Text style={styles.questionText}>
+                      {index + 1}. {q.text}
+                    </Text>
+                    <View style={styles.answerRow}>
+                      {ANSWER_OPTIONS.map((option) => {
+                        const active = quiz.answers[q.id] === option.value
+                        return (
+                          <Pressable
+                            key={option.value}
+                            onPress={() => quiz.setAnswer(q.id, option.value)}
+                            disabled={quiz.status === 'validating'}
+                            style={[styles.answerBtn, active && styles.answerBtnActive]}
+                          >
+                            <Text style={[styles.answerText, active && styles.answerTextActive]}>
+                              {option.label}
+                            </Text>
+                          </Pressable>
+                        )
+                      })}
+                    </View>
+                  </View>
+                ))}
+                <Pressable
+                  onPress={quiz.submit}
+                  disabled={!quiz.allAnswered || quiz.status === 'validating'}
+                  style={[
+                    styles.refineBtn,
+                    (!quiz.allAnswered || quiz.status === 'validating') && styles.saveBtnDisabled,
+                  ]}
+                >
+                  {quiz.status === 'validating' ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <MaterialCommunityIcons color="#FFF" name="account-search-outline" size={18} />
+                  )}
+                  <Text style={styles.saveBtnText}>
+                    {quiz.status === 'validating' ? 'Checking…' : 'Get refined result'}
+                  </Text>
+                </Pressable>
+              </>
+            )}
+
+            {quiz.status === 'refined' && (
+              <Text style={styles.quizDone}>
+                Questions answered {'\u2014'} result refined from your answers.
+              </Text>
+            )}
           </View>
         )}
 
@@ -263,7 +369,7 @@ export default function ResultScreen() {
           <>
             <Pressable
               onPress={() => setConsented((value) => !value)}
-              disabled={saveScreening.isPending}
+              disabled={saveScreening.isPending || !quizReady}
               style={styles.consentRow}
             >
               <MaterialCommunityIcons
@@ -277,10 +383,19 @@ export default function ResultScreen() {
               </Text>
             </Pressable>
 
+            {!quizReady && (
+              <Text style={styles.consentHint}>
+                Complete the symptom check above to continue.
+              </Text>
+            )}
+
             <Pressable
               onPress={handleSave}
-              disabled={!consented || !top || saveScreening.isPending}
-              style={[styles.saveBtn, (!consented || !top || saveScreening.isPending) && styles.saveBtnDisabled]}
+              disabled={!consented || !top || !quizReady || saveScreening.isPending}
+              style={[
+                styles.saveBtn,
+                (!consented || !top || !quizReady || saveScreening.isPending) && styles.saveBtnDisabled,
+              ]}
             >
               {saveScreening.isPending ? (
                 <ActivityIndicator color="#FFF" size="small" />
@@ -362,6 +477,60 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   confidenceBadge: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 10 },
   confidenceText: { fontSize: 32, fontWeight: '800' },
   confidenceLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '500' },
+  refinedChip: {
+    alignItems: 'center',
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  refinedChipText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
+  refinedRationale: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+
+  quizCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 18,
+  },
+  quizLoading: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingVertical: 12 },
+  quizLoadingText: { color: colors.textSecondary, fontSize: 13 },
+  quizWarn: { color: colors.textMuted, fontSize: 13, lineHeight: 19, paddingVertical: 6 },
+  quizDone: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, paddingTop: 6 },
+  questionBlock: { marginBottom: 14 },
+  questionText: { color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 20 },
+  answerRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  answerBtn: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 8,
+  },
+  answerBtnActive: { backgroundColor: '#B96534', borderColor: '#B96534' },
+  answerText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  answerTextActive: { color: '#FFFFFF' },
+  refineBtn: {
+    alignItems: 'center',
+    backgroundColor: '#B96534',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    marginTop: 4,
+    paddingVertical: 13,
+  },
 
   breakdownCard: {
     backgroundColor: colors.surface,
@@ -427,6 +596,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 4,
   },
   consentText: { color: colors.textSecondary, flex: 1, fontSize: 13, lineHeight: 19 },
+  consentHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
 
   saveBtn: {
     alignItems: 'center',

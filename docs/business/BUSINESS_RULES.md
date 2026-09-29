@@ -326,6 +326,15 @@ Second check (LLM):
 - MOCK screenings skip the second check.
 - The image may be forwarded to the LLM for a single call and is never stored server-side.
 
+Symptom quiz (mandatory refinement):
+
+- Before a device screening is saved, the owner must answer 3-5 Yes/No questions generated for the top-3 model predictions.
+- The answers may re-rank the prediction; the refined result (disease, LLM-estimated confidence, rationale) replaces the model's top result.
+- The quiz runs before save because AI predictions are immutable after creation.
+- The quiz is advisory: it never provides a diagnosis and never changes `ais_status`.
+- If the quiz service is unavailable, the owner may continue with the model result (fail open); the screening saves without a refinement audit.
+- The original model top-3, the questions, the answers, and the refined result are stored as an audit record on the screening.
+
 ---
 
 # 16. Prescription Rules

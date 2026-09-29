@@ -329,6 +329,23 @@ After a DEVICE screening is created, the backend runs an advisory second check w
 - Rules: advisory only. The second check can never change ais_status (stays PENDING_REVIEW; only a human may CONFIRM or DISMISS). Failures return UNAVAILABLE and the screening still saves. Transient HTTP 429/503 responses are retried once.
 - Configuration: GEMINI_API_KEY, GEMINI_MODEL (default gemini-3.5-flash), GEMINI_TIMEOUT_SECONDS (default 20).
 
+Symptom quiz (mandatory refinement, pre-save)
+
+Before a DEVICE screening is saved, the app runs a mandatory symptom quiz with Gemini:
+
+1. The app requests questions: `POST /api/owner/screenings/quiz-questions/` with the pet, the top-3 model predictions (code + confidence + disease description from the database) and the captured image (optional, max 2 MB). Gemini returns 3-5 short Yes/No/Not-sure questions an owner can answer by observing their pet — built to tell the top-3 candidates apart.
+2. The owner answers every question, then the app requests the re-rank: `POST /api/owner/screenings/quiz-validate/` with the questions and answers. Gemini returns one candidate disease code (must be one of the top-3), an estimated confidence (0-100), and a short rationale.
+3. The refined result replaces the displayed prediction (badged "Refined by symptom check"). On save, the screening stores the final prediction plus an `ais_refinement` audit object (original top-3, questions, answers, refined result).
+
+Rules:
+
+- Advisory only, never a diagnosis; the saved screening stays `PENDING_REVIEW`.
+- Predictions are immutable after creation, so the quiz always happens before save.
+- The quiz is mandatory in the UI when the service is available. If Gemini is unavailable, the UI fails open: it shows "Questions unavailable — continue with the model result" and the screening saves with the model result and no refinement.
+- MOCK screenings never see the quiz.
+- If the answers keep the original top prediction, the audit records that outcome.
+- Each screening uses at most 3 Gemini calls (quiz questions, quiz validate, second check).
+
 ---
 
 # 15. Database Storage

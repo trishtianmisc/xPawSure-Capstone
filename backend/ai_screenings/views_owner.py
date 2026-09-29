@@ -1,15 +1,24 @@
 from uuid import UUID
 
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from ai_screenings.models import AiScreening, ScreeningSource
-from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
-from ai_screenings.services import ScreeningService, SecondCheckService
+from ai_screenings.serializers import (
+    CreateScreeningSerializer,
+    QuizQuestionsSerializer,
+    QuizValidateSerializer,
+    ScreeningSerializer,
+)
+from ai_screenings.services import QuizService, ScreeningService, SecondCheckService
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
 from pets.models import Pet
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_uuid(value):
@@ -127,6 +136,10 @@ class OwnerScreeningListCreateView(APIView):
                     inference_time_ms=validated.get('inference_time_ms'),
                     device=validated.get('device'),
                 )
+                refinement = validated.get('refinement')
+                if refinement is not None:
+                    screening.ais_refinement = refinement
+                    screening.save(update_fields=['ais_refinement'])
                 SecondCheckService.run(screening, image=validated.get('image'))
         except ValueError as e:
             return Response(
@@ -136,3 +149,87 @@ class OwnerScreeningListCreateView(APIView):
 
         result = ScreeningSerializer(screening)
         return Response(result.data, status=status.HTTP_201_CREATED)
+
+
+class OwnerScreeningQuizQuestionsView(APIView):
+    permission_classes = [IsOwner]
+
+    def post(self, request):
+        owner_profile = _get_owner_profile(request.user)
+        if not owner_profile:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = QuizQuestionsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        pet = Pet.objects.filter(
+            pet_id=validated['pet_id'],
+            own_id=owner_profile,
+            pet_is_active=True,
+            pet_deleted_at__isnull=True,
+        ).first()
+        if not pet:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            questions = QuizService.generate(
+                pet, validated['predictions'], validated.get('image'),
+            )
+        except Exception as e:
+            logger.warning('Quiz question generation failed for pet %s: %s', pet.pet_id, e)
+            return Response(
+                {'detail': 'AI question service unavailable. Continue with the model result.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response({'questions': questions})
+
+
+class OwnerScreeningQuizValidateView(APIView):
+    permission_classes = [IsOwner]
+
+    def post(self, request):
+        owner_profile = _get_owner_profile(request.user)
+        if not owner_profile:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = QuizValidateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        validated = serializer.validated_data
+
+        pet = Pet.objects.filter(
+            pet_id=validated['pet_id'],
+            own_id=owner_profile,
+            pet_is_active=True,
+            pet_deleted_at__isnull=True,
+        ).first()
+        if not pet:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            result = QuizService.validate(
+                pet,
+                validated['predictions'],
+                validated['questions'],
+                validated['answers'],
+                validated.get('image'),
+            )
+        except Exception as e:
+            logger.warning('Quiz validation failed for pet %s: %s', pet.pet_id, e)
+            return Response(
+                {'detail': 'AI question service unavailable. Continue with the model result.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        return Response(result)

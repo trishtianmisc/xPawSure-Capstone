@@ -1,4 +1,5 @@
 import base64
+import json
 from unittest import mock
 
 import requests
@@ -359,3 +360,205 @@ class SecondCheckTests(OwnerScreeningBase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data['ais_check_verdict'], SecondCheckVerdict.UNAVAILABLE)
         self.assertEqual(post.call_count, 2)
+
+
+def _llm(text):
+    response = mock.Mock()
+    response.status_code = 200
+    response.json.return_value = {
+        'candidates': [{'content': {'parts': [{'text': text}]}}],
+    }
+    response.raise_for_status.return_value = None
+    return response
+
+
+@override_settings(GEMINI_API_KEY='test-key', GEMINI_MODEL='test-model')
+class QuizTests(OwnerScreeningBase):
+
+    QUESTIONS_URL = '/api/owner/screenings/quiz-questions/'
+    VALIDATE_URL = '/api/owner/screenings/quiz-validate/'
+    PREDICTIONS = [
+        {'disease_code': 'MANGE', 'confidence': 88.0},
+        {'disease_code': 'FUNGAL', 'confidence': 6.0},
+        {'disease_code': 'HOTSPOT', 'confidence': 3.0},
+    ]
+
+    def _post_json(self, url, payload, email=OWNER_EMAIL):
+        auth = self._auth(email)
+        return self.client.post(
+            url, json.dumps(payload), content_type='application/json', **auth,
+        )
+
+    def _post_questions(self, **extra):
+        payload = {'pet_id': str(self.pet.pet_id), 'predictions': self.PREDICTIONS}
+        payload.update(extra)
+        return self._post_json(self.QUESTIONS_URL, payload)
+
+    def _post_validate(self, **extra):
+        payload = {
+            'pet_id': str(self.pet.pet_id),
+            'predictions': self.PREDICTIONS,
+            'questions': [{'id': 1, 'text': 'Is your pet scratching a lot?'}],
+            'answers': {'1': 'YES'},
+        }
+        payload.update(extra)
+        return self._post_json(self.VALIDATE_URL, payload)
+
+    def test_questions_generated_with_ids(self):
+        text = '{"questions": [{"text": "Is your pet scratching a lot?"}, {"text": "Any circular bald patches?"}]}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_llm(text)) as post:
+            response = self._post_questions()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        questions = response.data['questions']
+        self.assertEqual(len(questions), 2)
+        self.assertEqual(questions[0]['id'], 1)
+        self.assertEqual(questions[1]['id'], 2)
+        self.assertTrue(questions[0]['text'])
+        self.assertNotIn('inline_data', str(post.call_args.kwargs['json']))
+
+    def test_questions_with_image_forwards_inline_data(self):
+        text = '{"questions": [{"text": "Is your pet scratching?"}]}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_llm(text)) as post:
+            response = self._post_questions(image=TINY_IMAGE)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        parts = post.call_args.kwargs['json']['contents'][0]['parts']
+        inline = [p for p in parts if 'inline_data' in p]
+        self.assertEqual(len(inline), 1)
+        self.assertEqual(inline[0]['inline_data']['data'], TINY_IMAGE)
+
+    def test_questions_unknown_disease_returns_400(self):
+        response = self._post_questions(
+            predictions=[{'disease_code': 'NOT_A_DISEASE', 'confidence': 50}],
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_questions_too_many_predictions_returns_400(self):
+        response = self._post_questions(
+            predictions=[
+                {'disease_code': 'MANGE', 'confidence': 50},
+                {'disease_code': 'FUNGAL', 'confidence': 30},
+                {'disease_code': 'HOTSPOT', 'confidence': 15},
+                {'disease_code': 'BACTERIAL', 'confidence': 5},
+            ],
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_questions_foreign_pet_returns_404(self):
+        response = self._post_json(
+            self.QUESTIONS_URL,
+            {'pet_id': str(self.other_pet.pet_id), 'predictions': self.PREDICTIONS},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_questions_no_api_key_returns_503(self):
+        with mock.patch('ai_screenings.services.requests.post') as post:
+            response = self._post_questions()
+
+        self.assertEqual(response.status_code, 503)
+        post.assert_not_called()
+
+    def test_questions_malformed_llm_output_returns_503(self):
+        with mock.patch('ai_screenings.services.requests.post', return_value=_llm('not-json')):
+            response = self._post_questions()
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_validate_returns_refined_result(self):
+        fungal_name = Disease.objects.get(dis_code='FUNGAL').dis_name
+        text = '{"disease_code": "FUNGAL", "confidence": 72, "rationale": "Answers fit fungal more."}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_llm(text)) as post:
+            response = self._post_validate()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['disease_code'], 'FUNGAL')
+        self.assertEqual(response.data['disease_name'], fungal_name)
+        self.assertEqual(response.data['confidence'], 72.0)
+        self.assertTrue(response.data['rationale'])
+        self.assertIn('Owner answers:', str(post.call_args.kwargs['json']))
+
+    def test_validate_non_candidate_disease_returns_503(self):
+        text = '{"disease_code": "BACTERIAL", "confidence": 70, "rationale": "x"}'
+        with mock.patch('ai_screenings.services.requests.post', return_value=_llm(text)):
+            response = self._post_validate()
+
+        self.assertEqual(response.status_code, 503)
+
+    def test_validate_missing_answer_returns_400(self):
+        response = self._post_validate(answers={})
+        self.assertEqual(response.status_code, 400)
+
+    def test_validate_invalid_answer_value_returns_400(self):
+        response = self._post_validate(answers={'1': 'MAYBE'})
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_device_screening_stores_refinement(self):
+        refinement = {
+            'original': [{'disease': 'MANGE', 'confidence': 88.0}],
+            'questions': [{'id': 1, 'text': 'Is your pet scratching?'}],
+            'answers': {'1': 'YES'},
+            'refined': {'disease': 'FUNGAL', 'confidence': 72, 'rationale': 'Answers fit fungal.'},
+        }
+        response = self._post_json(
+            '/api/owner/screenings/',
+            {
+                'pet_id': str(self.pet.pet_id),
+                'source': 'DEVICE',
+                'prediction': 'FUNGAL',
+                'confidence': 72.0,
+                'model_version': '2.0.0',
+                'refinement': refinement,
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['ais_refinement'], refinement)
+        screening = AiScreening.objects.get(ais_id=response.data['ais_id'])
+        self.assertEqual(screening.ais_refinement, refinement)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_refinement_must_be_object_returns_400(self):
+        response = self._post_json(
+            '/api/owner/screenings/',
+            {
+                'pet_id': str(self.pet.pet_id),
+                'source': 'DEVICE',
+                'prediction': 'MANGE',
+                'confidence': 88.0,
+                'model_version': '2.0.0',
+                'refinement': [1, 2, 3],
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_oversized_refinement_returns_400(self):
+        response = self._post_json(
+            '/api/owner/screenings/',
+            {
+                'pet_id': str(self.pet.pet_id),
+                'source': 'DEVICE',
+                'prediction': 'MANGE',
+                'confidence': 88.0,
+                'model_version': '2.0.0',
+                'refinement': {'original': ['x' * 17000]},
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(GEMINI_API_KEY='')
+    def test_mock_screening_ignores_refinement(self):
+        response = self._post_json(
+            '/api/owner/screenings/',
+            {
+                'pet_id': str(self.pet.pet_id),
+                'source': 'MOCK',
+                'refinement': {'original': [{'disease': 'MANGE', 'confidence': 90}]},
+            },
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['ais_refinement'])

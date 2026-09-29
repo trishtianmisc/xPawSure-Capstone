@@ -314,6 +314,7 @@
 | AI_SCREENING | AIS_CHECK_REMEDY | LLM general home-care tip (no treatment) | TEXT | NULL |
 | AI_SCREENING | AIS_CHECK_MODEL | LLM model that performed the second check | VARCHAR | NULL |
 | AI_SCREENING | AIS_CHECK_AT | Second-check timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_REFINEMENT | Symptom-quiz audit (original top-3, questions, answers, refined) | JSONB | NULL |
 
 ---
 

@@ -781,7 +781,8 @@ Response:
       "ais_check_notes": "string",
       "ais_check_remedy": "string (general home-care tip, may be empty)",
       "ais_check_model": "gemini-3.5-flash",
-      "ais_check_at": "timestamp or null"
+      "ais_check_at": "timestamp or null",
+      "ais_refinement": "object or null (symptom-quiz audit: original, questions, answers, refined)"
     }
   ]
 }
@@ -822,7 +823,8 @@ Request:
   "image": "data-url or base64, max 2 MB (optional, DEVICE only)"
 }
 
-Response `201` with the screening object (see GET above), including the second-check fields.
+Response `201` with the screening object (see GET above), including the second-check fields
+and `ais_refinement` (audit JSON of the symptom quiz when provided).
 
 Business rules:
 
@@ -831,6 +833,64 @@ Business rules:
 - AI predictions are immutable after creation.
 - `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
   MOCK screenings skip the second check.
+
+---
+
+## POST /api/owner/screenings/quiz-questions/
+
+Requires authentication (Owner role). Pet must belong to the owner (404 otherwise).
+
+Generates the mandatory symptom-quiz questions (Yes/No style, max 5) for the top-3
+model predictions before a DEVICE screening is saved. Returns `503` with a skip-friendly
+detail when the AI service is unavailable (client then continues with the model result).
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "predictions": [
+    {"disease_code": "MANGE", "confidence": 88.0},
+    {"disease_code": "FUNGAL", "confidence": 6.0},
+    {"disease_code": "HOTSPOT", "confidence": 3.0}
+  ],
+  "image": "data-url or base64, max 2 MB (optional)"
+}
+
+Response `200`:
+
+{
+  "questions": [
+    {"id": 1, "text": "Is your pet scratching more than usual?"},
+    {"id": 2, "text": "Are the patches of hair loss circular?"}
+  ]
+}
+
+---
+
+## POST /api/owner/screenings/quiz-validate/
+
+Requires authentication (Owner role). Pet must belong to the owner (404 otherwise).
+
+Re-ranks the candidate diseases from the owner's answers. Returns `503` when the AI
+service is unavailable or returns an invalid result.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "predictions": [ ...same as quiz-questions... ],
+  "questions": [{"id": 1, "text": "..."}],
+  "answers": {"1": "YES | NO | NOT_SURE"}
+}
+
+Response `200`:
+
+{
+  "disease_code": "FUNGAL",
+  "disease_name": "Fungal",
+  "confidence": 65,
+  "rationale": "Short plain-language explanation."
+}
 
 ---
 
