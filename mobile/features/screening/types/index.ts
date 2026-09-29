@@ -38,4 +38,9 @@ export interface ScreeningListResponse {
 export interface CreateScreeningPayload {
   pet_id: string
   source: ScreeningSource
+  prediction?: string
+  confidence?: number
+  model_version?: string
+  inference_time_ms?: number
+  device?: string
 }
