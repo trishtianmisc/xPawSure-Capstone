@@ -14,6 +14,8 @@ export interface PetCreatePayload {
   profile_picture?: string
 }
 
+export type PetUpdatePayload = Partial<PetCreatePayload>
+
 export interface Pet {
   id: string
   name: string
