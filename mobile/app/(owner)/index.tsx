@@ -10,6 +10,7 @@ import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../features/appointment/types'
 import { usePets } from '../../features/pet/hooks/usePets'
+import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 type Shortcut = {
   label: string
@@ -20,7 +21,7 @@ type Shortcut = {
 const shortcuts: Shortcut[] = [
   { label: 'Screen Skin', icon: 'camera-outline', route: '/(owner)/pets/screening' },
   { label: 'My Pets', icon: 'paw-outline', route: '/(owner)/pets' },
-  { label: 'QR Code', icon: 'qrcode', route: '/(owner)/records' },
+  { label: 'Records', icon: 'folder-outline', route: '/(owner)/records' },
   { label: 'Find Vet', icon: 'map-marker-outline', route: '/(owner)/appointments' },
 ]
 
@@ -32,6 +33,9 @@ export default function HomeScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
   const { data: appointments } = useMyAppointments()
+  const { data: screenings, isLoading: screeningsLoading } = useAllScreenings()
+
+  const latestScreening = screenings?.results[0]
 
   const nextAppointment: AppointmentListItem | undefined = useMemo(() => {
     const activeStatuses = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
@@ -163,16 +167,37 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Screenings</Text>
-          <Pressable onPress={() => router.push('/(owner)/records')}><Text style={styles.seeAll}>See All</Text></Pressable>
+          <Pressable onPress={() => router.push('/(owner)/screenings')}><Text style={styles.seeAll}>See All</Text></Pressable>
         </View>
-        <Pressable onPress={() => router.push('/(owner)/records')} style={styles.screeningPreview}>
-          <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="dog" size={19} /></View>
-          <View style={styles.previewText}>
-            <Text style={styles.previewTitle}>Allergic Dermatitis</Text>
-            <Text style={styles.previewMeta}>Milo · 12 Mar, 10:30 AM</Text>
+        {latestScreening ? (
+          <Pressable onPress={() => router.push('/(owner)/screenings')} style={styles.screeningPreview}>
+            <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="face-man-profile" size={19} /></View>
+            <View style={styles.previewText}>
+              <Text style={styles.previewTitle}>{latestScreening.disease}</Text>
+              <Text style={styles.previewMeta}>
+                {latestScreening.pet_name} · {latestScreening.ais_confidence}% confidence ·{' '}
+                {new Date(latestScreening.ais_created_at).toLocaleDateString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                })}
+              </Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
+          </Pressable>
+        ) : screeningsLoading ? (
+          <View style={styles.screeningPreview}>
+            <Text style={styles.previewMeta}>Loading screenings...</Text>
           </View>
-          <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
-        </Pressable>
+        ) : (
+          <Pressable onPress={() => router.push('/(owner)/pets/screening')} style={styles.screeningPreview}>
+            <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="face-man-profile" size={19} /></View>
+            <View style={styles.previewText}>
+              <Text style={styles.previewTitle}>No screenings yet</Text>
+              <Text style={styles.previewMeta}>Run a quick AI skin check for your pet.</Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   )

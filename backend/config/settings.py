@@ -34,6 +34,9 @@ INSTALLED_APPS = [
     'staff',
     'appointments',
     'ai_screenings',
+    'consultations',
+    'prescriptions',
+    'vaccinations',
     'notifications',
     'audit_log',
     'rest_framework_simplejwt.token_blacklist',
@@ -133,6 +136,7 @@ SUPABASE_URL = env('SUPABASE_URL', default='')
 SUPABASE_SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY', default='')
 SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', default='pet-images')
 SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
+SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

@@ -654,7 +654,7 @@ class DashboardService:
 class OwnerService:
 
     @staticmethod
-    def list_owners(clinic_id, search=None, page=1, page_size=20):
+    def list_owners(clinic_id=None, search=None, page=1, page_size=20):
         from owners.models import OwnerProfile
 
         qs = OwnerProfile.objects.filter(

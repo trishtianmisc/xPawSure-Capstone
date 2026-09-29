@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   SafeAreaView,
@@ -13,6 +14,8 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
+import { apiErrorMessage } from '../../../../src/utils/error'
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 import type { Prediction } from '../../../../ai/types/ai.types'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
@@ -72,8 +75,14 @@ export default function ResultScreen() {
     petId: string
     petName: string
     predictions: string
+    modelVersion: string
+    inferenceTimeMs: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
+  const saveScreening = useCreateScreening()
+  const [consented, setConsented] = useState(false)
+
+  const saved = saveScreening.isSuccess
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -87,6 +96,18 @@ export default function ResultScreen() {
   const top = sorted[0]
   const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
   const confidencePct = top ? Math.round(top.confidence) : 0
+
+  const handleSave = () => {
+    if (!consented || !top || saved || saveScreening.isPending) return
+    saveScreening.mutate({
+      pet_id: params.petId,
+      source: 'DEVICE',
+      prediction: top.disease,
+      confidence: Number(top.confidence.toFixed(2)),
+      model_version: params.modelVersion || 'unknown',
+      inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+    })
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -148,6 +169,55 @@ export default function ResultScreen() {
             Consult a vet for definitive results.
           </Text>
         </View>
+
+        {saveScreening.isError && (
+          <View style={[styles.banner, styles.bannerError, { backgroundColor: colors.surface }]}>
+            <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
+            <Text style={[styles.bannerText, { color: colors.error }]}>{apiErrorMessage(saveScreening.error)}</Text>
+          </View>
+        )}
+
+        {saved ? (
+          <View style={[styles.banner, styles.bannerSuccess]}>
+            <MaterialCommunityIcons color="#2E7D32" name="check-circle-outline" size={16} />
+            <Text style={[styles.bannerText, { color: '#2E7D32' }]}>
+              Screening saved to {params.petName}&apos;s medical record.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Pressable
+              onPress={() => setConsented((value) => !value)}
+              disabled={saveScreening.isPending}
+              style={styles.consentRow}
+            >
+              <MaterialCommunityIcons
+                color={consented ? '#B96534' : colors.textMuted}
+                name={consented ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                size={22}
+              />
+              <Text style={styles.consentText}>
+                I consent to save this on-device AI screening result and its metadata to my
+                pet&apos;s medical record for veterinary review.
+              </Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSave}
+              disabled={!consented || !top || saveScreening.isPending}
+              style={[styles.saveBtn, (!consented || !top || saveScreening.isPending) && styles.saveBtnDisabled]}
+            >
+              {saveScreening.isPending ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <MaterialCommunityIcons color="#FFF" name="content-save-outline" size={18} />
+              )}
+              <Text style={styles.saveBtnText}>
+                {saveScreening.isPending ? 'Saving...' : 'Save to Record'}
+              </Text>
+            </Pressable>
+          </>
+        )}
       </ScrollView>
 
       <View style={styles.bottomBar}>
@@ -237,6 +307,40 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 12,
   },
   infoText: { color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+
+  banner: {
+    alignItems: 'center',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  bannerError: { borderColor: '#C0392B', borderWidth: 1 },
+  bannerSuccess: { backgroundColor: '#E8F5E9' },
+  bannerText: { flex: 1, fontSize: 13, fontWeight: '600' },
+
+  consentRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 14,
+    paddingHorizontal: 4,
+  },
+  consentText: { color: colors.textSecondary, flex: 1, fontSize: 13, lineHeight: 19 },
+
+  saveBtn: {
+    alignItems: 'center',
+    backgroundColor: '#B96534',
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  saveBtnDisabled: { opacity: 0.45 },
+  saveBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
 
   bottomBar: {
     backgroundColor: colors.surface,

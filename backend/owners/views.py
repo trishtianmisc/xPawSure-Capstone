@@ -1,10 +1,56 @@
-from rest_framework import status
+from rest_framework import parsers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.services import OwnerService
-from core.permissions import IsReceptionist
-from owners.serializers import OwnerDetailSerializer, OwnerListSerializer
+from core.permissions import IsOwner, IsReceptionist
+from owners.models import OwnerProfile
+from owners.serializers import (
+    OwnerDetailSerializer,
+    OwnerListSerializer,
+    OwnerProfileSerializer,
+    OwnerProfileUpdateSerializer,
+)
+from owners.services import OwnerProfileService
+
+
+class OwnerProfileView(APIView):
+    permission_classes = [IsOwner]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
+
+    def _get_profile(self, request):
+        try:
+            return request.user.owner_profile
+        except OwnerProfile.DoesNotExist:
+            return None
+
+    def get(self, request):
+        profile = self._get_profile(request)
+        if profile is None:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(OwnerProfileSerializer(profile).data)
+
+    def put(self, request):
+        profile = self._get_profile(request)
+        if profile is None:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = OwnerProfileUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        profile = OwnerProfileService.update_profile(
+            profile,
+            serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+        return Response(OwnerProfileSerializer(profile).data)
 
 
 class OwnerListView(APIView):
@@ -12,8 +58,14 @@ class OwnerListView(APIView):
 
     def get(self, request):
         search = request.query_params.get('search')
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        try:
+            page = max(int(request.query_params.get('page', 1) or 1), 1)
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 20) or 20), 1), 100)
+        except (ValueError, TypeError):
+            page_size = 20
 
         data = OwnerService.list_owners(
             search=search,

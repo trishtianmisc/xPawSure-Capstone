@@ -8,9 +8,11 @@ import { useTheme } from '../../../src/context/ThemeContext'
 interface PhotoPickerProps {
   value: string | undefined
   onChange: (uri: string | undefined) => void
+  title?: string
+  icon?: string
 }
 
-export function PhotoPicker({ value, onChange }: PhotoPickerProps) {
+export function PhotoPicker({ value, onChange, title = 'Add Pet Photo', icon = 'dog' }: PhotoPickerProps) {
   const { colors } = useTheme()
   const [loading, setLoading] = useState(false)
 
@@ -79,9 +81,9 @@ export function PhotoPicker({ value, onChange }: PhotoPickerProps) {
         style={[styles.uploadArea, { borderColor: colors.border }]}
       >
         <View style={[styles.iconCircle, { backgroundColor: colors.primaryLight }]}>
-          <MaterialCommunityIcons color={colors.primary} name="dog" size={28} />
+          <MaterialCommunityIcons color={colors.primary} name={icon as never} size={28} />
         </View>
-        <Text style={[styles.uploadTitle, { color: colors.text }]}>Add Pet Photo</Text>
+        <Text style={[styles.uploadTitle, { color: colors.text }]}>{title}</Text>
         <Text style={[styles.uploadHint, { color: colors.textMuted }]}>
           {loading ? 'Loading...' : 'Tap to upload from gallery'}
         </Text>

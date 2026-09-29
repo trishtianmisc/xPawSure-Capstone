@@ -138,10 +138,12 @@ Owners may view their pets' medical history, including:
 
 - Consultation records (read-only)
 - Prescription records (read-only)
-- Vaccination records (read-only)
+- Vaccination records
 - AI screening history
 
-Owners cannot edit medical records.
+Owners cannot edit consultation or prescription records.
+
+Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 
 ---
 
@@ -379,7 +381,15 @@ GET  /api/consultations/           List consultations (read-only)
 
 GET  /api/prescriptions/           List prescriptions (read-only)
 
-GET  /api/vaccinations/            List vaccinations (read-only)
+GET  /api/vaccinations/            List vaccinations
+
+POST /api/vaccinations/            Create owner-reported vaccination
+
+GET  /api/vaccinations/{id}/       Vaccination detail
+
+PUT  /api/vaccinations/{id}/       Update owner-reported vaccination
+
+DELETE /api/vaccinations/{id}/     Delete owner-reported vaccination
 
 ---
 

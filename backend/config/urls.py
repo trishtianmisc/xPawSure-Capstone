@@ -10,6 +10,10 @@ urlpatterns = [
     path('api/', include('staff.urls')),
     path('api/', include('pets.urls')),
     path('api/', include('appointments.urls')),
+    path('api/', include('owners.urls')),
     path('api/', include('ai_screenings.urls')),
     path('api/', include('notifications.urls')),
+    path('api/', include('consultations.urls')),
+    path('api/', include('prescriptions.urls')),
+    path('api/', include('vaccinations.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

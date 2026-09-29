@@ -187,15 +187,16 @@ Owners may:
 - View appointment history
 - View consultation history (read-only)
 - View prescription history (read-only)
-- View vaccination history (read-only)
+- View vaccination history
+- Add, edit, and delete their own self-reported vaccination records
 - View AI screening history
 
 Owners cannot:
 
-- Edit medical records
+- Edit consultation or prescription records
 - Create consultations
 - Create prescriptions
-- Record vaccinations
+- Modify veterinarian-issued vaccination records
 - Access other owners' data
 - Register a clinic
 
@@ -345,11 +346,23 @@ Every vaccination records
 
 - Vaccine name
 - Date administered
-- Veterinarian
+- Source: veterinarian-issued or owner-reported
 - Batch number (optional)
 - Next due date (optional)
 
-Vaccination history cannot be deleted.
+Sources
+
+- Veterinarian-issued records are created by clinic staff during a Consultation and are immutable.
+- Owner-reported records are created by the pet owner from the mobile app (for vaccines given elsewhere).
+- Owners may add, edit, and delete only their own reported records.
+
+Validation
+
+- Vaccination date cannot be in the future.
+- Next due date must be on or after the vaccination date.
+- Only active pets may receive vaccinations.
+
+Veterinarian-issued vaccination history cannot be deleted.
 
 ---
 
@@ -357,11 +370,13 @@ Vaccination history cannot be deleted.
 
 Medical history is permanent.
 
-Medical records
+Veterinarian-issued medical records
 
 Must never be physically deleted.
 
 Corrections should create audit entries rather than erase historical information.
+
+Owner-reported vaccination records may be deleted by their owner; every create, update, and delete is recorded in the audit log.
 
 ---
 
