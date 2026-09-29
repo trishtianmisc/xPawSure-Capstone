@@ -15,8 +15,14 @@ class NotificationListView(APIView):
 
     def get(self, request):
         unread_only = request.query_params.get('unread_only', 'false').lower() == 'true'
-        page = int(request.query_params.get('page', 1))
-        page_size = int(request.query_params.get('page_size', 20))
+        try:
+            page = max(int(request.query_params.get('page', 1) or 1), 1)
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 20) or 20), 1), 100)
+        except (ValueError, TypeError):
+            page_size = 20
 
         result = NotificationService.list_notifications(
             user_id=request.user.usr_id,

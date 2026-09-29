@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
+import { useUnreadCount } from '../../features/notification/hooks/useUnreadCount'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 
@@ -9,6 +11,9 @@ export function AppHeader() {
   const { colors, theme, toggleTheme } = useTheme()
   const { user } = useAuth()
   const insets = useSafeAreaInsets()
+  const router = useRouter()
+  const isOwner = user?.role === 'OWNER'
+  const { data: unreadCount } = useUnreadCount(isOwner)
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
@@ -22,8 +27,14 @@ export function AppHeader() {
       </View>
 
       <View style={styles.right}>
-        <Pressable style={[styles.iconBtn, { backgroundColor: colors.iconBg }]}>
-          <View style={[styles.notifDot, { backgroundColor: colors.error }]} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+          disabled={!isOwner}
+          onPress={isOwner ? () => router.push('/(owner)/notifications') : undefined}
+          style={[styles.iconBtn, { backgroundColor: colors.iconBg }]}
+        >
+          {(unreadCount ?? 0) > 0 && <View style={[styles.notifDot, { backgroundColor: colors.error }]} />}
           <MaterialCommunityIcons color={colors.iconColor} name="bell-outline" size={19} />
         </Pressable>
 
