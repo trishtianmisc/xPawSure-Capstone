@@ -6,59 +6,7 @@ import { File } from 'expo-file-system'
 import { MODEL_INFO } from '../constants/diseases'
 import type { ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
 import { SCREENING_THRESHOLDS, SCREENING_STATE_MESSAGES } from '../constants/diseases'
-
-class Normalization extends tf.layers.Layer {
-  static className = 'Normalization'
-
-  constructor(args: Record<string, unknown>) {
-    super(args as any)
-  }
-
-  override build(inputShape: tf.Shape | tf.Shape[]): void {
-    this.addWeight('mean', [3], 'float32', tf.initializers.zeros())
-    this.addWeight('variance', [3], 'float32', tf.initializers.zeros())
-    this.addWeight('count', [], 'float32', tf.initializers.zeros())
-    this.built = true
-  }
-
-  override computeOutputShape(inputShape: tf.Shape | tf.Shape[]): tf.Shape | tf.Shape[] {
-    return inputShape
-  }
-
-  override call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor | tf.Tensor[] {
-    const x = Array.isArray(inputs) ? inputs[0] : inputs
-    const mean = this.getWeights()[0]
-    const variance = this.getWeights()[1]
-    const sqrtVar = tf.sqrt(variance)
-    const denom = tf.maximum(sqrtVar, tf.scalar(1e-7, 'float32'))
-    return tf.sub(x, mean).div(denom)
-  }
-
-  override getClassName() {
-    return 'Normalization'
-  }
-}
-
-class Rescaling extends tf.layers.Layer {
-  static className = 'Rescaling'
-  private readonly rescaleScale: number
-  private readonly rescaleOffset: number
-
-  constructor(args: Record<string, unknown>) {
-    super(args as any)
-    this.rescaleScale = (args.scale as number) ?? 1.0
-    this.rescaleOffset = (args.offset as number) ?? 0.0
-  }
-
-  override call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor | tf.Tensor[] {
-    const x = Array.isArray(inputs) ? inputs[0] : inputs
-    return tf.mul(x, this.rescaleScale).add(this.rescaleOffset)
-  }
-
-  override getClassName() {
-    return 'Rescaling'
-  }
-}
+import { Normalization, Rescaling } from './customLayers'
 
 tf.serialization.registerClass(Normalization)
 tf.serialization.registerClass(Rescaling)
@@ -75,21 +23,21 @@ export async function loadModel(): Promise<void> {
 
   modelLoadPromise = (async () => {
     try {
-      await tf.ready()
+      const loadStart = Date.now()
 
-      const backends = tf.engine().findBackend('webgl')
-        ? ['webgl', 'cpu'] as const
-        : ['cpu'] as const
-
-      for (const backend of backends) {
-        try {
-          await tf.setBackend(backend)
-          break
-        } catch {}
+      const backendStart = Date.now()
+      try {
+        await tf.setBackend('rn-webgl')
+      } catch (error) {
+        console.log(`[TF] rn-webgl unavailable (${error})`)
+        await tf.setBackend('cpu')
       }
+      await tf.ready()
+      console.log(`[TF] backend=${tf.getBackend()} in ${Date.now() - backendStart}ms`)
 
       const modelJSON = require('../../assets/model/model.json')
 
+      const weightsStart = Date.now()
       const weightsAsset = await Asset.loadAsync(
         require('../../assets/model/weights.bin'),
       )
@@ -97,7 +45,9 @@ export async function loadModel(): Promise<void> {
       const weightsUri = weightsAsset[0].localUri
       const weightsFile = new File(weightsUri!)
       const weightsBytes = await weightsFile.bytes()
+      console.log(`[TF] weights loaded in ${Date.now() - weightsStart}ms`)
 
+      const parseStart = Date.now()
       model = await tf.loadLayersModel(
         tf.io.fromMemory({
           modelTopology: modelJSON.modelTopology,
@@ -105,9 +55,19 @@ export async function loadModel(): Promise<void> {
           weightData: weightsBytes.buffer,
         })
       )
+      console.log(`[TF] model parsed in ${Date.now() - parseStart}ms`)
 
-      const warmup = model.predict(tf.zeros([1, 224, 224, 3])) as tf.Tensor
-      warmup.dispose()
+      const warmupStart = Date.now()
+      if (tf.getBackend() !== 'cpu') {
+        const zeroTensor = tf.zeros([1, 224, 224, 3])
+        const warmup = model.predict(zeroTensor) as tf.Tensor
+        await warmup.data()
+        warmup.dispose()
+        zeroTensor.dispose()
+        console.log(`[TF] warmup in ${Date.now() - warmupStart}ms`)
+      } else {
+        console.log(`[TF] warmup skipped (cpu backend)`)
+      }
 
       const trainingRef = require('../../assets/model/training_reference.json')
       trainingMeanVector = new Float32Array(trainingRef.mean_feature)
@@ -118,6 +78,7 @@ export async function loadModel(): Promise<void> {
       console.log(`[TF] Feature extractor created: output shape [${featureModel.outputShape}]`)
 
       isModelLoaded = true
+      console.log(`[TF] model ready in ${Date.now() - loadStart}ms total`)
     } catch (error) {
       modelLoadPromise = null
       throw new Error(`Failed to load TensorFlow model: ${error}`)
@@ -125,6 +86,10 @@ export async function loadModel(): Promise<void> {
   })()
 
   return modelLoadPromise
+}
+
+export function preloadModel(): void {
+  loadModel().catch(() => {})
 }
 
 export function isReady(): boolean {
@@ -220,9 +185,8 @@ export async function runInference(
 
   const startTime = Date.now()
   const output = model.predict(imageTensor) as tf.Tensor
-  const inferenceTimeMs = Date.now() - startTime
-
   const probabilities = (await output.data()) as Float32Array
+  const inferenceTimeMs = Date.now() - startTime
   output.dispose()
 
   let featureSimilarity = 1.0
@@ -265,8 +229,11 @@ export async function runScreening(
   const imageTensor = await preprocessImage(imageUri, modelInfo.inputSize)
 
   try {
-    const meanVal = tf.mean(imageTensor).dataSync()[0]
-    const variance = tf.moments(imageTensor).variance.dataSync()[0]
+    const moments = tf.moments(imageTensor)
+    const meanVal = (await moments.mean.data())[0]
+    const variance = (await moments.variance.data())[0]
+    moments.mean.dispose()
+    moments.variance.dispose()
 
     console.log(`[TF SCREENING] Image quality: mean=${meanVal.toFixed(1)} variance=${variance.toFixed(1)}`)
 
