@@ -1,4 +1,5 @@
 import type { RecentItem, RecentCategory } from '../types/dashboard.types'
+import { formatRelativeTime } from '../../../../utils/format'
 
 interface RecentActivityProps {
   data: RecentItem[]
@@ -7,7 +8,6 @@ interface RecentActivityProps {
 const CATEGORY_META: Record<RecentCategory, { label: string; icon: string }> = {
   staff: { label: 'Staff', icon: '👥' },
   clinic: { label: 'Clinic', icon: '🏥' },
-  security: { label: 'Security', icon: '🔐' },
   cancellation: { label: 'Cancellation', icon: '⚠️' },
 }
 
@@ -34,7 +34,7 @@ export function RecentActivity({ data }: RecentActivityProps) {
                     <p className="truncate text-xs text-stone-500 dark:text-stone-400">{item.subtitle}</p>
                   </div>
                 </div>
-                <span className="shrink-0 pl-3 text-xs text-stone-400 dark:text-stone-500">{item.timestamp}</span>
+                <span className="shrink-0 pl-3 text-xs text-stone-400 dark:text-stone-500">{formatRelativeTime(item.timestamp)}</span>
               </div>
             )
           })}
