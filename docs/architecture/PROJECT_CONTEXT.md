@@ -580,7 +580,7 @@ AI provides preliminary screening only.
 
 Veterinarians make final diagnosis.
 
-Medical records cannot be permanently deleted.
+Veterinarian-issued medical records cannot be permanently deleted.
 
 Every consultation belongs to one appointment.
 
@@ -594,7 +594,7 @@ Consultation history is immutable.
 
 Prescription history is immutable.
 
-Vaccination history is immutable.
+Veterinarian-issued vaccination history is immutable; owner-reported vaccination records are editable and deletable by their owner.
 
 Clinics are created only by Super Admins after manual approval; public clinic registration and in-system clinic application workflows are not allowed.
 
@@ -602,7 +602,7 @@ Clinic Admins must change their password on first login before accessing protect
 
 Owners self-register through the mobile application.
 
-Owners may view but never edit medical records.
+Owners may view medical records; they may add, edit, and delete only their own reported vaccination records.
 
 ---
 

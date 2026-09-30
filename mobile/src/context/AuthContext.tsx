@@ -9,6 +9,7 @@ interface User {
   email: string
   first_name: string
   last_name: string
+  phone?: string
   role: string
 }
 
@@ -25,6 +26,7 @@ interface AuthContextType {
     phone?: string
   }) => Promise<void>
   signOut: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -74,8 +76,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
   }
 
+  const refreshUser = async () => {
+    try {
+      const profile = await authService.getProfile()
+      const next: User = {
+        id: profile.id,
+        email: profile.email,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        phone: profile.phone ?? '',
+        role: profile.role,
+      }
+      await setItem(STORAGE_USER, JSON.stringify(next))
+      setUser(next)
+    } catch {
+      // Keep the cached user if the refresh fails
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, register, signOut }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, login, register, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

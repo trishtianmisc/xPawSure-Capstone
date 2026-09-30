@@ -48,6 +48,59 @@ export async function getPet(id: string): Promise<Pet> {
 }
 
 export async function createPet(payload: PetCreatePayload): Promise<Pet> {
+  if (payload.profile_picture) {
+    const form = new FormData()
+    form.append('name', payload.name)
+    form.append('sex', payload.sex)
+    form.append('breed_id', payload.breed_id)
+    if (payload.date_of_birth) form.append('date_of_birth', payload.date_of_birth)
+    if (payload.weight) form.append('weight', payload.weight)
+    if (payload.color) form.append('color', payload.color)
+    if (payload.microchip_number) form.append('microchip_number', payload.microchip_number)
+    form.append('profile_picture', {
+      uri: payload.profile_picture,
+      name: 'pet_photo.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob)
+
+    const { data } = await http.post('/pets/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+
   const { data } = await http.post('/pets/', payload)
   return data
+}
+
+export type PetUpdatePayload = Partial<PetCreatePayload>
+
+export async function updatePet(id: string, payload: PetUpdatePayload): Promise<Pet> {
+  if (payload.profile_picture) {
+    const form = new FormData()
+    if (payload.name !== undefined) form.append('name', payload.name)
+    if (payload.sex !== undefined) form.append('sex', payload.sex)
+    if (payload.breed_id !== undefined) form.append('breed_id', payload.breed_id)
+    if (payload.date_of_birth) form.append('date_of_birth', payload.date_of_birth)
+    if (payload.weight) form.append('weight', payload.weight)
+    if (payload.color) form.append('color', payload.color)
+    if (payload.microchip_number) form.append('microchip_number', payload.microchip_number)
+    form.append('profile_picture', {
+      uri: payload.profile_picture,
+      name: 'pet_photo.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob)
+
+    const { data } = await http.put(`/pets/${id}/`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+
+  const { data } = await http.put(`/pets/${id}/`, payload)
+  return data
+}
+
+export async function deletePet(id: string): Promise<void> {
+  await http.delete(`/pets/${id}/`)
 }

@@ -1,10 +1,18 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 
+import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { apiErrorMessage } from '../../../src/utils/error'
+import { useConsultations } from '../../records/hooks/useConsultations'
+import { useVaccinations } from '../../records/hooks/useVaccinations'
+import { useScreenings } from '../../screening/hooks/useScreenings'
+import { PetRecordSection } from '../components/PetRecordSection'
+import { ConsultationRow, ScreeningRow, VaccinationRow } from '../components/PetRecordRows'
+import { useDeletePet } from '../hooks/useDeletePet'
 import { usePet } from '../hooks/usePet'
 
 function computeAge(birthDate: string | null): string {
@@ -32,26 +40,37 @@ function InfoCard({ icon, label, value }: { icon: string; label: string; value: 
   )
 }
 
-function StatusBadge({ status, overdue }: { status: string; overdue?: boolean }) {
-  const { colors } = useTheme()
-  const styles = useMemo(() => createStyles(colors), [colors])
-  const isOverdue = overdue ?? status.toLowerCase() === 'overdue'
-
-  return (
-    <View style={[styles.badge, isOverdue ? styles.badgeOverdue : styles.badgeUpToDate]}>
-      <Text style={[styles.badgeText, isOverdue ? styles.badgeTextOverdue : styles.badgeTextUpToDate]}>
-        {status}
-      </Text>
-    </View>
-  )
-}
-
 export default function PetProfileScreen() {
   const router = useRouter()
   const { colors } = useTheme()
+  const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { data: pet, isLoading, isError, error } = usePet(id)
+  const deletePet = useDeletePet(user?.id ?? '')
+  const vaccinations = useVaccinations(pet?.id, !!pet)
+  const consultations = useConsultations(pet?.id, !!pet)
+  const screenings = useScreenings(pet?.id, !!pet)
   const styles = useMemo(() => createStyles(colors), [colors])
+
+  const confirmDelete = () => {
+    if (!pet) return
+    Alert.alert(
+      'Delete pet?',
+      `${pet.name}'s profile will be removed from your pets. Existing medical records are preserved.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deletePet.mutate(pet.id, {
+              onSuccess: () => router.back(),
+            })
+          },
+        },
+      ],
+    )
+  }
 
   const renderHeader = (title?: string) => (
     <View style={styles.header}>
@@ -65,7 +84,19 @@ export default function PetProfileScreen() {
         <Ionicons color={colors.text} name="arrow-back" size={22} />
       </Pressable>
       <Text style={styles.headerTitle} numberOfLines={1}>{title || 'Pet Profile'}</Text>
-      <View style={styles.headerRight} />
+      {pet ? (
+        <Pressable
+          accessibilityLabel={`Edit ${pet.name}`}
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => router.push(`/(owner)/pets/edit/${pet.id}`)}
+          style={styles.headerBack}
+        >
+          <Ionicons color={colors.text} name="pencil-outline" size={20} />
+        </Pressable>
+      ) : (
+        <View style={styles.headerRight} />
+      )}
     </View>
   )
 
@@ -189,28 +220,95 @@ export default function PetProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Vaccination Records</Text>
-          <View style={styles.comingSoonCard}>
-            <MaterialCommunityIcons color={colors.textMuted} name="medical-bag" size={24} />
-            <Text style={styles.comingSoonText}>Vaccination records will appear here</Text>
-          </View>
-        </View>
+        <PetRecordSection
+          title="Vaccination Records"
+          isLoading={vaccinations.isLoading}
+          isError={vaccinations.isError}
+          itemCount={(vaccinations.data ?? []).length}
+          emptyIcon="medical-bag"
+          emptyText="No vaccination records yet."
+          emptyAction={{
+            label: 'Record a vaccination',
+            onPress: () => router.push(`/(owner)/records/vaccinations/new?petId=${pet.id}`),
+          }}
+          headerAction={{
+            label: 'Add',
+            onPress: () => router.push(`/(owner)/records/vaccinations/new?petId=${pet.id}`),
+          }}
+          seeAllLabel="See all"
+          onSeeAll={() => router.push('/(owner)/records?tab=vaccinations')}
+        >
+          {(vaccinations.data ?? []).slice(0, 3).map((record) => (
+            <VaccinationRow
+              key={record.id}
+              record={record}
+              onPress={() => router.push(`/(owner)/records/vaccinations/${record.id}`)}
+            />
+          ))}
+        </PetRecordSection>
+
+        <PetRecordSection
+          title="Medical Notes"
+          isLoading={consultations.isLoading}
+          isError={consultations.isError}
+          itemCount={(consultations.data ?? []).length}
+          emptyIcon="note-text-outline"
+          emptyText="No medical notes yet."
+          seeAllLabel="See all"
+          onSeeAll={() => router.push('/(owner)/records?tab=consultations')}
+        >
+          {(consultations.data ?? []).slice(0, 3).map((record) => (
+            <ConsultationRow
+              key={record.id}
+              record={record}
+              onPress={() => router.push(`/(owner)/records/consultations/${record.id}`)}
+            />
+          ))}
+        </PetRecordSection>
+
+        <PetRecordSection
+          title="Screening History"
+          isLoading={screenings.isLoading}
+          isError={screenings.isError}
+          itemCount={(screenings.data?.results ?? []).length}
+          emptyIcon="face-man-profile"
+          emptyText="No screenings yet."
+          emptyAction={{
+            label: 'Start a skin screening',
+            onPress: () => router.push('/(owner)/pets/screening'),
+          }}
+          seeAllLabel="See all"
+          onSeeAll={() => router.push('/(owner)/screenings')}
+        >
+          {(screenings.data?.results ?? []).slice(0, 3).map((screening) => (
+            <ScreeningRow
+              key={screening.ais_id}
+              screening={screening}
+              onPress={() => router.push('/(owner)/screenings')}
+            />
+          ))}
+        </PetRecordSection>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Notes</Text>
-          <View style={styles.comingSoonCard}>
-            <MaterialCommunityIcons color={colors.textMuted} name="note-text-outline" size={24} />
-            <Text style={styles.comingSoonText}>Medical notes will appear here</Text>
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Screening History</Text>
-          <View style={styles.comingSoonCard}>
-            <MaterialCommunityIcons color={colors.textMuted} name="face-man-profile" size={24} />
-            <Text style={styles.comingSoonText}>Screening history will appear here</Text>
-          </View>
+          <Pressable
+            accessibilityLabel={`Delete ${pet.name}`}
+            accessibilityRole="button"
+            disabled={deletePet.isPending}
+            onPress={confirmDelete}
+            style={[styles.deleteButton, deletePet.isPending && styles.deleteButtonDisabled]}
+          >
+            {deletePet.isPending ? (
+              <ActivityIndicator color={colors.error} size="small" />
+            ) : (
+              <>
+                <MaterialCommunityIcons color={colors.error} name="trash-can-outline" size={18} />
+                <Text style={styles.deleteButtonText}>Delete Pet</Text>
+              </>
+            )}
+          </Pressable>
+          {deletePet.isError && (
+            <Text style={styles.deleteError}>{apiErrorMessage(deletePet.error)}</Text>
+          )}
         </View>
 
         <View style={styles.spacer} />
@@ -443,39 +541,29 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     textAlign: 'center',
   },
 
-  badge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+  deleteButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.error,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: 8,
+    height: 46,
+    justifyContent: 'center',
   },
-  badgeOverdue: {
-    backgroundColor: '#FFE5E5',
+  deleteButtonDisabled: {
+    opacity: 0.6,
   },
-  badgeUpToDate: {
-    backgroundColor: '#E5F9E7',
-  },
-  badgeText: {
-    fontSize: 11,
+  deleteButtonText: {
+    color: colors.error,
+    fontSize: 15,
     fontWeight: '700',
   },
-  badgeTextOverdue: {
-    color: '#D92D2D',
-  },
-  badgeTextUpToDate: {
-    color: '#1B8A3B',
-  },
-
-  comingSoonCard: {
-    alignItems: 'center',
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 14,
-    gap: 8,
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-  },
-  comingSoonText: {
-    color: colors.textMuted,
-    fontSize: 13,
+  deleteError: {
+    color: colors.error,
+    fontSize: 12,
+    marginTop: 8,
     textAlign: 'center',
   },
 

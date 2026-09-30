@@ -1,0 +1,6 @@
+export { DashboardPage } from './pages/DashboardPage'
+export { ConsultationsPage } from './pages/ConsultationsPage'
+export { ConsultationFormPage } from './pages/ConsultationFormPage'
+export { PrescriptionPage } from './pages/PrescriptionPage'
+export { SchedulePage } from './pages/SchedulePage'
+export { ProfilePage } from './pages/ProfilePage'

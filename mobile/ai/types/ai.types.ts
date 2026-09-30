@@ -1,14 +1,9 @@
 export type DiseaseType =
-  | 'MANGE'
-  | 'FUNGAL_INFECTION'
-  | 'BACTERIAL_INFECTION'
-  | 'HOT_SPOT'
-  | 'RINGWORM'
-  | 'TICK_BITE_DERMATITIS'
   | 'ALLERGIC_DERMATITIS'
-  | 'FLEA_ALLERGY_DERMATITIS'
-  | 'SEBORRHEA'
-  | 'YEAST_INFECTION'
+  | 'BACTERIAL'
+  | 'FUNGAL'
+  | 'HOTSPOT'
+  | 'MANGE'
 
 export interface Prediction {
   disease: DiseaseType

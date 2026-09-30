@@ -313,3 +313,62 @@ Used By
 • Dashboard
 
 • Owner Mobile Application
+
+---
+
+# VET_SLOT
+
+Purpose
+
+Stores individual time slots for each veterinarian's schedule. Slots are generated from clinic operating hours and appointment duration settings.
+
+---
+
+## Attributes
+
+| Column | Type | Constraints |
+|---------|------|-------------|
+| VSL_ID | UUID | PK |
+| CLN_ID | UUID | FK → CLINIC |
+| STF_ID | UUID | FK → STAFF_PROFILE |
+| VSL_DATE | DATE | NOT NULL |
+| VSL_START_TIME | TIME | NOT NULL |
+| VSL_END_TIME | TIME | NOT NULL |
+| VSL_APPOINTMENT | UUID | FK → APPOINTMENT, NULLABLE |
+| VSL_STATUS | ENUM | NOT NULL, DEFAULT 'AVAILABLE' |
+| VSL_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
+| VSL_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
+
+---
+
+# Slot Status
+
+AVAILABLE — Open, bookable by an owner
+
+BOOKED — Has an appointment attached
+
+BLOCKED — Vet unavailable, receptionist-set, not bookable
+
+---
+
+# Slot Business Rules
+
+Slots are generated from ClinicOperatingHours and ClinicSettings.cls_appointment_duration.
+
+Each slot belongs to one veterinarian and one clinic.
+
+Slots are unique per veterinarian, date, and start time.
+
+Receptionists can toggle slot status between AVAILABLE and BLOCKED freely for slots with no appointment.
+
+BOOKED slots cannot be blocked directly — the appointment must be cancelled first.
+
+When an appointment is cancelled or marked no-show, the slot returns to AVAILABLE status.
+
+Bulk block operations skip BOOKED slots and return a count of skipped slots.
+
+---
+
+# Unique Constraints
+
+UQ_VET_SLOT_VET_DATE_START — (STF_ID, VSL_DATE, VSL_START_TIME)

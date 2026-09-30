@@ -7,12 +7,12 @@ import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 
 export default function OwnerTabLayout() {
-  const { isAuthenticated, isLoading, user } = useAuth()
   const { colors } = useTheme()
+  const { isLoading, isAuthenticated, user } = useAuth()
 
   if (isLoading) return null
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />
-  if (user?.role !== 'OWNER') return <Redirect href="/(vet)/" />
+  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -28,6 +28,8 @@ export default function OwnerTabLayout() {
         <Tabs.Screen name="pets" options={{ title: 'My Pets', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'paw' : 'paw-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="appointments" options={{ title: 'Appointments', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="records" options={{ title: 'Records', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'folder' : 'folder-outline'} size={20} color={color} /> }} />
+        <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
+        <Tabs.Screen name="screenings" options={{ href: null, title: 'Screenings' }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} /> }} />
       </Tabs>
     </View>

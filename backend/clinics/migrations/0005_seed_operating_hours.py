@@ -40,7 +40,7 @@ def reverse_seed(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('clinics', '0004_clinic_operating_hours'),
+        ('clinics', '0004_remove_clinicoperatinghours_coh_created_at_and_more'),
     ]
 
     operations = [

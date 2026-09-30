@@ -1,11 +1,66 @@
-import { File } from 'expo-file-system'
 import * as tf from '@tensorflow/tfjs'
-import { bundleResourceIO, decodeJpeg } from '@tensorflow/tfjs-react-native'
+import '@tensorflow/tfjs-react-native'
+import { Asset } from 'expo-asset'
+import { File } from 'expo-file-system'
 
 import { MODEL_INFO } from '../constants/diseases'
 import type { ModelInfo, Prediction, ScreeningResult } from '../types/ai.types'
 
-let model: tf.GraphModel | null = null
+class Normalization extends tf.layers.Layer {
+  static className = 'Normalization'
+
+  constructor(args: Record<string, unknown>) {
+    super(args as any)
+  }
+
+  override build(inputShape: tf.Shape | tf.Shape[]): void {
+    this.addWeight('mean', [3], 'float32', tf.initializers.zeros())
+    this.addWeight('variance', [3], 'float32', tf.initializers.zeros())
+    this.addWeight('count', [], 'float32', tf.initializers.zeros())
+    this.built = true
+  }
+
+  override computeOutputShape(inputShape: tf.Shape | tf.Shape[]): tf.Shape | tf.Shape[] {
+    return inputShape
+  }
+
+  override call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor | tf.Tensor[] {
+    const x = Array.isArray(inputs) ? inputs[0] : inputs
+    const mean = this.getWeights()[0]
+    const variance = this.getWeights()[1]
+    return tf.sub(x, mean).div(tf.sqrt(tf.add(variance, 1e-7)))
+  }
+
+  override getClassName() {
+    return 'Normalization'
+  }
+}
+
+class Rescaling extends tf.layers.Layer {
+  static className = 'Rescaling'
+  private readonly rescaleScale: number
+  private readonly rescaleOffset: number
+
+  constructor(args: Record<string, unknown>) {
+    super(args as any)
+    this.rescaleScale = (args.scale as number) ?? 1.0
+    this.rescaleOffset = (args.offset as number) ?? 0.0
+  }
+
+  override call(inputs: tf.Tensor | tf.Tensor[]): tf.Tensor | tf.Tensor[] {
+    const x = Array.isArray(inputs) ? inputs[0] : inputs
+    return tf.mul(x, this.rescaleScale).add(this.rescaleOffset)
+  }
+
+  override getClassName() {
+    return 'Rescaling'
+  }
+}
+
+tf.serialization.registerClass(Normalization)
+tf.serialization.registerClass(Rescaling)
+
+let model: tf.LayersModel | null = null
 let isModelLoaded = false
 let modelLoadPromise: Promise<void> | null = null
 
@@ -17,12 +72,55 @@ export async function loadModel(): Promise<void> {
     try {
       await tf.ready()
 
-      const modelJson = require('../../assets/model/model.json')
-      const modelWeights = require('../../assets/model/weights.bin')
+      const backends = tf.engine().findBackend('webgl')
+        ? ['webgl', 'cpu'] as const
+        : ['cpu'] as const
 
-      model = await tf.loadGraphModel(
-        bundleResourceIO(modelJson, modelWeights),
+      for (const backend of backends) {
+        try {
+          await tf.setBackend(backend)
+          break
+        } catch {}
+      }
+
+      const modelJSON = require('../../assets/model/model.json')
+
+      const weightsAsset = await Asset.loadAsync(
+        require('../../assets/model/weights.bin'),
       )
+
+      const weightsUri = weightsAsset[0].localUri
+      const weightsFile = new File(weightsUri!)
+      const weightsBytes = await weightsFile.bytes()
+
+      model = await tf.loadLayersModel(
+        tf.io.fromMemory({
+          modelTopology: modelJSON.modelTopology,
+          weightSpecs: modelJSON.weightsManifest[0].weights,
+          weightData: weightsBytes.buffer,
+        })
+      )
+
+      let fixedCount = 0
+      for (const layer of model.layers) {
+        if (layer.getClassName() !== 'BatchNormalization') continue
+        const weights = layer.getWeights()
+        if (weights.length < 4) continue
+        const variance = weights[3]
+        const varianceData = Array.from(variance.dataSync() as Float32Array)
+        const hasNegative = varianceData.some(v => v < 0)
+        if (hasNegative) {
+          const fixedData = varianceData.map(v => Math.max(v, 0))
+          const fixed = tf.tensor(fixedData, variance.shape, 'float32')
+          weights[3] = fixed
+          layer.setWeights(weights)
+          fixedCount++
+        }
+      }
+      console.log(`[TF] Clamped negative moving_variance in ${fixedCount} BN layers`)
+
+      const warmup = model.predict(tf.zeros([1, 224, 224, 3])) as tf.Tensor
+      warmup.dispose()
 
       isModelLoaded = true
     } catch (error) {
@@ -42,6 +140,8 @@ export async function preprocessImage(
   uri: string,
   inputSize: number = MODEL_INFO.inputSize,
 ): Promise<tf.Tensor4D> {
+  const { decodeJpeg } = await import('@tensorflow/tfjs-react-native')
+
   const file = new File(uri)
   const imageBytes = await file.bytes()
   const imageTensor = decodeJpeg(imageBytes, 3)
@@ -111,3 +211,20 @@ export function disposeModel(): void {
     modelLoadPromise = null
   }
 }
+
+export async function warmUpModel(): Promise<void> {
+  if (!model) return
+  try {
+    const zeroTensor = tf.zeros([1, 224, 224, 3]) as tf.Tensor4D
+    console.log('[TF] warmup running...')
+    const output = model.predict(zeroTensor) as tf.Tensor
+    const outData = await output.data()
+    console.log('[TF] warmup output:', Array.from(outData).map(v => v.toFixed(6)))
+    output.dispose()
+    zeroTensor.dispose()
+  } catch (e) {
+    console.error('[TF] warmup failed:', e)
+  }
+}
+
+

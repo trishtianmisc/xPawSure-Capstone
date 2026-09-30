@@ -27,6 +27,41 @@ AI Screening records become part of the pet's medical history.
 
 ---
 
+# Implementation Status (v1.1)
+
+Implemented in `backend/ai_screenings/` (Django app `ai_screenings`).
+
+Implemented tables: `DISEASE`, `AI_SCREENING`.
+Seeded diseases: `ALLERGIC_DERMATITIS`, `BACTERIAL`, `FUNGAL`, `HOTSPOT`, `MANGE`
+(codes match `mobile/ai/constants/diseases.ts`).
+
+Implemented links:
+
+- `APPOINTMENT.APT_SCREENING_ID` → `AI_SCREENING.AIS_ID` (NULL) — the scan result
+  attached to an appointment, so veterinarians see it and post-consultation
+  verification/training datasets can join both records.
+- Owner endpoints: `GET/POST /api/owner/screenings/`.
+- Booking gate: owner bookings (`POST /api/owner/appointments/`) require a
+  `screening_id` belonging to the booked pet, otherwise `403`.
+
+Deviations from this document (deliberate, for this iteration):
+
+| Spec | Implemented | Reason |
+|------|-------------|--------|
+| — | `DISEASE.DIS_CODE` (unique) added | Stable machine label for on-device predictions |
+| — | `AI_SCREENING.AIS_SOURCE` (`MOCK` / `DEVICE`) added | Placeholder rows must be excludable from ML training sets |
+| `CON_ID` FK → CONSULTATION | Deferred | `consultations` app is still a stub |
+| `AI_SCREENING_IMAGE` table | Deferred | Comes with the real on-device image upload |
+| `USR_ID` NOT NULL | nullable (`ON DELETE SET NULL`) | Preserve dataset rows if a user row is hard-deleted |
+| — | `APPOINTMENT.APT_SCREENING_ID` added | Booking gate + vet visibility (see above) |
+
+Placeholder flow: while on-device AI ships, the mobile booking wizard creates a
+server-fabricated result via `POST /api/owner/screenings/ {"source": "MOCK"}`
+("Run demo scan"). When the model ships, the app posts `{"source": "DEVICE"}`
+with real `prediction`/`confidence`/`model_version` — no backend change needed.
+
+---
+
 # Entity
 
 ## DISEASE
