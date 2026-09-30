@@ -332,6 +332,44 @@ is preserved.
 
 ---
 
+## GET /api/pets/public/{qr_code}/
+
+Public. No authentication required.
+
+Reached by scanning a pet's QR code (encoded value:
+`{FRONTEND_URL}/pets/{qr_code}/public` → rendered by the web at
+`/pets/:qrCode/public`). Throttled to 60 requests/min per IP.
+
+Returns a restricted, privacy-safe profile of an active pet looked up by its
+`qr_code` (the pet ID). Never exposes owner data, microchip number, weight, or
+internal IDs. Deleted or inactive pets return `404`.
+
+Response (200):
+
+{
+  "qr_code": "uuid",
+  "name": "string",
+  "breed_name": "string | null",
+  "sex": "MALE | FEMALE",
+  "date_of_birth": "YYYY-MM-DD | null",
+  "age": "integer | null",
+  "color": "string | null",
+  "profile_picture": "url | null",
+  "vaccinations": [
+    {
+      "name": "string",
+      "date_given": "YYYY-MM-DD",
+      "next_due": "YYYY-MM-DD | null",
+      "status": "OVERDUE | DUE_SOON | CURRENT | NO_DUE_DATE"
+    }
+  ]
+}
+
+Vaccinations are sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
+`NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
+
+---
+
 # 5. Appointment Endpoints
 
 ## GET /api/appointments/

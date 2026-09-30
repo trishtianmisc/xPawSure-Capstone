@@ -15,12 +15,13 @@ type Shortcut = {
   label: string
   icon: ComponentProps<typeof MaterialCommunityIcons>['name']
   route: '/(owner)/pets' | '/(owner)/pets/screening' | '/(owner)/appointments' | '/(owner)/records'
+  action?: 'open-qr'
 }
 
 const shortcuts: Shortcut[] = [
   { label: 'Screen Skin', icon: 'camera-outline', route: '/(owner)/pets/screening' },
   { label: 'My Pets', icon: 'paw-outline', route: '/(owner)/pets' },
-  { label: 'QR Code', icon: 'qrcode', route: '/(owner)/records' },
+  { label: 'QR Code', icon: 'qrcode', route: '/(owner)/pets', action: 'open-qr' },
   { label: 'Find Vet', icon: 'map-marker-outline', route: '/(owner)/appointments' },
 ]
 
@@ -32,6 +33,15 @@ export default function HomeScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
   const { data: appointments } = useMyAppointments()
+
+  const handleShortcut = (shortcut: Shortcut) => {
+    if (shortcut.action === 'open-qr') {
+      const target = pets?.[0]
+      router.push(target ? `/(owner)/pets/${target.id}` : '/(owner)/pets')
+      return
+    }
+    router.push(shortcut.route)
+  }
 
   const nextAppointment: AppointmentListItem | undefined = useMemo(() => {
     const activeStatuses = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
@@ -77,7 +87,7 @@ export default function HomeScreen() {
 
         <View style={styles.shortcuts}>
           {shortcuts.map((shortcut) => (
-            <Pressable key={shortcut.label} onPress={() => router.push(shortcut.route)} style={styles.shortcut}>
+            <Pressable key={shortcut.label} onPress={() => handleShortcut(shortcut)} style={styles.shortcut}>
               <View style={styles.shortcutIcon}>
                 <MaterialCommunityIcons color={colors.iconColor} name={shortcut.icon} size={20} />
               </View>

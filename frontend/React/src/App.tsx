@@ -5,6 +5,7 @@ import { SessionWatcher } from './components/SessionWatcher'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
+const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPage').then(m => ({ default: m.PublicPetPage })))
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -55,6 +56,7 @@ function App() {
         <Routes>
           <Route element={<Navigate replace to="/login" />} path="/" />
           <Route element={<LoginPage />} path="/login" />
+          <Route element={<PublicPetPage />} path="/pets/:qrCode/public" />
           <Route element={<ChangePasswordPage />} path="/change-password" />
           <Route
             element={

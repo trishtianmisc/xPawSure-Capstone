@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import QRCode from 'react-native-qrcode-svg'
 
@@ -14,6 +14,7 @@ import { PetRecordSection } from '../components/PetRecordSection'
 import { ConsultationRow, ScreeningRow, VaccinationRow } from '../components/PetRecordRows'
 import { useDeletePet } from '../hooks/useDeletePet'
 import { usePet } from '../hooks/usePet'
+import { buildPetPublicUrl } from '../utils/qr'
 
 function computeAge(birthDate: string | null): string {
   if (!birthDate) return 'Unknown'
@@ -51,6 +52,12 @@ export default function PetProfileScreen() {
   const consultations = useConsultations(pet?.id, !!pet)
   const screenings = useScreenings(pet?.id, !!pet)
   const styles = useMemo(() => createStyles(colors), [colors])
+  const scrollViewRef = useRef<ScrollView>(null)
+  const qrSectionY = useRef(0)
+
+  const scrollToQrSection = () => {
+    scrollViewRef.current?.scrollTo({ y: qrSectionY.current, animated: true })
+  }
 
   const confirmDelete = () => {
     if (!pet) return
@@ -137,7 +144,7 @@ export default function PetProfileScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader(pet.name)}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.coverSection}>
           <View style={styles.coverGradient}>
             <MaterialCommunityIcons color="rgba(255,255,255,0.12)" name="paw" size={100} style={styles.coverPaw1} />
@@ -173,7 +180,7 @@ export default function PetProfileScreen() {
           <Pressable
             accessibilityLabel={`View ${pet.name}'s QR code section`}
             accessibilityRole="button"
-            onPress={() => router.push(`/(owner)/pets/${pet.id}?showQR=true`)}
+            onPress={scrollToQrSection}
             style={[styles.actionButton, styles.actionButtonSecondary]}
           >
             <MaterialCommunityIcons color={colors.primary} name="qrcode" size={18} />
@@ -206,17 +213,25 @@ export default function PetProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        <View
+          onLayout={(event) => {
+            qrSectionY.current = event.nativeEvent.layout.y
+          }}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>QR Code</Text>
           <View style={styles.qrCard}>
             <View style={styles.qrContainer}>
-              {pet.qr_code ? (
-                <QRCode value={pet.qr_code} size={140} backgroundColor="#FFFFFF" color="#000000" />
-              ) : (
-                <QRCode value={pet.id} size={140} backgroundColor="#FFFFFF" color="#000000" />
-              )}
+              <QRCode
+                value={buildPetPublicUrl(pet.qr_code || pet.id)}
+                size={140}
+                backgroundColor="#FFFFFF"
+                color="#000000"
+              />
             </View>
-            <Text style={styles.qrHint}>Scan this code to quickly access {pet.name}'s profile</Text>
+            <Text style={styles.qrHint}>
+              Scan this code to view {pet.name}'s public profile
+            </Text>
           </View>
         </View>
 

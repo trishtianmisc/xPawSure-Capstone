@@ -1,12 +1,21 @@
 from rest_framework import status
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
-from pets.serializers import BreedSerializer, PetCreateSerializer, PetResponseSerializer, PetUpdateSerializer
+from pets.serializers import (
+    BreedSerializer,
+    PetCreateSerializer,
+    PetResponseSerializer,
+    PetUpdateSerializer,
+    PublicPetSerializer,
+)
 from pets.services.pet_service import PetService
+from pets.services.public_pet_service import PublicPetService
 
 
 class BreedListView(APIView):
@@ -130,3 +139,21 @@ class PetDetailView(APIView):
             ip_address=request.META.get('REMOTE_ADDR'),
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class PublicPetDetailView(APIView):
+    """Unauthenticated pet profile reached by scanning the pet's QR code."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'public_pet'
+
+    def get(self, request, qr_code):
+        profile = PublicPetService.get_public_profile(qr_code)
+        if profile is None:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(PublicPetSerializer(profile).data)

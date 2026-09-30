@@ -189,6 +189,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         'login': '30/min',
+        'public_pet': '60/min',
     },
 }
 
