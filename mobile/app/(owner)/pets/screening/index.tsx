@@ -92,6 +92,8 @@ export default function CaptureScreen() {
           petId: selectedPet?.id ?? 'unknown',
           petName: selectedPet?.name ?? 'Unknown Pet',
           predictions: JSON.stringify(result.predictions),
+          state: result.state,
+          stateMessage: result.stateMessage,
         },
       })
     } catch {

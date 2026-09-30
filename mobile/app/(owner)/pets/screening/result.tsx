@@ -13,7 +13,8 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
-import type { Prediction } from '../../../../ai/types/ai.types'
+import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
   ALLERGIC_DERMATITIS: { color: '#E67E22', icon: 'alert-circle-outline' },
@@ -21,6 +22,13 @@ const DISEASE_META: Record<string, { color: string; icon: string }> = {
   FUNGAL: { color: '#8E44AD', icon: 'flower-tulip-outline' },
   HOTSPOT: { color: '#D35400', icon: 'fire' },
   MANGE: { color: '#27AE60', icon: 'bug-outline' },
+}
+
+const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> = {
+  DISEASE_DETECTED: { color: '#C0392B', icon: 'medical-bag' },
+  NOT_SKIN_IMAGE: { color: '#E67E22', icon: 'image-off-outline' },
+  UNCERTAIN: { color: '#F39C12', icon: 'help-circle-outline' },
+  INVALID_IMAGE: { color: '#E74C3C', icon: 'image-off-outline' },
 }
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
@@ -72,8 +80,13 @@ export default function ResultScreen() {
     petId: string
     petName: string
     predictions: string
+    state: ScreeningResultState
+    stateMessage: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
+
+  const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
+  const stateMessage = params.stateMessage || ''
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -87,6 +100,9 @@ export default function ResultScreen() {
   const top = sorted[0]
   const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
   const confidencePct = top ? Math.round(top.confidence) : 0
+
+  const stateMeta = STATE_META[screeningState]
+  const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -111,35 +127,47 @@ export default function ResultScreen() {
           </View>
         </View>
 
-        {top && topMeta && (
-          <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
-            <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
-              <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
+        {screeningState === 'DISEASE_DETECTED' && top && topMeta && (
+          <>
+            <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
+              <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
+                <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
+              </View>
+              <Text style={styles.topLabel}>Predicted Condition</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
+              <View style={styles.confidenceBadge}>
+                <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
+                <Text style={styles.confidenceLabel}>confidence</Text>
+              </View>
             </View>
-            <Text style={styles.topLabel}>Predicted Condition</Text>
-            <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
-            <View style={styles.confidenceBadge}>
-              <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-              <Text style={styles.confidenceLabel}>confidence</Text>
+
+            <View style={styles.breakdownCard}>
+              <Text style={styles.breakdownTitle}>All Predictions</Text>
+              {sorted.map((pred, i) => {
+                const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
+                return (
+                  <ConfidenceBar
+                    key={pred.disease}
+                    label={pred.label}
+                    confidence={pred.confidence}
+                    isTop={i === 0}
+                    color={meta.color}
+                  />
+                )
+              })}
             </View>
-          </View>
+          </>
         )}
 
-        <View style={styles.breakdownCard}>
-          <Text style={styles.breakdownTitle}>All Predictions</Text>
-          {sorted.map((pred, i) => {
-            const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
-            return (
-              <ConfidenceBar
-                key={pred.disease}
-                label={pred.label}
-                confidence={pred.confidence}
-                isTop={i === 0}
-                color={meta.color}
-              />
-            )
-          })}
-        </View>
+        {(screeningState === 'NOT_SKIN_IMAGE' || screeningState === 'UNCERTAIN' || screeningState === 'INVALID_IMAGE') && (
+          <View style={[styles.stateCard, { borderColor: stateMeta.color + '30' }]}>
+            <View style={[styles.stateIconCircle, { backgroundColor: stateMeta.color + '18' }]}>
+              <MaterialCommunityIcons color={stateMeta.color} name={stateMeta.icon as any} size={32} />
+            </View>
+            <Text style={[styles.stateTitle, { color: stateMeta.color }]}>{stateConfig.title}</Text>
+            <Text style={styles.stateMessage}>{stateMessage || stateConfig.message}</Text>
+          </View>
+        )}
 
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
@@ -227,6 +255,34 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 18,
   },
   breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+
+  stateCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 16,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 28,
+  },
+  stateIconCircle: {
+    alignItems: 'center',
+    borderRadius: 40,
+    height: 80,
+    justifyContent: 'center',
+    marginBottom: 16,
+    width: 80,
+  },
+  stateTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  stateMessage: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 10,
+    textAlign: 'center',
+  },
 
   infoCard: {
     alignItems: 'flex-start',
