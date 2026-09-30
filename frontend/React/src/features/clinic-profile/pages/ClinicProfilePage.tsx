@@ -1,4 +1,5 @@
 import { Alert } from '../../../components/ui'
+import { useToast } from '../../../components/ui/ToastContext'
 import { useClinicProfile } from '../hooks/useClinicProfile'
 import { useClinicSettings } from '../hooks/useClinicSettings'
 import { useOperatingHours } from '../hooks/useOperatingHours'
@@ -10,6 +11,8 @@ import type { SettingsFormValues } from '../schemas/clinicProfile.schema'
 import type { OperatingHoursDay } from '../types/clinicProfile.types'
 
 export function ClinicProfilePage() {
+  const { showToast } = useToast()
+
   const {
     data: profile,
     isLoading: profileLoading,
@@ -44,28 +47,40 @@ export function ClinicProfilePage() {
         address: data.address,
       },
       {
-        onSuccess: () => {},
-        onError: () => {},
+        onSuccess: () => showToast('Clinic profile updated.', 'success'),
+        onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update profile.', 'error'),
       },
     )
   }
 
   function handleUpdateSettings(data: SettingsFormValues) {
-    updateSettings.mutate({
-      opening_time: data.opening_time,
-      closing_time: data.closing_time,
-      appointment_duration: data.appointment_duration,
-      max_appointments_per_day: data.max_appointments_per_day,
-      allow_owner_booking: data.allow_owner_booking,
-    })
+    updateSettings.mutate(
+      {
+        opening_time: data.opening_time,
+        closing_time: data.closing_time,
+        appointment_duration: data.appointment_duration,
+        max_appointments_per_day: data.max_appointments_per_day,
+        allow_owner_booking: data.allow_owner_booking,
+      },
+      {
+        onSuccess: () => showToast('Clinic settings updated.', 'success'),
+        onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update settings.', 'error'),
+      },
+    )
   }
 
   function handleUploadLogo(file: File) {
-    uploadLogo.mutate(file)
+    uploadLogo.mutate(file, {
+      onSuccess: () => showToast('Logo uploaded successfully.', 'success'),
+      onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to upload logo.', 'error'),
+    })
   }
 
   function handleUpdateOperatingHours(data: OperatingHoursDay[]) {
-    updateOperatingHours.mutate(data)
+    updateOperatingHours.mutate(data, {
+      onSuccess: () => showToast('Operating hours updated.', 'success'),
+      onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update operating hours.', 'error'),
+    })
   }
 
   return (
@@ -86,35 +101,6 @@ export function ClinicProfilePage() {
 
         {profile && (
           <>
-            {updateProfile.isError && (
-              <Alert variant="error">
-                {updateProfile.error instanceof Error
-                  ? updateProfile.error.message
-                  : 'Failed to update profile.'}
-              </Alert>
-            )}
-            {updateSettings.isError && (
-              <Alert variant="error">
-                {updateSettings.error instanceof Error
-                  ? updateSettings.error.message
-                  : 'Failed to update settings.'}
-              </Alert>
-            )}
-            {uploadLogo.isError && (
-              <Alert variant="error">
-                {uploadLogo.error instanceof Error
-                  ? uploadLogo.error.message
-                  : 'Failed to upload logo.'}
-              </Alert>
-            )}
-            {updateOperatingHours.isError && (
-              <Alert variant="error">
-                {updateOperatingHours.error instanceof Error
-                  ? updateOperatingHours.error.message
-                  : 'Failed to update operating hours.'}
-              </Alert>
-            )}
-
             <ClinicProfileCard
               profile={profile}
               isUpdating={updateProfile.isPending}

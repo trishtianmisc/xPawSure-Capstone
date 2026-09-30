@@ -103,7 +103,7 @@ class ClinicProfileSerializer(serializers.Serializer):
     def validate_phone(self, value):
         if value and not _PHONE_RE.match(value):
             raise serializers.ValidationError(
-                'Phone must be in format 09XXXXXXXXX or +63XXXXXXXXXX.',
+                'Phone must be in format 09XXXXXXXXX.',
             )
         return value
 
@@ -182,7 +182,17 @@ class ClinicOperatingHoursSerializer(serializers.ModelSerializer):
         model = ClinicOperatingHours
         fields = ['day_of_week', 'day_index', 'opening_time', 'closing_time', 'is_closed']
 
+    def to_internal_value(self, data):
+        for field_name in ('opening_time', 'closing_time'):
+            if field_name in data and data[field_name] == '':
+                data[field_name] = None
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
+        for field in ('opening_time', 'closing_time'):
+            if attrs.get(field) == '':
+                attrs[field] = None
+
         is_closed = attrs.get('is_closed', True)
         if not is_closed:
             if not attrs.get('opening_time'):

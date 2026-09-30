@@ -26,6 +26,11 @@ OPERATING_HOURS_DEFAULTS = [
 
 VALID_DAYS = {'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'}
 
+DAY_INDEX_MAP = {
+    'MON': 0, 'TUE': 1, 'WED': 2, 'THU': 3,
+    'FRI': 4, 'SAT': 5, 'SUN': 6,
+}
+
 
 def _audit(**kwargs):
     try:
@@ -292,19 +297,19 @@ class ClinicProfileService:
         settings_obj = ClinicProfileService.get_settings(clinic)
 
         old_values = {
-            'opening_time': str(settings_obj.cls_opening_time),
-            'closing_time': str(settings_obj.cls_closing_time),
-            'appointment_duration': settings_obj.cls_appointment_duration,
-            'max_appointments_per_day': settings_obj.cls_max_appointments_per_day,
-            'allow_owner_booking': settings_obj.cls_allow_owner_booking,
+            'cls_opening_time': str(settings_obj.cls_opening_time),
+            'cls_closing_time': str(settings_obj.cls_closing_time),
+            'cls_appointment_duration': settings_obj.cls_appointment_duration,
+            'cls_max_appointments_per_day': settings_obj.cls_max_appointments_per_day,
+            'cls_allow_owner_booking': settings_obj.cls_allow_owner_booking,
         }
 
         field_map = {
-            'opening_time': 'cls_opening_time',
-            'closing_time': 'cls_closing_time',
-            'appointment_duration': 'cls_appointment_duration',
-            'max_appointments_per_day': 'cls_max_appointments_per_day',
-            'allow_owner_booking': 'cls_allow_owner_booking',
+            'cls_opening_time': 'cls_opening_time',
+            'cls_closing_time': 'cls_closing_time',
+            'cls_appointment_duration': 'cls_appointment_duration',
+            'cls_max_appointments_per_day': 'cls_max_appointments_per_day',
+            'cls_allow_owner_booking': 'cls_allow_owner_booking',
         }
 
         new_values = {}
@@ -312,11 +317,14 @@ class ClinicProfileService:
             if key in data:
                 new_values[key] = str(data[key]) if not isinstance(data[key], bool) else data[key]
 
+        changed = False
         for key, field in field_map.items():
             if key in data:
                 setattr(settings_obj, field, data[key])
+                changed = True
 
-        settings_obj.save()
+        if changed:
+            settings_obj.save()
 
         changed_keys = [k for k in new_values if new_values[k] != old_values.get(k)]
         if changed_keys:
@@ -378,6 +386,25 @@ class ClinicProfileService:
 
     @staticmethod
     def get_operating_hours(clinic: Clinic):
+        existing_days = set(
+            ClinicOperatingHours.objects.filter(cln_id=clinic)
+            .values_list('day_of_week', flat=True)
+        )
+        missing_hours = [
+            ClinicOperatingHours(
+                cln_id=clinic,
+                day_of_week=day,
+                day_index=index,
+                opening_time=open_t,
+                closing_time=close_t,
+                is_closed=closed,
+            )
+            for day, index, open_t, close_t, closed in OPERATING_HOURS_DEFAULTS
+            if day not in existing_days
+        ]
+        if missing_hours:
+            ClinicOperatingHours.objects.bulk_create(missing_hours)
+
         return list(
             ClinicOperatingHours.objects.filter(cln_id=clinic).order_by('day_index')
         )
@@ -408,7 +435,7 @@ class ClinicProfileService:
                     cln_id=clinic,
                     day_of_week=day_data['day_of_week'],
                     defaults={
-                        'day_index': day_data['day_index'],
+                        'day_index': DAY_INDEX_MAP[day_data['day_of_week']],
                         'opening_time': day_data.get('opening_time'),
                         'closing_time': day_data.get('closing_time'),
                         'is_closed': day_data.get('is_closed', True),

@@ -186,7 +186,13 @@ export function ClinicAdminLayout() {
 
         {/* User info */}
         <div className="border-t border-stone-200 p-3 dark:border-stone-800">
-          <div className={`flex items-center gap-3 rounded-lg px-3 py-2.5 ${isCollapsed ? 'justify-center' : ''}`}>
+          <Link
+            aria-label="Manage profile"
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-amber-700 dark:hover:bg-stone-800 ${isCollapsed ? 'justify-center' : ''}`}
+            onClick={() => setIsMobileNavOpen(false)}
+            title="Manage profile"
+            to="/clinic/manage-profile"
+          >
             <div className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-sm font-bold text-white shadow-sm">
               {user?.first_name?.[0]}{user?.last_name?.[0]}
             </div>
@@ -198,7 +204,7 @@ export function ClinicAdminLayout() {
                 <p className="truncate text-xs text-stone-500 dark:text-stone-400">{user?.email}</p>
               </div>
             )}
-          </div>
+          </Link>
         </div>
       </aside>
 
@@ -264,9 +270,16 @@ export function ClinicAdminLayout() {
 
             {/* User avatar + sign out */}
             <div className="hidden items-center gap-3 sm:flex">
-              <div className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm">
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
-              </div>
+              <Link
+                aria-label="Manage profile"
+                className="rounded-full transition focus-visible:outline-2 focus-visible:outline-amber-700"
+                title="Manage profile"
+                to="/clinic/manage-profile"
+              >
+                <div className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm">
+                  {user?.first_name?.[0]}{user?.last_name?.[0]}
+                </div>
+              </Link>
               <button
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
                 onClick={logout}

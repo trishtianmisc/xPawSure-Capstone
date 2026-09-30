@@ -889,7 +889,35 @@ Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
 
 ---
 
-# 12. General API Rules
+# 12. Audit Log Endpoints (Clinic Admin)
+
+## GET /api/audit-logs/
+
+Clinic Admin only.
+
+Returns the clinic's recent administrative activity, filtered to staff, clinic, and cancellation events, newest first.
+
+Query parameters:
+
+- limit (optional): integer, default 10, max 50
+
+Response 200:
+
+[
+  {
+    "id": "8f1c0a2e-5d4b-4a6c-9e1f-2a3b4c5d6e7f",
+    "title": "Staff member deactivated: maria@test.com",
+    "subtitle": "by Ada Admin",
+    "category": "staff",
+    "timestamp": "2026-09-30T16:35:35Z"
+  }
+]
+
+category is one of: staff | clinic | cancellation
+
+---
+
+# 13. General API Rules
 
 All list endpoints support pagination.
 
@@ -933,7 +961,7 @@ HTTP Status Codes:
 
 ---
 
-# 13. Mobile API Integration
+# 14. Mobile API Integration
 
 The mobile application consumes the same API as the web application.
 
