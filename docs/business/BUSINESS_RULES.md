@@ -217,6 +217,21 @@ Required information:
 
 Each pet receives a permanent medical history.
 
+## Pet QR Code Rules
+
+Every pet has a QR code whose value is a public URL
+(`{FRONTEND_URL}/pets/{qr_code}/public`).
+
+Scanning the QR code shows the pet's public profile without login.
+
+The public profile may only expose:
+
+- Pet identity: photo, name, breed, sex, birth date/age, color
+- Health alerts: vaccination status (`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE`)
+
+The public profile must never expose owner personal data (name, phone, email,
+address), microchip number, weight, or internal medical records.
+
 ---
 
 # 12. Appointment Rules

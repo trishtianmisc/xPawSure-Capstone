@@ -75,7 +75,8 @@ class PetService:
             pet.pet_profile_image = image_url
             pet.save(update_fields=['pet_profile_image'])
 
-        qr_image_bytes = generate_qr_code(pet_id_str)
+        qr_value = f'{settings.FRONTEND_URL}/pets/{pet_id_str}/public'
+        qr_image_bytes = generate_qr_code(qr_value)
         qr_code_url = QRStorageService.save(pet_id_str, qr_image_bytes)
 
         pet.pet_qr_code = pet_id_str
