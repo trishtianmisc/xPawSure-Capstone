@@ -9,6 +9,7 @@ const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pa
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicProfilePage = lazy(() => import('./features/clinic-profile/pages/ClinicProfilePage').then(m => ({ default: m.ClinicProfilePage })))
+const UserProfilePage = lazy(() => import('./features/clinic-admin/profile/pages/UserProfilePage').then(m => ({ default: m.UserProfilePage })))
 const StaffListPage = lazy(() => import('./features/staff/pages/StaffListPage').then(m => ({ default: m.StaffListPage })))
 const StaffDetailPage = lazy(() => import('./features/staff/pages/StaffDetailPage').then(m => ({ default: m.StaffDetailPage })))
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
@@ -81,6 +82,7 @@ function App() {
             <Route element={<StaffListPage />} path="staff" />
             <Route element={<StaffDetailPage />} path="staff/:id" />
             <Route element={<ClinicProfilePage />} path="profile" />
+            <Route element={<UserProfilePage />} path="manage-profile" />
           </Route>
         </Routes>
       </Suspense>

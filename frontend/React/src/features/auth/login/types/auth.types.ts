@@ -19,6 +19,7 @@ export interface AuthUser {
   role: UserRole
   first_name: string
   last_name: string
+  phone?: string
   must_change_password: boolean
 }
 

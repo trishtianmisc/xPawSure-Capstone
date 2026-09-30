@@ -5,11 +5,12 @@ interface StatCardProps {
   label: string
   value: number | string
   trend?: { direction: 'up' | 'down'; value: string }
+  hint?: string
   className?: string
 };
 
 
-export function StatCard({ icon, label, value, trend, className = '' }: StatCardProps) {
+export function StatCard({ icon, label, value, trend, hint, className = '' }: StatCardProps) {
   return (
     <div className={`rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-stone-700 dark:bg-stone-800 ${className}`}>
       <div className="flex items-start justify-between">
@@ -31,6 +32,9 @@ export function StatCard({ icon, label, value, trend, className = '' }: StatCard
       <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
         {label}
       </p>
+      {hint && (
+        <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">{hint}</p>
+      )}
     </div>
   )
 }

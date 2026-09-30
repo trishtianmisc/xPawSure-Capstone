@@ -14,34 +14,21 @@ export interface ChartDataPoint {
 export interface DashboardCharts {
   appointments_by_month: ChartDataPoint[]
   screenings_by_disease: ChartDataPoint[]
+  vet_workload: ChartDataPoint[]
 }
+
+export type RecentCategory = 'staff' | 'clinic' | 'security' | 'cancellation'
 
 export interface RecentItem {
   id: string
   title: string
   subtitle: string
   timestamp: string
-}
-
-export interface RecentActivity {
-  pets: RecentItem[]
-  appointments: RecentItem[]
-  screenings: RecentItem[]
-  consultations: RecentItem[]
-}
-
-export interface NotificationItem {
-  id: string
-  title: string
-  message: string
-  type: string
-  is_read: boolean
-  created_at: string
+  category?: RecentCategory
 }
 
 export interface DashboardData {
   stats: DashboardStats
   charts: DashboardCharts
-  recent: RecentActivity
-  notifications: NotificationItem[]
+  recent: RecentItem[]
 }

@@ -30,63 +30,26 @@ const MOCK_DASHBOARD: DashboardData = {
       { label: 'Allergic Dermatitis', value: 15 },
       { label: 'Other', value: 10 },
     ],
-  },
-  recent: {
-    pets: [
-      { id: '1', title: 'Buddy', subtitle: 'Golden Retriever · Male', timestamp: '2 hours ago' },
-      { id: '2', title: 'Luna', subtitle: 'Shih Tzu · Female', timestamp: '4 hours ago' },
-      { id: '3', title: 'Max', subtitle: 'Labrador · Male', timestamp: 'Yesterday' },
-      { id: '4', title: 'Bella', subtitle: 'Pomeranian · Female', timestamp: 'Yesterday' },
-    ],
-    appointments: [
-      { id: '1', title: 'Rex · Annual Checkup', subtitle: 'Dr. Santos · 10:00 AM', timestamp: 'Today' },
-      { id: '2', title: 'Milo · Vaccination', subtitle: 'Dr. Cruz · 11:30 AM', timestamp: 'Today' },
-      { id: '3', title: 'Coco · Grooming', subtitle: 'Dr. Santos · 2:00 PM', timestamp: 'Today' },
-      { id: '4', title: 'Charlie · Follow-up', subtitle: 'Dr. Reyes · 3:30 PM', timestamp: 'Today' },
-    ],
-    screenings: [
-      { id: '1', title: 'Rocky · Possible Mange', subtitle: 'Confidence: 94%', timestamp: '1 hour ago' },
-      { id: '2', title: 'Daisy · Skin Irritation', subtitle: 'Confidence: 87%', timestamp: '3 hours ago' },
-      { id: '3', title: 'Oscar · Hot Spot', subtitle: 'Confidence: 91%', timestamp: '5 hours ago' },
-    ],
-    consultations: [
-      { id: '1', title: 'Luna · Skin Allergy', subtitle: 'Dr. Reyes completed', timestamp: '1 hour ago' },
-      { id: '2', title: 'Thor · Ear Infection', subtitle: 'Dr. Cruz completed', timestamp: '3 hours ago' },
+    // TODO: source from appointment service — group appointments by vetId, filter
+    // to current month (backend appointments app stubbed on this branch; full
+    // implementation lives on the Clinic-Receptionist branch).
+    vet_workload: [
+      { label: 'Dr. Santos', value: 14 },
+      { label: 'Dr. Cruz', value: 12 },
+      { label: 'Dr. Reyes', value: 10 },
+      { label: 'Dr. Villanueva', value: 9 },
+      { label: 'Dr. Lim', value: 8 },
+      { label: 'Dr. Aquino', value: 6 },
     ],
   },
-  notifications: [
-    {
-      id: '1',
-      title: 'New Appointment',
-      message: 'A new appointment has been booked by Maria Santos for her pet Luna.',
-      type: 'APPOINTMENT_CREATED',
-      is_read: false,
-      created_at: '10 minutes ago',
-    },
-    {
-      id: '2',
-      title: 'AI Screening Ready',
-      message: 'AI screening results for Rocky are pending your review.',
-      type: 'AI_SCREENING_COMPLETED',
-      is_read: false,
-      created_at: '1 hour ago',
-    },
-    {
-      id: '3',
-      title: 'Appointment Reminder',
-      message: 'Rex has an appointment at 10:00 AM tomorrow with Dr. Santos.',
-      type: 'APPOINTMENT_REMINDER',
-      is_read: true,
-      created_at: '3 hours ago',
-    },
-    {
-      id: '4',
-      title: 'Vaccination Due',
-      message: 'Milo is due for his annual booster vaccination.',
-      type: 'VACCINATION_REMINDER',
-      is_read: true,
-      created_at: 'Yesterday',
-    },
+  recent: [
+    { id: 'r1', title: 'Veterinarian onboarded', subtitle: 'Dr. Cruz added to the clinic team', timestamp: '2 hours ago', category: 'staff' },
+    { id: 'r2', title: 'Staff account disabled', subtitle: 'Maria Reyes (Receptionist)', timestamp: '5 hours ago', category: 'staff' },
+    { id: 'r3', title: 'First login recorded', subtitle: 'Dr. Santos activated her account (invited → active)', timestamp: 'Yesterday', category: 'security' },
+    { id: 'r4', title: 'Clinic profile updated', subtitle: 'Contact number changed', timestamp: 'Yesterday', category: 'clinic' },
+    { id: 'r5', title: 'Operating hours updated', subtitle: 'Mon–Sat · 8:00 AM – 6:00 PM', timestamp: '2 days ago', category: 'clinic' },
+    { id: 'r6', title: 'Clinic logo updated', subtitle: 'New branding uploaded', timestamp: '3 days ago', category: 'clinic' },
+    { id: 'r7', title: 'Clinic-wide cancellation', subtitle: '6 appointments cancelled — schedule conflict', timestamp: '4 days ago', category: 'cancellation' },
   ],
 }
 
