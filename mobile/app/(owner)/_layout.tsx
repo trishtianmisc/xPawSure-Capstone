@@ -1,12 +1,23 @@
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
-import { View } from 'react-native'
+import { useEffect } from 'react'
+import { InteractionManager, View } from 'react-native'
 
 import { AppHeader } from '../../src/components/AppHeader'
 import { useTheme } from '../../src/context/ThemeContext'
+import { preloadModel } from '../../ai/services/tensorflow.service'
 
 export default function OwnerTabLayout() {
   const { colors } = useTheme()
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      preloadModel()
+    })
+    return () => {
+      task.cancel()
+    }
+  }, [])
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
