@@ -79,14 +79,18 @@ export default function RegisterScreen() {
   const onSubmit = async (data: RegisterForm) => {
     setServerError(null)
     try {
-      await register({
+      const signedIn = await register({
         email: data.email,
         password: data.password,
         first_name: data.first_name,
         last_name: data.last_name,
         phone: data.phone || undefined,
       })
-      router.push('/(auth)/login')
+      if (signedIn) {
+        router.replace('/(owner)/')
+      } else {
+        router.push('/(auth)/login')
+      }
     } catch (error: unknown) {
       if (error && typeof error === 'object') {
         const axiosError = error as {

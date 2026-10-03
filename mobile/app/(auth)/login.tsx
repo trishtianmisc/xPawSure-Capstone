@@ -51,7 +51,6 @@ export default function LoginScreen() {
   const { login } = useAuth()
   const { colors, isDark } = useTheme()
   const [passwordVisible, setPasswordVisible] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
   const [serverError, setServerError] = useState<string | null>(null)
 
   const { control, handleSubmit, formState: { errors, isSubmitting } } = useForm<LoginForm>({
@@ -171,12 +170,6 @@ export default function LoginScreen() {
               {errors.password && <Text style={styles.fieldError}>{errors.password.message}</Text>}
 
               <View style={styles.optionsRow}>
-                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: rememberMe }} onPress={() => setRememberMe((selected) => !selected)} style={styles.rememberOption}>
-                  <View style={[styles.checkbox, rememberMe && styles.checkboxSelected]}>
-                    {rememberMe ? <MaterialCommunityIcons color={colors.inverse} name="check" size={12} /> : null}
-                  </View>
-                  <Text style={styles.optionText}>Remember me</Text>
-                </Pressable>
                 <Text style={styles.forgotText}>Forgot password?</Text>
               </View>
 
@@ -235,11 +228,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   passwordField: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, flexDirection: 'row', height: 48 },
   passwordInput: { color: colors.text, flex: 1, fontSize: 15, paddingHorizontal: 14 },
   visibilityButton: { alignItems: 'center', justifyContent: 'center', width: 44 },
-  optionsRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
-  rememberOption: { alignItems: 'center', flexDirection: 'row' },
-  checkbox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 4, borderWidth: 1.5, height: 18, justifyContent: 'center', marginRight: 8, width: 18 },
-  checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  optionText: { color: colors.linkMuted, fontSize: 13 },
+  optionsRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
   forgotText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
   submitButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, height: 52, justifyContent: 'center', marginTop: 28 },
   submitButtonPressed: { opacity: 0.85 },

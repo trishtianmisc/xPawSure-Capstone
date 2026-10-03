@@ -6,6 +6,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View
 import { StatusPill } from '../../../features/appointment/components/StatusPill'
 import { useAppointment } from '../../../features/appointment/hooks/useAppointment'
 import { useCancelAppointment } from '../../../features/appointment/hooks/useCancelAppointment'
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 
 const CANCELLABLE_STATUSES = ['PENDING', 'CONFIRMED']
@@ -26,7 +27,7 @@ export default function AppointmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: appointment, isError, isLoading } = useAppointment(id)
+  const { data: appointment, isError, isLoading, refetch, isRefetching } = useAppointment(id)
   const cancelAppointment = useCancelAppointment()
 
   function handleCancel() {
@@ -57,7 +58,11 @@ export default function AppointmentDetailScreen() {
   if (isError || !appointment) {
     return (
       <View style={styles.centerState}>
-        <Text style={styles.statusText}>Appointment not found.</Text>
+        <ErrorRetry
+          isRetrying={isRefetching}
+          message="We couldn't load this appointment."
+          onRetry={() => void refetch()}
+        />
       </View>
     )
   }

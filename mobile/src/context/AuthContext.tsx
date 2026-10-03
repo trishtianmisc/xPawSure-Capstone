@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 
 import { queryClient } from '../lib/queryClient'
 import * as authService from '../services/auth'
+import { setOnSessionExpired } from '../services/http'
 import { getItem, removeItem, setItem } from '../utils/storage'
 
 interface User {
@@ -24,7 +25,7 @@ interface AuthContextType {
     first_name: string
     last_name: string
     phone?: string
-  }) => Promise<void>
+  }) => Promise<boolean>
   signOut: () => Promise<void>
   refreshUser: () => Promise<void>
 }
@@ -47,6 +48,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false))
   }, [])
 
+  const clearLocalSession = async () => {
+    queryClient.clear()
+    await removeItem(STORAGE_USER)
+    await removeItem('xpawsure_access_token')
+    await removeItem('xpawsure_refresh_token')
+    setUser(null)
+  }
+
+  useEffect(() => {
+    setOnSessionExpired(() => {
+      void clearLocalSession()
+    })
+    return () => setOnSessionExpired(null)
+  }, [])
+
   const login = async (email: string, password: string) => {
     const userData = await authService.login(email, password)
     await setItem(STORAGE_USER, JSON.stringify(userData))
@@ -59,8 +75,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     first_name: string
     last_name: string
     phone?: string
-  }) => {
+  }): Promise<boolean> => {
     await authService.register(data)
+    try {
+      await login(data.email, data.password)
+      return true
+    } catch {
+      return false
+    }
   }
 
   const signOut = async () => {
@@ -69,11 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // Proceed with local cleanup even if server call fails
     }
-    queryClient.clear()
-    await removeItem(STORAGE_USER)
-    await removeItem('xpawsure_access_token')
-    await removeItem('xpawsure_refresh_token')
-    setUser(null)
+    await clearLocalSession()
   }
 
   const refreshUser = async () => {

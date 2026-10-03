@@ -1,10 +1,11 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
 import { useMemo } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
+import { apiErrorMessage } from '../../../src/utils/error'
 import { usePrescription } from '../hooks/usePrescription'
 
 function formatDate(iso: string): string {
@@ -39,7 +40,7 @@ function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
 export default function PrescriptionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
-  const { data: prescription, isLoading, isError, error } = usePrescription(id)
+  const { data: prescription, isLoading, isError, error, refetch, isRefetching } = usePrescription(id)
   const styles = useMemo(() => createStyles(colors), [colors])
 
   if (isLoading) {
@@ -54,10 +55,11 @@ export default function PrescriptionDetailScreen() {
   if (isError || !prescription) {
     return (
       <View style={styles.stateContainer}>
-        <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={42} />
-        <Text style={styles.stateText}>
-          {(error as Error)?.message || 'Unable to load this prescription.'}
-        </Text>
+        <ErrorRetry
+          isRetrying={isRefetching}
+          message={apiErrorMessage(error) || 'Unable to load this prescription.'}
+          onRetry={() => void refetch()}
+        />
       </View>
     )
   }

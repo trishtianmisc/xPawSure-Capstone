@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo } from 'react'
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
@@ -35,7 +36,7 @@ export default function VaccinationDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
-  const { data: vaccination, isLoading, isError, error } = useVaccination(id)
+  const { data: vaccination, isLoading, isError, error, refetch, isRefetching } = useVaccination(id)
   const deleteVaccination = useDeleteVaccination()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -78,10 +79,11 @@ export default function VaccinationDetailScreen() {
   if (isError || !vaccination) {
     return (
       <View style={styles.stateContainer}>
-        <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={42} />
-        <Text style={styles.stateText}>
-          {(error as Error)?.message || 'Unable to load this vaccination record.'}
-        </Text>
+        <ErrorRetry
+          isRetrying={isRefetching}
+          message={apiErrorMessage(error) || 'Unable to load this vaccination record.'}
+          onRetry={() => void refetch()}
+        />
       </View>
     )
   }

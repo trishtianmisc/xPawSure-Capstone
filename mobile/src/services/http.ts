@@ -54,6 +54,14 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = []
 }
 
+type SessionExpiredListener = () => void
+
+let sessionExpiredListener: SessionExpiredListener | null = null
+
+export function setOnSessionExpired(listener: SessionExpiredListener | null): void {
+  sessionExpiredListener = listener
+}
+
 http.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -88,7 +96,11 @@ http.interceptors.response.use(
         return http(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError, null)
+        const hadSession = !!(await loadRefreshToken())
         await clearTokens()
+        if (hadSession) {
+          sessionExpiredListener?.()
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

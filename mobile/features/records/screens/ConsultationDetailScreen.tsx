@@ -1,9 +1,10 @@
-import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
 import { useMemo } from 'react'
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { apiErrorMessage } from '../../../src/utils/error'
 import { useConsultation } from '../hooks/useConsultation'
 
 function formatDate(iso: string): string {
@@ -29,7 +30,7 @@ function Section({ title, children }: { title: string; children: string }) {
 export default function ConsultationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
-  const { data: consultation, isLoading, isError, error } = useConsultation(id)
+  const { data: consultation, isLoading, isError, error, refetch, isRefetching } = useConsultation(id)
   const styles = useMemo(() => createStyles(colors), [colors])
 
   if (isLoading) {
@@ -44,10 +45,11 @@ export default function ConsultationDetailScreen() {
   if (isError || !consultation) {
     return (
       <View style={styles.stateContainer}>
-        <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={42} />
-        <Text style={styles.stateText}>
-          {(error as Error)?.message || 'Unable to load this consultation.'}
-        </Text>
+        <ErrorRetry
+          isRetrying={isRefetching}
+          message={apiErrorMessage(error) || 'Unable to load this consultation.'}
+          onRetry={() => void refetch()}
+        />
       </View>
     )
   }

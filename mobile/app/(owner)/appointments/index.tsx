@@ -1,12 +1,14 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { StatusPill } from '../../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../../features/appointment/types'
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
 type Tab = 'upcoming' | 'history'
@@ -55,7 +57,8 @@ export default function AppointmentsScreen() {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [tab, setTab] = useState<Tab>('upcoming')
-  const { data, isError, isLoading } = useMyAppointments()
+  const { data, isError, isLoading, refetch } = useMyAppointments()
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
 
   const { upcoming, history } = useMemo(() => {
     const results = data?.results ?? []
@@ -107,11 +110,15 @@ export default function AppointmentsScreen() {
           ))}
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={onRefresh} refreshing={refreshing} tintColor={colors.primary} />}
+          showsVerticalScrollIndicator={false}
+        >
           {isLoading ? (
             <View style={styles.statusState}><ActivityIndicator color={colors.primary} /></View>
           ) : isError ? (
-            <Text style={styles.statusText}>We couldn&apos;t load your appointments. Please try again.</Text>
+            <ErrorRetry message="We couldn't load your appointments." onRetry={() => void refetch()} />
           ) : visibleAppointments.length > 0 ? (
             visibleAppointments.map((appointment) => (
               <AppointmentRow

@@ -1,10 +1,12 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
 
@@ -37,7 +39,8 @@ export default function PetsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const [search, setSearch] = useState('')
   const [sortDescending, setSortDescending] = useState(false)
-  const { data: pets = [], isError, isLoading } = usePets(user?.id)
+  const { data: pets = [], isError, isLoading, refetch } = usePets(user?.id)
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
 
   const filteredPets = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -51,7 +54,12 @@ export default function PetsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={onRefresh} refreshing={refreshing} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.titleRow}>
           <Text style={styles.title}>My Pets</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/(owner)/pets/new')} style={styles.addButton}>
@@ -88,7 +96,7 @@ export default function PetsScreen() {
           {isLoading ? (
             <View style={styles.statusState}><ActivityIndicator color={colors.primary} /></View>
           ) : isError ? (
-            <Text style={styles.statusText}>We couldn&apos;t load your pets. Please try again.</Text>
+            <ErrorRetry message="We couldn't load your pets." onRetry={() => void refetch()} />
           ) : filteredPets.length > 0 ? (
             filteredPets.map((pet) => <PetRow key={pet.id} pet={pet} onPress={() => router.push(`/(owner)/pets/${pet.id}`)} />)
           ) : (
@@ -98,14 +106,14 @@ export default function PetsScreen() {
             </View>
           )}
         </View>
-      </View>
+      </ScrollView>
     </View>
   )
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
+  content: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 24, paddingBottom: 24 },
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   title: { color: colors.text, fontSize: 22, fontWeight: '800' },
   addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 36, paddingHorizontal: 16, justifyContent: 'center' },

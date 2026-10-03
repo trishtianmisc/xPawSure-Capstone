@@ -1,9 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import type {
   ConsultationRecord,
   PrescriptionRecord,
@@ -90,7 +92,8 @@ export default function RecordsScreen() {
   const active = tab === 'consultations' ? consultations
     : tab === 'prescriptions' ? prescriptions
       : vaccinations
-  const { data, isError, isLoading } = active
+  const { data, isError, isLoading, refetch } = active
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
 
   const emptyText =
     tab === 'consultations' ? 'No consultation records yet.'
@@ -113,9 +116,7 @@ export default function RecordsScreen() {
 
     if (isError) {
       return (
-        <Text style={styles.statusText}>
-          We couldn&apos;t load your records. Please try again.
-        </Text>
+        <ErrorRetry message="We couldn't load your records." onRetry={() => void refetch()} />
       )
     }
 
@@ -173,7 +174,11 @@ export default function RecordsScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={onRefresh} refreshing={refreshing} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.tabs}>
           {TABS.map(({ value, label }) => (
             <Pressable

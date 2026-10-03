@@ -1,9 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { STATUS_STYLES } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
 
@@ -19,21 +21,24 @@ export default function ScreeningHistoryScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data, isLoading, isError } = useAllScreenings()
+  const { data, isLoading, isError, refetch } = useAllScreenings()
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
 
   const screenings = data?.results ?? []
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={onRefresh} refreshing={refreshing} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
         {isLoading ? (
           <View style={styles.statusState}>
             <ActivityIndicator color={colors.primary} />
           </View>
         ) : isError ? (
-          <Text style={styles.statusText}>
-            We couldn&apos;t load your screening history. Please try again.
-          </Text>
+          <ErrorRetry message="We couldn't load your screening history." onRetry={() => void refetch()} />
         ) : screenings.length > 0 ? (
           screenings.map((screening) => {
             const status = STATUS_STYLES[screening.ais_status]

@@ -1,20 +1,23 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, type ComponentProps } from 'react'
-import { Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
+import { ErrorRetry } from '../../src/components/ErrorRetry'
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../src/hooks/usePullToRefresh'
 import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../features/appointment/types'
 import { usePets } from '../../features/pet/hooks/usePets'
+import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 type Shortcut = {
   label: string
   icon: ComponentProps<typeof MaterialCommunityIcons>['name']
-  route: '/(owner)/pets' | '/(owner)/pets/screening' | '/(owner)/appointments' | '/(owner)/records'
+  route: '/(owner)/pets' | '/(owner)/pets/screening'
   action?: 'open-qr'
 }
 
@@ -22,7 +25,6 @@ const shortcuts: Shortcut[] = [
   { label: 'Screen Skin', icon: 'camera-outline', route: '/(owner)/pets/screening' },
   { label: 'My Pets', icon: 'paw-outline', route: '/(owner)/pets' },
   { label: 'QR Code', icon: 'qrcode', route: '/(owner)/pets', action: 'open-qr' },
-  { label: 'Find Vet', icon: 'map-marker-outline', route: '/(owner)/appointments' },
 ]
 
 export default function HomeScreen() {
@@ -31,8 +33,19 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme()
   const firstName = user?.first_name?.trim() || 'Pet Parent'
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: pets, isLoading: petsLoading } = usePets(user?.id)
-  const { data: appointments } = useMyAppointments()
+  const { data: pets, isLoading: petsLoading, isError: petsError, refetch: refetchPets } = usePets(user?.id)
+  const { data: appointments, isLoading: appointmentsLoading, isError: appointmentsError, refetch: refetchAppointments } = useMyAppointments()
+  const {
+    data: screeningsData,
+    isLoading: screeningsLoading,
+    isError: screeningsError,
+    refetch: refetchScreenings,
+  } = useAllScreenings()
+  const { refreshing, onRefresh } = usePullToRefresh(async () => {
+    await Promise.allSettled([refetchPets(), refetchAppointments(), refetchScreenings()])
+  })
+
+  const latestScreening = screeningsData?.results[0]
 
   const handleShortcut = (shortcut: Shortcut) => {
     if (shortcut.action === 'open-qr') {
@@ -61,7 +74,11 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl colors={[colors.primary]} onRefresh={onRefresh} refreshing={refreshing} tintColor={colors.primary} />}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.welcome}>Welcome Back {firstName}!</Text>
@@ -102,7 +119,15 @@ export default function HomeScreen() {
             <Text style={styles.seeAll}>See All</Text>
           </Pressable>
         </View>
-        {nextAppointment ? (
+        {appointmentsError ? (
+          <View style={styles.errorBox}>
+            <ErrorRetry message="We couldn't load your appointments." onRetry={() => void refetchAppointments()} />
+          </View>
+        ) : appointmentsLoading ? (
+          <View style={styles.emptyPets}>
+            <Text style={styles.emptyPetsText}>Loading...</Text>
+          </View>
+        ) : nextAppointment ? (
           <Pressable
             onPress={() => router.push(`/(owner)/appointments/${nextAppointment.apt_id}`)}
             style={[styles.appointmentCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
@@ -143,6 +168,10 @@ export default function HomeScreen() {
           <View style={styles.emptyPets}>
             <Text style={styles.emptyPetsText}>Loading...</Text>
           </View>
+        ) : petsError ? (
+          <View style={styles.errorBox}>
+            <ErrorRetry message="We couldn't load your pets." onRetry={() => void refetchPets()} />
+          </View>
         ) : pets && pets.length > 0 ? (
           <View style={styles.petList}>
             {pets.slice(0, 3).map((pet) => (
@@ -173,16 +202,40 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Screenings</Text>
-          <Pressable onPress={() => router.push('/(owner)/records')}><Text style={styles.seeAll}>See All</Text></Pressable>
+          <Pressable onPress={() => router.push('/(owner)/screenings')}><Text style={styles.seeAll}>See All</Text></Pressable>
         </View>
-        <Pressable onPress={() => router.push('/(owner)/records')} style={styles.screeningPreview}>
-          <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="dog" size={19} /></View>
-          <View style={styles.previewText}>
-            <Text style={styles.previewTitle}>Allergic Dermatitis</Text>
-            <Text style={styles.previewMeta}>Milo · 12 Mar, 10:30 AM</Text>
+        {screeningsLoading ? (
+          <View style={styles.emptyPets}>
+            <Text style={styles.emptyPetsText}>Loading...</Text>
           </View>
-          <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
-        </Pressable>
+        ) : screeningsError ? (
+          <View style={styles.errorBox}>
+            <ErrorRetry message="We couldn't load recent screenings." onRetry={() => void refetchScreenings()} />
+          </View>
+        ) : latestScreening ? (
+          <Pressable onPress={() => router.push('/(owner)/screenings')} style={styles.screeningPreview}>
+            <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="dog" size={19} /></View>
+            <View style={styles.previewText}>
+              <Text style={styles.previewTitle}>{latestScreening.disease}</Text>
+              <Text style={styles.previewMeta}>
+                {latestScreening.pet_name} · {new Date(latestScreening.ais_created_at).toLocaleString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+              </Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
+          </Pressable>
+        ) : (
+          <Pressable onPress={() => router.push('/(owner)/pets/screening')} style={styles.emptyPets}>
+            <View style={styles.addPetIcon}>
+              <MaterialCommunityIcons color="#9A532F" name="paw" size={18} />
+            </View>
+            <Text style={styles.emptyPetsText}>No screenings yet. Start your first skin screening.</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -226,6 +279,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   petName: { color: colors.text, fontSize: 15, fontWeight: '700' },
   petMeta: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   emptyPets: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderColor: colors.borderLight, borderRadius: 16, borderStyle: 'dashed', borderWidth: 1.5, gap: 10, justifyContent: 'center', marginBottom: 24, minHeight: 120, padding: 20 },
+  errorBox: { marginBottom: 24 },
   addPetIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 20, height: 40, justifyContent: 'center', width: 40 },
   emptyPetsText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, textAlign: 'center' },
 

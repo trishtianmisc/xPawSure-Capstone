@@ -22,6 +22,7 @@ import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
 import { useCreateScreening } from '../../../features/screening/hooks/useCreateScreening'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
+import { ErrorRetry } from '../../../src/components/ErrorRetry'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 
@@ -95,13 +96,13 @@ export default function BookAppointmentScreen() {
 
   const days = useMemo(() => buildDays(14), [])
 
-  const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError } = useClinics()
-  const { data: pets = [], isLoading: petsLoading, isError: petsError } = usePets(user?.id)
-  const { data: vets = [], isLoading: vetsLoading, isError: vetsError } = useVets(
+  const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError, refetch: refetchClinics, isRefetching: clinicsRefetching } = useClinics()
+  const { data: pets = [], isLoading: petsLoading, isError: petsError, refetch: refetchPets, isRefetching: petsRefetching } = usePets(user?.id)
+  const { data: vets = [], isLoading: vetsLoading, isError: vetsError, refetch: refetchVets, isRefetching: vetsRefetching } = useVets(
     clinicId ?? undefined,
     step >= 5 ? (date ?? undefined) : undefined,
   )
-  const { data: slots = [], isLoading: slotsLoading, isError: slotsError } = useSlots(
+  const { data: slots = [], isLoading: slotsLoading, isError: slotsError, refetch: refetchSlots, isRefetching: slotsRefetching } = useSlots(
     vetId ?? undefined,
     step >= 6 ? (date ?? undefined) : undefined,
   )
@@ -109,6 +110,8 @@ export default function BookAppointmentScreen() {
     data: screenings,
     isLoading: screeningsLoading,
     isError: screeningsError,
+    refetch: refetchScreenings,
+    isRefetching: screeningsRefetching,
   } = useScreenings(step >= 3 && pet ? pet.id : undefined, step >= 3)
   const createScreening = useCreateScreening()
   const bookAppointment = useBookAppointment()
@@ -218,7 +221,7 @@ export default function BookAppointmentScreen() {
             {clinicsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : clinicsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load clinics. Please try again.</Text>
+              <ErrorRetry isRetrying={clinicsRefetching} message="We couldn't load clinics." onRetry={() => void refetchClinics()} />
             ) : clinics.length > 0 ? (
               clinics.map((clinic) => (
                 <Pressable
@@ -252,7 +255,7 @@ export default function BookAppointmentScreen() {
             {petsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : petsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load your pets. Please try again.</Text>
+              <ErrorRetry isRetrying={petsRefetching} message="We couldn't load your pets." onRetry={() => void refetchPets()} />
             ) : pets.length > 0 ? (
               pets.map((currentPet) => (
                 <Pressable
@@ -284,7 +287,7 @@ export default function BookAppointmentScreen() {
             {screeningsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : screeningsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load scan results. Please try again.</Text>
+              <ErrorRetry isRetrying={screeningsRefetching} message="We couldn't load scan results." onRetry={() => void refetchScreenings()} />
             ) : latestScreening ? (
               <View style={styles.scanCard}>
                 <View style={styles.scanHeader}>
@@ -371,7 +374,7 @@ export default function BookAppointmentScreen() {
             {vetsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : vetsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load veterinarians. Please try again.</Text>
+              <ErrorRetry isRetrying={vetsRefetching} message="We couldn't load veterinarians." onRetry={() => void refetchVets()} />
             ) : vets.length > 0 ? (
               vets.map((vet) => (
                 <Pressable
@@ -405,7 +408,7 @@ export default function BookAppointmentScreen() {
             {slotsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : slotsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load time slots. Please try again.</Text>
+              <ErrorRetry isRetrying={slotsRefetching} message="We couldn't load time slots." onRetry={() => void refetchSlots()} />
             ) : slots.length > 0 ? (
               <View style={styles.slotGrid}>
                 {slots.map((currentSlot) => (
