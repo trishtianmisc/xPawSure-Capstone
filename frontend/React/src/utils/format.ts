@@ -24,6 +24,40 @@ export function normalizePhoneInput(raw: string): string {
   return digits
 }
 
+function toDate(value: string | Date | null | undefined): Date | null {
+  if (value == null || value === '') return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+export function formatDate(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  if (!date) return '—'
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+export function formatTime(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  if (!date) return '—'
+  if (date.getHours() === 0 && date.getMinutes() === 0) return ''
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })
+}
+
+export function formatDateTime(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  if (!date) return '—'
+  const time = formatTime(date)
+  return time ? `${formatDate(date)} · ${time}` : formatDate(date)
+}
+
 export function formatRelativeTime(iso: string): string {
   const timestamp = new Date(iso)
   if (Number.isNaN(timestamp.getTime())) return iso

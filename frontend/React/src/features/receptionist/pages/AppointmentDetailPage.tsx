@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 
 import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { formatDateTime } from '../../../utils/format'
 
 export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -140,7 +141,7 @@ export function AppointmentDetailPage() {
             <div className="flex justify-between">
               <dt className="text-sm text-stone-500 dark:text-stone-400">Scheduled</dt>
               <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">
-                {new Date(appointment.apt_scheduled_at).toLocaleString()}
+                {formatDateTime(appointment.apt_scheduled_at)}
               </dd>
             </div>
             <div className="flex justify-between">

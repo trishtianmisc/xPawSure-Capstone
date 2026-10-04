@@ -103,6 +103,7 @@ function App() {
   <Route path="staff" element={<StaffListPage />} />
   <Route path="staff/:id" element={<StaffDetailPage />} />
   <Route path="profile" element={<ClinicProfilePage />} />
+  <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
 
 <Route
@@ -129,12 +130,6 @@ function App() {
             }
             path="/receptionist"
           >
-            <Route index element={<ClinicAdminDashboardPage />} />
-            <Route element={<ClinicAdminDashboardPage />} path="dashboard" />
-            <Route element={<StaffListPage />} path="staff" />
-            <Route element={<StaffDetailPage />} path="staff/:id" />
-            <Route element={<ClinicProfilePage />} path="profile" />
-            <Route element={<UserProfilePage />} path="manage-profile" />
             <Route index element={<ReceptionistDashboardPage />} />
             <Route element={<ReceptionistDashboardPage />} path="dashboard" />
             <Route element={<ReceptionistAppointmentsPage />} path="appointments" />

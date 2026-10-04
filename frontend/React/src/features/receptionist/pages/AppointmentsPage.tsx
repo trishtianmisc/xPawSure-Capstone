@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { useAppointments } from '../hooks/useAppointments'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
-import type { AppointmentStatus } from '../types/receptionist.types'
+import { formatDateTime } from '../../../utils/format'
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All' },
@@ -114,7 +114,7 @@ export function AppointmentsPage() {
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">{apt.owner_name ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">{apt.vet_name ?? 'Unassigned'}</td>
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">
-                    {new Date(apt.apt_scheduled_at).toLocaleString()}
+                    {formatDateTime(apt.apt_scheduled_at)}
                   </td>
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">{apt.apt_type}</td>
                   <td className="px-4 py-3">
