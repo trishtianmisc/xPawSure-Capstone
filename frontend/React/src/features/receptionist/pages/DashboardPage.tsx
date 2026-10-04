@@ -1,8 +1,20 @@
 import { useAuth } from '../../auth/context/AuthContext'
 import { useDashboardStats } from '../hooks/useDashboardStats'
+import { useUpcomingAppointments } from '../hooks/useUpcomingAppointments'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { formatDate, formatDateTime, formatTime } from '../../../utils/format'
 
-function StatCard({ label, value, icon }: { label: string; value: number | string; icon: string }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  subValue,
+}: {
+  label: string
+  value: number | string
+  icon: string
+  subValue?: string
+}) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
       <div className="flex items-center gap-4">
@@ -14,20 +26,44 @@ function StatCard({ label, value, icon }: { label: string; value: number | strin
         <div>
           <p className="text-sm font-medium text-stone-500 dark:text-stone-400">{label}</p>
           <p className="text-2xl font-bold text-stone-900 dark:text-stone-100">{value}</p>
+          {subValue && (
+            <p className="text-xs font-medium text-stone-400 dark:text-stone-500">{subValue}</p>
+          )}
         </div>
       </div>
     </div>
   )
 }
 
+function ListSkeleton() {
+  return (
+    <>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="px-5 py-3">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
+          <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
+        </div>
+      ))}
+    </>
+  )
+}
+
 export function DashboardPage() {
   const { user } = useAuth()
   const { data: stats, isLoading, error } = useDashboardStats()
+  const {
+    upcoming,
+    nextUp,
+    isLoading: appointmentsLoading,
+    error: appointmentsError,
+    refetch: refetchAppointments,
+  } = useUpcomingAppointments()
 
   if (isLoading) {
     return (
       <div className="p-6">
         <div className="mb-6 h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
+        <div className="mb-8 h-24 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
@@ -59,8 +95,55 @@ export function DashboardPage() {
         Welcome back, {user?.first_name}
       </h1>
 
+      {/* Up Next */}
+      <div className="mb-8 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-800 dark:bg-amber-900/20">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              Up Next
+            </p>
+            {appointmentsLoading ? (
+              <div className="mt-2 h-5 w-64 max-w-full animate-pulse rounded bg-amber-200 dark:bg-amber-800/40" />
+            ) : appointmentsError ? (
+              <p className="mt-1 text-sm font-medium text-stone-600 dark:text-stone-300">
+                Unable to load today&apos;s schedule
+              </p>
+            ) : nextUp ? (
+              <>
+                <p className="mt-1 truncate text-lg font-bold text-stone-900 dark:text-stone-100">
+                  {nextUp.pet_name} — {nextUp.owner_name ?? 'Unknown owner'}
+                </p>
+                <p className="text-sm text-stone-600 dark:text-stone-300">
+                  {nextUp.vet_name ?? 'Unassigned'} ·{' '}
+                  {formatTime(nextUp.apt_scheduled_at) || formatDate(nextUp.apt_scheduled_at)}
+                </p>
+              </>
+            ) : (
+              <p className="mt-1 text-sm font-medium text-stone-600 dark:text-stone-300">
+                No more appointments today
+              </p>
+            )}
+          </div>
+          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
+            <svg
+              className="size-6 text-amber-700 dark:text-amber-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+        </div>
+      </div>
+
       {/* Today's Stats */}
-      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Today's Appointments"
           value={stats?.today.total ?? 0}
@@ -69,12 +152,8 @@ export function DashboardPage() {
         <StatCard
           label="Pending"
           value={stats?.today.pending ?? 0}
+          subValue={`${stats?.today.confirmed ?? 0} Confirmed`}
           icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-        />
-        <StatCard
-          label="Confirmed"
-          value={stats?.today.confirmed ?? 0}
-          icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
         />
         <StatCard
           label="Checked In"
@@ -102,21 +181,33 @@ export function DashboardPage() {
         />
       </div> */}
 
-      {/* Recent Appointments */}
+      {/* Upcoming Appointments */}
       <div className="rounded-xl border border-stone-200 bg-white shadow-sm dark:border-stone-800 dark:bg-stone-900">
         <div className="border-b border-stone-200 px-5 py-4 dark:border-stone-800">
-          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Recent Appointments</h2>
+          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Upcoming Appointments</h2>
         </div>
         <div className="divide-y divide-stone-100 dark:divide-stone-800">
-          {stats?.recent_appointments && stats.recent_appointments.length > 0 ? (
-            stats.recent_appointments.map((apt) => (
+          {appointmentsLoading ? (
+            <ListSkeleton />
+          ) : appointmentsError ? (
+            <div className="px-5 py-8 text-center">
+              <p className="text-sm text-stone-500 dark:text-stone-400">Failed to load appointments</p>
+              <button
+                onClick={() => refetchAppointments()}
+                className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              >
+                Retry
+              </button>
+            </div>
+          ) : upcoming.length > 0 ? (
+            upcoming.map((apt) => (
               <div key={apt.apt_id} className="flex items-center justify-between px-5 py-3">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
                     {apt.pet_name} — {apt.owner_name ?? 'Unknown'}
                   </p>
                   <p className="text-xs text-stone-500 dark:text-stone-400">
-                    {apt.vet_name ?? 'Unassigned'} · {new Date(apt.apt_scheduled_at).toLocaleString()}
+                    {apt.vet_name ?? 'Unassigned'} · {formatDateTime(apt.apt_scheduled_at)}
                   </p>
                 </div>
                 <AppointmentStatusBadge status={apt.apt_status} />
@@ -124,7 +215,7 @@ export function DashboardPage() {
             ))
           ) : (
             <p className="px-5 py-8 text-center text-sm text-stone-500 dark:text-stone-400">
-              No recent appointments
+              No upcoming appointments
             </p>
           )}
         </div>
