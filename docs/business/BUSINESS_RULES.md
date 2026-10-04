@@ -144,6 +144,10 @@ Receptionists cannot
 - Manage user accounts
 - Access records outside their own clinic
 
+Patient visibility: receptionists only see pets that have an appointment at their
+own clinic (the sidebar "Patients" tab). The Owners directory stays platform-wide;
+booking is done by first selecting an owner, then one of that owner's pets.
+
 ---
 
 # 9. Veterinarian Rules
@@ -484,6 +488,9 @@ Vaccination (Optional)
 ↓
 
 Consultation Completed
+
+Owner bookings are created PENDING and await clinic confirmation.
+Receptionist desk bookings are created CONFIRMED.
 
 ---
 

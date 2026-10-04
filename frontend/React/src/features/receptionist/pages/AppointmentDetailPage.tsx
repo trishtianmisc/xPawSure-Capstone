@@ -35,10 +35,7 @@ export function AppointmentDetailPage() {
       setShowCancelModal(true)
       return
     }
-    updateStatus.mutate(
-      { aptId: appointment.apt_id, status: newStatus },
-      { onSuccess: () => {} },
-    )
+    updateStatus.mutate({ aptId: appointment.apt_id, status: newStatus })
   }
 
   function handleCancel() {
@@ -144,6 +141,22 @@ export function AppointmentDetailPage() {
                 {formatDateTime(appointment.apt_scheduled_at)}
               </dd>
             </div>
+            {appointment.apt_checked_in_at && (
+              <div className="flex justify-between">
+                <dt className="text-sm text-stone-500 dark:text-stone-400">Checked in</dt>
+                <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">
+                  {formatDateTime(appointment.apt_checked_in_at)}
+                </dd>
+              </div>
+            )}
+            {appointment.apt_completed_at && (
+              <div className="flex justify-between">
+                <dt className="text-sm text-stone-500 dark:text-stone-400">Completed</dt>
+                <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">
+                  {formatDateTime(appointment.apt_completed_at)}
+                </dd>
+              </div>
+            )}
             <div className="flex justify-between">
               <dt className="text-sm text-stone-500 dark:text-stone-400">Veterinarian</dt>
               <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">{appointment.vet_name ?? 'Unassigned'}</dd>

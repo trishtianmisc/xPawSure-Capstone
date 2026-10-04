@@ -375,7 +375,10 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
-    def create_appointment(clinic_id, pet_id, slot_id, apt_type, reason, created_by, screening=None):
+    def create_appointment(
+        clinic_id, pet_id, slot_id, apt_type, reason, created_by,
+        screening=None, initial_status=AppointmentStatus.PENDING,
+    ):
         try:
             slot = VetSlot.objects.select_for_update().get(
                 vsl_id=slot_id,
@@ -400,7 +403,7 @@ class AppointmentService:
             cln_id_id=clinic_id,
             stf_id=slot.stf_id,
             apt_type=apt_type,
-            apt_status=AppointmentStatus.PENDING,
+            apt_status=initial_status,
             apt_scheduled_at=scheduled_at,
             apt_reason=reason,
             apt_created_by_id=created_by,
@@ -423,22 +426,36 @@ class AppointmentService:
                 'vet_id': str(slot.stf_id_id),
                 'slot_date': str(slot.vsl_date),
                 'apt_type': apt_type,
+                'apt_status': str(initial_status),
             },
         )
 
         from notifications.models import NotificationType
 
-        _notify(
-            user_id=pet.own_id.usr_id_id,
-            title='Appointment Request Sent',
-            message=(
-                f'Your appointment request for {pet.pet_name} on '
-                f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
-                f'is awaiting clinic confirmation.'
-            ),
-            ntf_type=NotificationType.APPOINTMENT_CREATED,
-            ref_id=appointment.apt_id,
-        )
+        if initial_status == AppointmentStatus.CONFIRMED:
+            _notify(
+                user_id=pet.own_id.usr_id_id,
+                title='Appointment Confirmed',
+                message=(
+                    f'Your appointment for {pet.pet_name} on '
+                    f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
+                    f'has been confirmed.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ref_id=appointment.apt_id,
+            )
+        else:
+            _notify(
+                user_id=pet.own_id.usr_id_id,
+                title='Appointment Request Sent',
+                message=(
+                    f'Your appointment request for {pet.pet_name} on '
+                    f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
+                    f'is awaiting clinic confirmation.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CREATED,
+                ref_id=appointment.apt_id,
+            )
 
         return appointment
 
@@ -694,15 +711,34 @@ class OwnerService:
 class ReceptionistPetService:
 
     @staticmethod
-    def list_pets(clinic_id, search=None, owner_id=None, page=1, page_size=20):
+    def _pets_in_clinic(qs, clinic_id):
+        from django.db import models as db_models
+        return qs.filter(
+            db_models.Q(appointments__cln_id_id=clinic_id)
+            & db_models.Q(appointments__apt_deleted_at__isnull=True)
+        ).distinct()
+
+    @staticmethod
+    def _pet_in_clinic(pet, clinic_id):
+        return pet.appointments.filter(
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).exists()
+
+    @staticmethod
+    def list_pets(clinic_id, search=None, owner_id=None, page=1, page_size=20, scope=None):
         from pets.models import Pet
 
         qs = Pet.objects.filter(
             pet_is_active=True, pet_deleted_at__isnull=True,
         ).select_related('own_id__usr_id', 'brd_id')
 
-        if owner_id:
+        if scope == 'owner' and owner_id:
             qs = qs.filter(own_id_id=owner_id)
+        else:
+            qs = ReceptionistPetService._pets_in_clinic(qs, clinic_id)
+            if owner_id:
+                qs = qs.filter(own_id_id=owner_id)
         if search:
             from django.db import models as db_models
             qs = qs.filter(
@@ -724,14 +760,75 @@ class ReceptionistPetService:
         }
 
     @staticmethod
-    def get_pet_detail(pet_id):
+    def get_pet_detail(pet_id, clinic_id):
         from pets.models import Pet
         try:
-            return Pet.objects.select_related(
+            pet = Pet.objects.select_related(
                 'own_id__usr_id', 'brd_id',
             ).get(pet_id=pet_id)
         except Pet.DoesNotExist:
             return None
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
+            return None
+        return pet
+
+    @staticmethod
+    def get_pet_history(pet_id, clinic_id):
+        from pets.models import Pet
+        from consultations.models import Consultation
+        from prescriptions.models import Prescription
+        from vaccinations.models import VaccinationRecord
+        from ai_screenings.models import AiScreening
+        from appointments.models import Appointment
+
+        try:
+            pet = Pet.objects.get(pet_id=pet_id)
+        except Pet.DoesNotExist:
+            return None
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
+            return None
+
+        consultations = Consultation.objects.filter(
+            apt_id__pet_id=pet,
+            apt_id__cln_id_id=clinic_id,
+            apt_id__apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'apt_id',
+        ).order_by('-con_created_at')
+
+        prescriptions = Prescription.objects.filter(
+            con_id__apt_id__pet_id=pet,
+            con_id__apt_id__cln_id_id=clinic_id,
+            con_id__apt_id__apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'con_id',
+        ).prefetch_related('items').order_by('-prs_created_at')
+
+        vaccinations = VaccinationRecord.objects.filter(
+            pet_id=pet,
+        ).select_related(
+            'stf_id__usr_id', 'con_id',
+        ).order_by('-vac_date_given', '-vac_created_at')
+
+        screenings = AiScreening.objects.filter(
+            pet_id=pet,
+        ).select_related('dis_id').order_by('-ais_created_at')
+
+        appointments = Appointment.objects.filter(
+            pet_id=pet,
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'pet_id',
+        ).order_by('-apt_scheduled_at')
+
+        return {
+            'consultations': consultations,
+            'prescriptions': prescriptions,
+            'vaccinations': vaccinations,
+            'screenings': screenings,
+            'appointments': appointments,
+        }
 
     @staticmethod
     def create_pet(validated_data, user_id):
@@ -753,12 +850,15 @@ class ReceptionistPetService:
         return pet
 
     @staticmethod
-    def update_pet(pet_id, validated_data, user_id):
+    def update_pet(pet_id, validated_data, user_id, clinic_id):
         from pets.models import Pet
 
         try:
             pet = Pet.objects.get(pet_id=pet_id)
         except Pet.DoesNotExist:
+            return None
+
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
             return None
 
         old_values = {}

@@ -175,6 +175,7 @@ class AppointmentListCreateView(APIView):
                 apt_type=serializer.validated_data['apt_type'],
                 reason=serializer.validated_data.get('reason', ''),
                 created_by=request.user.usr_id,
+                initial_status=AppointmentStatus.CONFIRMED,
             )
         except SlotUnavailableError as e:
             return Response(
@@ -194,9 +195,22 @@ class AppointmentListCreateView(APIView):
 class AppointmentDetailView(APIView):
     permission_classes = [IsReceptionist]
 
+    @staticmethod
+    def _get_clinic_id(request):
+        from users.models import StaffProfile
+
+        staff = StaffProfile.objects.filter(usr_id=request.user).first()
+        return staff.cln_id_id if staff else None
+
+    def _in_clinic(self, request, appointment):
+        clinic_id = self._get_clinic_id(request)
+        if not appointment or clinic_id is None:
+            return False
+        return appointment.cln_id_id == clinic_id
+
     def get(self, request, apt_id):
         appointment = AppointmentService.get_appointment_detail(apt_id)
-        if not appointment:
+        if not self._in_clinic(request, appointment):
             return Response(
                 {'detail': 'Appointment not found.'},
                 status=status.HTTP_404_NOT_FOUND,
@@ -206,7 +220,12 @@ class AppointmentDetailView(APIView):
         return Response(serializer.data)
 
     def patch(self, request, apt_id):
-        from users.models import StaffProfile
+        appointment = AppointmentService.get_appointment_detail(apt_id)
+        if not self._in_clinic(request, appointment):
+            return Response(
+                {'detail': 'Appointment not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         new_status = request.data.get('apt_status')
         cancellation_reason = (

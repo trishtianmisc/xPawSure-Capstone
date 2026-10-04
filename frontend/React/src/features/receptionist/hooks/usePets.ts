@@ -1,16 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listPets, getPetDetail, createPet, updatePet } from '../services/pet.service'
+import { listPets, getPetDetail, getPetHistory, createPet, updatePet } from '../services/pet.service'
 
-export function usePets(params: {
-  search?: string
-  owner_id?: string
-  page?: number
-  page_size?: number
-}) {
+export function usePets(
+  params: {
+    search?: string
+    owner_id?: string
+    scope?: string
+    page?: number
+    page_size?: number
+  },
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ['receptionist', 'pets', params],
     queryFn: () => listPets(params),
     staleTime: 30_000,
+    enabled: options?.enabled ?? true,
   })
 }
 
@@ -19,6 +24,15 @@ export function usePetDetail(petId: string) {
     queryKey: ['receptionist', 'pet', petId],
     queryFn: () => getPetDetail(petId),
     enabled: !!petId,
+  })
+}
+
+export function usePetHistory(petId: string) {
+  return useQuery({
+    queryKey: ['receptionist', 'pet-history', petId],
+    queryFn: () => getPetHistory(petId),
+    enabled: !!petId,
+    staleTime: 30_000,
   })
 }
 

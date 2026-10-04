@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 import { useAuth } from '../../auth/context/AuthContext'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useUpcomingAppointments } from '../hooks/useUpcomingAppointments'
@@ -49,6 +51,7 @@ function ListSkeleton() {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { data: stats, isLoading, error } = useDashboardStats()
   const {
@@ -201,7 +204,11 @@ export function DashboardPage() {
             </div>
           ) : upcoming.length > 0 ? (
             upcoming.map((apt) => (
-              <div key={apt.apt_id} className="flex items-center justify-between px-5 py-3">
+              <div
+                key={apt.apt_id}
+                onClick={() => navigate(`/receptionist/appointments/${apt.apt_id}`)}
+                className="flex cursor-pointer items-center justify-between px-5 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50"
+              >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
                     {apt.pet_name} — {apt.owner_name ?? 'Unknown'}
@@ -210,7 +217,12 @@ export function DashboardPage() {
                     {apt.vet_name ?? 'Unassigned'} · {formatDateTime(apt.apt_scheduled_at)}
                   </p>
                 </div>
-                <AppointmentStatusBadge status={apt.apt_status} />
+                <div className="flex items-center gap-3">
+                  <AppointmentStatusBadge status={apt.apt_status} />
+                  <span className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
+                    View
+                  </span>
+                </div>
               </div>
             ))
           ) : (

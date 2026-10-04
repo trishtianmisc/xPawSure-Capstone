@@ -1,10 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useToast } from '../../../components/ui/ToastContext'
+import { apiErrorMessage } from '../../../utils/error'
 import {
   listAppointments,
   getAppointmentDetail,
   createAppointment,
   updateAppointmentStatus,
 } from '../services/appointment.service'
+
+const STATUS_TOAST: Record<string, string> = {
+  PENDING: 'Appointment marked as pending',
+  CONFIRMED: 'Appointment confirmed',
+  CHECKED_IN: 'Patient checked in',
+  IN_PROGRESS: 'Consultation in progress',
+  COMPLETED: 'Appointment completed',
+  CANCELLED: 'Appointment cancelled',
+  NO_SHOW: 'Appointment marked as no show',
+}
 
 export function useAppointments(params: {
   date?: string
@@ -43,6 +55,7 @@ export function useCreateAppointment() {
 
 export function useUpdateAppointmentStatus() {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   return useMutation({
     mutationFn: ({
       aptId,
@@ -53,9 +66,14 @@ export function useUpdateAppointmentStatus() {
       status: string
       cancellationReason?: string
     }) => updateAppointmentStatus(aptId, status, cancellationReason),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointment', vars.aptId] })
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
+      showToast(STATUS_TOAST[vars.status] ?? 'Appointment updated')
+    },
+    onError: (error) => {
+      showToast(apiErrorMessage(error), 'error')
     },
   })
 }

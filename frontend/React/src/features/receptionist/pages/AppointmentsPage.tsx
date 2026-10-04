@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
-import { useAppointments } from '../hooks/useAppointments'
+import { useAppointments, useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { formatDateTime } from '../../../utils/format'
 
@@ -16,11 +16,56 @@ const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: 'NO_SHOW', label: 'No Show' },
 ]
 
+type StatusMutation = ReturnType<typeof useUpdateAppointmentStatus>
+
+function QuickStatusAction({
+  aptId,
+  status,
+  updateStatus,
+}: {
+  aptId: string
+  status: string
+  updateStatus: StatusMutation
+}) {
+  const pending = updateStatus.isPending && updateStatus.variables?.aptId === aptId
+
+  if (status === 'PENDING') {
+    return (
+      <button
+        type="button"
+        onClick={() => updateStatus.mutate({ aptId, status: 'CONFIRMED' })}
+        disabled={pending}
+        className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-50"
+      >
+        {pending ? 'Confirming…' : 'Confirm'}
+      </button>
+    )
+  }
+
+  if (status === 'CONFIRMED') {
+    return (
+      <button
+        type="button"
+        onClick={() => updateStatus.mutate({ aptId, status: 'CHECKED_IN' })}
+        disabled={pending}
+        className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+      >
+        {pending ? 'Checking in…' : 'Check In'}
+      </button>
+    )
+  }
+
+  return null
+}
+
 export function AppointmentsPage() {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
   const [page, setPage] = useState(1)
+
+  const updateStatus = useUpdateAppointmentStatus()
 
   const { data, isLoading, error } = useAppointments({
     search: search || undefined,
@@ -84,13 +129,14 @@ export function AppointmentsPage() {
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Date & Time</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Type</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Status</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800">
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="h-4 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
                     </td>
@@ -99,15 +145,23 @@ export function AppointmentsPage() {
               ))
             ) : error ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-stone-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">
                   Failed to load appointments
                 </td>
               </tr>
             ) : data?.results && data.results.length > 0 ? (
               data.results.map((apt) => (
-                <tr key={apt.apt_id} className="hover:bg-stone-50 dark:hover:bg-stone-800/50">
+                <tr
+                  key={apt.apt_id}
+                  onClick={() => navigate(`/receptionist/appointments/${apt.apt_id}`)}
+                  className="cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                >
                   <td className="px-4 py-3">
-                    <Link to={`/receptionist/pets/${apt.pet_id}`} className="text-sm font-medium text-amber-700 hover:underline dark:text-amber-400">
+                    <Link
+                      to={`/receptionist/pets/${apt.pet_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-sm font-medium text-amber-700 hover:underline dark:text-amber-400"
+                    >
                       {apt.pet_name}
                     </Link>
                   </td>
@@ -120,11 +174,26 @@ export function AppointmentsPage() {
                   <td className="px-4 py-3">
                     <AppointmentStatusBadge status={apt.apt_status} />
                   </td>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <QuickStatusAction
+                        aptId={apt.apt_id}
+                        status={apt.apt_status}
+                        updateStatus={updateStatus}
+                      />
+                      <Link
+                        to={`/receptionist/appointments/${apt.apt_id}`}
+                        className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400"
+                      >
+                        View
+                      </Link>
+                    </div>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-stone-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-sm text-stone-500">
                   No appointments found
                 </td>
               </tr>

@@ -1,4 +1,5 @@
 import http from '../../../services/http'
+import { apiErrorMessage } from '../../../utils/error'
 import type {
   BulkUploadResponse,
   CreateStaffPayload,
@@ -8,22 +9,6 @@ import type {
   StaffStats,
   UpdateStaffPayload,
 } from '../types/staff.types'
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    const err = error as Error & { response?: { data?: unknown } }
-    const data = err.response?.data
-    if (typeof data === 'object' && data !== null) {
-      const record = data as Record<string, unknown>
-      if (typeof record.detail === 'string') {
-        return record.detail
-      }
-      return Object.values(record).flat().join(', ')
-    }
-    return err.message
-  }
-  return 'An unexpected error occurred.'
-}
 
 export async function listStaff(params?: {
   role?: string
@@ -36,7 +21,7 @@ export async function listStaff(params?: {
     const response = await http.get('/staff/', { params })
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -45,7 +30,7 @@ export async function getStaffDetail(id: string): Promise<StaffMember> {
     const response = await http.get(`/staff/${id}/`)
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -54,7 +39,7 @@ export async function createStaff(payload: CreateStaffPayload): Promise<CreateSt
     const response = await http.post('/staff/', payload)
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -63,7 +48,7 @@ export async function updateStaff(id: string, payload: UpdateStaffPayload): Prom
     const response = await http.patch(`/staff/${id}/`, payload)
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -72,7 +57,7 @@ export async function staffAction(id: string, action: string): Promise<{ detail:
     const response = await http.post(`/staff/${id}/${action}/`)
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -85,7 +70,7 @@ export async function bulkUploadStaff(file: File): Promise<BulkUploadResponse> {
     })
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }
 
@@ -94,6 +79,6 @@ export async function getStaffStats(): Promise<StaffStats> {
     const response = await http.get('/staff/stats/')
     return response.data
   } catch (error) {
-    throw new Error(toErrorMessage(error))
+    throw new Error(apiErrorMessage(error), { cause: error })
   }
 }

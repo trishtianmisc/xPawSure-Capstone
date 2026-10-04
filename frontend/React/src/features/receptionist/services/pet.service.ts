@@ -2,6 +2,7 @@ import http from '../../../services/http'
 import type {
   CreatePetPayload,
   Pet,
+  PetHistory,
   PetListResponse,
   UpdatePetPayload,
 } from '../types/receptionist.types'
@@ -9,6 +10,7 @@ import type {
 export async function listPets(params: {
   search?: string
   owner_id?: string
+  scope?: string
   page?: number
   page_size?: number
 }): Promise<PetListResponse> {
@@ -18,6 +20,11 @@ export async function listPets(params: {
 
 export async function getPetDetail(petId: string): Promise<Pet> {
   const { data } = await http.get(`/receptionist/pets/${petId}/`)
+  return data
+}
+
+export async function getPetHistory(petId: string): Promise<PetHistory> {
+  const { data } = await http.get(`/receptionist/pets/${petId}/history/`)
   return data
 }
 
