@@ -13,7 +13,7 @@ export function PasswordInput({ error, registration }: PasswordInputProps) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-4">
-        <label className="text-sm font-semibold text-stone-800 dark:text-stone-200" htmlFor="password">
+        <label className="text-sm font-semibold text-stone-800 text-white" htmlFor="password">
           Password
         </label>
         <a
