@@ -1,5 +1,6 @@
 import { Alert } from '../../../components/ui'
 import { useToast } from '../../../components/ui/ToastContext'
+import { PageHero } from '../../receptionist/components/PageHero'
 import { useClinicProfile } from '../hooks/useClinicProfile'
 import { useClinicSettings } from '../hooks/useClinicSettings'
 import { useOperatingHours } from '../hooks/useOperatingHours'
@@ -85,6 +86,11 @@ export function ClinicProfilePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        <PageHero
+          title="Clinic Profile"
+          subtitle="Manage clinic information, settings, and operating hours."
+        />
+
         {isLoading && (
           <div className="flex items-center justify-center py-32">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-200 border-t-amber-600" />

@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 import { useAuth } from '../../../auth/context/AuthContext'
+import { PageHero } from '../../../receptionist/components/PageHero'
 
 const profileSchema = z.object({
   first_name: z.string().min(1, 'First name is required').max(100),
@@ -89,32 +90,22 @@ export function UserProfilePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">
-          My Profile
-        </h1>
-        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-          Manage your personal information
-        </p>
-      </div>
-
-      {/* Avatar card */}
-      <div className="mb-6 flex items-center gap-4 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
-        <div className="grid size-16 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-2xl font-bold text-white shadow-sm">
-          {user?.first_name?.[0]}
-          {user?.last_name?.[0]}
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-stone-900 dark:text-stone-100">
-            {user?.first_name} {user?.last_name}
-          </p>
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            {user?.email}
-          </p>
-          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
-            {roleLabel[user?.role ?? ''] ?? user?.role}
-          </span>
-        </div>
+      <div className="mb-6">
+        <PageHero
+          title={`${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || 'My Profile'}
+          subtitle={user?.email ?? ''}
+          avatar={
+            <span className="inline-flex size-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-xl font-bold text-white ring-2 ring-white/20">
+              {user?.first_name?.[0]}
+              {user?.last_name?.[0]}
+            </span>
+          }
+          meta={
+            <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
+              {roleLabel[user?.role ?? ''] ?? user?.role}
+            </span>
+          }
+        />
       </div>
 
       {/* Form */}

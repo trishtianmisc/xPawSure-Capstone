@@ -12,7 +12,7 @@ interface StatCardProps {
 
 export function StatCard({ icon, label, value, trend, hint, className = '' }: StatCardProps) {
   return (
-    <div className={`rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-stone-700 dark:bg-stone-800 ${className}`}>
+    <div className={`rounded-xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-stone-700 dark:bg-stone-800 ${className}`}>
       <div className="flex items-start justify-between">
         <div className="rounded-xl bg-amber-50 p-3 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
           {icon}
@@ -41,7 +41,7 @@ export function StatCard({ icon, label, value, trend, hint, className = '' }: St
 
 export function StatCardSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800">
+    <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800">
       <div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" />
       <div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" />
       <div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" />
@@ -51,7 +51,7 @@ export function StatCardSkeleton() {
 
 export function StatCardError({ label }: { label: string }) {
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-900/20">
+    <div className="rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900 dark:bg-red-900/20">
       <p className="text-sm font-medium text-red-700 dark:text-red-400">Failed to load {label}</p>
     </div>
   )

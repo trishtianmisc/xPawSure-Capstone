@@ -1,12 +1,15 @@
+import { useAuth } from '../../../auth/context/AuthContext'
 import { useDashboard } from '../hooks/useDashboard'
 import { StatCard, StatCardSkeleton } from '../components/StatCard'
 import { useStaffStats } from '../../../staff/hooks/useStaffStats'
 import { RecentActivity } from '../components/RecentActivity'
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { AppointmentsByMonthChart, ChartSkeleton } from '../components/Charts/AppointmentsByMonthChart'
 import { ScreeningsByDiseaseChart } from '../components/Charts/ScreeningsByDiseaseChart'
 import { VetWorkloadChart } from '../components/Charts/VetWorkloadChart'
 
 export function DashboardPage() {
+  const { user } = useAuth()
   const { data, error } = useDashboard()
   const { data: staffStats, isLoading: staffStatsLoading } = useStaffStats()
 
@@ -14,19 +17,25 @@ export function DashboardPage() {
     return (
         <div className="flex min-h-[60vh] items-center justify-center p-8">
           <div className="max-w-md text-center">
-            <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-red-100 text-3xl dark:bg-red-900/30">
-              ⚠️
-            </div>
-            <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Failed to load dashboard</h2>
-            <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+            <svg
+              className="mx-auto h-12 w-12 text-stone-300 dark:text-stone-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+            </svg>
+            <h2 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">Failed to load dashboard</h2>
+            <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
               {error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
             </p>
             <button
-              className="mt-6 rounded-lg bg-amber-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950"
+              className="mt-5 rounded-md bg-amber-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
               onClick={() => window.location.reload()}
               type="button"
             >
-              Retry
+              Try again
             </button>
           </div>
         </div>
@@ -35,6 +44,11 @@ export function DashboardPage() {
 
   return (
       <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+        <PageHero
+          title="Dashboard"
+          subtitle={`Welcome back${user?.first_name ? `, ${user.first_name}` : ''}. Here's your clinic overview.`}
+        />
+
         {staffStatsLoading ? (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -96,11 +110,17 @@ export function DashboardPage() {
         ) : (
           <div className="flex min-h-[60vh] items-center justify-center">
             <div className="max-w-md text-center">
-              <div className="mx-auto mb-4 grid size-16 place-items-center rounded-full bg-stone-100 text-3xl dark:bg-stone-800">
-                📊
-              </div>
-              <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">No dashboard data</h2>
-              <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
+              <svg
+                className="mx-auto h-12 w-12 text-stone-300 dark:text-stone-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0h1.5m-1.5 0h-11m0 0h-1.5m1.5 0v-1.5A2.25 2.25 0 006 12H3.75m0 0h1.5M3.75 12h16.5m0 0h1.5m-1.5 0v-1.5A2.25 2.25 0 0118 12h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+              </svg>
+              <h2 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">No dashboard data</h2>
+              <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
                 Your clinic dashboard will populate once you start registering pets and scheduling appointments.
               </p>
             </div>

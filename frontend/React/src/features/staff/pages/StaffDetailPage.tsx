@@ -4,6 +4,7 @@ import { useStaffAction } from '../hooks/useStaffAction'
 import { EditStaffModal } from '../components/EditStaffModal'
 import { useToast } from '../../../components/ui/ToastContext'
 import { Modal } from '../../../components/ui/Modal'
+import { PageHero } from '../../receptionist/components/PageHero'
 import { formatPhone } from '../../../utils/format'
 import { useState } from 'react'
 import type { StaffMember } from '../types/staff.types'
@@ -64,7 +65,7 @@ export function StaffDetailPage() {
             </div>
           </div>
           <div className="grid gap-6 sm:grid-cols-2">
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
               <div className="h-5 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
               <div className="mt-4 space-y-4">
                 {[1, 2, 3, 4].map((i) => (
@@ -75,7 +76,7 @@ export function StaffDetailPage() {
                 ))}
               </div>
             </div>
-            <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
               <div className="h-5 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
               <div className="mt-4 space-y-4">
                 {[1, 2, 3].map((i) => (
@@ -157,12 +158,79 @@ export function StaffDetailPage() {
       <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
         <button
           onClick={() => navigate('/clinic/staff')}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-stone-700 px-3 py-1.5 text-sm font-medium text-stone-500 transition hover:bg-stone-800"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 transition-colors hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
         >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
-          </svg>
+          ← Back to Staff
         </button>
+
+        {/* Identity Hero */}
+        <PageHero
+          title={`${staff.first_name} ${staff.last_name}`}
+          subtitle={staff.email}
+          avatar={
+            <span
+              className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold ring-2 ring-white/20 ${avatarBg}`}
+            >
+              {getInitials(staff.first_name, staff.last_name)}
+            </span>
+          }
+          meta={
+            <>
+              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
+                {staff.position}
+              </span>
+              {staff.must_change_password ? (
+                <span className="rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-medium text-amber-200">
+                  Pending Setup
+                </span>
+              ) : staff.is_active ? (
+                <span className="rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-200">
+                  Active
+                </span>
+              ) : (
+                <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-200">
+                  Inactive
+                </span>
+              )}
+            </>
+          }
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setIsEditOpen(true)}
+                className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+                type="button"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => openConfirm('reset-password')}
+                className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                type="button"
+              >
+                Reset Password
+              </button>
+              {staff.is_active ? (
+                <button
+                  onClick={() => openConfirm('deactivate')}
+                  className="shrink-0 rounded-md bg-red-500/90 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-400"
+                  type="button"
+                >
+                  Deactivate
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleAction('activate')}
+                  className="shrink-0 rounded-md bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-500"
+                  type="button"
+                >
+                  Activate
+                </button>
+              )}
+            </div>
+          }
+        />
+
         {/* Pending Setup Banner */}
         {isPendingSetup && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
@@ -191,76 +259,8 @@ export function StaffDetailPage() {
           </div>
         )}
 
-        {/* Identity Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <span className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold ${avatarBg}`}>
-              {getInitials(staff.first_name, staff.last_name)}
-            </span>
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
-                {staff.first_name} {staff.last_name}
-              </h1>
-              <div className="mt-1.5 flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${staff.role === 'VETERINARIAN'
-                      ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                      : 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
-                    }`}
-                >
-                  {staff.role === 'VETERINARIAN' ? '\uD83E\uDE7A' : '\uD83D\uDCCB'} {staff.position}
-                </span>
-                {staff.must_change_password ? (
-                  <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                    Pending Setup
-                  </span>
-                ) : staff.is_active ? (
-                  <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    Active
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                    Inactive
-                  </span>
-                )}
-              </div>
-              <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">{staff.email}</p>
-            </div>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsEditOpen(true)}
-              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
-            >
-              Edit
-            </button>
-            <button
-              onClick={() => openConfirm('reset-password')}
-              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
-            >
-              Reset Password
-            </button>
-            {staff.is_active ? (
-              <button
-                onClick={() => openConfirm('deactivate')}
-                className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
-              >
-                Deactivate
-              </button>
-            ) : (
-              <button
-                onClick={() => handleAction('activate')}
-                className="rounded-lg border border-green-300 px-4 py-2 text-sm font-medium text-green-600 transition hover:bg-green-50 dark:border-green-700 dark:text-green-400 dark:hover:bg-green-900/20"
-              >
-                Activate
-              </button>
-            )}
-          </div>
-        </div>
-
         {/* Activity Summary */}
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
             Activity Summary
           </h3>
@@ -284,7 +284,7 @@ export function StaffDetailPage() {
         {/* Field Cards */}
         <div className="grid gap-6 sm:grid-cols-2">
           {/* Contact & Role Card */}
-          <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
             <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
               Contact & Role
             </h3>
@@ -324,7 +324,7 @@ export function StaffDetailPage() {
 
           {/* Licensing Card (Veterinarians only) */}
           {staff.role === 'VETERINARIAN' && (
-            <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
               <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
                 Licensing
               </h3>
@@ -370,7 +370,7 @@ export function StaffDetailPage() {
         </div>
 
         {/* Action History */}
-        <section className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
           <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
             Action History
           </h3>
