@@ -21,7 +21,11 @@ from appointments.views_owner import (
     OwnerVetListView,
 )
 from owners.views import OwnerDetailView, OwnerListView
-from pets.views_receptionist import ReceptionistPetDetailView, ReceptionistPetListCreateView
+from pets.views_receptionist import (
+    ReceptionistPetDetailView,
+    ReceptionistPetHistoryView,
+    ReceptionistPetListCreateView,
+)
 
 urlpatterns = [
     path('available-slots/', AvailableSlotsView.as_view(), name='available-slots'),
@@ -38,6 +42,7 @@ urlpatterns = [
     path('owners/<uuid:own_id>/', OwnerDetailView.as_view(), name='owner-detail'),
     path('receptionist/pets/', ReceptionistPetListCreateView.as_view(), name='receptionist-pet-list-create'),
     path('receptionist/pets/<uuid:pet_id>/', ReceptionistPetDetailView.as_view(), name='receptionist-pet-detail'),
+    path('receptionist/pets/<uuid:pet_id>/history/', ReceptionistPetHistoryView.as_view(), name='receptionist-pet-history'),
     path('owner/clinics/', OwnerClinicListView.as_view(), name='owner-clinic-list'),
     path('owner/vets/', OwnerVetListView.as_view(), name='owner-vet-list'),
     path('owner/slots/', OwnerAvailableSlotsView.as_view(), name='owner-available-slots'),

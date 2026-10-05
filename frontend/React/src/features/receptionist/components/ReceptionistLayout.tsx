@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 
 import { useTheme } from '../../../context/ThemeContext'
 import { useAuth } from '../../auth/context/AuthContext'
+import { roleLabel } from '../../../utils/roles'
 import { useUnreadCount } from '../hooks/useNotifications'
 
 interface NavItem {
@@ -28,19 +29,25 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { label: 'Schedule', path: '/receptionist/schedule', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
       { label: 'Appointments', path: '/receptionist/appointments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-      { label: 'Pets', path: '/receptionist/pets', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+      { label: 'Patients', path: '/receptionist/pets', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
       { label: 'Owners', path: '/receptionist/owners', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
     ],
   },
 ]
 
 export function ReceptionistLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, getProfile } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const { pathname } = useLocation()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { data: unreadData } = useUnreadCount()
+
+  useEffect(() => {
+    if (user && user.clinic_name === undefined) {
+      void getProfile().catch(() => undefined)
+    }
+  }, [user, getProfile])
 
   function isActive(path: string): boolean {
     if (path === '/receptionist/dashboard') return pathname === path
@@ -67,10 +74,12 @@ export function ReceptionistLayout() {
           } ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Branding */}
-        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-stone-200 px-5 dark:border-stone-800">
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-800 to-amber-950 shadow-sm">
-            <span className="text-base leading-none" aria-hidden="true">🐾</span>
-          </div>
+        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-stone-200 px-1 dark:border-stone-800">
+           <img
+            src="/LogoHalf.png"
+            alt="XPawSure"
+            className=" h-8 w-auto drop-shadow-2xl sm:h-10 lg:h-15 "
+          />
           {!isCollapsed && (
             <span className="text-base font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
               XPawSure
@@ -100,6 +109,8 @@ export function ReceptionistLayout() {
                   {section.label}
                 </p>
               )}
+        
+          
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = isActive(item.path)
@@ -134,10 +145,14 @@ export function ReceptionistLayout() {
                     </Link>
                   )
                 })}
+                
               </div>
+              
             </div>
           ))}
+          
         </nav>
+        
 
         {/* User info */}
         <div className="border-t border-stone-200 p-3 dark:border-stone-800">
@@ -154,7 +169,7 @@ export function ReceptionistLayout() {
                 <p className="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">
                   {user?.first_name} {user?.last_name}
                 </p>
-                <p className="truncate text-xs text-stone-500 dark:text-stone-400">{user?.email}</p>
+                <p className="truncate text-xs text-stone-500 dark:text-stone-400">{roleLabel(user?.role)}</p>
               </div>
             )}
           </Link>
@@ -185,7 +200,7 @@ export function ReceptionistLayout() {
           </button>
 
           <div className="hidden items-center gap-2 text-sm text-stone-500 dark:text-stone-400 sm:flex">
-            <span className="font-medium text-stone-900 dark:text-stone-200">Receptionist</span>
+            <span className="font-medium text-stone-900 dark:text-stone-200">{user?.clinic_name || 'Receptionist'}</span>
             <span className="text-stone-300 dark:text-stone-600">/</span>
             <span>{breadcrumb}</span>
           </div>

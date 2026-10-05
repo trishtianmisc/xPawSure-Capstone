@@ -14,6 +14,12 @@ from owners.serializers import (
 from owners.services import OwnerProfileService
 
 
+def _get_clinic_id(request):
+    from users.models import StaffProfile
+    staff = StaffProfile.objects.filter(usr_id=request.user).first()
+    return staff.cln_id_id if staff else None
+
+
 class OwnerProfileView(APIView):
     permission_classes = [IsOwner]
     parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
@@ -73,7 +79,10 @@ class OwnerListView(APIView):
             page_size=page_size,
         )
 
-        serializer = OwnerListSerializer(data['results'], many=True)
+        serializer = OwnerListSerializer(
+            data['results'], many=True,
+            context={'clinic_id': _get_clinic_id(request)},
+        )
         return Response({
             'total': data['total'],
             'page': data['page'],
@@ -93,5 +102,7 @@ class OwnerDetailView(APIView):
                 {'detail': 'Owner not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = OwnerDetailSerializer(owner)
+        serializer = OwnerDetailSerializer(
+            owner, context={'clinic_id': _get_clinic_id(request)},
+        )
         return Response(serializer.data)

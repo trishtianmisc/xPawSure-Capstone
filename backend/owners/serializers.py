@@ -1,6 +1,16 @@
+from django.db.models import Q
 from rest_framework import serializers
 
 from owners.models import OwnerProfile
+
+
+def _clinic_pets(qs, clinic_id):
+    if clinic_id is None:
+        return qs.none()
+    return qs.filter(
+        Q(appointments__cln_id_id=clinic_id)
+        & Q(appointments__apt_deleted_at__isnull=True)
+    ).distinct()
 
 
 class OwnerListSerializer(serializers.ModelSerializer):
@@ -21,7 +31,8 @@ class OwnerListSerializer(serializers.ModelSerializer):
         return f'{u.usr_first_name} {u.usr_last_name}'
 
     def get_pet_count(self, obj):
-        return obj.pets.filter(pet_is_active=True).count()
+        pets = obj.pets.filter(pet_is_active=True)
+        return _clinic_pets(pets, self.context.get('clinic_id')).count()
 
 
 class OwnerDetailSerializer(serializers.ModelSerializer):
@@ -45,6 +56,7 @@ class OwnerDetailSerializer(serializers.ModelSerializer):
     def get_pets(self, obj):
         from pets.serializers import PetResponseSerializer
         pets = obj.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True)
+        pets = _clinic_pets(pets, self.context.get('clinic_id'))
         return PetResponseSerializer(pets, many=True).data
 
 

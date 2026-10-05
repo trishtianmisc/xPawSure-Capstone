@@ -5,11 +5,14 @@ from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.test.client import BOUNDARY, MULTIPART_CONTENT, encode_multipart
+from django.utils import timezone
 from PIL import Image
 
+from appointments.models import Appointment, AppointmentStatus, AppointmentType
+from clinics.models import Clinic
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
-from users.models import User, UserRole
+from users.models import StaffPosition, StaffProfile, User, UserRole
 
 PASSWORD = 'TestPass123!'
 OWNER_EMAIL = 'proowner@example.com'
@@ -203,7 +206,20 @@ class OwnerListTests(OwnerProfileBase):
         self.receptionist_user = self._create_user(
             DESK_EMAIL, UserRole.RECEPTIONIST, 'Rita', 'Desk',
         )
-        Pet.objects.create(own_id=self.owner, pet_name='Rex', pet_sex=Sex.MALE)
+        self.clinic = Clinic.objects.create(cln_name='Pro Desk Clinic')
+        StaffProfile.objects.create(
+            usr_id=self.receptionist_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+        rex = Pet.objects.create(own_id=self.owner, pet_name='Rex', pet_sex=Sex.MALE)
+        Appointment.objects.create(
+            pet_id=rex,
+            cln_id=self.clinic,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.CONFIRMED,
+            apt_scheduled_at=timezone.now(),
+        )
 
     def test_receptionist_list_returns_owners_with_pets(self):
         response = self.client.get('/api/owners/', **self._auth(DESK_EMAIL))

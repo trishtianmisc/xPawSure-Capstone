@@ -42,9 +42,12 @@ Response (200):
     "id": "uuid",
     "email": "string",
     "full_name": "string",
-    "role": "string"
+    "role": "string",
+    "clinic_name": "string | null"
   }
 }
+
+`clinic_name` is the name of the clinic the staff member belongs to; `null` for users without a clinic (e.g. Super Admin, owners).
 
 ---
 
@@ -143,7 +146,8 @@ Response (200):
   "full_name": "string",
   "phone": "string",
   "role": "string",
-  "is_active": true
+  "is_active": true,
+  "clinic_name": "string | null"
 }
 
 ---
@@ -166,7 +170,8 @@ Response (200):
   "email": "string",
   "full_name": "string",
   "phone": "string",
-  "role": "string"
+  "role": "string",
+  "clinic_name": "string | null"
 }
 
 ---
@@ -370,6 +375,99 @@ Vaccinations are sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
 
 ---
 
+## GET /api/receptionist/pets/  (Receptionist, web)
+
+Clinic-scoped patient directory behind the sidebar "Patients" tab.
+
+Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
+
+- Default: only active pets with at least one non-deleted appointment at the
+  receptionist's own clinic. A pet becomes a clinic patient once an appointment
+  exists there.
+- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
+  Used by the booking form so walk-in owners can be booked; after the booking the
+  pet appears in the clinic's Patients tab.
+- Invalid `page` / `page_size` values fall back to defaults (never a 500).
+
+## POST /api/receptionist/pets/
+
+Requires authentication. Receptionist.
+
+Registers a pet for an existing owner. Registration does not attach the pet to a
+clinic — the pet appears in the clinic's Patients tab after its first appointment
+there.
+
+## GET /api/receptionist/pets/{id}/
+
+Requires authentication. Receptionist.
+
+Returns the pet only if it has an appointment at the receptionist's clinic,
+otherwise `404`.
+
+## PATCH /api/receptionist/pets/{id}/
+
+Requires authentication. Receptionist.
+
+Same clinic rule as GET — otherwise `404`.
+
+## GET /api/receptionist/pets/{id}/history/
+
+Requires authentication. Receptionist.
+
+Full read-only medical record for the Patient record page. The pet must have an
+appointment at the receptionist's clinic (`404` otherwise); a receptionist without
+a staff profile gets `400`.
+
+Response:
+
+```json
+{
+  "consultations": [],
+  "prescriptions": [],
+  "vaccinations": [],
+  "screenings": [],
+  "appointments": []
+}
+```
+
+Scoping (shared patients — a pet treated at multiple clinics):
+
+- `consultations`, `prescriptions`, `appointments`: only records from the
+  receptionist's own clinic (per `BUSINESS_RULES.md` — no records outside their
+  own clinic).
+- `vaccinations`, `screenings`: **pet-level** — returned in full, including
+  owner-reported vaccinations and phone AI screenings that belong to the pet
+  rather than any clinic.
+
+Read-only: the endpoint never mutates records (medical history is immutable).
+
+Web UI presentation: prescriptions are rendered inside their (one-to-one)
+consultation, and a consultation's AI screening is resolved through
+`appointments[].screening` — only screenings tied to a consultation are shown.
+Response shape is unchanged.
+
+---
+
+# 4A. Receptionist Owner Endpoints (Web)
+
+## GET /api/owners/
+
+Requires authentication. Receptionist.
+
+Owner directory. Owners are platform-wide (not attached to one clinic), so the
+list is not clinic-filtered. `pet_count` counts only the owner's active pets that
+have an appointment at the receptionist's clinic.
+
+Query parameters: `search`, `page`, `page_size`
+
+## GET /api/owners/{id}/
+
+Requires authentication. Receptionist.
+
+`pets` only includes pets with an appointment at the receptionist's clinic.
+
+---
+
 # 5. Appointment Endpoints
 
 ## GET /api/appointments/
@@ -400,6 +498,10 @@ the API responds `403` with:
 
 Receptionist bookings are not gated by screenings.
 
+Initial status: owner bookings start as `PENDING` (awaiting clinic confirmation; owner
+notified with `APPOINTMENT_CREATED`). Receptionist desk bookings start as `CONFIRMED`
+(owner notified with `APPOINTMENT_CONFIRMED`).
+
 Request (owner):
 
 {
@@ -416,13 +518,17 @@ Request (owner):
 
 Requires authentication.
 
+Owner: own pets' appointments only. Clinic staff: appointments within their own clinic,
+otherwise `404`.
+
 ---
 
 ## PATCH /api/appointments/{id}/
 
 Requires authentication. Receptionist or clinic admin.
 
-Update appointment status.
+Update appointment status. Clinic staff can only update appointments within their own
+clinic, otherwise `404`.
 
 ---
 
@@ -913,17 +1019,26 @@ Super Admin only.
 
 # 11. User Management Endpoints (Clinic Admin)
 
-## GET /api/users/
+## GET /api/staff/
 
-Clinic Admin or Super Admin.
+Clinic Admin.
 
-Returns users within the admin's own clinic (or all clinics for Super Admin).
+Returns staff members within the admin's own clinic.
 
-## POST /api/users/
+## POST /api/staff/
 
-Clinic Admin or Super Admin.
+Clinic Admin.
 
 Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
+
+The `201` response includes `temp_password` exactly once (it is also emailed to
+the staff member via the welcome email). It is never returned again — the
+`reset-password` and `resend-welcome` actions deliver a new temporary password by
+email only.
+
+Related endpoints: `GET /api/staff/stats/`, `GET`/`PATCH /api/staff/{id}/`,
+`POST /api/staff/{id}/{action}/` (activate | deactivate | reset-password |
+resend-welcome), `POST /api/staff/bulk-upload/`.
 
 ---
 

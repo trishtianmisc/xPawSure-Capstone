@@ -4,7 +4,7 @@ from django.conf import settings as django_settings
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 
-from clinics.models import CLINIC_LOGO_DIR, Clinic, ClinicOperatingHours, ClinicSettings, ClinicStatus
+from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings, ClinicStatus
 from users.models import User
 
 _PHONE_RE = re.compile(r'^(09\d{9}|\+63\d{10})$')
@@ -93,6 +93,8 @@ class ClinicProfileSerializer(serializers.Serializer):
     def get_logo_url(self, obj):
         if not obj.cln_logo_url:
             return None
+        if obj.cln_logo_url.startswith(('http://', 'https://')):
+            return obj.cln_logo_url
         request = self.context.get('request')
         if request:
             return request.build_absolute_uri(
