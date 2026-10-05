@@ -1,14 +1,20 @@
 import { Ionicons } from '@expo/vector-icons'
-import { Tabs } from 'expo-router'
+import { Redirect, Tabs } from 'expo-router'
 import { useEffect } from 'react'
 import { InteractionManager, View } from 'react-native'
 
 import { AppHeader } from '../../src/components/AppHeader'
+import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 import { preloadModel } from '../../ai/services/tensorflow.service'
 
 export default function OwnerTabLayout() {
   const { colors } = useTheme()
+  const { isLoading, isAuthenticated, user } = useAuth()
+
+  if (isLoading) return null
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
+  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
@@ -33,6 +39,8 @@ export default function OwnerTabLayout() {
         <Tabs.Screen name="pets" options={{ title: 'My Pets', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'paw' : 'paw-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="appointments" options={{ title: 'Appointments', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="records" options={{ title: 'Records', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'folder' : 'folder-outline'} size={20} color={color} /> }} />
+        <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
+        <Tabs.Screen name="screenings" options={{ href: null, title: 'Screenings' }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} /> }} />
       </Tabs>
     </View>

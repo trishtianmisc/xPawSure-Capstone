@@ -1,4 +1,11 @@
-export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+export type AppointmentStatus =
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'CHECKED_IN'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NO_SHOW'
 
 export type ConsultationStatus = 'TODAY' | 'UPCOMING' | 'COMPLETED'
 
@@ -80,4 +87,18 @@ export interface ScheduleDayAppointment {
   pet_name: string
   breed: string
   owner_name: string
+}
+
+export interface ScheduleMonthAppointment {
+  id: string
+  date: string
+  time: string
+  pet_name: string
+  breed: string
+  owner_name: string
+}
+
+export interface ScheduleWeekDay {
+  dayLabel: string
+  appointments: ScheduleDayAppointment[]
 }

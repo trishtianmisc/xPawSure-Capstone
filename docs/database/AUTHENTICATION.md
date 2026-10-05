@@ -222,7 +222,9 @@ Owners cannot modify consultation records.
 
 Owners cannot modify prescriptions.
 
-Owners cannot modify vaccination records.
+Owners cannot modify veterinarian-issued vaccination records.
+
+Owners may add, edit, and delete their own reported vaccination records.
 
 ---
 

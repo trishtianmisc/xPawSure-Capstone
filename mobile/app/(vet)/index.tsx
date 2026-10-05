@@ -10,6 +10,8 @@ import type { AppointmentStatus } from '../../features/vet/types'
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
   PENDING: { bg: '#FDEBD0', text: '#E67E22' },
   CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
+  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
+  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
   COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
   CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
   NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },

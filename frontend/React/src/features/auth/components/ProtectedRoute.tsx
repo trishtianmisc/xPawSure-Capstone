@@ -11,15 +11,15 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { user, isAuthenticated } = useAuth()
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user) {
     return <Navigate replace to="/login" />
   }
 
-  if (user?.must_change_password) {
+  if (user.must_change_password) {
     return <Navigate replace to="/change-password" />
   }
 
-  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate replace to="/login" />
   }
 

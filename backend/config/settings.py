@@ -32,8 +32,13 @@ INSTALLED_APPS = [
     'pets',
     'clinics',
     'staff',
+    'appointments',
+    'ai_screenings',
+    'consultations',
+    'prescriptions',
+    'vaccinations',
+    'notifications',
     'audit_log',
-    'veterinarians',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -125,7 +130,13 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 MEDIA_ROOT = BASE_DIR / 'media'
-MEDIA_URL = 'media/'
+MEDIA_URL = '/media/'
+
+SUPABASE_URL = env('SUPABASE_URL', default='')
+SUPABASE_SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY', default='')
+SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', default='pet-images')
+SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
+SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -178,6 +189,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         'login': '30/min',
+        'public_pet': '60/min',
     },
 }
 

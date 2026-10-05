@@ -197,6 +197,12 @@ Response (200):
   "profile_picture": "string (url)"
 }
 
+Implementation notes:
+
+- `clinic` is always `null` — owners are not permanently attached to a clinic
+  (see AUTHENTICATION.md). The key is kept so the documented shape stays stable.
+- `profile_picture` is `""` when no picture has been uploaded.
+
 ---
 
 ## PUT /api/owner/profile/
@@ -210,7 +216,11 @@ Request:
   "profile_picture": "file (optional)"
 }
 
-Response (200)
+`profile_picture` accepts JPEG, PNG, or WebP up to 2 MB; the file is stored in the
+Supabase `owner-images` bucket and the returned URL is saved. Sending
+`"profile_picture": null` clears the current picture.
+
+Response (200) — same shape as GET above.
 
 ---
 
@@ -301,6 +311,10 @@ Requires authentication.
 Owner: Can update own pets.
 Clinic staff: Can update any pet at their clinic.
 
+Note: Currently owner-only (`IsOwner`); clinic-staff update is not yet implemented.
+Partial updates are supported — only provided fields change. `profile_picture: null`
+clears the picture; a new image upload replaces it (multipart).
+
 ---
 
 ## DELETE /api/pets/{id}/
@@ -311,6 +325,48 @@ Soft delete.
 
 Owner: Can delete own pets.
 Clinic staff: Can delete any pet at their clinic.
+
+Note: Currently owner-only (`IsOwner`); clinic-staff delete is not yet implemented.
+Returns `204 No Content`. The pet disappears from list/detail but medical history
+is preserved.
+
+---
+
+## GET /api/pets/public/{qr_code}/
+
+Public. No authentication required.
+
+Reached by scanning a pet's QR code (encoded value:
+`{FRONTEND_URL}/pets/{qr_code}/public` → rendered by the web at
+`/pets/:qrCode/public`). Throttled to 60 requests/min per IP.
+
+Returns a restricted, privacy-safe profile of an active pet looked up by its
+`qr_code` (the pet ID). Never exposes owner data, microchip number, weight, or
+internal IDs. Deleted or inactive pets return `404`.
+
+Response (200):
+
+{
+  "qr_code": "uuid",
+  "name": "string",
+  "breed_name": "string | null",
+  "sex": "MALE | FEMALE",
+  "date_of_birth": "YYYY-MM-DD | null",
+  "age": "integer | null",
+  "color": "string | null",
+  "profile_picture": "url | null",
+  "vaccinations": [
+    {
+      "name": "string",
+      "date_given": "YYYY-MM-DD",
+      "next_due": "YYYY-MM-DD | null",
+      "status": "OVERDUE | DUE_SOON | CURRENT | NO_DUE_DATE"
+    }
+  ]
+}
+
+Vaccinations are sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
+`NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
 
 ---
 
@@ -333,17 +389,25 @@ Query parameters:
 
 Requires authentication. Owner or receptionist.
 
-Owner: Books appointment for own pet.
-Receptionist: Books appointment for any pet at clinic.
+Owner: Books appointment for own pet (`POST /api/owner/appointments/`).
+Receptionist: Books appointment for any pet at clinic (`POST /api/appointments/`).
 
-Request:
+Owner booking rule: the owner must attach a skin screening result for the booked pet.
+If `screening_id` is missing, does not belong to the pet, or the pet has no screening,
+the API responds `403` with:
+
+{ "detail": "A skin scan result is required for this pet before booking." }
+
+Receptionist bookings are not gated by screenings.
+
+Request (owner):
 
 {
   "pet_id": "uuid",
-  "date": "date",
-  "time": "time",
+  "slot_id": "uuid",
+  "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
   "reason": "string (optional)",
-  "veterinarian_id": "uuid"
+  "screening_id": "uuid (required for owner bookings)"
 }
 
 ---
@@ -370,7 +434,179 @@ Soft delete.
 
 ---
 
-# 6. Consultation Endpoints
+# 6. Schedule Management
+
+## GET /api/schedule/
+
+Receptionist only.
+
+Returns vet schedule for a date range.
+
+Query params:
+
+- start_date (required): YYYY-MM-DD
+- end_date (required): YYYY-MM-DD, max 7 days from start
+- vet_id (optional): filter to a single vet
+
+Response (200):
+
+{
+  "start_date": "2026-09-18",
+  "end_date": "2026-09-20",
+  "vets": [
+    {
+      "stf_id": "uuid",
+      "full_name": "Dr. Smith",
+      "days": [
+        {
+          "date": "2026-09-18",
+          "is_working": true,
+          "slots": [
+            {
+              "vsl_id": "uuid",
+              "vsl_start_time": "09:00",
+              "vsl_end_time": "09:30",
+              "status": "AVAILABLE",
+              "appointment": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+---
+
+## GET /api/schedule/vet-list/
+
+Receptionist only.
+
+Returns list of veterinarians with today's slot summary.
+
+Response (200):
+
+{
+  "vets": [
+    {
+      "stf_id": "uuid",
+      "full_name": "Dr. Smith",
+      "today_summary": {
+        "total_slots": 16,
+        "booked": 3,
+        "available": 10,
+        "blocked": 3,
+        "is_working": true,
+        "has_slots": true
+      }
+    }
+  ]
+}
+
+---
+
+## POST /api/generate-slots/
+
+Receptionist only.
+
+Pre-generates time slots for vets based on clinic operating hours.
+
+Request:
+
+{
+  "start_date": "2026-09-18",
+  "end_date": "2026-09-24",
+  "vet_id": "uuid (optional)"
+}
+
+Response (200):
+
+{
+  "generated": true,
+  "slots_created": 96
+}
+
+---
+
+## PATCH /api/schedule/slots/{slot_id}/status/
+
+Receptionist only.
+
+Toggles a slot's status between AVAILABLE and BLOCKED.
+
+Request:
+
+{
+  "status": "BLOCKED"
+}
+
+Response (200):
+
+{
+  "vsl_id": "uuid",
+  "status": "BLOCKED"
+}
+
+Errors:
+
+- 400: Slot has an appointment (cannot block)
+- 400: Invalid status value
+- 404: Slot not found
+
+---
+
+## POST /api/schedule/vets/{vet_id}/block-remaining/
+
+Receptionist only.
+
+Blocks all available slots for a vet on a specific date. Skips booked slots.
+
+Query params:
+
+- date (required): YYYY-MM-DD
+
+Response (200):
+
+{
+  "blocked": 12,
+  "skipped_booked": 3
+}
+
+---
+
+## GET /api/available-slots/
+
+Receptionist only.
+
+Returns available slots for a specific vet on a specific date.
+
+Query params:
+
+- vet_id (required): UUID
+- date (required): YYYY-MM-DD
+
+Response (200): Array of VetSlot objects with status = AVAILABLE
+
+---
+
+## GET /api/vets/
+
+Receptionist only.
+
+Returns veterinarians working on a specific date.
+
+Query params:
+
+- date (required): YYYY-MM-DD
+
+Response (200): Array of { stf_id, full_name, email }
+
+---
+
+# 7. Consultation Endpoints
+
+Owner read-only GETs are implemented. Clinic-staff scoping and the
+veterinarian write flow below are not yet implemented.
 
 ## GET /api/consultations/
 
@@ -379,11 +615,23 @@ Requires authentication.
 Owner: Returns consultations for own pets (read-only).
 Clinic staff: Returns consultations at their clinic.
 
+Query params:
+
+- pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
+  list; invalid UUID returns 400.
+
+Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
+chief_complaint, subjective, objective, assessment, plan, diagnosis, treatment,
+notes, created_at }
+
 ---
 
 ## GET /api/consultations/{id}/
 
 Requires authentication.
+
+Response (200): Consultation object as above. Returns 404 for consultations
+that do not belong to the requesting owner.
 
 ---
 
@@ -391,15 +639,22 @@ Requires authentication.
 
 Requires authentication. Veterinarian only.
 
+Not yet implemented (future veterinarian flow).
+
 ---
 
 ## PUT /api/consultations/{id}/
 
 Requires authentication. Veterinarian only.
 
+Not yet implemented (future veterinarian flow).
+
 ---
 
 # 7. Prescription Endpoints
+
+Owner read-only GETs are implemented. Clinic-staff scoping and the
+veterinarian write flow below are not yet implemented.
 
 ## GET /api/prescriptions/
 
@@ -408,11 +663,23 @@ Requires authentication.
 Owner: Returns prescriptions for own pets (read-only).
 Clinic staff: Returns prescriptions at their clinic.
 
+Query params:
+
+- pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
+  list; invalid UUID returns 400.
+
+Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
+instructions, items, created_at } where items is an array of
+{ id, medicine_name, dosage, frequency, duration, route, quantity, notes }
+
 ---
 
 ## GET /api/prescriptions/{id}/
 
 Requires authentication.
+
+Response (200): Prescription object as above. Returns 404 for prescriptions
+that do not belong to the requesting owner.
 
 ---
 
@@ -420,16 +687,34 @@ Requires authentication.
 
 Requires authentication. Veterinarian only.
 
+Not yet implemented (future veterinarian flow).
+
 ---
 
 # 8. Vaccination Endpoints
+
+Owner read and write flow (list, detail, create, update, delete) is
+implemented. Clinic-staff scoping and the veterinarian write flow are not yet
+implemented.
 
 ## GET /api/vaccinations/
 
 Requires authentication.
 
-Owner: Returns vaccinations for own pets (read-only).
+Owner: Returns vaccinations for own pets.
 Clinic staff: Returns vaccinations at their clinic.
+
+Query params:
+
+- pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
+  list; invalid UUID returns 400.
+
+Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
+name, brand, batch_no, dose, route, date_given, next_due, notes, source,
+created_at }, ordered by date_given descending.
+
+- source is "VET" (veterinarian-issued) or "OWNER" (owner-reported).
+- veterinarian and consultation_id are null for owner-reported records.
 
 ---
 
@@ -437,17 +722,140 @@ Clinic staff: Returns vaccinations at their clinic.
 
 Requires authentication.
 
+Response (200): Vaccination object as above. Returns 404 for vaccinations
+that do not belong to the requesting owner.
+
 ---
 
 ## POST /api/vaccinations/
 
-Requires authentication. Veterinarian only.
+Requires authentication. Owner role only (staff receive 403).
+
+Creates an owner-reported vaccination record (source=OWNER) for one of the
+owner's active pets. The record is not tied to a consultation or veterinarian.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "name": "Rabies",
+  "brand": "Nobivac (optional)",
+  "batch_no": "B-123 (optional)",
+  "dose": "1 ml",
+  "route": "SUBCUTANEOUS",
+  "date_given": "2026-09-30",
+  "next_due": "2027-09-30 (optional)",
+  "notes": "optional"
+}
+
+Validation errors (400): missing required fields, unknown route, date_given in
+the future, next_due before date_given. Unknown or foreign pet returns 404.
+
+Response (201): Vaccination object as above.
+
+---
+
+## PUT /api/vaccinations/{id}/
+
+Requires authentication. Owner role only.
+
+Updates an owner-reported record. All required fields must be provided (full
+update). Vet-issued records (source=VET) return 403. Foreign records return
+404. Validation matches POST.
+
+Response (200): Updated vaccination object.
+
+---
+
+## DELETE /api/vaccinations/{id}/
+
+Requires authentication. Owner role only.
+
+Deletes an owner-reported record. Vet-issued records return 403. Foreign
+records return 404. Deletions are recorded in the audit log.
+
+Response (204).
 
 ---
 
 # 9. AI Screening Endpoints
 
-## GET /api/screenings/
+Owner screening endpoints are implemented under `/api/owner/screenings/`.
+The generic staff-facing routes below remain the spec for a future release.
+
+## GET /api/owner/screenings/
+
+Requires authentication (Owner role).
+
+Returns screenings for the owner's pets, newest first.
+
+Query parameters:
+
+- pet_id (optional uuid filter; must belong to the owner, otherwise 404)
+- page, page_size
+
+Response:
+
+{
+  "total": 1,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "results": [
+    {
+      "ais_id": "uuid",
+      "pet_id": "uuid",
+      "pet_name": "Rex",
+      "disease": "Fungal",
+      "disease_code": "FUNGAL",
+      "ais_confidence": "87.40",
+      "ais_model_version": "mock-0.0.1",
+      "ais_inference_time_ms": null,
+      "ais_device": "server-mock",
+      "ais_status": "PENDING_REVIEW",
+      "ais_source": "MOCK",
+      "ais_created_at": "..."
+    }
+  ]
+}
+
+---
+
+## POST /api/owner/screenings/
+
+Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
+
+`source: "MOCK"` — development placeholder while the on-device AI ships.
+The server fabricates the prediction/confidence and stamps `ais_model_version = mock-0.0.1`,
+`ais_source = MOCK`. Used by the mobile booking wizard ("Run demo scan").
+
+`source: "DEVICE"` — contract for the future on-device TFLite/tfjs result upload.
+Requires `prediction` (disease code or name, resolved against DISEASE) and `model_version`.
+Optional: `confidence` (0-100), `inference_time_ms`, `device`.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "source": "MOCK | DEVICE",
+  "prediction": "string (DEVICE only)",
+  "confidence": "number 0-100 (DEVICE only)",
+  "model_version": "string (DEVICE only)",
+  "inference_time_ms": "integer (optional)",
+  "device": "string (optional)"
+}
+
+Response `201` with the screening object (see GET above).
+
+Business rules:
+
+- Only veterinarians may later change `ais_status` (vet review UI is future work).
+- AI predictions are immutable after creation.
+- `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
+
+---
+
+## GET /api/screenings/  (spec only, not implemented)
 
 Requires authentication.
 
@@ -456,7 +864,7 @@ Clinic staff: Returns screenings at their clinic.
 
 ---
 
-## POST /api/screenings/
+## POST /api/screenings/  (spec only, not implemented)
 
 Requires authentication. Owner or veterinarian.
 
@@ -477,7 +885,7 @@ Request (multipart/form-data):
 
 ---
 
-## GET /api/screenings/{id}/
+## GET /api/screenings/{id}/  (spec only, not implemented)
 
 Requires authentication.
 
@@ -519,7 +927,35 @@ Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
 
 ---
 
-# 12. General API Rules
+# 12. Audit Log Endpoints (Clinic Admin)
+
+## GET /api/audit-logs/
+
+Clinic Admin only.
+
+Returns the clinic's recent administrative activity, filtered to staff, clinic, and cancellation events, newest first.
+
+Query parameters:
+
+- limit (optional): integer, default 10, max 50
+
+Response 200:
+
+[
+  {
+    "id": "8f1c0a2e-5d4b-4a6c-9e1f-2a3b4c5d6e7f",
+    "title": "Staff member deactivated: maria@test.com",
+    "subtitle": "by Ada Admin",
+    "category": "staff",
+    "timestamp": "2026-09-30T16:35:35Z"
+  }
+]
+
+category is one of: staff | clinic | cancellation
+
+---
+
+# 13. General API Rules
 
 All list endpoints support pagination.
 
@@ -563,7 +999,7 @@ HTTP Status Codes:
 
 ---
 
-# 13. Mobile API Integration
+# 14. Mobile API Integration
 
 The mobile application consumes the same API as the web application.
 
@@ -576,10 +1012,78 @@ Mobile-exclusive features:
 - AI screening image upload from device camera/gallery
 - Push notification registration
 
-Mobile-accessible endpoints (read-only for owners):
+Mobile-accessible endpoints for owners:
 
-- GET /api/consultations/
-- GET /api/prescriptions/
-- GET /api/vaccinations/
+- GET /api/consultations/ (read-only)
+- GET /api/prescriptions/ (read-only)
+- GET /api/vaccinations/ and POST /api/vaccinations/
+- PUT /api/vaccinations/{id}/ and DELETE /api/vaccinations/{id}/
+  (owner-reported records only, see section 8)
+
+Notification endpoints (in-app notifications, see section 14):
+
+- GET /api/notifications/
+- GET /api/notifications/unread-count/
+- PATCH /api/notifications/{ntf_id}/read/
+- PATCH /api/notifications/read-all/
 
 All other endpoints are shared between web and mobile.
+
+---
+
+# 14. Notification Endpoints
+
+Requires authentication. Allowed roles: Owner, Receptionist (Veterinarians receive 403).
+Users can only read or modify their own notifications (foreign ids return 404).
+
+`ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
+APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
+AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, SYSTEM.
+
+## GET /api/notifications/
+
+Query parameters:
+
+- unread_only ("true" to return only unread notifications)
+- page, page_size (default 20)
+
+Response:
+
+{
+  "total": 3,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1,
+  "results": [
+    {
+      "ntf_id": "uuid",
+      "ntf_title": "Appointment confirmed",
+      "ntf_message": "Your appointment has been confirmed.",
+      "ntf_type": "APPOINTMENT_CONFIRMED",
+      "ntf_is_read": false,
+      "ntf_reference_table": "APPOINTMENT",
+      "ntf_reference_id": "uuid or null",
+      "ntf_created_at": "...",
+      "ntf_read_at": null
+    }
+  ]
+}
+
+## GET /api/notifications/unread-count/
+
+Response:
+
+{ "unread_count": 2 }
+
+## PATCH /api/notifications/{ntf_id}/read/
+
+Marks a single notification as read (idempotent; `ntf_read_at` is not overwritten).
+Returns the serialized notification. 404 if unknown or owned by another user.
+
+## PATCH /api/notifications/read-all/
+
+Marks all of the caller's unread notifications as read.
+
+Response:
+
+{ "detail": "All notifications marked as read." }

@@ -1,16 +1,18 @@
-import uuid
-from pathlib import Path
-
 from django.conf import settings
+
+from core.storage_service import SupabaseStorageService
 
 
 class QRStorageService:
+    """Stores pet QR code PNGs in Supabase Storage."""
 
     @staticmethod
     def save(pet_id: str, qr_image_bytes: bytes) -> str:
-        filename = f'{uuid.uuid4().hex}.png'
-        subdir = Path(settings.MEDIA_ROOT) / 'qr_codes'
-        subdir.mkdir(parents=True, exist_ok=True)
-        filepath = subdir / filename
-        filepath.write_bytes(qr_image_bytes)
-        return f'{settings.MEDIA_URL}qr_codes/{filename}'
+        """Upload a QR code PNG to Supabase Storage and return its public URL."""
+        object_path = SupabaseStorageService.build_object_path(pet_id, 'png')
+        return SupabaseStorageService.upload(
+            bucket=settings.SUPABASE_STORAGE_BUCKET_QR_CODES,
+            file_bytes=qr_image_bytes,
+            content_type='image/png',
+            object_path=object_path,
+        )

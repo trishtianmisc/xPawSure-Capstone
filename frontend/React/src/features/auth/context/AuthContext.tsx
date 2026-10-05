@@ -127,13 +127,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const getProfile = useCallback(async () => {
     const data = await authService.getProfile()
+    const merged = { ...user, ...data } as AuthUser
+    setUser(merged)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_USER)
+      if (raw) localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(merged))
+      else sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(merged))
+    } catch { /* storage unavailable */ }
     return data
-  }, [])
+  }, [user])
 
   const updateProfile = useCallback(async (data: { first_name?: string; last_name?: string; phone?: string }) => {
     const result = await authService.updateProfile(data)
+    const merged = { ...user, ...result } as AuthUser
+    setUser(merged)
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_USER)
+      if (raw) localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(merged))
+      else sessionStorage.setItem(STORAGE_KEY_USER, JSON.stringify(merged))
+    } catch { /* storage unavailable */ }
     return result
-  }, [])
+  }, [user])
 
   const revokeAllSessions = useCallback(async () => {
     await authService.revokeAllSessions()

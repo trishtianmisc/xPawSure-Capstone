@@ -100,6 +100,8 @@ Each table uses a unique prefix.
 | AI_SCREENING_IMAGE | ASI |
 | NOTIFICATION | NTF |
 | AUDIT_LOG | ADL |
+| VET_SLOT | VSL |
+| CLINIC_OPERATING_HOURS | COH |
 
 ---
 
@@ -133,6 +135,13 @@ The database is divided into the following modules.
 ## Appointment Management
 
 - Appointment
+
+---
+
+## Schedule Management
+
+- Vet Slot
+- Clinic Operating Hours
 
 ---
 
@@ -171,9 +180,9 @@ The database is divided into the following modules.
 - Every Appointment belongs to one Clinic.
 - Consultations are created only after an Appointment.
 - AI Screening is a preliminary assessment only.
-- Medical records are immutable.
-- Only Veterinarians may create Consultations, Prescriptions, and Vaccination Records.
-- Owners may view medical records but cannot modify them.
+- Veterinarian-issued medical records are immutable.
+- Only Veterinarians may create Consultations, Prescriptions, and veterinarian-issued Vaccination Records.
+- Owners may view medical records and may add, edit, and delete their own reported vaccination records.
 - Super Admin has cross-clinic access.
 
 ---

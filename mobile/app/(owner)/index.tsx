@@ -6,18 +6,22 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { StatusPill } from '../../features/appointment/components/StatusPill'
+import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
+import type { AppointmentListItem } from '../../features/appointment/types'
 import { usePets } from '../../features/pet/hooks/usePets'
 
 type Shortcut = {
   label: string
   icon: ComponentProps<typeof MaterialCommunityIcons>['name']
   route: '/(owner)/pets' | '/(owner)/pets/screening' | '/(owner)/appointments' | '/(owner)/records'
+  action?: 'open-qr'
 }
 
 const shortcuts: Shortcut[] = [
   { label: 'Screen Skin', icon: 'camera-outline', route: '/(owner)/pets/screening' },
   { label: 'My Pets', icon: 'paw-outline', route: '/(owner)/pets' },
-  { label: 'QR Code', icon: 'qrcode', route: '/(owner)/records' },
+  { label: 'QR Code', icon: 'qrcode', route: '/(owner)/pets', action: 'open-qr' },
   { label: 'Find Vet', icon: 'map-marker-outline', route: '/(owner)/appointments' },
 ]
 
@@ -28,6 +32,31 @@ export default function HomeScreen() {
   const firstName = user?.first_name?.trim() || 'Pet Parent'
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
+  const { data: appointments } = useMyAppointments()
+
+  const handleShortcut = (shortcut: Shortcut) => {
+    if (shortcut.action === 'open-qr') {
+      const target = pets?.[0]
+      router.push(target ? `/(owner)/pets/${target.id}` : '/(owner)/pets')
+      return
+    }
+    router.push(shortcut.route)
+  }
+
+  const nextAppointment: AppointmentListItem | undefined = useMemo(() => {
+    const activeStatuses = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
+    const now = Date.now()
+    return appointments?.results
+      .filter(
+        (appointment) =>
+          activeStatuses.includes(appointment.apt_status) &&
+          new Date(appointment.apt_scheduled_at).getTime() >= now,
+      )
+      .sort(
+        (first, second) =>
+          new Date(first.apt_scheduled_at).getTime() - new Date(second.apt_scheduled_at).getTime(),
+      )[0]
+  }, [appointments])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -58,7 +87,7 @@ export default function HomeScreen() {
 
         <View style={styles.shortcuts}>
           {shortcuts.map((shortcut) => (
-            <Pressable key={shortcut.label} onPress={() => router.push(shortcut.route)} style={styles.shortcut}>
+            <Pressable key={shortcut.label} onPress={() => handleShortcut(shortcut)} style={styles.shortcut}>
               <View style={styles.shortcutIcon}>
                 <MaterialCommunityIcons color={colors.iconColor} name={shortcut.icon} size={20} />
               </View>
@@ -66,6 +95,45 @@ export default function HomeScreen() {
             </Pressable>
           ))}
         </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Next Appointment</Text>
+          <Pressable onPress={() => router.push('/(owner)/appointments')}>
+            <Text style={styles.seeAll}>See All</Text>
+          </Pressable>
+        </View>
+        {nextAppointment ? (
+          <Pressable
+            onPress={() => router.push(`/(owner)/appointments/${nextAppointment.apt_id}`)}
+            style={[styles.appointmentCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+          >
+            <View style={[styles.appointmentIcon, { backgroundColor: colors.iconBg }]}>
+              <MaterialCommunityIcons color={colors.iconColor} name="calendar-clock" size={19} />
+            </View>
+            <View style={styles.appointmentInfo}>
+              <Text style={styles.petName}>{nextAppointment.pet_name}</Text>
+              <Text style={styles.petMeta}>
+                {new Date(nextAppointment.apt_scheduled_at).toLocaleString(undefined, {
+                  day: 'numeric',
+                  month: 'short',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+                {' · '}
+                {nextAppointment.vet_name ?? 'Vet to be assigned'}
+              </Text>
+            </View>
+            <StatusPill status={nextAppointment.apt_status} />
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => router.push('/(owner)/appointments/book')}
+            style={[styles.appointmentCard, styles.appointmentEmpty, { borderColor: colors.borderLight }]}
+          >
+            <MaterialCommunityIcons color={colors.textMuted} name="calendar-blank-outline" size={20} />
+            <Text style={styles.emptyPetsText}>No upcoming appointment. Book one now.</Text>
+          </Pressable>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>My Pets</Text>
@@ -148,6 +216,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   petList: { gap: 8, marginBottom: 24 },
   petCard: { alignItems: 'center', borderRadius: 14, borderWidth: 1, flexDirection: 'row', padding: 12, gap: 12 },
+  appointmentCard: { alignItems: 'center', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 10, marginBottom: 24, padding: 14 },
+  appointmentEmpty: { borderStyle: 'dashed', justifyContent: 'center' },
+  appointmentIcon: { alignItems: 'center', borderRadius: 10, height: 40, justifyContent: 'center', width: 40 },
+  appointmentInfo: { flex: 1 },
   petAvatar: { borderRadius: 22, height: 44, width: 44 },
   petAvatarPlaceholder: { alignItems: 'center', borderRadius: 22, height: 44, justifyContent: 'center', width: 44 },
   petInfo: { flex: 1 },

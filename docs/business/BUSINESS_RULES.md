@@ -187,15 +187,16 @@ Owners may:
 - View appointment history
 - View consultation history (read-only)
 - View prescription history (read-only)
-- View vaccination history (read-only)
+- View vaccination history
+- Add, edit, and delete their own self-reported vaccination records
 - View AI screening history
 
 Owners cannot:
 
-- Edit medical records
+- Edit consultation or prescription records
 - Create consultations
 - Create prescriptions
-- Record vaccinations
+- Modify veterinarian-issued vaccination records
 - Access other owners' data
 - Register a clinic
 
@@ -215,6 +216,21 @@ Required information:
 - Weight
 
 Each pet receives a permanent medical history.
+
+## Pet QR Code Rules
+
+Every pet has a QR code whose value is a public URL
+(`{FRONTEND_URL}/pets/{qr_code}/public`).
+
+Scanning the QR code shows the pet's public profile without login.
+
+The public profile may only expose:
+
+- Pet identity: photo, name, breed, sex, birth date/age, color
+- Health alerts: vaccination status (`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE`)
+
+The public profile must never expose owner personal data (name, phone, email,
+address), microchip number, weight, or internal medical records.
 
 ---
 
@@ -345,11 +361,23 @@ Every vaccination records
 
 - Vaccine name
 - Date administered
-- Veterinarian
+- Source: veterinarian-issued or owner-reported
 - Batch number (optional)
 - Next due date (optional)
 
-Vaccination history cannot be deleted.
+Sources
+
+- Veterinarian-issued records are created by clinic staff during a Consultation and are immutable.
+- Owner-reported records are created by the pet owner from the mobile app (for vaccines given elsewhere).
+- Owners may add, edit, and delete only their own reported records.
+
+Validation
+
+- Vaccination date cannot be in the future.
+- Next due date must be on or after the vaccination date.
+- Only active pets may receive vaccinations.
+
+Veterinarian-issued vaccination history cannot be deleted.
 
 ---
 
@@ -357,11 +385,13 @@ Vaccination history cannot be deleted.
 
 Medical history is permanent.
 
-Medical records
+Veterinarian-issued medical records
 
 Must never be physically deleted.
 
 Corrections should create audit entries rather than erase historical information.
+
+Owner-reported vaccination records may be deleted by their owner; every create, update, and delete is recorded in the audit log.
 
 ---
 
@@ -524,6 +554,30 @@ Future versions may support:
 - Telemedicine
 
 These features must not break existing workflows.
+
+---
+
+---
+
+# Receptionist Schedule Management Rules
+
+Receptionists can view and manage veterinarian schedules for their clinic.
+
+Receptionists can generate time slots for veterinarians based on clinic operating hours.
+
+Receptionists can toggle slot status between AVAILABLE and BLOCKED for any slot that has no appointment.
+
+BOOKED slots cannot be blocked — the appointment must be cancelled first, notifying the owner.
+
+Receptionists can bulk-block all remaining available slots for a vet on a specific date.
+
+Bulk block operations skip BOOKED slots and return a count of skipped slots so the receptionist knows which appointments still need individual handling.
+
+When an appointment is cancelled or marked no-show, the slot automatically returns to AVAILABLE status.
+
+Slot generation uses ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+
+The mobile app's booking flow queries slots with status = AVAILABLE. Blocked slots are not visible to owners.
 
 ---
 

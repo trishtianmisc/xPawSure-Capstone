@@ -359,8 +359,9 @@ Owner data isolation must be enforced at the API level:
 
 - Owners may only access their own OwnerProfile
 - Owners may only access their own pets
-- Owners may only view medical records (read-only)
-- Owners may not create consultations, prescriptions, or vaccinations
+- Owners may only view consultation and prescription records (read-only)
+- Owners may not create consultations or prescriptions
+- Owners may add, edit, and delete only their own reported vaccination records (veterinarian-issued records return 403)
 
 The mobile application must not cache JWT tokens in insecure storage.
 

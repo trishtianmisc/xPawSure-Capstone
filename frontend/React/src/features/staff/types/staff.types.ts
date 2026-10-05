@@ -10,8 +10,21 @@ export interface StaffMember {
   is_active: boolean
   must_change_password: boolean
   created_at: string
+  updated_at?: string
+  clinic_id?: string
+  clinic_name?: string
   license_number?: string | null
   license_expiration_date?: string | null
+}
+
+export interface StaffStats {
+  total: number
+  veterinarians: number
+  receptionists: number
+  active: number
+  pending_setup: number
+  deactivated: number
+  licenses_expiring_soon: number
 }
 
 export interface CreateStaffPayload {
@@ -28,13 +41,21 @@ export interface CreateStaffResponse {
   id: string
   user_id: string
   email: string
-  role: string
+  role: 'VETERINARIAN' | 'RECEPTIONIST'
   first_name: string
   last_name: string
   temp_password: string
   must_change_password: boolean
   license_number?: string | null
   license_expiration_date?: string | null
+}
+
+export interface UpdateStaffPayload {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  license_number?: string
+  license_expiration_date?: string
 }
 
 export interface StaffListResponse {

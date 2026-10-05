@@ -1,7 +1,7 @@
 # vaccination.md
 
 > Module: Vaccination Management
-> Version: 1.0
+> Version: 1.1
 > Status: Final
 > Depends On:
 >
@@ -13,11 +13,13 @@
 
 The Vaccination module manages all vaccination records administered to registered pets.
 
-Vaccination records are created only by licensed veterinarians during a Consultation.
+Veterinarian-issued records are created by licensed veterinarians during a Consultation.
 
-Each vaccination becomes part of the pet's permanent medical history.
+Owner-reported records are created by the pet owner from the mobile app (for vaccines given outside the clinic).
 
-Vaccination records are immutable.
+Each vaccination becomes part of the pet's medical history.
+
+Veterinarian-issued records are immutable. Owner-reported records may be edited or deleted by their owner.
 
 ---
 
@@ -29,7 +31,7 @@ Purpose
 
 Stores every vaccine administered to a pet.
 
-Each record belongs to exactly one Consultation.
+Veterinarian-issued records belong to exactly one Consultation. Owner-reported records are not tied to a Consultation.
 
 One Consultation may contain multiple Vaccination Records.
 
@@ -40,9 +42,9 @@ One Consultation may contain multiple Vaccination Records.
 | Column | Type | Constraints |
 |---------|------|-------------|
 | VAC_ID | UUID | PK |
-| CON_ID | UUID | FK → CONSULTATION |
+| CON_ID | UUID | FK → CONSULTATION, NULL (vet-issued only) |
 | PET_ID | UUID | FK → PET |
-| STF_ID | UUID | FK → STAFF_PROFILE |
+| STF_ID | UUID | FK → STAFF_PROFILE, NULL (vet-issued only) |
 | VAC_NAME | VARCHAR(255) | NOT NULL |
 | VAC_BRAND | VARCHAR(255) | NULL |
 | VAC_BATCH_NO | VARCHAR(100) | NULL |
@@ -51,6 +53,7 @@ One Consultation may contain multiple Vaccination Records.
 | VAC_DATE_GIVEN | DATE | NOT NULL |
 | VAC_NEXT_DUE | DATE | NULL |
 | VAC_NOTES | TEXT | NULL |
+| VAC_SOURCE | ENUM | NOT NULL, DEFAULT 'VET' |
 | VAC_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | VAC_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 
@@ -70,17 +73,29 @@ OTHER
 
 ---
 
+# Source Enum
+
+VET (veterinarian-issued)
+
+OWNER (owner-reported)
+
+---
+
 # Business Rules
 
-Every Vaccination Record belongs to one Consultation.
+Veterinarian-issued Vaccination Records belong to one Consultation.
 
 Every Vaccination Record belongs to one Pet.
 
-Only Veterinarians may administer vaccines.
+Only Veterinarians may issue veterinarian-issued vaccination records.
 
-Vaccination records cannot be deleted.
+Owners may add, edit, and delete only their own reported records.
 
-Vaccination history is immutable.
+Veterinarian-issued vaccination records cannot be deleted.
+
+Veterinarian-issued vaccination history is immutable.
+
+All creates, updates, and deletes are recorded in the audit log.
 
 Next due date is optional.
 
@@ -150,23 +165,9 @@ IDX_VACCINATION_NEXT_DUE
 
 # Vaccination Workflow
 
-Appointment
+Veterinarian-issued: Appointment → Consultation → Vaccination → Medical History → Owner Mobile App
 
-↓
-
-Consultation
-
-↓
-
-Vaccination
-
-↓
-
-Medical History
-
-↓
-
-Owner Mobile App
+Owner-reported: Owner Mobile App → Vaccination (source=OWNER) → Medical History
 
 ---
 
@@ -178,11 +179,11 @@ Table
 
 Dependencies
 
-• CONSULTATION
+• CONSULTATION (veterinarian-issued only)
 
 • PET
 
-• STAFF_PROFILE
+• STAFF_PROFILE (veterinarian-issued only)
 
 Used By
 

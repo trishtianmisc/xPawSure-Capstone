@@ -10,11 +10,12 @@ class MustChangePasswordMiddleware:
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
         if request.user.is_authenticated and getattr(request.user, 'usr_must_change_password', False):
-            match = resolve(request.path_info)
-            if match.url_name not in self.ALLOWED_PATHS:
-                from django.http import JsonResponse
-                return JsonResponse(
-                    {'detail': 'You must change your password before accessing this resource.'},
-                    status=403,
-                )
+            if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                match = resolve(request.path_info)
+                if match.url_name not in self.ALLOWED_PATHS:
+                    from django.http import JsonResponse
+                    return JsonResponse(
+                        {'detail': 'You must change your password before accessing this resource.'},
+                        status=403,
+                    )
         return self.get_response(request)
