@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
+  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -19,6 +20,7 @@ import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { usePets } from '../../../../features/pet/hooks/usePets'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
+import { preloadModel } from '../../../../ai/services/tensorflow.service'
 
 export default function CaptureScreen() {
   const router = useRouter()
@@ -40,6 +42,13 @@ export default function CaptureScreen() {
       setSelectedPetId(pets[0].id)
     }
   }, [pets, selectedPetId])
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      preloadModel()
+    })
+    return () => task.cancel()
+  }, [])
 
   const handlePickGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -92,6 +101,8 @@ export default function CaptureScreen() {
           petId: selectedPet?.id ?? 'unknown',
           petName: selectedPet?.name ?? 'Unknown Pet',
           predictions: JSON.stringify(result.predictions),
+          state: result.state,
+          stateMessage: result.stateMessage,
         },
       })
     } catch {

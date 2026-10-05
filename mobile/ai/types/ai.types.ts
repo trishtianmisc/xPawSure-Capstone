@@ -5,6 +5,8 @@ export type DiseaseType =
   | 'HOTSPOT'
   | 'MANGE'
 
+export type ScreeningResultState = 'DISEASE_DETECTED' | 'NOT_SKIN_IMAGE' | 'UNCERTAIN' | 'INVALID_IMAGE'
+
 export interface Prediction {
   disease: DiseaseType
   confidence: number
@@ -16,6 +18,8 @@ export interface ScreeningResult {
   topPrediction: Prediction
   inferenceTimeMs: number
   modelVersion: string
+  state: ScreeningResultState
+  stateMessage: string
 }
 
 export interface ScreeningUploadPayload {
