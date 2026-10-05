@@ -34,7 +34,7 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: strin
 export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.className}`}>
+    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${config.className}`}>
       {config.label}
     </span>
   )

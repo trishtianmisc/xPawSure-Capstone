@@ -1,7 +1,6 @@
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -431,8 +430,13 @@ class ClinicProfileTests(ClinicAPITestCase):
         clinic_id = create_resp.data['id']
         clinic = Clinic.objects.get(cln_id=clinic_id)
 
-        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
-        self.clinic_admin.refresh_from_db()
+        StaffProfile.objects.update_or_create(
+            usr_id=self.clinic_admin,
+            defaults={
+                'cln_id': clinic,
+                'stf_position': StaffPosition.CLINIC_ADMIN,
+            },
+        )
 
     def test_get_profile(self):
         response = self.client.get(
@@ -500,7 +504,8 @@ class ClinicProfileTests(ClinicAPITestCase):
             adl_module='CLINIC',
         ).last()
         self.assertIsNotNone(audit)
-        self.assertIn('old_values', audit.adl_old_values.__class__.__name__ if hasattr(audit.adl_old_values, '__class__') else '')
+        self.assertIsInstance(audit.adl_old_values, dict)
+        self.assertEqual(audit.adl_old_values.get('name'), 'Profile Test Clinic')
 
 
 class ClinicSettingsTests(ClinicAPITestCase):
@@ -513,8 +518,13 @@ class ClinicSettingsTests(ClinicAPITestCase):
         clinic_id = create_resp.data['id']
         clinic = Clinic.objects.get(cln_id=clinic_id)
 
-        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
-        self.clinic_admin.refresh_from_db()
+        StaffProfile.objects.update_or_create(
+            usr_id=self.clinic_admin,
+            defaults={
+                'cln_id': clinic,
+                'stf_position': StaffPosition.CLINIC_ADMIN,
+            },
+        )
 
     def test_get_settings(self):
         response = self.client.get(
@@ -614,33 +624,129 @@ class ClinicSettingsTests(ClinicAPITestCase):
 
 class ClinicLogoTests(ClinicAPITestCase):
 
+    SUPABASE_LOGO_URL = (
+        'https://test-project.supabase.co/storage/v1/object/public'
+        '/clinic-images/logo-clinic/abc123.png'
+    )
+    PREVIOUS_LOGO_URL = (
+        'https://test-project.supabase.co/storage/v1/object/public'
+        '/clinic-images/old-clinic/old.png'
+    )
+
     def setUp(self):
         super().setUp()
         self.logo_url = reverse('clinic-logo')
 
         create_resp = self._create_clinic('Logo Test', email='logo@test.com')
         clinic_id = create_resp.data['id']
-        clinic = Clinic.objects.get(cln_id=clinic_id)
+        self.clinic = Clinic.objects.get(cln_id=clinic_id)
 
-        StaffProfile.objects.filter(usr_id=self.clinic_admin).update(cln_id=clinic)
-        self.clinic_admin.refresh_from_db()
+        StaffProfile.objects.update_or_create(
+            usr_id=self.clinic_admin,
+            defaults={
+                'cln_id': self.clinic,
+                'stf_position': StaffPosition.CLINIC_ADMIN,
+            },
+        )
 
     def _make_image(self, name='logo.png', content_type='image/png', size=1024):
-        content = BytesIO(b'\x89PNG\r\n\x1a\n' + b'\x00' * (size - 8))
-        return SimpleUploadedFile(name, content.read(), content_type=content_type)
+        from PIL import Image
 
-    @override_settings(MEDIA_ROOT='test_media')
+        buffer = BytesIO()
+        Image.new('RGB', (10, 10), color='blue').save(buffer, format='PNG')
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type=content_type)
+
     def test_upload_logo(self):
-        from shutil import rmtree
+        from django.conf import settings
+        from unittest.mock import patch
 
         logo_file = self._make_image()
-        response = self.client.post(
-            self.logo_url, {'logo': logo_file}, format='multipart',
-            **self._auth_header(self.clinic_admin),
+        with patch(
+            'clinics.services.SupabaseStorageService.upload',
+            return_value=self.SUPABASE_LOGO_URL,
+        ) as mock_upload:
+            response = self.client.post(
+                self.logo_url, {'logo': logo_file}, format='multipart',
+                **self._auth_header(self.clinic_admin),
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['logo_url'], self.SUPABASE_LOGO_URL)
+        mock_upload.assert_called_once()
+        self.assertEqual(
+            mock_upload.call_args.kwargs['bucket'],
+            settings.SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES,
+        )
+
+        self.clinic.refresh_from_db()
+        self.assertEqual(self.clinic.cln_logo_url, self.SUPABASE_LOGO_URL)
+
+    def test_profile_returns_supabase_url_verbatim(self):
+        from unittest.mock import patch
+
+        with patch(
+            'clinics.services.SupabaseStorageService.upload',
+            return_value=self.SUPABASE_LOGO_URL,
+        ):
+            post_response = self.client.post(
+                self.logo_url, {'logo': self._make_image()}, format='multipart',
+                **self._auth_header(self.clinic_admin),
+            )
+        self.assertEqual(post_response.status_code, status.HTTP_200_OK)
+
+        response = self.client.get(
+            reverse('clinic-profile'), **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNotNone(response.data['logo_url'])
-        rmtree('test_media', ignore_errors=True)
+        self.assertEqual(response.data['logo_url'], self.SUPABASE_LOGO_URL)
+        self.assertNotIn('/media/', response.data['logo_url'])
+
+    def test_logo_url_legacy_relative_path_uses_media_url(self):
+        self.clinic.cln_logo_url = 'clinic_logos/legacy.png'
+        self.clinic.save(update_fields=['cln_logo_url', 'cln_updated_at'])
+
+        response = self.client.get(
+            reverse('clinic-profile'), **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('/media/clinic_logos/legacy.png', response.data['logo_url'])
+
+    def test_upload_logo_deletes_previous_supabase_object(self):
+        from django.conf import settings
+        from unittest.mock import patch
+
+        self.clinic.cln_logo_url = self.PREVIOUS_LOGO_URL
+        self.clinic.save(update_fields=['cln_logo_url', 'cln_updated_at'])
+
+        with patch(
+            'clinics.services.SupabaseStorageService.upload',
+            return_value=self.SUPABASE_LOGO_URL,
+        ), patch(
+            'clinics.services.SupabaseStorageService.delete',
+        ) as mock_delete:
+            response = self.client.post(
+                self.logo_url, {'logo': self._make_image()}, format='multipart',
+                **self._auth_header(self.clinic_admin),
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_delete.assert_called_once_with(
+            bucket=settings.SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES,
+            object_path='old-clinic/old.png',
+        )
+
+    def test_upload_logo_storage_failure_propagates(self):
+        from unittest.mock import patch
+
+        from core.storage_service import SupabaseStorageError
+
+        with patch(
+            'clinics.services.SupabaseStorageService.upload',
+            side_effect=SupabaseStorageError('upload failed'),
+        ):
+            with self.assertRaises(SupabaseStorageError):
+                self.client.post(
+                    self.logo_url, {'logo': self._make_image()}, format='multipart',
+                    **self._auth_header(self.clinic_admin),
+                )
 
     def test_upload_logo_invalid_type(self):
         logo_file = SimpleUploadedFile(
@@ -661,17 +767,21 @@ class ClinicLogoTests(ClinicAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_upload_logo_creates_audit_log(self):
+        from unittest.mock import patch
+
         from audit_log.models import AuditLog
-        from shutil import rmtree
 
         logo_file = self._make_image()
-        self.client.post(
-            self.logo_url, {'logo': logo_file}, format='multipart',
-            **self._auth_header(self.clinic_admin),
-        )
+        with patch(
+            'clinics.services.SupabaseStorageService.upload',
+            return_value=self.SUPABASE_LOGO_URL,
+        ):
+            self.client.post(
+                self.logo_url, {'logo': logo_file}, format='multipart',
+                **self._auth_header(self.clinic_admin),
+            )
         audit = AuditLog.objects.filter(
             adl_action='UPLOAD_LOGO',
             adl_module='CLINIC',
         ).last()
         self.assertIsNotNone(audit)
-        rmtree('test_media', ignore_errors=True)

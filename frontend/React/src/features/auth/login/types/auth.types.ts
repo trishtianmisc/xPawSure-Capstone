@@ -21,6 +21,7 @@ export interface AuthUser {
   last_name: string
   phone?: string
   must_change_password: boolean
+  clinic_name?: string | null
 }
 
 export interface AuthResponse {

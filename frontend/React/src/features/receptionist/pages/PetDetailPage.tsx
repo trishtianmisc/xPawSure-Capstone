@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { formatDate, formatTime } from '../../../utils/format'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { PageHero } from '../components/PageHero'
 import { usePetDetail, usePetHistory } from '../hooks/usePets'
 import type { ConsultationRecord, PetHistory, ScreeningSummary } from '../types/receptionist.types'
 
@@ -112,8 +113,8 @@ function SkeletonRows({ rows = 3 }: { rows?: number }) {
 }
 
 const TH =
-  'px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400'
-const TD = 'px-4 py-3 text-sm text-stone-700 dark:text-stone-300'
+  'px-5 py-4 text-left text-sm font-semibold text-stone-500 dark:text-stone-400'
+const TD = 'px-5 py-4 text-sm text-stone-700 dark:text-stone-300'
 const ROW =
   'border-t border-stone-100 dark:border-stone-800/70 transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/40'
 
@@ -441,10 +442,12 @@ export function PetDetailPage() {
 
   if (petQuery.isLoading) {
     return (
-      <div className="space-y-6 p-4 sm:p-6">
-        <div className="h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-        <div className="h-28 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
-        <div className="h-64 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+      <div className="p-4 sm:p-6">
+        <div className="mx-auto max-w-6xl space-y-6">
+          <div className="h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
+          <div className="h-28 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+          <div className="h-64 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+        </div>
       </div>
     )
   }
@@ -464,116 +467,121 @@ export function PetDetailPage() {
     : 0
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <button
-        onClick={() => navigate(-1)}
-        className="text-sm font-medium text-stone-500 transition-colors hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
-      >
-        ← Back
-      </button>
+    <div className="p-4 sm:p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-sm font-medium text-stone-500 transition-colors hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+        >
+          ← Back
+        </button>
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-4">
-          {pet.profile_picture ? (
-            <img
-              src={pet.profile_picture}
-              alt={pet.name}
-              className="h-14 w-14 rounded-full object-cover ring-2 ring-stone-200 dark:ring-stone-700"
-            />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-xl font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-              {initial}
-            </div>
-          )}
-          <div>
-            <h1 className="text-xl font-bold text-stone-900 sm:text-2xl dark:text-stone-100">{pet.name}</h1>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-400">
+        <PageHero
+          title={pet.name}
+          avatar={
+            pet.profile_picture ? (
+              <img
+                src={pet.profile_picture}
+                alt={pet.name}
+                className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+              />
+            ) : (
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-xl font-bold text-white ring-2 ring-white/10">
+                {initial}
+              </div>
+            )
+          }
+          meta={
+            <>
+              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
                 {pet.breed_name ?? 'Unknown breed'}
               </span>
-              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-400">
+              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
                 {labelize(pet.sex)}
               </span>
               {age && (
-                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-400">
+                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
                   {age}
                 </span>
               )}
-            </div>
+            </>
+          }
+          actions={
+            <button
+              onClick={() => navigate('/receptionist/appointments/new')}
+              className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+              type="button"
+            >
+              + Book Appointment
+            </button>
+          }
+        />
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-2 dark:border-stone-800 dark:bg-stone-900">
+            <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
+              Patient Information
+            </h2>
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[
+                ['Breed', pet.breed_name ?? '—'],
+                ['Sex', labelize(pet.sex)],
+                ['Date of Birth', pet.date_of_birth ? formatDate(pet.date_of_birth) : '—'],
+                ['Weight', pet.weight ? `${pet.weight} kg` : '—'],
+                ['Color', pet.color ?? '—'],
+                ['Microchip', pet.microchip_number ?? '—'],
+                ['QR Code', pet.qr_code ?? '—'],
+                ['Registered', formatDate(pet.created_at)],
+              ].map(([label, value]) => (
+                <div key={label} className="flex items-baseline justify-between gap-3 border-b border-stone-100 pb-2 sm:block sm:border-0 sm:pb-0 dark:border-stone-800/60">
+                  <dt className="text-xs text-stone-500 dark:text-stone-400">{label}</dt>
+                  <dd className="text-sm font-medium text-stone-900 sm:mt-0.5 dark:text-stone-100">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-stone-800 dark:bg-stone-900">
+            <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
+              Record Summary
+            </h2>
+            {historyLoading && !history ? (
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <StatTile label="Consultations" value={String(history?.consultations.length ?? 0)} />
+                <StatTile label="Prescriptions" value={String(history?.prescriptions.length ?? 0)} />
+                <StatTile label="Vaccinations" value={String(history?.vaccinations.length ?? 0)} />
+                <StatTile label="AI Screenings" value={String(linkedScreenings)} />
+              </div>
+            )}
           </div>
         </div>
-        <button
-          onClick={() => navigate('/receptionist/appointments/new')}
-          className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 sm:py-2"
-        >
-          + Book Appointment
-        </button>
-      </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-2 dark:border-stone-800 dark:bg-stone-900">
-          <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
-            Patient Information
-          </h2>
-          <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-            {[
-              ['Breed', pet.breed_name ?? '—'],
-              ['Sex', labelize(pet.sex)],
-              ['Date of Birth', pet.date_of_birth ? formatDate(pet.date_of_birth) : '—'],
-              ['Weight', pet.weight ? `${pet.weight} kg` : '—'],
-              ['Color', pet.color ?? '—'],
-              ['Microchip', pet.microchip_number ?? '—'],
-              ['QR Code', pet.qr_code ?? '—'],
-              ['Registered', formatDate(pet.created_at)],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-baseline justify-between gap-3 border-b border-stone-100 pb-2 sm:block sm:border-0 sm:pb-0 dark:border-stone-800/60">
-                <dt className="text-xs text-stone-500 dark:text-stone-400">{label}</dt>
-                <dd className="text-sm font-medium text-stone-900 sm:mt-0.5 dark:text-stone-100">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-
-        <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-stone-800 dark:bg-stone-900">
-          <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
-            Record Summary
-          </h2>
-          {historyLoading && !history ? (
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <StatTile label="Consultations" value={String(history?.consultations.length ?? 0)} />
-              <StatTile label="Prescriptions" value={String(history?.prescriptions.length ?? 0)} />
-              <StatTile label="Vaccinations" value={String(history?.vaccinations.length ?? 0)} />
-              <StatTile label="AI Screenings" value={String(linkedScreenings)} />
-            </div>
-          )}
-        </div>
+        {historyQuery.error ? (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-400">
+            Could not load the medical history. Please try again.
+          </div>
+        ) : historyLoading && !history ? (
+          <div className="space-y-6">
+            <SectionShell title="Consultations" count={null}>
+              <SkeletonRows />
+            </SectionShell>
+            <SectionShell title="Vaccinations" count={null}>
+              <SkeletonRows />
+            </SectionShell>
+            <SectionShell title="Appointments" count={null}>
+              <SkeletonRows />
+            </SectionShell>
+          </div>
+        ) : history ? (
+          <Sections history={history} />
+        ) : null}
       </div>
-
-      {historyQuery.error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-400">
-          Could not load the medical history. Please try again.
-        </div>
-      ) : historyLoading && !history ? (
-        <div className="space-y-6">
-          <SectionShell title="Consultations" count={null}>
-            <SkeletonRows />
-          </SectionShell>
-          <SectionShell title="Vaccinations" count={null}>
-            <SkeletonRows />
-          </SectionShell>
-          <SectionShell title="Appointments" count={null}>
-            <SkeletonRows />
-          </SectionShell>
-        </div>
-      ) : history ? (
-        <Sections history={history} />
-      ) : null}
     </div>
   )
 }

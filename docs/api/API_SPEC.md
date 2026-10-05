@@ -42,9 +42,12 @@ Response (200):
     "id": "uuid",
     "email": "string",
     "full_name": "string",
-    "role": "string"
+    "role": "string",
+    "clinic_name": "string | null"
   }
 }
+
+`clinic_name` is the name of the clinic the staff member belongs to; `null` for users without a clinic (e.g. Super Admin, owners).
 
 ---
 
@@ -143,7 +146,8 @@ Response (200):
   "full_name": "string",
   "phone": "string",
   "role": "string",
-  "is_active": true
+  "is_active": true,
+  "clinic_name": "string | null"
 }
 
 ---
@@ -166,7 +170,8 @@ Response (200):
   "email": "string",
   "full_name": "string",
   "phone": "string",
-  "role": "string"
+  "role": "string",
+  "clinic_name": "string | null"
 }
 
 ---

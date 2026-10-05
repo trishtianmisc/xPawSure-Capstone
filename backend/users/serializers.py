@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError
 
 from rest_framework import serializers
@@ -121,6 +122,12 @@ class ProfileSerializer(serializers.Serializer):
     def get_full_name(self, obj):
         return f'{obj.usr_first_name} {obj.usr_last_name}'.strip()
 
+    def get_clinic_name(self, obj):
+        try:
+            return obj.staffprofile.cln_id.cln_name
+        except ObjectDoesNotExist:
+            return None
+
     def update(self, instance, validated_data):
         instance.usr_first_name = validated_data.get('first_name', instance.usr_first_name)
         instance.usr_last_name = validated_data.get('last_name', instance.usr_last_name)
@@ -138,4 +145,5 @@ class ProfileSerializer(serializers.Serializer):
             'phone': instance.usr_phone or '',
             'role': instance.usr_role,
             'is_active': instance.usr_is_active,
+            'clinic_name': self.get_clinic_name(instance),
         }
