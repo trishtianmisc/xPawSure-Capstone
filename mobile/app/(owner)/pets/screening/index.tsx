@@ -42,16 +42,13 @@ export default function CaptureScreen() {
   const canRun = !!imageUri && !!selectedPet && !isBusy
 
   useEffect(() => {
-    if (petIdParam && !selectedPetId) {
+    if (!pets || selectedPetId) return
+    if (petIdParam && pets.some((p) => p.id === petIdParam)) {
       setSelectedPetId(petIdParam)
-    }
-  }, [petIdParam, selectedPetId])
-
-  useEffect(() => {
-    if (pets && pets.length === 1 && !selectedPetId) {
+    } else if (pets.length === 1) {
       setSelectedPetId(pets[0].id)
     }
-  }, [pets, selectedPetId])
+  }, [pets, petIdParam, selectedPetId])
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
