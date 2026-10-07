@@ -1,8 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
+  ActivityIndicator,
   Image,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -15,6 +17,7 @@ import {
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
   ALLERGIC_DERMATITIS: { color: '#E67E22', icon: 'alert-circle-outline' },
@@ -75,11 +78,15 @@ const barStyles = StyleSheet.create({
 export default function ResultScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
+  const createScreening = useCreateScreening()
+  const [saveError, setSaveError] = useState(false)
   const params = useLocalSearchParams<{
     imageUri: string
     petId: string
     petName: string
     predictions: string
+    modelVersion: string
+    inferenceTimeMs: string
     state: ScreeningResultState
     stateMessage: string
   }>()
@@ -103,6 +110,32 @@ export default function ResultScreen() {
 
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
+
+  const canBook = screeningState === 'DISEASE_DETECTED' && !!top && !!params.petId && params.petId !== 'unknown'
+
+  const handleSaveAndBook = () => {
+    if (!canBook || createScreening.isPending) return
+    setSaveError(false)
+    createScreening.mutate(
+      {
+        pet_id: params.petId,
+        source: 'DEVICE',
+        prediction: top.disease,
+        confidence: Math.round(top.confidence),
+        model_version: params.modelVersion || 'unknown',
+        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+        device: Platform.OS,
+      },
+      {
+        onSuccess: () => {
+          router.replace('/(owner)/appointments/book')
+        },
+        onError: () => {
+          setSaveError(true)
+        },
+      },
+    )
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -178,6 +211,15 @@ export default function ResultScreen() {
         </View>
       </ScrollView>
 
+      {saveError && (
+        <View style={styles.saveErrorRow}>
+          <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
+          <Text style={styles.saveErrorText}>
+            Couldn&apos;t save the scan. Check your connection and try again.
+          </Text>
+        </View>
+      )}
+
       <View style={styles.bottomBar}>
         <Pressable
           onPress={() => router.replace('/(owner)/pets/screening')}
@@ -186,13 +228,30 @@ export default function ResultScreen() {
           <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
           <Text style={[styles.actionBtnText, { color: colors.primary }]}>Scan Again</Text>
         </Pressable>
-        <Pressable
-          onPress={() => router.dismissTo('/(owner)')}
-          style={[styles.actionBtn, styles.primaryBtn]}
-        >
-          <MaterialCommunityIcons color="#FFF" name="home" size={16} />
-          <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Home</Text>
-        </Pressable>
+        {canBook ? (
+          <Pressable
+            disabled={createScreening.isPending}
+            onPress={handleSaveAndBook}
+            style={[styles.actionBtn, styles.primaryBtn, createScreening.isPending && styles.actionBtnDisabled]}
+          >
+            {createScreening.isPending ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <MaterialCommunityIcons color="#FFF" name="calendar-plus" size={16} />
+            )}
+            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
+              {createScreening.isPending ? 'Saving...' : 'Book Appointment'}
+            </Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => router.dismissTo('/(owner)')}
+            style={[styles.actionBtn, styles.primaryBtn]}
+          >
+            <MaterialCommunityIcons color="#FFF" name="home" size={16} />
+            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Home</Text>
+          </Pressable>
+        )}
       </View>
     </SafeAreaView>
   )
@@ -213,7 +272,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   headerTitle: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
   headerRight: { width: 48 },
 
-  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 120 },
+  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 140 },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
@@ -316,7 +375,25 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
   },
+  actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534' },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
   actionBtnText: { fontSize: 14, fontWeight: '700' },
+
+  saveErrorRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: '#C0392B',
+    borderRadius: 12,
+    borderWidth: 1,
+    bottom: 84,
+    flexDirection: 'row',
+    gap: 8,
+    left: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    position: 'absolute',
+    right: 24,
+  },
+  saveErrorText: { color: '#C0392B', flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 17 },
 })

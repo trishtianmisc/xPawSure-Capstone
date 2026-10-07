@@ -166,9 +166,19 @@ function AiVsVetComparison({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <ScreeningStatusBadge status={screening.ais_status} />
               <span className="text-[11px] text-stone-500 dark:text-stone-400">
-                {formatDate(screening.ais_created_at)} · {screening.ais_model_version} ·{' '}
-                {screening.ais_source === 'DEVICE' ? 'On-device' : 'Demo'}
+                {formatDate(screening.ais_created_at)} · {screening.ais_model_version} · On-device
               </span>
+              {screening.ais_is_correct !== null && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                    screening.ais_is_correct
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                      : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                  }`}
+                >
+                  {screening.ais_is_correct ? 'AI correct' : 'AI incorrect'}
+                </span>
+              )}
             </div>
           </>
         ) : (

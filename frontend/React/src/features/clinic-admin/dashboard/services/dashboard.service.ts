@@ -1,4 +1,4 @@
-import type { DashboardCharts, DashboardData, DashboardStats, RecentCategory, RecentItem } from '../types/dashboard.types'
+import type { ChartDataPoint, DashboardCharts, DashboardData, DashboardStats, RecentCategory, RecentItem } from '../types/dashboard.types'
 import http from '../../../../services/http'
 
 const MOCK_STATS: DashboardStats = {
@@ -6,7 +6,12 @@ const MOCK_STATS: DashboardStats = {
   total_pets: 215,
   appointments_this_month: 59,
   appointments_last_month: 51,
-  screenings_pending_review: 3,
+  screenings_pending_review: 0,
+}
+
+interface ScreeningStatsResponse {
+  screenings_pending_review: number
+  screenings_by_disease: ChartDataPoint[]
 }
 
 const MOCK_CHARTS: DashboardCharts = {
@@ -24,13 +29,7 @@ const MOCK_CHARTS: DashboardCharts = {
     { label: 'Nov', value: 51 },
     { label: 'Dec', value: 47 },
   ],
-  screenings_by_disease: [
-    { label: 'Mange', value: 35 },
-    { label: 'Hot Spot', value: 22 },
-    { label: 'Ringworm', value: 18 },
-    { label: 'Allergic Dermatitis', value: 15 },
-    { label: 'Other', value: 10 },
-  ],
+  screenings_by_disease: [],
   // TODO: source from appointment service — group appointments by vetId, filter
   // to current month (backend appointments app stubbed on this branch).
   vet_workload: [
@@ -67,9 +66,17 @@ export const dashboardService = {
       recent = []
     }
 
-    // TODO: replace MOCK_STATS / MOCK_CHARTS with real endpoints (total_pets,
-    // month aggregates, vet workload); screenings stay mock until ai_screenings
-    // has a backend.
-    return { stats: MOCK_STATS, charts: MOCK_CHARTS, recent }
+    // TODO: replace remaining MOCK_STATS / MOCK_CHARTS with real endpoints
+    // (total_pets, month aggregates, vet workload).
+    let stats = MOCK_STATS
+    let charts = MOCK_CHARTS
+    try {
+      const { data } = await http.get<ScreeningStatsResponse>('screenings/stats/')
+      stats = { ...MOCK_STATS, screenings_pending_review: data.screenings_pending_review }
+      charts = { ...MOCK_CHARTS, screenings_by_disease: data.screenings_by_disease }
+    } catch {
+      // fall back to zeroed screening stats
+    }
+    return { stats, charts, recent }
   },
 }

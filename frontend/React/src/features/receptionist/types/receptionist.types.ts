@@ -7,7 +7,8 @@ export interface ScreeningSummary {
   ais_confidence: string
   ais_model_version: string
   ais_status: string
-  ais_source: 'MOCK' | 'DEVICE'
+  ais_source: 'DEVICE'
+  ais_is_correct: boolean | null
   ais_created_at: string
 }
 

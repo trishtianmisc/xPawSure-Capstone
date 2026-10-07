@@ -115,7 +115,10 @@ class OwnerBookingBase(TestCase):
             '/api/owner/screenings/',
             {
                 'pet_id': str((pet or self.pet).pet_id),
-                'source': 'MOCK',
+                'source': 'DEVICE',
+                'prediction': 'MANGE',
+                'confidence': 88.5,
+                'model_version': 'test-1.0.0',
             },
             format='json',
             **self._auth(email),

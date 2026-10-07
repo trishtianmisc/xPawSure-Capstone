@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ai_screenings.models import AiScreening, ScreeningSource
+from ai_screenings.models import AiScreening
 from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
 from ai_screenings.services import ScreeningService
 from core.permissions import IsOwner
@@ -98,35 +98,28 @@ class OwnerScreeningListCreateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        source = validated.get('source', ScreeningSource.MOCK)
-
         try:
-            if source == ScreeningSource.MOCK:
-                screening = ScreeningService.create_mock_screening(
-                    pet=pet, user=request.user,
+            prediction = validated.get('prediction', '')
+            if not prediction:
+                return Response(
+                    {'detail': 'prediction is required for DEVICE screenings.'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-            else:
-                prediction = validated.get('prediction', '')
-                if not prediction:
-                    return Response(
-                        {'detail': 'prediction is required for DEVICE screenings.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                model_version = validated.get('model_version', '')
-                if not model_version:
-                    return Response(
-                        {'detail': 'model_version is required for DEVICE screenings.'},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                screening = ScreeningService.create_device_screening(
-                    pet=pet,
-                    user=request.user,
-                    prediction=prediction,
-                    confidence=validated.get('confidence', 0),
-                    model_version=model_version,
-                    inference_time_ms=validated.get('inference_time_ms'),
-                    device=validated.get('device'),
+            model_version = validated.get('model_version', '')
+            if not model_version:
+                return Response(
+                    {'detail': 'model_version is required for DEVICE screenings.'},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
+            screening = ScreeningService.create_device_screening(
+                pet=pet,
+                user=request.user,
+                prediction=prediction,
+                confidence=validated.get('confidence', 0),
+                model_version=model_version,
+                inference_time_ms=validated.get('inference_time_ms'),
+                device=validated.get('device'),
+            )
         except ValueError as e:
             return Response(
                 {'detail': str(e)},

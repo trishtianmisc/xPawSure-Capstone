@@ -1,6 +1,6 @@
 export type ScreeningStatus = 'PENDING_REVIEW' | 'REVIEWED' | 'CONFIRMED' | 'DISMISSED'
 
-export type ScreeningSource = 'MOCK' | 'DEVICE'
+export type ScreeningSource = 'DEVICE'
 
 export interface Screening {
   ais_id: string
@@ -14,6 +14,7 @@ export interface Screening {
   ais_device: string | null
   ais_status: ScreeningStatus
   ais_source: ScreeningSource
+  ais_is_correct: boolean | null
   ais_created_at: string
 }
 
@@ -24,6 +25,7 @@ export interface ScreeningSummary {
   ais_model_version: string
   ais_status: ScreeningStatus
   ais_source: ScreeningSource
+  ais_is_correct: boolean | null
   ais_created_at: string
 }
 
@@ -38,4 +40,9 @@ export interface ScreeningListResponse {
 export interface CreateScreeningPayload {
   pet_id: string
   source: ScreeningSource
+  prediction: string
+  confidence: number
+  model_version: string
+  inference_time_ms?: number
+  device?: string
 }

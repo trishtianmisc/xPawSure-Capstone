@@ -889,6 +889,10 @@ Response (204).
 Owner screening endpoints are implemented under `/api/owner/screenings/`.
 The generic staff-facing routes below remain the spec for a future release.
 
+All screenings are created from **on-device AI results** (`source: "DEVICE"`).
+Server-side mock screenings no longer exist; older `MOCK` rows were deleted
+by migration `ai_screenings.0003`.
+
 ## GET /api/owner/screenings/
 
 Requires authentication (Owner role).
@@ -915,15 +919,20 @@ Response:
       "disease": "Fungal",
       "disease_code": "FUNGAL",
       "ais_confidence": "87.40",
-      "ais_model_version": "mock-0.0.1",
-      "ais_inference_time_ms": null,
-      "ais_device": "server-mock",
+      "ais_model_version": "tflite-skin-1.0.0",
+      "ais_inference_time_ms": 412,
+      "ais_device": "android",
       "ais_status": "PENDING_REVIEW",
-      "ais_source": "MOCK",
+      "ais_source": "DEVICE",
+      "ais_is_correct": null,
       "ais_created_at": "..."
     }
   ]
 }
+
+`ais_is_correct` is `null` until a consultation with a diagnosis is saved for
+the linked appointment; it then becomes `true`/`false` (see verdict rules
+below).
 
 ---
 
@@ -931,22 +940,18 @@ Response:
 
 Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
 
-`source: "MOCK"` — development placeholder while the on-device AI ships.
-The server fabricates the prediction/confidence and stamps `ais_model_version = mock-0.0.1`,
-`ais_source = MOCK`. Used by the mobile booking wizard ("Run demo scan").
-
-`source: "DEVICE"` — contract for the future on-device TFLite/tfjs result upload.
-Requires `prediction` (disease code or name, resolved against DISEASE) and `model_version`.
-Optional: `confidence` (0-100), `inference_time_ms`, `device`.
+Uploads an on-device TFLite inference result. `source` must be `DEVICE`
+(any other value returns 400). `prediction` (disease code or name, resolved
+against DISEASE) and `model_version` are required; missing values return 400.
 
 Request:
 
 {
   "pet_id": "uuid",
-  "source": "MOCK | DEVICE",
-  "prediction": "string (DEVICE only)",
-  "confidence": "number 0-100 (DEVICE only)",
-  "model_version": "string (DEVICE only)",
+  "source": "DEVICE",
+  "prediction": "string (required)",
+  "confidence": "number 0-100 (required)",
+  "model_version": "string (required)",
   "inference_time_ms": "integer (optional)",
   "device": "string (optional)"
 }
@@ -957,7 +962,30 @@ Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
 - AI predictions are immutable after creation.
-- `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
+- When a consultation for the linked appointment is saved with a diagnosis,
+  the backend compares it (normalized substring match of the disease name in
+  the diagnosis) and stores `ais_is_correct`, `ais_compared_diagnosis`,
+  `ais_compared_at`, plus the `con_id` link, for ML training/retraining sets.
+
+---
+
+## GET /api/screenings/stats/
+
+Requires authentication (Clinic Admin). Clinic is resolved from the
+authenticated staff profile; other roles get 403.
+
+Screenings are scoped to pets that have an appointment at the clinic
+(non-deleted appointments).
+
+Response `200`:
+
+{
+  "screenings_pending_review": 3,
+  "screenings_by_disease": [
+    { "label": "Mange", "value": 12 },
+    { "label": "Ringworm", "value": 7 }
+  ]
+}
 
 ---
 

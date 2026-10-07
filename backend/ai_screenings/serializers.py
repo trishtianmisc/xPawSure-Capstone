@@ -20,7 +20,8 @@ class ScreeningSerializer(serializers.ModelSerializer):
         fields = [
             'ais_id', 'pet_id', 'pet_name', 'disease', 'disease_code',
             'ais_confidence', 'ais_model_version', 'ais_inference_time_ms',
-            'ais_device', 'ais_status', 'ais_source', 'ais_created_at',
+            'ais_device', 'ais_status', 'ais_source', 'ais_is_correct',
+            'ais_created_at',
         ]
         read_only_fields = fields
 
@@ -32,14 +33,14 @@ class ScreeningSummarySerializer(serializers.ModelSerializer):
         model = AiScreening
         fields = [
             'ais_id', 'disease', 'ais_confidence', 'ais_model_version',
-            'ais_status', 'ais_source', 'ais_created_at',
+            'ais_status', 'ais_source', 'ais_is_correct', 'ais_created_at',
         ]
         read_only_fields = fields
 
 
 class CreateScreeningSerializer(serializers.Serializer):
     pet_id = serializers.UUIDField()
-    source = serializers.ChoiceField(choices=ScreeningSource.choices, default=ScreeningSource.MOCK)
+    source = serializers.ChoiceField(choices=ScreeningSource.choices, default=ScreeningSource.DEVICE)
     prediction = serializers.CharField(required=False, allow_blank=True, default='')
     confidence = serializers.FloatField(required=False, min_value=0, max_value=100, default=0)
     model_version = serializers.CharField(required=False, allow_blank=True, default='')

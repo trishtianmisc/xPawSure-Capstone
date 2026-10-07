@@ -330,6 +330,16 @@ Each screening records
 - Image
 - Timestamp
 
+Screenings are created only from on-device AI results (`source: DEVICE`).
+Mock or server-fabricated screenings are rejected.
+
+Owner bookings from the mobile app require a screening for the booked pet.
+Bookings without a valid screening are rejected.
+
+After the linked consultation's diagnosis is saved, the system records whether
+the AI prediction matched the veterinarian's diagnosis. The verdict is stored
+for ML training sets and shown to clinic staff next to the screening result.
+
 The AI only provides a preliminary screening.
 
 The veterinarian makes the final diagnosis.

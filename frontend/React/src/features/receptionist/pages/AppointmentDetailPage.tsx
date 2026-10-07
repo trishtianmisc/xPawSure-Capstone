@@ -5,6 +5,12 @@ import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAp
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { formatDateTime } from '../../../utils/format'
 
+function labelize(value: string): string {
+  if (value === 'AI_REVIEW') return 'AI Review'
+  const lower = value.replace(/_/g, ' ').toLowerCase()
+  return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
+
 export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -133,7 +139,7 @@ export function AppointmentDetailPage() {
           <dl className="space-y-3">
             <div className="flex justify-between">
               <dt className="text-sm text-stone-500 dark:text-stone-400">Type</dt>
-              <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">{appointment.apt_type}</dd>
+              <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">{labelize(appointment.apt_type)}</dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-sm text-stone-500 dark:text-stone-400">Scheduled</dt>
@@ -213,14 +219,8 @@ export function AppointmentDetailPage() {
         <div className="mt-6 rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
           <div className="mb-4 flex items-center gap-3">
             <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Skin Scan Result</h2>
-            <span
-              className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                appointment.screening.ais_source === 'MOCK'
-                  ? 'bg-stone-200 text-stone-700 dark:bg-stone-700 dark:text-stone-200'
-                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-              }`}
-            >
-              {appointment.screening.ais_source === 'MOCK' ? 'Demo' : 'On-device AI'}
+            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200">
+              On-device AI
             </span>
           </div>
           <dl className="grid gap-3 sm:grid-cols-4">
@@ -244,6 +244,20 @@ export function AppointmentDetailPage() {
                 {appointment.screening.ais_status.replace('_', ' ')}
               </dd>
             </div>
+            {appointment.screening.ais_is_correct !== null && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">Verdict</dt>
+                <dd
+                  className={`mt-1 text-sm font-medium ${
+                    appointment.screening.ais_is_correct
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : 'text-rose-700 dark:text-rose-300'
+                  }`}
+                >
+                  {appointment.screening.ais_is_correct ? 'AI correct' : 'AI incorrect'}
+                </dd>
+              </div>
+            )}
           </dl>
         </div>
       )}
