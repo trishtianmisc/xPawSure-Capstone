@@ -171,7 +171,7 @@ export default function PetProfileScreen() {
           <Pressable
             accessibilityLabel={`Start a skin screening for ${pet.name}`}
             accessibilityRole="button"
-            onPress={() => router.push('/(owner)/pets/screening')}
+            onPress={() => router.push(`/(owner)/pets/screening?petId=${pet.id}`)}
             style={styles.actionButton}
           >
             <MaterialCommunityIcons color="#FFFFFF" name="face-man-profile" size={18} />
@@ -290,7 +290,7 @@ export default function PetProfileScreen() {
           emptyText="No screenings yet."
           emptyAction={{
             label: 'Start a skin screening',
-            onPress: () => router.push('/(owner)/pets/screening'),
+            onPress: () => router.push(`/(owner)/pets/screening?petId=${pet.id}`),
           }}
           seeAllLabel="See all"
           onSeeAll={() => router.push('/(owner)/screenings')}

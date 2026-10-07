@@ -180,7 +180,12 @@ export default function ResultScreen() {
 
       <View style={styles.bottomBar}>
         <Pressable
-          onPress={() => router.replace('/(owner)/pets/screening')}
+          onPress={() =>
+            router.replace({
+              pathname: '/(owner)/pets/screening',
+              params: { petId: params.petId, petName: params.petName },
+            })
+          }
           style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}
         >
           <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
