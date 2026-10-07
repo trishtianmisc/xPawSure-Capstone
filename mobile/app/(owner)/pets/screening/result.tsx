@@ -156,6 +156,26 @@ export default function ResultScreen() {
                 )
               })}
             </View>
+
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/(owner)/pets/screening/adjust',
+                  params: {
+                    predictions: params.predictions,
+                    petId: params.petId,
+                    petName: params.petName,
+                    imageUri: params.imageUri ?? '',
+                  },
+                })
+              }
+              style={styles.narrowBtn}
+            >
+              <MaterialCommunityIcons color={colors.primary} name="file-tree-outline" size={16} />
+              <Text style={[styles.narrowBtnText, { color: colors.primary }]}>
+                Doesn&rsquo;t look right? Narrow it down
+              </Text>
+            </Pressable>
           </>
         )}
 
@@ -260,6 +280,20 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 18,
   },
   breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+
+  narrowBtn: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 16,
+    paddingVertical: 12,
+  },
+  narrowBtnText: { fontSize: 13, fontWeight: '700' },
 
   stateCard: {
     alignItems: 'center',
