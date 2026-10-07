@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { usePets } from '../../../../features/pet/hooks/usePets'
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { preloadModel } from '../../../../ai/services/tensorflow.service'
 
@@ -29,6 +30,7 @@ export default function CaptureScreen() {
   const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
   const { data: pets } = usePets(user?.id)
   const { screenImage, isScreening, isModelLoading, modelError } = useAIScreening()
+  const createScreening = useCreateScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
@@ -101,6 +103,19 @@ export default function CaptureScreen() {
 
     try {
       const result = await screenImage(imageUri)
+
+      if (result.state === 'DISEASE_DETECTED') {
+        createScreening.mutate({
+          pet_id: selectedPet.id,
+          source: 'DEVICE',
+          prediction: result.topPrediction.disease,
+          confidence: result.topPrediction.confidence,
+          model_version: result.modelVersion,
+          inference_time_ms: result.inferenceTimeMs,
+          device: 'react-native',
+        })
+      }
+
       router.push({
         pathname: '/(owner)/pets/screening/result',
         params: {
