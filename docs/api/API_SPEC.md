@@ -711,8 +711,8 @@ Response (200): Array of { stf_id, full_name, email }
 
 # 7. Consultation Endpoints
 
-Owner read-only GETs are implemented. Clinic-staff scoping and the
-veterinarian write flow below are not yet implemented.
+Owner read-only GETs and the veterinarian write flow are implemented.
+Clinic-staff scoping is not yet implemented.
 
 ## GET /api/consultations/
 
@@ -745,7 +745,29 @@ that do not belong to the requesting owner.
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Creates the consultation for an appointment that is assigned to the
+requesting veterinarian and has been started (`apt_status = IN_PROGRESS`).
+
+Request body:
+
+- appointment_id (required): UUID
+- chief_complaint (optional): string
+- objective (optional): string
+- diagnosis (required): non-empty string (a seeded skin disease, or a
+  free-text disease name when the UI "Other" option is used)
+- notes (optional): string
+
+Responses:
+
+- 201: Consultation object as above
+- 400: blank diagnosis, or the caller has no staff profile
+- 403: appointment belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown appointment
+- 409: appointment is not `IN_PROGRESS`, or a consultation already exists
+
+Diagnosis date is not stored on the consultation; the appointment's
+`apt_checked_in_at` records when the patient arrived.
 
 ---
 
@@ -753,14 +775,27 @@ Not yet implemented (future veterinarian flow).
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Replaces the consultation fields while the appointment is still
+`IN_PROGRESS`. The record becomes read-only once the appointment leaves
+`IN_PROGRESS`.
+
+Request body: same fields as POST, except `appointment_id`.
+
+Responses:
+
+- 200: Consultation object as above
+- 400: blank diagnosis, or the caller has no staff profile
+- 403: consultation belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown consultation
+- 409: appointment is not `IN_PROGRESS`
 
 ---
 
 # 7. Prescription Endpoints
 
-Owner read-only GETs are implemented. Clinic-staff scoping and the
-veterinarian write flow below are not yet implemented.
+Owner read-only GETs and the veterinarian write flow are implemented.
+Clinic-staff scoping is not yet implemented.
 
 ## GET /api/prescriptions/
 
@@ -776,7 +811,8 @@ Query params:
 
 Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
 instructions, items, created_at } where items is an array of
-{ id, medicine_name, dosage, frequency, duration, route, quantity, notes }
+{ id, medicine_name, generic_name, dosage, frequency, duration, route,
+quantity, notes }
 
 ---
 
@@ -793,7 +829,36 @@ that do not belong to the requesting owner.
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Creates the prescription for a consultation whose appointment is assigned to
+the requesting veterinarian and is `IN_PROGRESS`. A consultation has at most
+one prescription; when one already exists it is updated and its medication
+items are replaced. Multiple medications are stored as items on that single
+prescription.
+
+Request body:
+
+- consultation_id (required): UUID
+- instructions (optional): string
+- items (required): array with at least one entry
+  - medicine_name (required)
+  - generic_name (optional)
+  - dosage (required)
+  - frequency (required)
+  - duration (required)
+  - route (required): ORAL | TOPICAL | INJECTION | EAR | EYE | OTHER
+  - quantity (optional): integer; stays null when the veterinarian UI does
+    not capture it
+  - notes (optional): string
+
+Responses:
+
+- 201: prescription created; 200: existing prescription updated
+- 400: empty items, invalid route, missing required item field, or the
+  caller has no staff profile
+- 403: consultation belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown consultation
+- 409: appointment is not `IN_PROGRESS`
 
 ---
 

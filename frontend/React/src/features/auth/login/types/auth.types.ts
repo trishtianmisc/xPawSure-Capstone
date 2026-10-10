@@ -22,6 +22,9 @@ export interface AuthUser {
   phone?: string
   must_change_password: boolean
   clinic_name?: string | null
+  position?: string | null
+  license_number?: string | null
+  license_expiration_date?: string | null
 }
 
 export interface AuthResponse {

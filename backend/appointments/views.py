@@ -19,7 +19,8 @@ from appointments.services import (
     SlotUnavailableError,
     VetSlotService,
 )
-from core.permissions import IsReceptionist
+from core.permissions import HasRole, IsReceptionist
+from users.models import UserRole
 
 
 class AvailableSlotsView(APIView):
@@ -193,7 +194,22 @@ class AppointmentListCreateView(APIView):
 
 
 class AppointmentDetailView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [HasRole(UserRole.RECEPTIONIST, UserRole.VETERINARIAN)]
+
+    @staticmethod
+    def _vet_guard(request, appointment):
+        if getattr(request.user, 'usr_role', None) != UserRole.VETERINARIAN:
+            return None
+
+        from users.models import StaffProfile
+
+        staff = StaffProfile.objects.filter(usr_id=request.user).first()
+        if staff is None or appointment.stf_id_id != staff.stf_id:
+            return Response(
+                {'detail': 'You do not have permission to access this appointment.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
 
     @staticmethod
     def _get_clinic_id(request):
@@ -215,6 +231,10 @@ class AppointmentDetailView(APIView):
                 {'detail': 'Appointment not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        guard = self._vet_guard(request, appointment)
+        if guard is not None:
+            return guard
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
@@ -245,6 +265,26 @@ class AppointmentDetailView(APIView):
             return Response(
                 {'detail': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        appointment = AppointmentService.get_appointment_detail(apt_id)
+        if not appointment:
+            return Response(
+                {'detail': 'Appointment not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        guard = self._vet_guard(request, appointment)
+        if guard is not None:
+            return guard
+
+        if (
+            getattr(request.user, 'usr_role', None) == UserRole.VETERINARIAN
+            and new_status != AppointmentStatus.CANCELLED
+        ):
+            return Response(
+                {'detail': 'Veterinarians can only cancel appointments.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         try:

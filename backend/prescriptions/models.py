@@ -51,6 +51,7 @@ class PrescriptionItem(models.Model):
         db_column='PRS_ID',
     )
     pri_medicine_name = models.CharField(max_length=255, db_column='PRI_MEDICINE_NAME')
+    pri_generic_name = models.CharField(max_length=255, null=True, blank=True, db_column='PRI_GENERIC_NAME')
     pri_dosage = models.CharField(max_length=100, db_column='PRI_DOSAGE')
     pri_frequency = models.CharField(max_length=100, db_column='PRI_FREQUENCY')
     pri_duration = models.CharField(max_length=100, db_column='PRI_DURATION')

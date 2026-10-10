@@ -417,6 +417,8 @@ Table PRESCRIPTION_ITEM {
 
   PRI_MEDICINE_NAME varchar(255) [not null]
 
+  PRI_GENERIC_NAME varchar(255)
+
   PRI_MEDICINE_TYPE MedicineType
 
   PRI_DOSAGE varchar(100) [not null]
