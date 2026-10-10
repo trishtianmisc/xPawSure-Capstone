@@ -1,8 +1,11 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from ai_screenings.serializers import ScreeningSummarySerializer
 from appointments.models import Appointment, AppointmentType, VetSlot
 from clinics.models import Clinic
+from consultations.serializers import ConsultationResponseSerializer
+from prescriptions.serializers import PrescriptionResponseSerializer
 
 
 class OwnerClinicSerializer(serializers.ModelSerializer):
@@ -76,17 +79,21 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_breed = serializers.SerializerMethodField()
     pet_sex = serializers.CharField(source='pet_id.pet_sex', read_only=True)
+    pet_birth_date = serializers.DateField(source='pet_id.pet_birth_date', read_only=True)
     owner_name = serializers.SerializerMethodField()
     owner_phone = serializers.SerializerMethodField()
     vet_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
     screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
+    consultation = serializers.SerializerMethodField()
+    prescription = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
+            'pet_birth_date',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
             'owner_name', 'owner_phone', 'screening',
             'apt_type', 'apt_status', 'apt_scheduled_at',
@@ -94,7 +101,22 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
             'apt_created_at', 'apt_updated_at',
+            'consultation', 'prescription',
         ]
+
+    def get_consultation(self, obj):
+        try:
+            consultation = obj.consultation
+        except ObjectDoesNotExist:
+            return None
+        return ConsultationResponseSerializer(consultation).data
+
+    def get_prescription(self, obj):
+        try:
+            prescription = obj.consultation.prescription
+        except ObjectDoesNotExist:
+            return None
+        return PrescriptionResponseSerializer(prescription).data
 
     def get_pet_breed(self, obj):
         if obj.pet_id and obj.pet_id.brd_id:

@@ -2,30 +2,62 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ConsultationsTable } from '../components/ConsultationsTable'
-import type { Consultation } from '../types/veterinarian.types'
-
-const MOCK_CONSULTATIONS: Consultation[] = [
-  { id: '1', pet_name: 'Max', breed: 'Golden Retriever', date: '04/12/2026', time: '10:00 AM', status: 'COMPLETED' },
-  { id: '2', pet_name: 'Lerclerc', breed: 'Golden Retriever', date: '03/20/2026', time: '10:00 AM', status: 'COMPLETED' },
-  { id: '3', pet_name: 'Bella', breed: 'Shih Tzu', date: '04/18/2026', time: '8:30 AM', status: 'TODAY' },
-  { id: '4', pet_name: 'Rocky', breed: 'Labrador', date: '04/20/2026', time: '2:00 PM', status: 'UPCOMING' },
-  { id: '5', pet_name: 'Daisy', breed: 'Pomeranian', date: '04/10/2026', time: '11:00 AM', status: 'CANCELLED' },
-]
+import { useStartConsultation, useVetAppointments } from '../hooks/useVetAppointments'
+import type { AppointmentStatus, VetAppointmentSummary } from '../types/dashboard.types'
 
 const TABS = ['Upcoming', 'Today', 'Completed', 'Cancelled']
 
+function toDateStr(iso: string): string {
+  const d = new Date(iso)
+  const month = `${d.getMonth() + 1}`.padStart(2, '0')
+  const day = `${d.getDate()}`.padStart(2, '0')
+  return `${d.getFullYear()}-${month}-${day}`
+}
+
+function matchesTab(appointment: VetAppointmentSummary, tab: string, todayStr: string): boolean {
+  const status: AppointmentStatus = appointment.apt_status
+  const dateStr = toDateStr(appointment.apt_scheduled_at)
+
+  if (tab === 'Upcoming') return status === 'CONFIRMED' && dateStr > todayStr
+  if (tab === 'Today') {
+    return (
+      dateStr === todayStr &&
+      (status === 'CONFIRMED' || status === 'CHECKED_IN' || status === 'IN_PROGRESS')
+    )
+  }
+  if (tab === 'Completed') return status === 'COMPLETED'
+  if (tab === 'Cancelled') return status === 'CANCELLED' || status === 'NO_SHOW'
+  return true
+}
+
 export function ConsultationsPage() {
   const navigate = useNavigate()
+  const { data: appointments = [], isLoading, error } = useVetAppointments()
+  const startConsultation = useStartConsultation()
   const [activeTab, setActiveTab] = useState('Today')
   const [search, setSearch] = useState('')
   const [dateFilter, setDateFilter] = useState('')
 
-  const filtered = MOCK_CONSULTATIONS.filter((c) => {
-    const matchesSearch = c.pet_name.toLowerCase().includes(search.toLowerCase()) ||
-      c.breed.toLowerCase().includes(search.toLowerCase())
-    const matchesDate = !dateFilter || c.date === dateFilter
-    return matchesSearch && matchesDate
+  const todayStr = toDateStr(new Date().toISOString())
+
+  const filtered = appointments.filter((c) => {
+    const matchesTabFilter = matchesTab(c, activeTab, todayStr)
+    const matchesSearch =
+      c.pet_name.toLowerCase().includes(search.toLowerCase()) ||
+      (c.pet_species ?? '').toLowerCase().includes(search.toLowerCase())
+    const matchesDate = !dateFilter || toDateStr(c.apt_scheduled_at) === dateFilter
+    return matchesTabFilter && matchesSearch && matchesDate
   })
+
+  function handleStart(aptId: string) {
+    startConsultation.mutate(aptId, {
+      onSuccess: () => navigate(`/veterinarian/consultations/${aptId}`),
+    })
+  }
+
+  function handleView(aptId: string) {
+    navigate(`/veterinarian/appointments/${aptId}`)
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -75,12 +107,21 @@ export function ConsultationsPage() {
         ))}
       </div>
 
-      <ConsultationsTable
-        activeTab={activeTab}
-        consultations={filtered}
-        onStart={(id) => navigate(`/veterinarian/consultations/${id}`)}
-        onView={(id) => navigate(`/veterinarian/consultations/${id}`)}
-      />
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-6 py-8 text-center dark:border-red-900/40 dark:bg-red-950/30">
+          <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+            Failed to load consultations. Please try again.
+          </p>
+        </div>
+      ) : isLoading ? (
+        <div className="h-64 animate-pulse rounded-md border border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800" />
+      ) : (
+        <ConsultationsTable
+          consultations={filtered}
+          onStart={handleStart}
+          onView={handleView}
+        />
+      )}
     </div>
   )
 }

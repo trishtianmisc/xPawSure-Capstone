@@ -56,7 +56,9 @@ Only Veterinarians may prescribe medications.
 
 Prescription records cannot be deleted.
 
-Prescription records become read-only after creation.
+Prescription records become read-only once the appointment leaves
+`IN_PROGRESS`; the assigned veterinarian may edit them while the appointment
+is in progress.
 
 Every medication belongs to exactly one Prescription.
 
@@ -109,6 +111,7 @@ A Prescription may contain multiple medications.
 | PRI_ID | UUID | PK |
 | PRS_ID | UUID | FK → PRESCRIPTION |
 | PRI_MEDICINE_NAME | VARCHAR(255) | NOT NULL |
+| PRI_GENERIC_NAME | VARCHAR(255) | NULL |
 | PRI_DOSAGE | VARCHAR(100) | NOT NULL |
 | PRI_FREQUENCY | VARCHAR(100) | NOT NULL |
 | PRI_DURATION | VARCHAR(100) | NOT NULL |

@@ -668,6 +668,120 @@ class DashboardService:
         }
 
 
+class VetDashboardService:
+
+    ACTIVE_TODAY_STATUSES = (
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.CHECKED_IN,
+        AppointmentStatus.IN_PROGRESS,
+        AppointmentStatus.COMPLETED,
+    )
+    PENDING_STATUSES = (
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.CHECKED_IN,
+        AppointmentStatus.IN_PROGRESS,
+    )
+
+    @staticmethod
+    def _vet_appointments(stf_id):
+        return Appointment.objects.filter(
+            stf_id_id=stf_id,
+            apt_deleted_at__isnull=True,
+        )
+
+    @staticmethod
+    def get_stats(stf_id, ref_date):
+        import calendar
+
+        month_start = ref_date.replace(day=1)
+        last_day = calendar.monthrange(ref_date.year, ref_date.month)[1]
+        month_end = ref_date.replace(day=last_day)
+
+        qs = VetDashboardService._vet_appointments(stf_id)
+
+        return {
+            'consultations_this_month': qs.filter(
+                apt_status=AppointmentStatus.COMPLETED,
+                apt_scheduled_at__date__gte=month_start,
+                apt_scheduled_at__date__lte=month_end,
+            ).count(),
+            'pending': qs.filter(
+                apt_status__in=VetDashboardService.PENDING_STATUSES,
+            ).count(),
+            'completed': qs.filter(
+                apt_status=AppointmentStatus.COMPLETED,
+            ).count(),
+        }
+
+    @staticmethod
+    def get_today_appointments(stf_id, ref_date):
+        return list(
+            VetDashboardService._vet_appointments(stf_id)
+            .filter(
+                apt_scheduled_at__date=ref_date,
+                apt_status__in=VetDashboardService.ACTIVE_TODAY_STATUSES,
+            )
+            .select_related(
+                'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
+                'stf_id__usr_id', 'apt_screening__dis_id',
+            )
+            .order_by('apt_scheduled_at')
+        )
+
+    @staticmethod
+    def list_appointments(stf_id, start_date=None, end_date=None):
+        qs = VetDashboardService._vet_appointments(stf_id).select_related(
+            'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
+            'stf_id__usr_id', 'apt_screening__dis_id',
+        )
+        if start_date is not None:
+            qs = qs.filter(apt_scheduled_at__date__gte=start_date)
+        if end_date is not None:
+            qs = qs.filter(apt_scheduled_at__date__lte=end_date)
+        return list(qs.order_by('-apt_scheduled_at'))
+
+    @staticmethod
+    @transaction.atomic
+    def start_consultation(apt_id, stf_id, user_id):
+        try:
+            appointment = Appointment.objects.select_for_update().get(
+                apt_id=apt_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.stf_id_id != stf_id:
+            raise PermissionError(
+                'This appointment is not assigned to you.',
+            )
+
+        if appointment.apt_status == AppointmentStatus.IN_PROGRESS:
+            return appointment
+
+        if appointment.apt_status != AppointmentStatus.CHECKED_IN:
+            raise InvalidTransitionError(
+                f'Cannot start consultation from status {appointment.apt_status}.',
+            )
+
+        old_status = appointment.apt_status
+        appointment.apt_status = AppointmentStatus.IN_PROGRESS
+        appointment.save(update_fields=['apt_status', 'apt_updated_at'])
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Consultation started',
+            old_values={'apt_status': old_status},
+            new_values={'apt_status': AppointmentStatus.IN_PROGRESS},
+        )
+
+        return appointment
+
+
 class OwnerService:
 
     @staticmethod

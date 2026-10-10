@@ -1,9 +1,24 @@
+import { useNavigate } from 'react-router-dom'
+
 import { useDashboard } from '../hooks/useDashboard'
+import { useStartConsultation } from '../hooks/useVetAppointments'
 import { StatCard, StatCardSkeleton } from '../components/StatCard'
 import { TodayConsultations } from '../components/TodayConsultations'
 
 export function DashboardPage() {
   const { data, isLoading, error } = useDashboard()
+  const navigate = useNavigate()
+  const startConsultation = useStartConsultation()
+
+  function handleStart(aptId: string) {
+    startConsultation.mutate(aptId, {
+      onSuccess: () => navigate(`/veterinarian/consultations/${aptId}`),
+    })
+  }
+
+  function handleView(aptId: string) {
+    navigate(`/veterinarian/appointments/${aptId}`)
+  }
 
   if (error) {
     return (
@@ -79,7 +94,11 @@ export function DashboardPage() {
             />
           </div>
 
-          <TodayConsultations consultations={data.today_consultations} />
+          <TodayConsultations
+            consultations={data.today_consultations}
+            onStart={handleStart}
+            onView={handleView}
+          />
         </>
       ) : null}
     </div>
