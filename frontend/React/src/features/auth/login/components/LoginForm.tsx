@@ -29,7 +29,7 @@ export function LoginForm() {
       onSubmit={handleSubmit(submitLogin)}
     >
       <div>
-        <label className="mb-2 block text-sm font-semibold text-stone-800 text-white" htmlFor="email">
+        <label className="mb-2 block text-sm font-semibold text-stone-800 dark:text-stone-200" htmlFor="email">
           Email address
         </label>
         <input
@@ -55,7 +55,7 @@ export function LoginForm() {
         registration={register('password')}
       />
 
-      <label className="flex w-fit cursor-pointer items-center gap-3 text-sm text-stone-500 dark:text-stone-200">
+      <label className="flex w-fit cursor-pointer items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
         <input
           {...register('rememberMe')}
           className="size-4 rounded border-stone-300 text-amber-800 focus:ring-amber-700 dark:text-stone-500"

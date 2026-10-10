@@ -19,7 +19,18 @@ from appointments.services import (
     SlotUnavailableError,
     VetSlotService,
 )
-from core.permissions import IsReceptionist
+from core.permissions import HasRole, IsClinicAdmin, IsReceptionist
+from users.models import UserRole
+
+
+def _parse_date_param(query_params, name):
+    raw = query_params.get(name)
+    if not raw:
+        return None, None
+    try:
+        return datetime.strptime(raw, '%Y-%m-%d').date(), None
+    except ValueError:
+        return None, f"Invalid '{name}'; expected YYYY-MM-DD."
 
 
 class AvailableSlotsView(APIView):
@@ -112,7 +123,11 @@ class VetListView(APIView):
 
 
 class AppointmentListCreateView(APIView):
-    permission_classes = [IsReceptionist]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsReceptionist()]
+        return [HasRole(UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN)()]
 
     def get(self, request):
         from users.models import StaffProfile
@@ -125,13 +140,41 @@ class AppointmentListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        date = request.query_params.get('date')
+        date, date_error = _parse_date_param(request.query_params, 'date')
+        if date_error:
+            return Response(
+                {'detail': date_error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        overdue = request.query_params.get('overdue') in ('1', 'true', 'True')
         apt_status = request.query_params.get('status')
         vet_id = request.query_params.get('vet_id')
         pet_id = request.query_params.get('pet_id')
         search = request.query_params.get('search')
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 20))
+
+        date_from, date_from_error = _parse_date_param(
+            request.query_params, 'date_from',
+        )
+        if date_from_error:
+            return Response(
+                {'detail': date_from_error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        date_to, date_to_error = _parse_date_param(
+            request.query_params, 'date_to',
+        )
+        if date_to_error:
+            return Response(
+                {'detail': date_to_error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from and date_to and date_from > date_to:
+            return Response(
+                {'detail': "'date_from' cannot be after 'date_to'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         data = AppointmentService.list_appointments(
             clinic_id=staff.cln_id_id,
@@ -140,8 +183,11 @@ class AppointmentListCreateView(APIView):
             vet_id=vet_id,
             pet_id=pet_id,
             search=search,
+            date_from=date_from,
+            date_to=date_to,
             page=page,
             page_size=page_size,
+            overdue=overdue,
         )
 
         serializer = AppointmentListSerializer(data['results'], many=True)
@@ -190,6 +236,52 @@ class AppointmentListCreateView(APIView):
 
         result = AppointmentDetailSerializer(appointment)
         return Response(result.data, status=status.HTTP_201_CREATED)
+
+
+class AppointmentVolumeView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def get(self, request):
+        from users.models import StaffProfile
+
+        try:
+            staff = StaffProfile.objects.get(usr_id=request.user)
+        except StaffProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        date_from, date_from_error = _parse_date_param(
+            request.query_params, 'date_from',
+        )
+        if date_from_error:
+            return Response(
+                {'detail': date_from_error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        date_to, date_to_error = _parse_date_param(
+            request.query_params, 'date_to',
+        )
+        if date_to_error:
+            return Response(
+                {'detail': date_to_error},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if date_from and date_to and date_from > date_to:
+            return Response(
+                {'detail': "'date_from' cannot be after 'date_to'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        results = AppointmentService.get_volume(
+            clinic_id=staff.cln_id_id,
+            date_from=date_from,
+            date_to=date_to,
+            vet_id=request.query_params.get('vet_id'),
+            status=request.query_params.get('status'),
+        )
+        return Response({'results': results})
 
 
 class AppointmentDetailView(APIView):

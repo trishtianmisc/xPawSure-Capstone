@@ -89,7 +89,7 @@ export function UserProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
         <PageHero
           title={`${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || 'My Profile'}

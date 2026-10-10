@@ -7,11 +7,26 @@ import { PageHero } from '../../../receptionist/components/PageHero'
 import { AppointmentsByMonthChart, ChartSkeleton } from '../components/Charts/AppointmentsByMonthChart'
 import { ScreeningsByDiseaseChart } from '../components/Charts/ScreeningsByDiseaseChart'
 import { VetWorkloadChart } from '../components/Charts/VetWorkloadChart'
+import { Button } from '../../../../components/ui'
+import { apiErrorMessage } from '../../../../utils/error'
+import { useAppointmentVolume } from '../../appointments/hooks/useAppointments'
+import { aggregateVolumeByMonth } from '../../appointments/utils/volume'
+
+function rollingWindowStart(): string {
+  const now = new Date()
+  const from = new Date(now.getFullYear(), now.getMonth() - 11, 1)
+  const month = String(from.getMonth() + 1).padStart(2, '0')
+  return `${from.getFullYear()}-${month}-01`
+}
 
 export function DashboardPage() {
   const { user } = useAuth()
   const { data, error } = useDashboard()
   const { data: staffStats, isLoading: staffStatsLoading } = useStaffStats()
+  const volume = useAppointmentVolume({ date_from: rollingWindowStart() })
+  const appointmentsByMonth = aggregateVolumeByMonth(volume.data ?? [])
+  const thisMonthCount = appointmentsByMonth[appointmentsByMonth.length - 1]?.value
+  const lastMonthCount = appointmentsByMonth[appointmentsByMonth.length - 2]?.value
 
   if (error) {
     return (
@@ -78,13 +93,17 @@ export function DashboardPage() {
               <StatCard
                 icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
                 label="Appointments This Month"
-                value={data.stats.appointments_this_month}
-                trend={{
-                  direction: data.stats.appointments_this_month >= data.stats.appointments_last_month ? 'up' : 'down',
-                  value: data.stats.appointments_last_month > 0
-                    ? `${Math.round(Math.abs(data.stats.appointments_this_month - data.stats.appointments_last_month) / data.stats.appointments_last_month * 100)}%`
-                    : 'N/A',
-                }}
+                value={thisMonthCount ?? '—'}
+                trend={
+                  thisMonthCount !== undefined && lastMonthCount !== undefined
+                    ? {
+                        direction: thisMonthCount >= lastMonthCount ? 'up' : 'down',
+                        value: lastMonthCount > 0
+                          ? `${Math.round(Math.abs(thisMonthCount - lastMonthCount) / lastMonthCount * 100)}%`
+                          : 'N/A',
+                      }
+                    : undefined
+                }
               />
               <StatCard
                 icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
@@ -95,7 +114,32 @@ export function DashboardPage() {
             </section>
 
             <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <AppointmentsByMonthChart data={data.charts.appointments_by_month} />
+              {volume.isLoading ? (
+                <ChartSkeleton />
+              ) : volume.error ? (
+                <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+                  <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">
+                    Appointments by Month
+                  </h3>
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {apiErrorMessage(volume.error)}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      loading={volume.isFetching}
+                      onClick={() => volume.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <AppointmentsByMonthChart data={appointmentsByMonth} />
+              )}
               <ScreeningsByDiseaseChart data={data.charts.screenings_by_disease} />
             </section>
 
