@@ -302,7 +302,7 @@ class ReceptionistPetHistoryTests(ReceptionistPetBase):
             ais_confidence=87.50,
             ais_model_version='v1.0',
             ais_status='PENDING_REVIEW',
-            ais_source='MOCK',
+            ais_source='DEVICE',
         )
 
     def _history(self, pet_id, email):
@@ -359,7 +359,7 @@ class ReceptionistPetHistoryTests(ReceptionistPetBase):
         screening = response.data['screenings'][0]
         self.assertEqual(screening['disease'], 'Dermatitis')
         self.assertEqual(screening['ais_confidence'], '87.50')
-        self.assertEqual(screening['ais_source'], 'MOCK')
+        self.assertEqual(screening['ais_source'], 'DEVICE')
 
         response_b = self._history(self.patient_a.pet_id, REC_B_EMAIL)
         self.assertEqual(len(response_b.data['screenings']), 1)

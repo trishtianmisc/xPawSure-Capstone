@@ -1,4 +1,4 @@
-import type { DashboardCharts, DashboardData, DashboardStats, RecentCategory, RecentItem } from '../types/dashboard.types'
+import type { ChartDataPoint, DashboardCharts, DashboardData, DashboardStats, RecentCategory, RecentItem } from '../types/dashboard.types'
 import http from '../../../../services/http'
 
 const MOCK_STATS: DashboardStats = {
