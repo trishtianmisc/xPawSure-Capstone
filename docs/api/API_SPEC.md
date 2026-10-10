@@ -472,14 +472,44 @@ Requires authentication. Receptionist.
 
 ## GET /api/appointments/
 
-Requires authentication.
+Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
+`GET /api/owner/appointments/`.
 
 Owner: Returns own pets' appointments.
-Clinic staff: Returns clinic appointments.
+Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
 
-- date, status, veterinarian_id, pet_id, page, page_size
+- date (single day, `YYYY-MM-DD`), status, vet_id, pet_id, search, page, page_size
+- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local [Asia/Manila]
+  calendar days; used by Clinic Admin date-range filtering). `400` if a value is not
+  a valid date or if `date_from` is after `date_to`.
+- overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
+  with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
+  "Needs attention" indicator; additive, combines with the other filters.
+
+Notes:
+
+- `GET /api/appointments/` is read-only for Clinic Admin; creating appointments
+  remains receptionist-only (`POST` returns `403` for Clinic Admin).
+
+---
+
+## GET /api/appointments/dashboard/stats/
+
+Requires authentication. Receptionist dashboard summary.
+
+Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
+`recent_appointments`, and `needs_attention` — the count of past-due appointments
+(`PENDING`/`CONFIRMED` with `apt_scheduled_at` already past) awaiting action.
+`today.pending` counts only upcoming `PENDING` appointments; past-due ones surface
+through `needs_attention` instead of double-counting in Pending/Confirmed.
+
+Background job: `appointments.close_past_due_appointments` runs hourly via
+`CELERY_BEAT_SCHEDULE` (`crontab(minute=0)`). It cancels past-due `PENDING`
+appointments (reason "Not confirmed in time") and marks `CONFIRMED` appointments
+more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as `NO_SHOW`. Idempotent;
+deployment must run both the Celery worker and beat scheduler.
 
 ---
 
@@ -530,6 +560,18 @@ Requires authentication. Receptionist or clinic admin.
 Update appointment status. Clinic staff can only update appointments within their own
 clinic, otherwise `404`.
 
+Time-based rules (Asia/Manila "now"):
+
+- Confirming a `PENDING` appointment whose scheduled time has passed returns `400`:
+  `{ "detail": "Cannot confirm an appointment that has already passed." }`
+- Marking `NO_SHOW` before the scheduled time returns `400`:
+  `{ "detail": "Cannot mark an appointment as no-show before its scheduled time." }`
+- `NO_SHOW` is allowed immediately once the scheduled time has passed (no grace
+  period on this endpoint). `CHECKED_IN` is not blocked for late arrivals; the
+  60-minute grace period (`NO_SHOW_GRACE_MINUTES`) only gates the hourly auto-close
+  job and the UI's Check In action.
+- Invalid status transitions still return `400` as before.
+
 ---
 
 ## DELETE /api/appointments/{id}/
@@ -537,6 +579,25 @@ clinic, otherwise `404`.
 Requires authentication.
 
 Soft delete.
+
+## GET /api/appointments/volume/
+
+Requires authentication. Clinic Admin.
+
+Daily appointment counts for the Clinic Admin oversight trend chart.
+
+Query parameters:
+
+- date_from, date_to (`YYYY-MM-DD`, optional), vet_id, status
+- Default window: last 30 clinic-local (Asia/Manila) days ending today.
+- Same `400` validation rules as `GET /api/appointments/` for the date params.
+
+Response:
+
+{ "results": [ { "date": "2026-10-01", "count": 3 }, { "date": "2026-10-02", "count": 0 } ] }
+
+Days are bucketed on Asia/Manila calendar boundaries and zero-filled across the
+window so chart timelines have no gaps.
 
 ---
 
@@ -1024,6 +1085,16 @@ Super Admin only.
 Clinic Admin.
 
 Returns staff members within the admin's own clinic.
+
+## GET /api/veterinarians/
+
+Clinic Admin.
+
+Returns active veterinarians within the admin's own clinic (used to populate the
+Clinic Admin appointments filter dropdown). Staff ids are `stf_id` values.
+
+Query parameters: page, page_size (default page size applies; `page_size=100`
+supported).
 
 ## POST /api/staff/
 

@@ -78,6 +78,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     pet_sex = serializers.CharField(source='pet_id.pet_sex', read_only=True)
     owner_name = serializers.SerializerMethodField()
     owner_phone = serializers.SerializerMethodField()
+    owner_email = serializers.SerializerMethodField()
     vet_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
@@ -88,7 +89,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
-            'owner_name', 'owner_phone', 'screening',
+            'owner_name', 'owner_phone', 'owner_email', 'screening',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name',
             'apt_checked_in_at', 'apt_completed_at',
@@ -110,6 +111,11 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     def get_owner_phone(self, obj):
         if obj.pet_id and obj.pet_id.own_id and obj.pet_id.own_id.usr_id:
             return obj.pet_id.own_id.usr_id.usr_phone
+        return None
+
+    def get_owner_email(self, obj):
+        if obj.pet_id and obj.pet_id.own_id and obj.pet_id.own_id.usr_id:
+            return obj.pet_id.own_id.usr_id.usr_email
         return None
 
     def get_vet_name(self, obj):

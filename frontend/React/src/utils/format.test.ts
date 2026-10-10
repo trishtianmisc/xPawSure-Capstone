@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatDateTime, formatTime } from './format'
+import { formatDate, formatDateLong, formatDateTime, formatTime } from './format'
 
 function localIso(
   year: number,
@@ -22,6 +22,17 @@ describe('formatDate', () => {
     expect(formatDate(undefined)).toBe('—')
     expect(formatDate('')).toBe('—')
     expect(formatDate('not-a-date')).toBe('—')
+  })
+})
+
+describe('formatDateLong', () => {
+  it('formats with weekday, month, day, and year', () => {
+    expect(formatDateLong(localIso(2026, 4, 17, 10, 0))).toBe('Friday, Apr 17, 2026')
+  })
+
+  it('returns an em dash for null or invalid input', () => {
+    expect(formatDateLong(null)).toBe('—')
+    expect(formatDateLong('not-a-date')).toBe('—')
   })
 })
 

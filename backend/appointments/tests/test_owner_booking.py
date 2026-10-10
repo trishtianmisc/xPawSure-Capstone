@@ -1,6 +1,7 @@
 import json
 import uuid
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
@@ -218,6 +219,20 @@ class OwnerBookingTests(OwnerBookingBase):
         db_slot = VetSlot.objects.get(vsl_id=slot['vsl_id'])
         self.assertEqual(db_slot.vsl_status, SlotStatus.BOOKED)
         self.assertEqual(str(db_slot.vsl_appointment_id), response.data['apt_id'])
+
+    def test_booked_appointment_scheduled_at_is_manila_aware(self):
+        slot = self._get_slots()[0]
+
+        response = self._book(slot_id=slot['vsl_id'])
+        self.assertEqual(response.status_code, 201, response.data)
+
+        appointment = Appointment.objects.get(apt_id=response.data['apt_id'])
+        db_slot = VetSlot.objects.get(vsl_id=slot['vsl_id'])
+        expected = timezone.make_aware(
+            datetime.combine(db_slot.vsl_date, db_slot.vsl_start_time),
+            ZoneInfo('Asia/Manila'),
+        )
+        self.assertEqual(appointment.apt_scheduled_at, expected)
 
     def test_book_creates_appointment_created_notification(self):
         response = self._book()

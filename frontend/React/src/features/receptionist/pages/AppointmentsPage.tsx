@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
@@ -17,7 +17,7 @@ const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'COMPLETED', label: 'Completed' },
   { value: 'CANCELLED', label: 'Cancelled' },
-  { value: 'NO_SHOW', label: 'No Show' },
+  { value: 'NO_SHOW', label: 'No-Show' },
 ]
 
 const INPUT_CLASSES =
@@ -75,6 +75,8 @@ function QuickStatusAction({
 
 export function AppointmentsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const attentionActive = searchParams.get('attention') === '1'
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFilter, setDateFilter] = useState('')
@@ -89,15 +91,16 @@ export function AppointmentsPage() {
       search: debouncedSearch || undefined,
       status: statusFilter || undefined,
       date: dateFilter || undefined,
+      overdue: attentionActive ? '1' : undefined,
       page,
       page_size: 20,
     }),
-    [debouncedSearch, statusFilter, dateFilter, page],
+    [debouncedSearch, statusFilter, dateFilter, attentionActive, page],
   )
 
   const { data, isLoading, error, refetch, isFetching } = useAppointments(params)
 
-  const hasActiveFilters = Boolean(search || dateFilter || statusFilter)
+  const hasActiveFilters = Boolean(search || dateFilter || statusFilter || attentionActive)
 
   return (
     <div className="p-6">
@@ -160,6 +163,17 @@ export function AppointmentsPage() {
                 <option key={f.value} value={f.value}>{f.label}</option>
               ))}
             </select>
+
+            {attentionActive && (
+              <button
+                type="button"
+                onClick={() => { setSearchParams({}, { replace: true }); setPage(1) }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 dark:border-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
+              >
+                Needs attention
+                <span aria-hidden="true" className="text-sm leading-none">&times;</span>
+              </button>
+            )}
           </div>
         </Card>
 
@@ -180,7 +194,7 @@ export function AppointmentsPage() {
                     <th className="px-5 py-4 font-semibold">Date & Time</th>
                     <th className="px-5 py-4 font-semibold">Type</th>
                     <th className="px-5 py-4 font-semibold">Status</th>
-                    <th className="px-5 py-4 text-right font-semibold">Actions</th>
+                    <th className="px-5 py-4 text-right font-semibold">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
@@ -228,16 +242,24 @@ export function AppointmentsPage() {
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          <QuickStatusAction
+                          {/* <QuickStatusAction
                             aptId={apt.apt_id}
                             status={apt.apt_status}
                             updateStatus={updateStatus}
-                          />
+                          /> */}
                           <Link
                             to={`/receptionist/appointments/${apt.apt_id}`}
                             className="rounded-lg px-3 py-1.5 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
                           >
-                            View
+                            <svg className="size-5 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                              <path
+                                fillRule="evenodd"
+                                clipRule="evenodd"
+                                d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z"
+                              />
+                            </svg>
+                      
                           </Link>
                         </div>
                       </td>

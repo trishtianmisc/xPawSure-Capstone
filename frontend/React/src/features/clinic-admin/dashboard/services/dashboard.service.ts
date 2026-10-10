@@ -4,26 +4,10 @@ import http from '../../../../services/http'
 const MOCK_STATS: DashboardStats = {
   total_veterinarians: 6,
   total_pets: 215,
-  appointments_this_month: 59,
-  appointments_last_month: 51,
   screenings_pending_review: 3,
 }
 
 const MOCK_CHARTS: DashboardCharts = {
-  appointments_by_month: [
-    { label: 'Jan', value: 45 },
-    { label: 'Feb', value: 52 },
-    { label: 'Mar', value: 38 },
-    { label: 'Apr', value: 61 },
-    { label: 'May', value: 55 },
-    { label: 'Jun', value: 72 },
-    { label: 'Jul', value: 48 },
-    { label: 'Aug', value: 64 },
-    { label: 'Sep', value: 59 },
-    { label: 'Oct', value: 43 },
-    { label: 'Nov', value: 51 },
-    { label: 'Dec', value: 47 },
-  ],
   screenings_by_disease: [
     { label: 'Mange', value: 35 },
     { label: 'Hot Spot', value: 22 },
@@ -67,8 +51,10 @@ export const dashboardService = {
       recent = []
     }
 
-    // TODO: replace MOCK_STATS / MOCK_CHARTS with real endpoints (total_pets,
-    // month aggregates, vet workload); screenings stay mock until ai_screenings
+    // TODO: replace MOCK_STATS / remaining MOCK_CHARTS with real endpoints
+    // (total_pets, screenings, vet workload). Appointment stats and the
+    // appointments-by-month chart are real, via GET /api/appointments/volume/
+    // (see useAppointmentVolume). Screenings stay mock until ai_screenings
     // has a backend.
     return { stats: MOCK_STATS, charts: MOCK_CHARTS, recent }
   },

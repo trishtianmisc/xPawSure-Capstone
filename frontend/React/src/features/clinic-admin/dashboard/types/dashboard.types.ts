@@ -1,8 +1,6 @@
 export interface DashboardStats {
   total_veterinarians: number
   total_pets: number
-  appointments_this_month: number
-  appointments_last_month: number
   screenings_pending_review: number
 }
 
@@ -12,7 +10,6 @@ export interface ChartDataPoint {
 }
 
 export interface DashboardCharts {
-  appointments_by_month: ChartDataPoint[]
   screenings_by_disease: ChartDataPoint[]
   vet_workload: ChartDataPoint[]
 }
