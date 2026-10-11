@@ -30,3 +30,30 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     def get_veterinarian(self, obj) -> str:
         user = obj.stf_id.usr_id
         return f'{user.usr_first_name} {user.usr_last_name}'.strip()
+
+
+class ConsultationCreateSerializer(serializers.Serializer):
+    appointment_id = serializers.UUIDField()
+    chief_complaint = serializers.CharField(required=False, allow_blank=True, default='')
+    objective = serializers.CharField(required=False, allow_blank=True, default='')
+    diagnosis = serializers.CharField()
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_diagnosis(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Diagnosis is required.')
+        return value
+
+
+class ConsultationUpdateSerializer(serializers.Serializer):
+    chief_complaint = serializers.CharField(required=False, allow_blank=True, default='')
+    objective = serializers.CharField(required=False, allow_blank=True, default='')
+    diagnosis = serializers.CharField()
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_diagnosis(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Diagnosis is required.')
+        return value

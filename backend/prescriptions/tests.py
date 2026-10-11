@@ -21,7 +21,7 @@ LIST_FIELDS = {
     'instructions', 'items', 'created_at',
 }
 ITEM_FIELDS = {
-    'id', 'medicine_name', 'dosage', 'frequency', 'duration',
+    'id', 'medicine_name', 'generic_name', 'dosage', 'frequency', 'duration',
     'route', 'quantity', 'notes',
 }
 
