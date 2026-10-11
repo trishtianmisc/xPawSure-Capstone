@@ -64,7 +64,8 @@ Only Veterinarians may create Consultations.
 
 Consultations cannot be deleted.
 
-Consultations become read-only after creation.
+Consultations become read-only once the appointment leaves `IN_PROGRESS`;
+the assigned veterinarian may edit them while the appointment is in progress.
 
 All updates must be recorded in the Audit Log.
 

@@ -1,11 +1,12 @@
 from rest_framework import serializers
 
-from prescriptions.models import Prescription, PrescriptionItem
+from prescriptions.models import Prescription, PrescriptionItem, PrescriptionRoute
 
 
 class PrescriptionItemResponseSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(source='pri_id', read_only=True)
     medicine_name = serializers.CharField(source='pri_medicine_name', read_only=True)
+    generic_name = serializers.CharField(source='pri_generic_name', read_only=True)
     dosage = serializers.CharField(source='pri_dosage', read_only=True)
     frequency = serializers.CharField(source='pri_frequency', read_only=True)
     duration = serializers.CharField(source='pri_duration', read_only=True)
@@ -16,8 +17,8 @@ class PrescriptionItemResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = PrescriptionItem
         fields = [
-            'id', 'medicine_name', 'dosage', 'frequency', 'duration',
-            'route', 'quantity', 'notes',
+            'id', 'medicine_name', 'generic_name', 'dosage', 'frequency',
+            'duration', 'route', 'quantity', 'notes',
         ]
 
 
@@ -41,3 +42,26 @@ class PrescriptionResponseSerializer(serializers.ModelSerializer):
     def get_veterinarian(self, obj) -> str:
         user = obj.stf_id.usr_id
         return f'{user.usr_first_name} {user.usr_last_name}'.strip()
+
+
+class PrescriptionItemCreateSerializer(serializers.Serializer):
+    medicine_name = serializers.CharField(max_length=255)
+    generic_name = serializers.CharField(required=False, allow_blank=True, default='')
+    dosage = serializers.CharField(max_length=100)
+    frequency = serializers.CharField(max_length=100)
+    duration = serializers.CharField(max_length=100)
+    route = serializers.ChoiceField(choices=PrescriptionRoute.choices)
+    quantity = serializers.IntegerField(required=False, allow_null=True, default=None)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+
+    def validate_medicine_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('Medicine name is required.')
+        return value
+
+
+class PrescriptionCreateSerializer(serializers.Serializer):
+    consultation_id = serializers.UUIDField()
+    instructions = serializers.CharField(required=False, allow_blank=True, default='')
+    items = PrescriptionItemCreateSerializer(many=True, allow_empty=False)

@@ -12,6 +12,11 @@ from appointments.views import (
     VetScheduleListView,
 )
 from appointments.views_dashboard import DashboardStatsView
+from appointments.views_vet import (
+    VetAppointmentListView,
+    VetAppointmentStartView,
+    VetDashboardView,
+)
 from appointments.views_owner import (
     OwnerAppointmentCancelView,
     OwnerAppointmentDetailView,
@@ -33,6 +38,9 @@ urlpatterns = [
     path('appointments/', AppointmentListCreateView.as_view(), name='appointment-list-create'),
     path('appointments/<uuid:apt_id>/', AppointmentDetailView.as_view(), name='appointment-detail'),
     path('dashboard/stats/', DashboardStatsView.as_view(), name='receptionist-dashboard-stats'),
+    path('veterinarian/dashboard/', VetDashboardView.as_view(), name='veterinarian-dashboard'),
+    path('veterinarian/appointments/', VetAppointmentListView.as_view(), name='veterinarian-appointment-list'),
+    path('veterinarian/appointments/<uuid:apt_id>/start/', VetAppointmentStartView.as_view(), name='veterinarian-appointment-start'),
     path('schedule/', ScheduleView.as_view(), name='schedule'),
     path('schedule/vet-list/', VetScheduleListView.as_view(), name='schedule-vet-list'),
     path('schedule/slots/<uuid:slot_id>/status/', SlotStatusView.as_view(), name='slot-status'),
