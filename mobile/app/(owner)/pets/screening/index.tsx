@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
@@ -19,6 +19,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { usePets } from '../../../../features/pet/hooks/usePets'
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { preloadModel } from '../../../../ai/services/tensorflow.service'
 
@@ -26,8 +27,10 @@ export default function CaptureScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
   const { user } = useAuth()
+  const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
   const { data: pets } = usePets(user?.id)
   const { screenImage, isScreening, isModelLoading, modelError } = useAIScreening()
+  const createScreening = useCreateScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
@@ -36,12 +39,18 @@ export default function CaptureScreen() {
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
   const isBusy = isScreening || isModelLoading
+  const petsLoaded = pets !== undefined
+  const hasPets = (pets?.length ?? 0) > 0
+  const canRun = !!imageUri && !!selectedPet && !isBusy
 
   useEffect(() => {
-    if (pets && pets.length === 1 && !selectedPetId) {
+    if (!pets || selectedPetId) return
+    if (petIdParam && pets.some((p) => p.id === petIdParam)) {
+      setSelectedPetId(petIdParam)
+    } else if (pets.length === 1) {
       setSelectedPetId(pets[0].id)
     }
-  }, [pets, selectedPetId])
+  }, [pets, petIdParam, selectedPetId])
 
   useEffect(() => {
     const task = InteractionManager.runAfterInteractions(() => {
@@ -90,16 +99,29 @@ export default function CaptureScreen() {
   }
 
   const handleRunScreening = async () => {
-    if (!imageUri) return
+    if (!imageUri || !selectedPet) return
 
     try {
       const result = await screenImage(imageUri)
+
+      if (result.state === 'DISEASE_DETECTED') {
+        createScreening.mutate({
+          pet_id: selectedPet.id,
+          source: 'DEVICE',
+          prediction: result.topPrediction.disease,
+          confidence: result.topPrediction.confidence,
+          model_version: result.modelVersion,
+          inference_time_ms: result.inferenceTimeMs,
+          device: 'react-native',
+        })
+      }
+
       router.push({
         pathname: '/(owner)/pets/screening/result',
         params: {
           imageUri,
-          petId: selectedPet?.id ?? 'unknown',
-          petName: selectedPet?.name ?? 'Unknown Pet',
+          petId: selectedPet.id,
+          petName: selectedPet.name,
           predictions: JSON.stringify(result.predictions),
           modelVersion: result.modelVersion,
           inferenceTimeMs: String(result.inferenceTimeMs),
@@ -132,6 +154,22 @@ export default function CaptureScreen() {
           </View>
         )}
 
+        {petsLoaded && !hasPets && (
+          <View style={styles.emptyPetCard}>
+            <MaterialCommunityIcons color={colors.primary} name="paw" size={28} />
+            <Text style={styles.emptyPetTitle}>Add a pet first</Text>
+            <Text style={styles.emptyPetText}>
+              A skin screening must be linked to one of your pets.
+            </Text>
+            <Pressable
+              onPress={() => router.push('/(owner)/pets')}
+              style={styles.emptyPetBtn}
+            >
+              <Text style={styles.emptyPetBtnText}>Go to My Pets</Text>
+            </Pressable>
+          </View>
+        )}
+
         {pets && pets.length > 1 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>SELECT PET</Text>
@@ -158,6 +196,9 @@ export default function CaptureScreen() {
                 )
               })}
             </ScrollView>
+            {!selectedPetId && (
+              <Text style={styles.selectHint}>Select a pet to continue</Text>
+            )}
           </View>
         )}
 
@@ -212,8 +253,8 @@ export default function CaptureScreen() {
       <View style={styles.bottomBar}>
         <Pressable
           onPress={handleRunScreening}
-          disabled={!imageUri || isBusy}
-          style={[styles.screenBtn, (!imageUri || isBusy) && styles.screenBtnDisabled]}
+          disabled={!canRun}
+          style={[styles.screenBtn, !canRun && styles.screenBtnDisabled]}
         >
           {isBusy ? (
             <>
@@ -269,6 +310,28 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   section: { marginBottom: 20 },
   sectionLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, marginBottom: 10 },
+  selectHint: { color: colors.error, fontSize: 12, fontWeight: '600', marginTop: 8 },
+  emptyPetCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.borderLight,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 6,
+    marginBottom: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+  },
+  emptyPetTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  emptyPetText: { color: colors.textMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  emptyPetBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  emptyPetBtnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   petPills: { gap: 8 },
   petPill: {
     alignItems: 'center',

@@ -12,7 +12,7 @@ tf.serialization.registerClass(Normalization)
 tf.serialization.registerClass(Rescaling)
 
 let model: tf.LayersModel | null = null
-let featureModel: tf.LayersModel | null = null
+let combinedModel: tf.LayersModel | null = null
 let trainingMeanVector: Float32Array | null = null
 let isModelLoaded = false
 let modelLoadPromise: Promise<void> | null = null
@@ -74,8 +74,11 @@ export async function loadModel(): Promise<void> {
       console.log(`[TF] Loaded training reference: ${trainingRef.num_images} images, ${trainingRef.feature_dim} features`)
 
       const gapLayer = model.getLayer('global_average_pooling2d')
-      featureModel = tf.model({ inputs: model.inputs, outputs: gapLayer.output })
-      console.log(`[TF] Feature extractor created: output shape [${featureModel.outputShape}]`)
+      combinedModel = tf.model({
+        inputs: model.inputs,
+        outputs: [model.outputs[0], gapLayer.output as tf.SymbolicTensor],
+      })
+      console.log(`[TF] Single-pass model created: class + feature outputs`)
 
       isModelLoaded = true
       console.log(`[TF] model ready in ${Date.now() - loadStart}ms total`)
@@ -137,16 +140,6 @@ function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
 }
 
-async function extractFeatures(imageTensor: tf.Tensor4D): Promise<Float32Array> {
-  if (!featureModel) {
-    throw new Error('Feature model not loaded.')
-  }
-  const features = featureModel.predict(imageTensor) as tf.Tensor
-  const featureData = await features.data()
-  features.dispose()
-  return new Float32Array(featureData)
-}
-
 function determineScreeningState(predictions: Prediction[], featureSimilarity: number): {
   state: ScreeningResultState
   stateMessage: string
@@ -179,20 +172,21 @@ export async function runInference(
   imageTensor: tf.Tensor4D,
   modelInfo?: ModelInfo,
 ): Promise<ScreeningResult> {
-  if (!model) {
+  if (!model || !combinedModel) {
     throw new Error('Model not loaded. Call loadModel() first.')
   }
 
   const startTime = Date.now()
-  const output = model.predict(imageTensor) as tf.Tensor
-  const probabilities = (await output.data()) as Float32Array
+  const outputs = combinedModel.predict(imageTensor) as tf.Tensor[]
+  const probabilities = (await outputs[0].data()) as Float32Array
+  const featureData = await outputs[1].data()
   const inferenceTimeMs = Date.now() - startTime
-  output.dispose()
+  outputs[0].dispose()
+  outputs[1].dispose()
 
   let featureSimilarity = 1.0
-  if (featureModel && trainingMeanVector) {
-    const features = await extractFeatures(imageTensor)
-    featureSimilarity = cosineSimilarity(features, trainingMeanVector)
+  if (trainingMeanVector) {
+    featureSimilarity = cosineSimilarity(new Float32Array(featureData), trainingMeanVector)
     console.log(`[TF SCREENING] Feature similarity: ${featureSimilarity.toFixed(4)}`)
   }
 
@@ -206,7 +200,7 @@ export async function runInference(
 
   const { state, stateMessage } = determineScreeningState(predictions, featureSimilarity)
 
-  console.log(`[TF SCREENING] RESULT: sim=${featureSimilarity.toFixed(3)} state=${state} top=${predictions[0].label} ${predictions[0].confidence}%`)
+  console.log(`[TF SCREENING] RESULT: sim=${featureSimilarity.toFixed(3)} state=${state} top=${predictions[0].label} ${predictions[0].confidence}% inference=${inferenceTimeMs}ms`)
 
   return {
     predictions,
@@ -268,6 +262,10 @@ export async function runScreening(
 }
 
 export function disposeModel(): void {
+  if (combinedModel) {
+    combinedModel.dispose()
+    combinedModel = null
+  }
   if (model) {
     model.dispose()
     model = null
