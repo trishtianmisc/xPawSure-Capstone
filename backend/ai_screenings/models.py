@@ -34,7 +34,6 @@ class ScreeningStatus(models.TextChoices):
 
 
 class ScreeningSource(models.TextChoices):
-    MOCK = 'MOCK', 'Mock Data'
     DEVICE = 'DEVICE', 'On-device AI'
 
 
@@ -43,12 +42,19 @@ class AiScreening(models.Model):
     pet_id = models.ForeignKey('pets.Pet', on_delete=models.CASCADE, related_name='screenings', db_column='PET_ID')
     dis_id = models.ForeignKey(Disease, on_delete=models.PROTECT, related_name='screenings', db_column='DIS_ID')
     usr_id = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, related_name='screenings', db_column='USR_ID')
+    con_id = models.ForeignKey(
+        'consultations.Consultation', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='screenings', db_column='CON_ID',
+    )
     ais_confidence = models.DecimalField(max_digits=5, decimal_places=2, db_column='AIS_CONFIDENCE')
     ais_model_version = models.CharField(max_length=50, db_column='AIS_MODEL_VERSION')
     ais_inference_time_ms = models.PositiveIntegerField(null=True, blank=True, db_column='AIS_INFERENCE_TIME_MS')
     ais_device = models.CharField(max_length=100, null=True, blank=True, db_column='AIS_DEVICE')
     ais_status = models.CharField(max_length=20, choices=ScreeningStatus.choices, default=ScreeningStatus.PENDING_REVIEW, db_column='AIS_STATUS')
-    ais_source = models.CharField(max_length=10, choices=ScreeningSource.choices, default=ScreeningSource.MOCK, db_column='AIS_SOURCE')
+    ais_source = models.CharField(max_length=10, choices=ScreeningSource.choices, default=ScreeningSource.DEVICE, db_column='AIS_SOURCE')
+    ais_is_correct = models.BooleanField(null=True, blank=True, db_column='AIS_IS_CORRECT')
+    ais_compared_diagnosis = models.TextField(null=True, blank=True, db_column='AIS_COMPARED_DIAGNOSIS')
+    ais_compared_at = models.DateTimeField(null=True, blank=True, db_column='AIS_COMPARED_AT')
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')
 
     class Meta:

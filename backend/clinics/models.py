@@ -40,11 +40,6 @@ class Clinic(models.Model):
         return self.cln_name
 
 
-# TODO: Move clinic logo storage to Supabase Storage before production deployment.
-# Local file storage (MEDIA_ROOT/clinic_logos/) is used for development only.
-CLINIC_LOGO_DIR = 'clinic_logos'
-
-
 class ClinicSettings(models.Model):
     cls_id = models.UUIDField(
         primary_key=True, default=uuid.uuid4, editable=False, db_column='CLS_ID',

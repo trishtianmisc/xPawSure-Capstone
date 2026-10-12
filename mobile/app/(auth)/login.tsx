@@ -106,7 +106,7 @@ export default function LoginScreen() {
                 <MaterialCommunityIcons color={colors.primary} name="dog" size={30} />
               </View>
               <Text style={styles.brandName}>XPawSure</Text>
-              <Text style={styles.brandTagline}>Veterinary Management System</Text>
+              <Text style={styles.brandTagline}>AI-Assisted Canine Skin Condition Preliminary Screening</Text>
             </View>
 
             <Text style={styles.welcomeText}>Welcome back</Text>

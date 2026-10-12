@@ -42,9 +42,12 @@ Response (200):
     "id": "uuid",
     "email": "string",
     "full_name": "string",
-    "role": "string"
+    "role": "string",
+    "clinic_name": "string | null"
   }
 }
+
+`clinic_name` is the name of the clinic the staff member belongs to; `null` for users without a clinic (e.g. Super Admin, owners).
 
 ---
 
@@ -143,7 +146,8 @@ Response (200):
   "full_name": "string",
   "phone": "string",
   "role": "string",
-  "is_active": true
+  "is_active": true,
+  "clinic_name": "string | null"
 }
 
 ---
@@ -166,7 +170,8 @@ Response (200):
   "email": "string",
   "full_name": "string",
   "phone": "string",
-  "role": "string"
+  "role": "string",
+  "clinic_name": "string | null"
 }
 
 ---
@@ -370,18 +375,141 @@ Vaccinations are sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
 
 ---
 
+## GET /api/receptionist/pets/  (Receptionist, web)
+
+Clinic-scoped patient directory behind the sidebar "Patients" tab.
+
+Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
+
+- Default: only active pets with at least one non-deleted appointment at the
+  receptionist's own clinic. A pet becomes a clinic patient once an appointment
+  exists there.
+- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
+  Used by the booking form so walk-in owners can be booked; after the booking the
+  pet appears in the clinic's Patients tab.
+- Invalid `page` / `page_size` values fall back to defaults (never a 500).
+
+## POST /api/receptionist/pets/
+
+Requires authentication. Receptionist.
+
+Registers a pet for an existing owner. Registration does not attach the pet to a
+clinic — the pet appears in the clinic's Patients tab after its first appointment
+there.
+
+## GET /api/receptionist/pets/{id}/
+
+Requires authentication. Receptionist.
+
+Returns the pet only if it has an appointment at the receptionist's clinic,
+otherwise `404`.
+
+## PATCH /api/receptionist/pets/{id}/
+
+Requires authentication. Receptionist.
+
+Same clinic rule as GET — otherwise `404`.
+
+## GET /api/receptionist/pets/{id}/history/
+
+Requires authentication. Receptionist.
+
+Full read-only medical record for the Patient record page. The pet must have an
+appointment at the receptionist's clinic (`404` otherwise); a receptionist without
+a staff profile gets `400`.
+
+Response:
+
+```json
+{
+  "consultations": [],
+  "prescriptions": [],
+  "vaccinations": [],
+  "screenings": [],
+  "appointments": []
+}
+```
+
+Scoping (shared patients — a pet treated at multiple clinics):
+
+- `consultations`, `prescriptions`, `appointments`: only records from the
+  receptionist's own clinic (per `BUSINESS_RULES.md` — no records outside their
+  own clinic).
+- `vaccinations`, `screenings`: **pet-level** — returned in full, including
+  owner-reported vaccinations and phone AI screenings that belong to the pet
+  rather than any clinic.
+
+Read-only: the endpoint never mutates records (medical history is immutable).
+
+Web UI presentation: prescriptions are rendered inside their (one-to-one)
+consultation, and a consultation's AI screening is resolved through
+`appointments[].screening` — only screenings tied to a consultation are shown.
+Response shape is unchanged.
+
+---
+
+# 4A. Receptionist Owner Endpoints (Web)
+
+## GET /api/owners/
+
+Requires authentication. Receptionist.
+
+Owner directory. Owners are platform-wide (not attached to one clinic), so the
+list is not clinic-filtered. `pet_count` counts only the owner's active pets that
+have an appointment at the receptionist's clinic.
+
+Query parameters: `search`, `page`, `page_size`
+
+## GET /api/owners/{id}/
+
+Requires authentication. Receptionist.
+
+`pets` only includes pets with an appointment at the receptionist's clinic.
+
+---
+
 # 5. Appointment Endpoints
 
 ## GET /api/appointments/
 
-Requires authentication.
+Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
+`GET /api/owner/appointments/`.
 
 Owner: Returns own pets' appointments.
-Clinic staff: Returns clinic appointments.
+Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
 
-- date, status, veterinarian_id, pet_id, page, page_size
+- date (single day, `YYYY-MM-DD`), status, vet_id, pet_id, search, page, page_size
+- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local [Asia/Manila]
+  calendar days; used by Clinic Admin date-range filtering). `400` if a value is not
+  a valid date or if `date_from` is after `date_to`.
+- overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
+  with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
+  "Needs attention" indicator; additive, combines with the other filters.
+
+Notes:
+
+- `GET /api/appointments/` is read-only for Clinic Admin; creating appointments
+  remains receptionist-only (`POST` returns `403` for Clinic Admin).
+
+---
+
+## GET /api/appointments/dashboard/stats/
+
+Requires authentication. Receptionist dashboard summary.
+
+Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
+`recent_appointments`, and `needs_attention` — the count of past-due appointments
+(`PENDING`/`CONFIRMED` with `apt_scheduled_at` already past) awaiting action.
+`today.pending` counts only upcoming `PENDING` appointments; past-due ones surface
+through `needs_attention` instead of double-counting in Pending/Confirmed.
+
+Background job: `appointments.close_past_due_appointments` runs hourly via
+`CELERY_BEAT_SCHEDULE` (`crontab(minute=0)`). It cancels past-due `PENDING`
+appointments (reason "Not confirmed in time") and marks `CONFIRMED` appointments
+more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as `NO_SHOW`. Idempotent;
+deployment must run both the Celery worker and beat scheduler.
 
 ---
 
@@ -400,6 +528,10 @@ the API responds `403` with:
 
 Receptionist bookings are not gated by screenings.
 
+Initial status: owner bookings start as `PENDING` (awaiting clinic confirmation; owner
+notified with `APPOINTMENT_CREATED`). Receptionist desk bookings start as `CONFIRMED`
+(owner notified with `APPOINTMENT_CONFIRMED`).
+
 Request (owner):
 
 {
@@ -416,13 +548,29 @@ Request (owner):
 
 Requires authentication.
 
+Owner: own pets' appointments only. Clinic staff: appointments within their own clinic,
+otherwise `404`.
+
 ---
 
 ## PATCH /api/appointments/{id}/
 
 Requires authentication. Receptionist or clinic admin.
 
-Update appointment status.
+Update appointment status. Clinic staff can only update appointments within their own
+clinic, otherwise `404`.
+
+Time-based rules (Asia/Manila "now"):
+
+- Confirming a `PENDING` appointment whose scheduled time has passed returns `400`:
+  `{ "detail": "Cannot confirm an appointment that has already passed." }`
+- Marking `NO_SHOW` before the scheduled time returns `400`:
+  `{ "detail": "Cannot mark an appointment as no-show before its scheduled time." }`
+- `NO_SHOW` is allowed immediately once the scheduled time has passed (no grace
+  period on this endpoint). `CHECKED_IN` is not blocked for late arrivals; the
+  60-minute grace period (`NO_SHOW_GRACE_MINUTES`) only gates the hourly auto-close
+  job and the UI's Check In action.
+- Invalid status transitions still return `400` as before.
 
 ---
 
@@ -431,6 +579,25 @@ Update appointment status.
 Requires authentication.
 
 Soft delete.
+
+## GET /api/appointments/volume/
+
+Requires authentication. Clinic Admin.
+
+Daily appointment counts for the Clinic Admin oversight trend chart.
+
+Query parameters:
+
+- date_from, date_to (`YYYY-MM-DD`, optional), vet_id, status
+- Default window: last 30 clinic-local (Asia/Manila) days ending today.
+- Same `400` validation rules as `GET /api/appointments/` for the date params.
+
+Response:
+
+{ "results": [ { "date": "2026-10-01", "count": 3 }, { "date": "2026-10-02", "count": 0 } ] }
+
+Days are bucketed on Asia/Manila calendar boundaries and zero-filled across the
+window so chart timelines have no gaps.
 
 ---
 
@@ -605,8 +772,8 @@ Response (200): Array of { stf_id, full_name, email }
 
 # 7. Consultation Endpoints
 
-Owner read-only GETs are implemented. Clinic-staff scoping and the
-veterinarian write flow below are not yet implemented.
+Owner read-only GETs and the veterinarian write flow are implemented.
+Clinic-staff scoping is not yet implemented.
 
 ## GET /api/consultations/
 
@@ -639,7 +806,29 @@ that do not belong to the requesting owner.
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Creates the consultation for an appointment that is assigned to the
+requesting veterinarian and has been started (`apt_status = IN_PROGRESS`).
+
+Request body:
+
+- appointment_id (required): UUID
+- chief_complaint (optional): string
+- objective (optional): string
+- diagnosis (required): non-empty string (a seeded skin disease, or a
+  free-text disease name when the UI "Other" option is used)
+- notes (optional): string
+
+Responses:
+
+- 201: Consultation object as above
+- 400: blank diagnosis, or the caller has no staff profile
+- 403: appointment belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown appointment
+- 409: appointment is not `IN_PROGRESS`, or a consultation already exists
+
+Diagnosis date is not stored on the consultation; the appointment's
+`apt_checked_in_at` records when the patient arrived.
 
 ---
 
@@ -647,14 +836,27 @@ Not yet implemented (future veterinarian flow).
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Replaces the consultation fields while the appointment is still
+`IN_PROGRESS`. The record becomes read-only once the appointment leaves
+`IN_PROGRESS`.
+
+Request body: same fields as POST, except `appointment_id`.
+
+Responses:
+
+- 200: Consultation object as above
+- 400: blank diagnosis, or the caller has no staff profile
+- 403: consultation belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown consultation
+- 409: appointment is not `IN_PROGRESS`
 
 ---
 
 # 7. Prescription Endpoints
 
-Owner read-only GETs are implemented. Clinic-staff scoping and the
-veterinarian write flow below are not yet implemented.
+Owner read-only GETs and the veterinarian write flow are implemented.
+Clinic-staff scoping is not yet implemented.
 
 ## GET /api/prescriptions/
 
@@ -670,7 +872,8 @@ Query params:
 
 Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
 instructions, items, created_at } where items is an array of
-{ id, medicine_name, dosage, frequency, duration, route, quantity, notes }
+{ id, medicine_name, generic_name, dosage, frequency, duration, route,
+quantity, notes }
 
 ---
 
@@ -687,7 +890,36 @@ that do not belong to the requesting owner.
 
 Requires authentication. Veterinarian only.
 
-Not yet implemented (future veterinarian flow).
+Creates the prescription for a consultation whose appointment is assigned to
+the requesting veterinarian and is `IN_PROGRESS`. A consultation has at most
+one prescription; when one already exists it is updated and its medication
+items are replaced. Multiple medications are stored as items on that single
+prescription.
+
+Request body:
+
+- consultation_id (required): UUID
+- instructions (optional): string
+- items (required): array with at least one entry
+  - medicine_name (required)
+  - generic_name (optional)
+  - dosage (required)
+  - frequency (required)
+  - duration (required)
+  - route (required): ORAL | TOPICAL | INJECTION | EAR | EYE | OTHER
+  - quantity (optional): integer; stays null when the veterinarian UI does
+    not capture it
+  - notes (optional): string
+
+Responses:
+
+- 201: prescription created; 200: existing prescription updated
+- 400: empty items, invalid route, missing required item field, or the
+  caller has no staff profile
+- 403: consultation belongs to another veterinarian, or caller is not a
+  veterinarian
+- 404: unknown consultation
+- 409: appointment is not `IN_PROGRESS`
 
 ---
 
@@ -783,6 +1015,10 @@ Response (204).
 Owner screening endpoints are implemented under `/api/owner/screenings/`.
 The generic staff-facing routes below remain the spec for a future release.
 
+All screenings are created from **on-device AI results** (`source: "DEVICE"`).
+Server-side mock screenings no longer exist; older `MOCK` rows were deleted
+by migration `ai_screenings.0003`.
+
 ## GET /api/owner/screenings/
 
 Requires authentication (Owner role).
@@ -809,15 +1045,20 @@ Response:
       "disease": "Fungal",
       "disease_code": "FUNGAL",
       "ais_confidence": "87.40",
-      "ais_model_version": "mock-0.0.1",
-      "ais_inference_time_ms": null,
-      "ais_device": "server-mock",
+      "ais_model_version": "tflite-skin-1.0.0",
+      "ais_inference_time_ms": 412,
+      "ais_device": "android",
       "ais_status": "PENDING_REVIEW",
-      "ais_source": "MOCK",
+      "ais_source": "DEVICE",
+      "ais_is_correct": null,
       "ais_created_at": "..."
     }
   ]
 }
+
+`ais_is_correct` is `null` until a consultation with a diagnosis is saved for
+the linked appointment; it then becomes `true`/`false` (see verdict rules
+below).
 
 ---
 
@@ -825,22 +1066,18 @@ Response:
 
 Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
 
-`source: "MOCK"` — development placeholder while the on-device AI ships.
-The server fabricates the prediction/confidence and stamps `ais_model_version = mock-0.0.1`,
-`ais_source = MOCK`. Used by the mobile booking wizard ("Run demo scan").
-
-`source: "DEVICE"` — contract for the future on-device TFLite/tfjs result upload.
-Requires `prediction` (disease code or name, resolved against DISEASE) and `model_version`.
-Optional: `confidence` (0-100), `inference_time_ms`, `device`.
+Uploads an on-device TFLite inference result. `source` must be `DEVICE`
+(any other value returns 400). `prediction` (disease code or name, resolved
+against DISEASE) and `model_version` are required; missing values return 400.
 
 Request:
 
 {
   "pet_id": "uuid",
-  "source": "MOCK | DEVICE",
-  "prediction": "string (DEVICE only)",
-  "confidence": "number 0-100 (DEVICE only)",
-  "model_version": "string (DEVICE only)",
+  "source": "DEVICE",
+  "prediction": "string (required)",
+  "confidence": "number 0-100 (required)",
+  "model_version": "string (required)",
   "inference_time_ms": "integer (optional)",
   "device": "string (optional)"
 }
@@ -851,7 +1088,30 @@ Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
 - AI predictions are immutable after creation.
-- `ais_source = MOCK` rows exist so ML training sets can exclude placeholder data.
+- When a consultation for the linked appointment is saved with a diagnosis,
+  the backend compares it (normalized substring match of the disease name in
+  the diagnosis) and stores `ais_is_correct`, `ais_compared_diagnosis`,
+  `ais_compared_at`, plus the `con_id` link, for ML training/retraining sets.
+
+---
+
+## GET /api/screenings/stats/
+
+Requires authentication (Clinic Admin). Clinic is resolved from the
+authenticated staff profile; other roles get 403.
+
+Screenings are scoped to pets that have an appointment at the clinic
+(non-deleted appointments).
+
+Response `200`:
+
+{
+  "screenings_pending_review": 3,
+  "screenings_by_disease": [
+    { "label": "Mange", "value": 12 },
+    { "label": "Ringworm", "value": 7 }
+  ]
+}
 
 ---
 
@@ -913,17 +1173,36 @@ Super Admin only.
 
 # 11. User Management Endpoints (Clinic Admin)
 
-## GET /api/users/
+## GET /api/staff/
 
-Clinic Admin or Super Admin.
+Clinic Admin.
 
-Returns users within the admin's own clinic (or all clinics for Super Admin).
+Returns staff members within the admin's own clinic.
 
-## POST /api/users/
+## GET /api/veterinarians/
 
-Clinic Admin or Super Admin.
+Clinic Admin.
+
+Returns active veterinarians within the admin's own clinic (used to populate the
+Clinic Admin appointments filter dropdown). Staff ids are `stf_id` values.
+
+Query parameters: page, page_size (default page size applies; `page_size=100`
+supported).
+
+## POST /api/staff/
+
+Clinic Admin.
 
 Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
+
+The `201` response includes `temp_password` exactly once (it is also emailed to
+the staff member via the welcome email). It is never returned again — the
+`reset-password` and `resend-welcome` actions deliver a new temporary password by
+email only.
+
+Related endpoints: `GET /api/staff/stats/`, `GET`/`PATCH /api/staff/{id}/`,
+`POST /api/staff/{id}/{action}/` (activate | deactivate | reset-password |
+resend-welcome), `POST /api/staff/bulk-upload/`.
 
 ---
 

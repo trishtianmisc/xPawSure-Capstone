@@ -8,8 +8,9 @@ from django.utils import timezone
 
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
-from clinics.models import CLINIC_LOGO_DIR, Clinic, ClinicOperatingHours, ClinicSettings, ClinicStatus
+from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings, ClinicStatus
 from clinics.tasks import send_clinic_welcome_email
+from core.storage_service import SupabaseStorageService
 from users.services import AuthService
 
 logger = logging.getLogger(__name__)
@@ -342,6 +343,12 @@ class ClinicProfileService:
 
         return settings_obj
 
+    _LOGO_CONTENT_TYPE_EXTENSIONS = {
+        'image/jpeg': 'jpg',
+        'image/png': 'png',
+        'image/webp': 'webp',
+    }
+
     @staticmethod
     def upload_logo(
         clinic: Clinic,
@@ -349,25 +356,25 @@ class ClinicProfileService:
         user_id: str,
         ip_address: str | None = None,
     ) -> Clinic:
-        ext = os.path.splitext(file.name)[1].lower()
-        filename = f'{clinic.cln_id}_{timezone.now().timestamp()}{ext}'
-        relative_path = os.path.join(CLINIC_LOGO_DIR, filename)
+        bucket = settings.SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES
+        extension = ClinicProfileService._LOGO_CONTENT_TYPE_EXTENSIONS.get(
+            getattr(file, 'content_type', '') or '', 'jpg',
+        )
+        object_path = SupabaseStorageService.build_object_path(
+            str(clinic.cln_id), extension,
+        )
 
-        logo_dir = os.path.join(settings.MEDIA_ROOT, CLINIC_LOGO_DIR)
-        os.makedirs(logo_dir, exist_ok=True)
-        full_path = os.path.join(logo_dir, filename)
+        old_url = clinic.cln_logo_url
+        logo_url = SupabaseStorageService.upload(
+            bucket=bucket,
+            file_bytes=file.read(),
+            content_type=file.content_type,
+            object_path=object_path,
+        )
 
-        with open(full_path, 'wb+') as dest:
-            for chunk in file.chunks():
-                dest.write(chunk)
+        ClinicProfileService._cleanup_old_logo(old_url, bucket)
 
-        old_path = clinic.cln_logo_url
-        if old_path:
-            old_full = os.path.join(settings.MEDIA_ROOT, old_path)
-            if os.path.exists(old_full):
-                os.remove(old_full)
-
-        clinic.cln_logo_url = relative_path
+        clinic.cln_logo_url = logo_url
         clinic.save(update_fields=['cln_logo_url', 'cln_updated_at'])
 
         _audit(
@@ -377,12 +384,35 @@ class ClinicProfileService:
             table_name='CLINIC',
             record_id=str(clinic.cln_id),
             description=f'Clinic "{clinic.cln_name}" logo uploaded',
-            old_values={'logo_url': old_path},
-            new_values={'logo_url': relative_path},
+            old_values={'logo_url': old_url},
+            new_values={'logo_url': logo_url},
             ip_address=ip_address,
         )
 
         return clinic
+
+    @staticmethod
+    def _cleanup_old_logo(old_url, bucket):
+        """Best-effort removal of the replaced logo. Never raises."""
+        if not old_url:
+            return
+        marker = f'/public/{bucket}/'
+        if old_url.startswith(('http://', 'https://')):
+            if marker in old_url:
+                try:
+                    SupabaseStorageService.delete(
+                        bucket=bucket,
+                        object_path=old_url.split(marker, 1)[1],
+                    )
+                except Exception as exc:
+                    logger.warning('Old clinic logo cleanup failed: %s', exc)
+            return
+        try:
+            old_full = os.path.join(settings.MEDIA_ROOT, old_url)
+            if os.path.isfile(old_full):
+                os.remove(old_full)
+        except OSError as exc:
+            logger.warning('Legacy local clinic logo cleanup failed: %s', exc)
 
     @staticmethod
     def get_operating_hours(clinic: Clinic):

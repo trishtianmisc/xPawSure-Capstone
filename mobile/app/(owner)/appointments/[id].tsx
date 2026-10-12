@@ -107,19 +107,9 @@ export default function AppointmentDetailScreen() {
           <View style={styles.scanHeader}>
             <Ionicons color={colors.primary} name="sparkles-outline" size={18} />
             <Text style={styles.cardTitle}>Skin scan result</Text>
-            <View
-              style={[
-                styles.scanBadge,
-                appointment.screening.ais_source === 'MOCK' ? styles.scanBadgeDemo : styles.scanBadgeReal,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.scanBadgeText,
-                  appointment.screening.ais_source === 'MOCK' ? styles.scanBadgeTextDemo : styles.scanBadgeTextReal,
-                ]}
-              >
-                {appointment.screening.ais_source === 'MOCK' ? 'Demo' : 'On-device AI'}
+            <View style={[styles.scanBadge, styles.scanBadgeReal]}>
+              <Text style={[styles.scanBadgeText, styles.scanBadgeTextReal]}>
+                On-device AI
               </Text>
             </View>
           </View>
@@ -158,10 +148,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   cardTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   scanHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   scanBadge: { borderRadius: 999, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3 },
-  scanBadgeDemo: { backgroundColor: colors.iconBg },
   scanBadgeReal: { backgroundColor: colors.primaryLight },
   scanBadgeText: { fontSize: 11, fontWeight: '700' },
-  scanBadgeTextDemo: { color: colors.textSecondary },
   scanBadgeTextReal: { color: colors.primaryDark },
   detailRow: { gap: 2 },
   detailLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase' },

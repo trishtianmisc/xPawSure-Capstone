@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 
 import { useCreateAppointment } from '../hooks/useAppointments'
 import { useAvailableSlots, useVetsForDate } from '../hooks/useAvailableSlots'
+import { useOwners } from '../hooks/useOwners'
 import { usePets } from '../hooks/usePets'
 import { createAppointmentSchema, type CreateAppointmentForm } from '../schemas/receptionist.schema'
 import type { VetSlot } from '../types/receptionist.types'
@@ -16,11 +17,31 @@ export function CreateAppointmentPage() {
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedVet, setSelectedVet] = useState('')
   const [selectedSlot, setSelectedSlot] = useState<VetSlot | null>(null)
+  const [ownerSearch, setOwnerSearch] = useState('')
+  const [selectedOwnerId, setSelectedOwnerId] = useState('')
   const [petSearch, setPetSearch] = useState('')
 
   const { data: vets, isLoading: vetsLoading } = useVetsForDate(selectedDate)
   const { data: slots, isLoading: slotsLoading } = useAvailableSlots(selectedVet, selectedDate)
-  const { data: petsData } = usePets({ search: petSearch || undefined, page_size: 50 })
+  const { data: ownersData } = useOwners({ search: ownerSearch || undefined, page_size: 20 })
+  const { data: petsData } = usePets(
+    {
+      owner_id: selectedOwnerId || undefined,
+      scope: selectedOwnerId ? 'owner' : undefined,
+      page_size: 50,
+    },
+    { enabled: !!selectedOwnerId },
+  )
+
+  const visiblePets = (petsData?.results ?? []).filter(
+    (pet) => !petSearch || pet.name.toLowerCase().includes(petSearch.toLowerCase()),
+  )
+
+  function onOwnerChange(value: string) {
+    setSelectedOwnerId(value)
+    setPetSearch('')
+    setValue('pet_id', '')
+  }
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateAppointmentForm>({
     resolver: zodResolver(createAppointmentSchema),
@@ -51,28 +72,56 @@ export function CreateAppointmentPage() {
       <h1 className="mb-6 text-2xl font-bold text-stone-900 dark:text-stone-100">New Appointment</h1>
 
       <form onSubmit={handleSubmit(onSubmit)} className="max-w-3xl space-y-6">
-        {/* Step 1: Select Pet */}
+        {/* Step 1: Select Owner & Pet */}
         <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
-          <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-100">1. Select Pet</h2>
+          <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-100">1. Select Owner & Pet</h2>
+          <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Owner</label>
           <input
             type="text"
-            placeholder="Search pets..."
-            value={petSearch}
-            onChange={(e) => setPetSearch(e.target.value)}
+            placeholder="Search owners..."
+            value={ownerSearch}
+            onChange={(e) => setOwnerSearch(e.target.value)}
             className="mb-3 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100"
           />
           <select
-            {...register('pet_id')}
-            onChange={(e) => { register('pet_id').onChange(e); setPetSearch(e.target.value) }}
-            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100"
+            value={selectedOwnerId}
+            onChange={(e) => onOwnerChange(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100"
           >
-            <option value="">Select a pet</option>
-            {petsData?.results.map((pet) => (
-              <option key={pet.id} value={pet.id}>
-                {pet.name} — Owner: {(pet as unknown as Record<string, string>).owner_name ?? 'Unknown'}
+            <option value="">Select an owner</option>
+            {ownersData?.results.map((owner) => (
+              <option key={owner.own_id} value={owner.own_id}>
+                {owner.full_name} — {owner.email}
               </option>
             ))}
           </select>
+
+          <label className="mb-1 block text-sm font-medium text-stone-700 dark:text-stone-300">Pet</label>
+          <input
+            type="text"
+            placeholder="Search this owner's pets..."
+            value={petSearch}
+            onChange={(e) => setPetSearch(e.target.value)}
+            disabled={!selectedOwnerId}
+            className="mb-3 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100 disabled:opacity-50"
+          />
+          <select
+            {...register('pet_id')}
+            disabled={!selectedOwnerId}
+            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100 disabled:opacity-50"
+          >
+            <option value="">{selectedOwnerId ? 'Select a pet' : 'Select an owner first'}</option>
+            {visiblePets.map((pet) => (
+              <option key={pet.id} value={pet.id}>
+                {pet.name}
+              </option>
+            ))}
+          </select>
+          {selectedOwnerId && petsData && petsData.results.length === 0 && (
+            <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+              No pets found for this owner.
+            </p>
+          )}
           {errors.pet_id && <p className="mt-1 text-xs text-red-500">{errors.pet_id.message}</p>}
         </div>
 

@@ -9,7 +9,10 @@ interface AppointmentsByMonthChartProps {
 export function AppointmentsByMonthChart({ data }: AppointmentsByMonthChartProps) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
-      <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">Appointments by Month</h3>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-bold text-stone-700 dark:text-stone-300">Appointments by Month</h3>
+        <span className="text-xs text-stone-400 dark:text-stone-500">Last 12 months · monthly totals</span>
+      </div>
       {data.length === 0 ? (
         <p className="py-8 text-center text-sm text-stone-400 dark:text-stone-500">No appointment data available.</p>
       ) : (

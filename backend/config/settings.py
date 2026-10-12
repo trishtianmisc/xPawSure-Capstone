@@ -2,6 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -102,6 +103,16 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
 
+# Hourly housekeeping: close past-due appointments (pending -> cancelled,
+# confirmed past the grace period -> no-show). Requires `celery -A config
+# beat` and a worker in the deployment environment.
+CELERY_BEAT_SCHEDULE = {
+    'appointments.close_past_due_appointments': {
+        'task': 'appointments.close_past_due_appointments',
+        'schedule': crontab(minute=0),
+    },
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -137,6 +148,7 @@ SUPABASE_SERVICE_ROLE_KEY = env('SUPABASE_SERVICE_ROLE_KEY', default='')
 SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', default='pet-images')
 SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
 SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
+SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES = env('SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES', default='clinic-images')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

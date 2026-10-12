@@ -7,7 +7,9 @@ import { AddStaffModal } from '../components/AddStaffModal'
 import { BulkUploadModal } from '../components/BulkUploadModal'
 import { EditStaffModal } from '../components/EditStaffModal'
 import { useDebounce } from '../../../hooks/useDebounce'
+import { Button, Card } from '../../../components/ui'
 import { useToast } from '../../../components/ui/ToastContext'
+import { PageHero } from '../../receptionist/components/PageHero'
 import { StatCard } from '../../clinic-admin/dashboard/components/StatCard'
 import { formatPhone } from '../../../utils/format'
 import type { StaffMember } from '../types/staff.types'
@@ -163,39 +165,6 @@ function ActionsCell({
   )
 }
 
-function TableSkeleton() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900">
-      <table className="w-full text-left text-sm">
-        <thead>
-          <tr className="border-b border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-800">
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Name</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Email</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Role</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Phone</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">License</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Status</th>
-            <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <tr key={i} className="border-b border-stone-100 last:border-0 dark:border-stone-800">
-              <td className="px-4 py-3"><div className="flex items-center gap-3"><div className="h-8 w-8 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" /><div className="h-4 w-28 animate-pulse rounded bg-stone-200 dark:bg-stone-700" /></div></td>
-              <td className="px-4 py-3"><div className="h-4 w-36 animate-pulse rounded bg-stone-200 dark:bg-stone-700" /></td>
-              <td className="px-4 py-3"><div className="h-5 w-24 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" /></td>
-              <td className="px-4 py-3"><div className="h-4 w-28 animate-pulse rounded bg-stone-200 dark:bg-stone-700" /></td>
-              <td className="px-4 py-3"><div className="h-4 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" /></td>
-              <td className="px-4 py-3"><div className="h-5 w-20 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" /></td>
-              <td className="px-4 py-3"><div className="h-8 w-8 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 export function StaffListPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('ALL')
@@ -210,7 +179,7 @@ export function StaffListPage() {
   const roleParam = tab === 'ALL' ? undefined : tab
 
   const { data: stats, isLoading: statsLoading } = useStaffStats()
-  const { data, isLoading, error } = useStaff({
+  const { data, isLoading, error, refetch, isFetching } = useStaff({
     role: roleParam,
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
@@ -228,41 +197,38 @@ export function StaffListPage() {
   const endItem = data ? Math.min(data.page * data.page_size, data.total) : 0
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 px-6 py-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
-              Staff Management
-            </h1>
-            <p className="text-sm text-stone-500 dark:text-stone-400">
-              Manage veterinarians and receptionists
-            </p>
-          </div>
-          <div className="flex gap-2">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+      <PageHero
+        title="Staff Management"
+        subtitle="Manage veterinarians and receptionists."
+        actions={
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setIsBulkModalOpen(true)}
-              className="rounded-lg border border-amber-900 px-4 py-2 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 dark:border-amber-600 dark:text-amber-500 dark:hover:bg-amber-900/20"
+              className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+              type="button"
             >
               Upload CSV
             </button>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="rounded-lg bg-amber-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-950"
+              className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+              type="button"
             >
               + Add Staff
             </button>
           </div>
-        </div>
+        }
+      />
 
-      <main className="mx-auto max-w-7xl space-y-4 px-6 py-6">
         {/* Stats Strip */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {statsLoading ? (
             <>
-              <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
-              <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
-              <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
-              <div className="animate-pulse rounded-2xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
+              <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
+              <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
+              <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
+              <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800"><div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" /><div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" /><div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" /></div>
             </>
           ) : stats ? (
             <>
@@ -294,7 +260,8 @@ export function StaffListPage() {
         </div>
 
         {/* Tabs + Filters */}
-        <div className="flex items-center justify-between gap-4">
+        <Card padding="md">
+          <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-1 rounded-lg bg-stone-100 p-1 dark:bg-stone-800">
             {tabs.map((t) => (
               <button
@@ -315,7 +282,7 @@ export function StaffListPage() {
             <select
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setPage(1) }}
-              className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm text-stone-700 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-300"
+              className="rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-300 dark:focus:border-amber-500 dark:focus:ring-amber-900/40"
             >
               <option value="">All Statuses</option>
               <option value="ACTIVE">Active</option>
@@ -328,42 +295,76 @@ export function StaffListPage() {
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
                 placeholder="Search staff…"
-                className="w-56 rounded-lg border border-stone-300 bg-white px-3 py-1.5 pl-8 text-sm text-stone-900 placeholder-stone-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+                aria-label="Search staff"
+                className="w-56 rounded-md border border-stone-200 bg-white px-4 py-2.5 pl-9 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40"
               />
               <svg
-                className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
               </svg>
             </div>
           </div>
         </div>
+        </Card>
 
         {/* Content */}
+        <div className="overflow-hidden rounded-md border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
         {isLoading ? (
-          <TableSkeleton />
+          <div className="flex items-center justify-center py-20">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-amber-200 border-t-amber-600" />
+          </div>
         ) : error ? (
-          <div className="rounded-lg bg-red-50 p-4 text-center text-sm text-red-700 dark:bg-red-900/30 dark:text-red-400">
-            {error instanceof Error && error.message.includes('permission')
-              ? 'You do not have permission to view staff. Only Clinic Admins can manage staff.'
-              : error instanceof Error && error.message.includes('change your password')
-                ? 'Please change your password before accessing this page.'
-                : error instanceof Error ? error.message : 'Failed to load staff. Please try again.'}
+          <div className="py-16 text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-stone-300 dark:text-stone-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+            </svg>
+            <h3 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">Failed to load staff</h3>
+            <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
+              {error instanceof Error && error.message.includes('permission')
+                ? 'You do not have permission to view staff. Only Clinic Admins can manage staff.'
+                : error instanceof Error && error.message.includes('change your password')
+                  ? 'Please change your password before accessing this page.'
+                  : error instanceof Error ? error.message : 'Failed to load staff. Please try again.'}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="mt-4"
+              loading={isFetching}
+              onClick={() => refetch()}
+            >
+              Try again
+            </Button>
           </div>
         ) : !data || data.results.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-stone-300 py-20 dark:border-stone-700">
-            <div className="mb-4 grid size-16 place-items-center rounded-full bg-stone-100 text-3xl dark:bg-stone-800">
-              {search || statusFilter ? '🔍' : tab === 'VETERINARIAN' ? '🩺' : tab === 'RECEPTIONIST' ? '📋' : '👥'}
-            </div>
-            <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+          <div className="py-16 text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-stone-300 dark:text-stone-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+            </svg>
+            <h3 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">
               {search || statusFilter
                 ? 'No staff match your filters'
                 : tab === 'ALL' ? 'No staff members yet' : tab === 'VETERINARIAN' ? 'No veterinarians yet' : 'No receptionists yet'}
             </h3>
-            <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+            <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
               {search || statusFilter
                 ? 'Try adjusting your search or filters'
                 : tab === 'ALL'
@@ -373,36 +374,36 @@ export function StaffListPage() {
           </div>
         ) : (
           <>
-            <div className="overflow-visible rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-900">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-800">
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Name</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Email</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Role</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Phone</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">License</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Status</th>
-                    <th className="px-4 py-3 font-semibold text-stone-600 dark:text-stone-400">Actions</th>
+                  <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
+                    <th className="px-5 py-4 font-semibold">Name</th>
+                    <th className="px-5 py-4 font-semibold">Email</th>
+                    <th className="px-5 py-4 font-semibold">Role</th>
+                    <th className="px-5 py-4 font-semibold">Phone</th>
+                    <th className="px-5 py-4 font-semibold">License</th>
+                    <th className="px-5 py-4 font-semibold">Status</th>
+                    <th className="px-5 py-4 font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
                   {data.results.map((staff) => (
                     <tr
                       key={staff.id}
                       onClick={() => navigate(`/clinic/staff/${staff.id}`)}
-                      className="cursor-pointer border-b border-stone-100 transition hover:bg-stone-50 last:border-0 dark:border-stone-800 dark:hover:bg-stone-800/50"
+                      className="cursor-pointer transition hover:bg-amber-50/50 dark:hover:bg-amber-900/10"
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <AvatarCell staff={staff} />
-                          <span className="font-medium text-stone-900 dark:text-stone-100">
+                          <span className="text-sm font-semibold text-stone-900 transition hover:text-amber-700 dark:text-stone-100 dark:hover:text-amber-400">
                             {staff.first_name} {staff.last_name}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-stone-500 dark:text-stone-400">{staff.email}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">{staff.email}</td>
+                      <td className="px-5 py-4">
                         <span
                           className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${
                             staff.role === 'VETERINARIAN'
@@ -413,13 +414,13 @@ export function StaffListPage() {
                           {staff.role === 'VETERINARIAN' ? '🩺' : '📋'} {staff.position}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-stone-500 dark:text-stone-400">
+                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {formatPhone(staff.phone)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         <LicenseCell staff={staff} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4">
                         {staff.must_change_password ? (
                           <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                             Pending Setup
@@ -434,7 +435,7 @@ export function StaffListPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                         <ActionsCell staff={staff} onEdit={setEditingStaff} />
                       </td>
                     </tr>
@@ -444,35 +445,34 @@ export function StaffListPage() {
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-stone-500 dark:text-stone-400">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-700">
+              <span className="text-sm text-stone-500 dark:text-stone-400">
                 Showing {startItem}–{endItem} of {data.total} staff
-              </p>
+              </span>
               <div className="flex gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
                   disabled={page <= 1}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 disabled:opacity-40 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
-                 <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-                </button>
-                <button
-                  onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
                   disabled={page >= data.total_pages}
-                  className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 disabled:opacity-40 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+                  onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
                 >
-                  <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-                </button>
+                  Next
+                </Button>
               </div>
             </div>
           </>
         )}
-      </main>
-      
+        </div>
 
       <AddStaffModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       <BulkUploadModal isOpen={isBulkModalOpen} onClose={() => setIsBulkModalOpen(false)} />

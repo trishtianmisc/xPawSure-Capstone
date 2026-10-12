@@ -20,7 +20,6 @@ import { useVets } from '../../../features/appointment/hooks/useVets'
 import type { AppointmentType, OwnerSlot } from '../../../features/appointment/types'
 import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
-import { useCreateScreening } from '../../../features/screening/hooks/useCreateScreening'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
@@ -110,7 +109,6 @@ export default function BookAppointmentScreen() {
     isLoading: screeningsLoading,
     isError: screeningsError,
   } = useScreenings(step >= 3 && pet ? pet.id : undefined, step >= 3)
-  const createScreening = useCreateScreening()
   const bookAppointment = useBookAppointment()
 
   const latestScreening = screenings?.results[0] ?? null
@@ -164,9 +162,8 @@ export default function BookAppointmentScreen() {
     setStep(7)
   }
 
-  function handleCreateScreening() {
-    if (!pet) return
-    createScreening.mutate({ pet_id: pet.id, source: 'MOCK' })
+  function handleGoScan() {
+    router.push('/(owner)/pets/screening')
   }
 
   function handleBook() {
@@ -290,19 +287,9 @@ export default function BookAppointmentScreen() {
                 <View style={styles.scanHeader}>
                   <MaterialCommunityIcons color={colors.primary} name="brain" size={22} />
                   <Text style={styles.scanTitle}>Skin scan result</Text>
-                  <View
-                    style={[
-                      styles.scanBadge,
-                      latestScreening.ais_source === 'MOCK' ? styles.scanBadgeDemo : styles.scanBadgeReal,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.scanBadgeText,
-                        latestScreening.ais_source === 'MOCK' ? styles.scanBadgeTextDemo : styles.scanBadgeTextReal,
-                      ]}
-                    >
-                      {latestScreening.ais_source === 'MOCK' ? 'Demo' : 'On-device AI'}
+                  <View style={[styles.scanBadge, styles.scanBadgeReal]}>
+                    <Text style={[styles.scanBadgeText, styles.scanBadgeTextReal]}>
+                      On-device AI
                     </Text>
                   </View>
                 </View>
@@ -319,24 +306,16 @@ export default function BookAppointmentScreen() {
                 <MaterialCommunityIcons color={colors.primary} name="camera" size={34} />
                 <Text style={styles.blockTitle}>Skin scan required</Text>
                 <Text style={styles.blockText}>
-                  Booking needs a scan result for {pet?.name ?? 'your pet'}. Run a quick scan to continue.
+                  Booking needs a scan result for {pet?.name ?? 'your pet'}. Run a scan to continue.
                 </Text>
                 <Pressable
                   accessibilityRole="button"
-                  disabled={createScreening.isPending}
-                  onPress={handleCreateScreening}
-                  style={[styles.scanButton, createScreening.isPending && styles.scanButtonDisabled]}
+                  onPress={handleGoScan}
+                  style={styles.scanButton}
                 >
-                  {createScreening.isPending ? (
-                    <ActivityIndicator color={colors.inverse} />
-                  ) : (
-                    <Text style={styles.scanButtonText}>Run demo scan</Text>
-                  )}
+                  <Text style={styles.scanButtonText}>Scan {pet?.name ?? 'pet'}</Text>
                 </Pressable>
               </View>
-            )}
-            {createScreening.isError && (
-              <Text style={styles.errorText}>Couldn&apos;t create the scan result. Please try again.</Text>
             )}
           </View>
         )}
@@ -559,10 +538,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   scanHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   scanTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
   scanBadge: { borderRadius: 999, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3 },
-  scanBadgeDemo: { backgroundColor: colors.iconBg },
   scanBadgeReal: { backgroundColor: colors.primaryLight },
   scanBadgeText: { fontSize: 11, fontWeight: '700' },
-  scanBadgeTextDemo: { color: colors.textSecondary },
   scanBadgeTextReal: { color: colors.primaryDark },
   scanDisease: { color: colors.text, fontSize: 20, fontWeight: '800' },
   scanMeta: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
@@ -571,7 +548,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   blockTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
   blockText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   scanButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, justifyContent: 'center', minHeight: 48, paddingHorizontal: 28 },
-  scanButtonDisabled: { opacity: 0.5 },
   scanButtonText: { color: colors.inverse, fontSize: 15, fontWeight: '700' },
   errorText: { color: colors.error, fontSize: 13, fontWeight: '600' },
   footer: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },

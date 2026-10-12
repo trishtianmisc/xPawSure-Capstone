@@ -7,7 +7,8 @@ export interface ScreeningSummary {
   ais_confidence: string
   ais_model_version: string
   ais_status: string
-  ais_source: 'MOCK' | 'DEVICE'
+  ais_source: 'DEVICE'
+  ais_is_correct: boolean | null
   ais_created_at: string
 }
 
@@ -55,6 +56,7 @@ export interface AppointmentDetail extends Appointment {
   pet_sex: string
   clinic_name: string
   owner_phone: string | null
+  owner_email: string | null
   apt_cancellation_reason: string | null
   apt_updated_at: string
 }
@@ -122,6 +124,71 @@ export interface PetListResponse {
   results: Pet[]
 }
 
+export interface ConsultationRecord {
+  id: string
+  appointment_id: string
+  pet_id: string
+  pet_name: string
+  veterinarian: string
+  chief_complaint: string | null
+  subjective: string | null
+  objective: string | null
+  assessment: string | null
+  plan: string | null
+  diagnosis: string
+  treatment: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface PrescriptionItemRecord {
+  id: string
+  medicine_name: string
+  dosage: string
+  frequency: string
+  duration: string
+  route: string
+  quantity: number | null
+  notes: string | null
+}
+
+export interface PrescriptionRecord {
+  id: string
+  consultation_id: string
+  pet_id: string
+  pet_name: string
+  veterinarian: string
+  instructions: string | null
+  items: PrescriptionItemRecord[]
+  created_at: string
+}
+
+export interface VaccinationRecord {
+  id: string
+  consultation_id: string | null
+  pet_id: string
+  pet_name: string
+  veterinarian: string | null
+  name: string
+  brand: string | null
+  batch_no: string | null
+  dose: string
+  route: string
+  date_given: string
+  next_due: string | null
+  notes: string | null
+  source: 'VET' | 'OWNER'
+  created_at: string
+}
+
+export interface PetHistory {
+  consultations: ConsultationRecord[]
+  prescriptions: PrescriptionRecord[]
+  vaccinations: VaccinationRecord[]
+  screenings: ScreeningSummary[]
+  appointments: Appointment[]
+}
+
 export interface CreatePetPayload {
   owner_id: string
   pet_name: string
@@ -176,6 +243,7 @@ export interface DashboardStats {
   total_owners: number
   total_pets: number
   recent_appointments: Appointment[]
+  needs_attention: number
 }
 
 export type SlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED'

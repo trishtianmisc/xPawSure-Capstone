@@ -144,6 +144,10 @@ Receptionists cannot
 - Manage user accounts
 - Access records outside their own clinic
 
+Patient visibility: receptionists only see pets that have an appointment at their
+own clinic (the sidebar "Patients" tab). The Owners directory stays platform-wide;
+booking is done by first selecting an owner, then one of that owner's pets.
+
 ---
 
 # 9. Veterinarian Rules
@@ -326,6 +330,16 @@ Each screening records
 - Image
 - Timestamp
 
+Screenings are created only from on-device AI results (`source: DEVICE`).
+Mock or server-fabricated screenings are rejected.
+
+Owner bookings from the mobile app require a screening for the booked pet.
+Bookings without a valid screening are rejected.
+
+After the linked consultation's diagnosis is saved, the system records whether
+the AI prediction matched the veterinarian's diagnosis. The verdict is stored
+for ML training sets and shown to clinic staff next to the screening result.
+
 The AI only provides a preliminary screening.
 
 The veterinarian makes the final diagnosis.
@@ -484,6 +498,9 @@ Vaccination (Optional)
 ↓
 
 Consultation Completed
+
+Owner bookings are created PENDING and await clinic confirmation.
+Receptionist desk bookings are created CONFIRMED.
 
 ---
 

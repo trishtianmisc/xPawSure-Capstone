@@ -39,7 +39,7 @@ export function ClinicAdminTopBar({ children, breadcrumb }: ClinicAdminTopBarPro
             onClick={() => navigate('/clinic/dashboard')}
             className="font-medium text-stone-900 transition hover:text-stone-700 dark:text-stone-200 dark:hover:text-stone-300"
           >
-            Clinic Admin
+            {user?.clinic_name || 'Clinic Admin'}
           </button>
           <span className="text-stone-300 dark:text-stone-600">/</span>
           <span>{displayBreadcrumb}</span>

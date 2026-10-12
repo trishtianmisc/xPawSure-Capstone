@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom'
+
 import { useAuth } from '../../auth/context/AuthContext'
 import { useDashboardStats } from '../hooks/useDashboardStats'
 import { useUpcomingAppointments } from '../hooks/useUpcomingAppointments'
@@ -49,6 +51,7 @@ function ListSkeleton() {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const { data: stats, isLoading, error } = useDashboardStats()
   const {
@@ -167,6 +170,40 @@ export function DashboardPage() {
         />
       </div>
 
+      {/* Needs attention */}
+      {(stats?.needs_attention ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/receptionist/appointments?attention=1')}
+          className="mb-8 flex w-full items-center justify-between gap-4 rounded-xl border border-orange-300 bg-orange-50 px-5 py-3.5 text-left transition hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-900/20 dark:hover:bg-orange-900/30"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <svg
+              className="size-5 shrink-0 text-orange-600 dark:text-orange-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-2.13-3.374-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+              />
+            </svg>
+            <span className="min-w-0 truncate text-sm font-semibold text-orange-800 dark:text-orange-300">
+              {stats?.needs_attention ?? 0} past-due appointment
+              {(stats?.needs_attention ?? 0) === 1 ? '' : 's'} need
+              {(stats?.needs_attention ?? 0) === 1 ? 's' : ''} attention
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-bold text-orange-700 dark:text-orange-400">
+            Review →
+          </span>
+        </button>
+      )}
+
       {/* Totals */}
       {/* <div className="mb-8 grid gap-4 sm:grid-cols-2">
         <StatCard
@@ -201,7 +238,11 @@ export function DashboardPage() {
             </div>
           ) : upcoming.length > 0 ? (
             upcoming.map((apt) => (
-              <div key={apt.apt_id} className="flex items-center justify-between px-5 py-3">
+              <div
+                key={apt.apt_id}
+                onClick={() => navigate(`/receptionist/appointments/${apt.apt_id}`)}
+                className="flex cursor-pointer items-center justify-between px-5 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50"
+              >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
                     {apt.pet_name} — {apt.owner_name ?? 'Unknown'}
@@ -210,7 +251,12 @@ export function DashboardPage() {
                     {apt.vet_name ?? 'Unassigned'} · {formatDateTime(apt.apt_scheduled_at)}
                   </p>
                 </div>
-                <AppointmentStatusBadge status={apt.apt_status} />
+                <div className="flex items-center gap-3">
+                  <AppointmentStatusBadge status={apt.apt_status} />
+                  <span className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
+                    View
+                  </span>
+                </div>
               </div>
             ))
           ) : (

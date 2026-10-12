@@ -100,6 +100,7 @@ SUPABASE_SERVICE_ROLE_KEY=<server-only-storage-key>
 SUPABASE_STORAGE_BUCKET_PET_IMAGES=pet-images
 SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES=screening-images
 SUPABASE_STORAGE_BUCKET_MEDICAL_ATTACHMENTS=medical-attachments
+SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES=clinic-images
 ```
 
 `DATABASE_URL` is the Supabase PostgreSQL connection string used by Django.
@@ -115,6 +116,7 @@ Use separate buckets for each file category:
 - `pet-images` for pet profile photos
 - `screening-images` for captured skin lesion images
 - `medical-attachments` for approved medical documents and attachments
+- `clinic-images` for clinic logos (uploaded via `POST /api/clinic/logo/`)
 
 Use UUID-based object paths and retain the original filename only as metadata when required.
 

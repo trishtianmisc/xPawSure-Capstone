@@ -1,7 +1,9 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.db import models, transaction
+from django.db.models.functions import TruncDay
 from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetSlot
@@ -11,6 +13,16 @@ from clinics.models import ClinicOperatingHours, ClinicSettings
 from users.models import StaffPosition, StaffProfile
 
 logger = logging.getLogger(__name__)
+
+# Clinic operations run in Philippine time; day boundaries for appointment
+# date ranges and volume buckets are pinned here (not via global TIME_ZONE)
+# so no other module's day semantics are affected.
+CLINIC_TIMEZONE = ZoneInfo('Asia/Manila')
+
+
+def _clinic_day_bounds(day):
+    start = timezone.make_aware(datetime.combine(day, time.min), CLINIC_TIMEZONE)
+    return start, start + timedelta(days=1)
 
 
 class SlotUnavailableError(Exception):
@@ -240,7 +252,7 @@ class VetSlotService:
     def get_vet_list_summary(clinic_id, date=None):
         from django.utils import timezone as tz
 
-        today = date or tz.localdate()
+        today = date or tz.localdate(CLINIC_TIMEZONE)
         day_of_week = DAY_MAP[today.weekday()]
 
         vets = StaffProfile.objects.filter(
@@ -375,7 +387,10 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
-    def create_appointment(clinic_id, pet_id, slot_id, apt_type, reason, created_by, screening=None):
+    def create_appointment(
+        clinic_id, pet_id, slot_id, apt_type, reason, created_by,
+        screening=None, initial_status=AppointmentStatus.PENDING,
+    ):
         try:
             slot = VetSlot.objects.select_for_update().get(
                 vsl_id=slot_id,
@@ -393,6 +408,7 @@ class AppointmentService:
 
         scheduled_at = timezone.make_aware(
             datetime.combine(slot.vsl_date, slot.vsl_start_time),
+            CLINIC_TIMEZONE,
         )
 
         appointment = Appointment.objects.create(
@@ -400,7 +416,7 @@ class AppointmentService:
             cln_id_id=clinic_id,
             stf_id=slot.stf_id,
             apt_type=apt_type,
-            apt_status=AppointmentStatus.PENDING,
+            apt_status=initial_status,
             apt_scheduled_at=scheduled_at,
             apt_reason=reason,
             apt_created_by_id=created_by,
@@ -423,22 +439,36 @@ class AppointmentService:
                 'vet_id': str(slot.stf_id_id),
                 'slot_date': str(slot.vsl_date),
                 'apt_type': apt_type,
+                'apt_status': str(initial_status),
             },
         )
 
         from notifications.models import NotificationType
 
-        _notify(
-            user_id=pet.own_id.usr_id_id,
-            title='Appointment Request Sent',
-            message=(
-                f'Your appointment request for {pet.pet_name} on '
-                f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
-                f'is awaiting clinic confirmation.'
-            ),
-            ntf_type=NotificationType.APPOINTMENT_CREATED,
-            ref_id=appointment.apt_id,
-        )
+        if initial_status == AppointmentStatus.CONFIRMED:
+            _notify(
+                user_id=pet.own_id.usr_id_id,
+                title='Appointment Confirmed',
+                message=(
+                    f'Your appointment for {pet.pet_name} on '
+                    f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
+                    f'has been confirmed.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ref_id=appointment.apt_id,
+            )
+        else:
+            _notify(
+                user_id=pet.own_id.usr_id_id,
+                title='Appointment Request Sent',
+                message=(
+                    f'Your appointment request for {pet.pet_name} on '
+                    f'{slot.vsl_date} at {slot.vsl_start_time.strftime("%H:%M")} '
+                    f'is awaiting clinic confirmation.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CREATED,
+                ref_id=appointment.apt_id,
+            )
 
         return appointment
 
@@ -458,7 +488,19 @@ class AppointmentService:
                 f'Cannot transition from {current} to {new_status}.',
             )
 
-        now = timezone.now()
+        now = datetime.now(CLINIC_TIMEZONE)
+        is_past_due = appointment.apt_scheduled_at < now
+
+        if new_status == AppointmentStatus.CONFIRMED and is_past_due:
+            raise InvalidTransitionError(
+                'Cannot confirm an appointment that has already passed.',
+            )
+        if new_status == AppointmentStatus.NO_SHOW and not is_past_due:
+            raise InvalidTransitionError(
+                'Cannot mark an appointment as no-show before its '
+                'scheduled time.',
+            )
+
         old_status = current
         appointment.apt_status = new_status
 
@@ -479,16 +521,20 @@ class AppointmentService:
 
         appointment.save()
 
-        _audit(
-            user_id=str(user_id),
-            action=AuditAction.UPDATE,
-            module='appointments',
-            table_name='APPOINTMENT',
-            record_id=str(appointment.apt_id),
-            description=f'Status changed from {old_status} to {new_status}',
-            old_values={'apt_status': old_status},
-            new_values={'apt_status': new_status},
-        )
+        # System-triggered changes (auto-close job) pass user_id=None; there is
+        # no system user to attribute and a failed audit insert would poison the
+        # enclosing atomic block, so skip auditing when there is no actor.
+        if user_id:
+            _audit(
+                user_id=str(user_id),
+                action=AuditAction.UPDATE,
+                module='appointments',
+                table_name='APPOINTMENT',
+                record_id=str(appointment.apt_id),
+                description=f'Status changed from {old_status} to {new_status}',
+                old_values={'apt_status': old_status},
+                new_values={'apt_status': new_status},
+            )
 
         from notifications.models import NotificationType
 
@@ -528,13 +574,39 @@ class AppointmentService:
 
     @staticmethod
     def list_appointments(clinic_id, date=None, status=None, vet_id=None,
-                          pet_id=None, search=None, page=1, page_size=20):
+                          pet_id=None, search=None, date_from=None,
+                          date_to=None, page=1, page_size=20, overdue=False):
         qs = Appointment.objects.filter(
             cln_id_id=clinic_id, apt_deleted_at__isnull=True,
         ).select_related('pet_id', 'stf_id__usr_id', 'apt_created_by')
 
         if date:
-            qs = qs.filter(apt_scheduled_at__date=date)
+            day_start, day_end = _clinic_day_bounds(date)
+            qs = qs.filter(
+                apt_scheduled_at__gte=day_start,
+                apt_scheduled_at__lt=day_end,
+            )
+        if date_from:
+            qs = qs.filter(
+                apt_scheduled_at__gte=timezone.make_aware(
+                    datetime.combine(date_from, time.min), CLINIC_TIMEZONE,
+                ),
+            )
+        if date_to:
+            qs = qs.filter(
+                apt_scheduled_at__lt=timezone.make_aware(
+                    datetime.combine(date_to + timedelta(days=1), time.min),
+                    CLINIC_TIMEZONE,
+                ),
+            )
+        if overdue:
+            qs = qs.filter(
+                apt_status__in=[
+                    AppointmentStatus.PENDING,
+                    AppointmentStatus.CONFIRMED,
+                ],
+                apt_scheduled_at__lt=datetime.now(CLINIC_TIMEZONE),
+            )
         if status:
             qs = qs.filter(apt_status=status)
         if vet_id:
@@ -561,6 +633,51 @@ class AppointmentService:
         }
 
     @staticmethod
+    def get_volume(clinic_id, date_from=None, date_to=None, vet_id=None,
+                   status=None):
+        if date_to is None:
+            date_to = datetime.now(CLINIC_TIMEZONE).date()
+        if date_from is None:
+            date_from = date_to - timedelta(days=29)
+
+        start = timezone.make_aware(
+            datetime.combine(date_from, time.min), CLINIC_TIMEZONE,
+        )
+        end_exclusive = timezone.make_aware(
+            datetime.combine(date_to + timedelta(days=1), time.min),
+            CLINIC_TIMEZONE,
+        )
+        qs = Appointment.objects.filter(
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+            apt_scheduled_at__gte=start,
+            apt_scheduled_at__lt=end_exclusive,
+        )
+        if vet_id:
+            qs = qs.filter(stf_id_id=vet_id)
+        if status:
+            qs = qs.filter(apt_status=status)
+
+        rows = (
+            qs.annotate(day=TruncDay('apt_scheduled_at', tzinfo=CLINIC_TIMEZONE))
+            .values('day')
+            .annotate(count=models.Count('apt_id'))
+            .order_by('day')
+        )
+        counts = {
+            row['day'].date().isoformat(): row['count']
+            for row in rows
+        }
+
+        results = []
+        day = date_from
+        while day <= date_to:
+            key = day.isoformat()
+            results.append({'date': key, 'count': counts.get(key, 0)})
+            day += timedelta(days=1)
+        return results
+
+    @staticmethod
     def get_appointment_detail(apt_id):
         try:
             return Appointment.objects.select_related(
@@ -572,10 +689,13 @@ class AppointmentService:
 
     @staticmethod
     def get_today_appointments(clinic_id):
-        today = timezone.now().date()
+        day_start, day_end = _clinic_day_bounds(
+            datetime.now(CLINIC_TIMEZONE).date(),
+        )
         return Appointment.objects.filter(
             cln_id_id=clinic_id,
-            apt_scheduled_at__date=today,
+            apt_scheduled_at__gte=day_start,
+            apt_scheduled_at__lt=day_end,
             apt_deleted_at__isnull=True,
         ).select_related(
             'pet_id', 'stf_id__usr_id',
@@ -586,16 +706,19 @@ class DashboardService:
 
     @staticmethod
     def get_stats(clinic_id):
-        today = timezone.now().date()
+        now = datetime.now(CLINIC_TIMEZONE)
+        day_start, day_end = _clinic_day_bounds(now.date())
 
         appointments_today = Appointment.objects.filter(
             cln_id_id=clinic_id,
-            apt_scheduled_at__date=today,
+            apt_scheduled_at__gte=day_start,
+            apt_scheduled_at__lt=day_end,
             apt_deleted_at__isnull=True,
         )
 
         pending_count = appointments_today.filter(
             apt_status=AppointmentStatus.PENDING,
+            apt_scheduled_at__gte=now,
         ).count()
         confirmed_count = appointments_today.filter(
             apt_status=AppointmentStatus.CONFIRMED,
@@ -611,6 +734,16 @@ class DashboardService:
         ).count()
         no_show_count = appointments_today.filter(
             apt_status=AppointmentStatus.NO_SHOW,
+        ).count()
+
+        needs_attention = Appointment.objects.filter(
+            cln_id_id=clinic_id,
+            apt_status__in=[
+                AppointmentStatus.PENDING,
+                AppointmentStatus.CONFIRMED,
+            ],
+            apt_scheduled_at__lt=now,
+            apt_deleted_at__isnull=True,
         ).count()
 
         from owners.models import OwnerProfile
@@ -648,7 +781,122 @@ class DashboardService:
             'total_owners': total_owners,
             'total_pets': total_pets,
             'recent_appointments': recent_appointments,
+            'needs_attention': needs_attention,
         }
+
+
+class VetDashboardService:
+
+    ACTIVE_TODAY_STATUSES = (
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.CHECKED_IN,
+        AppointmentStatus.IN_PROGRESS,
+        AppointmentStatus.COMPLETED,
+    )
+    PENDING_STATUSES = (
+        AppointmentStatus.CONFIRMED,
+        AppointmentStatus.CHECKED_IN,
+        AppointmentStatus.IN_PROGRESS,
+    )
+
+    @staticmethod
+    def _vet_appointments(stf_id):
+        return Appointment.objects.filter(
+            stf_id_id=stf_id,
+            apt_deleted_at__isnull=True,
+        )
+
+    @staticmethod
+    def get_stats(stf_id, ref_date):
+        import calendar
+
+        month_start = ref_date.replace(day=1)
+        last_day = calendar.monthrange(ref_date.year, ref_date.month)[1]
+        month_end = ref_date.replace(day=last_day)
+
+        qs = VetDashboardService._vet_appointments(stf_id)
+
+        return {
+            'consultations_this_month': qs.filter(
+                apt_status=AppointmentStatus.COMPLETED,
+                apt_scheduled_at__date__gte=month_start,
+                apt_scheduled_at__date__lte=month_end,
+            ).count(),
+            'pending': qs.filter(
+                apt_status__in=VetDashboardService.PENDING_STATUSES,
+            ).count(),
+            'completed': qs.filter(
+                apt_status=AppointmentStatus.COMPLETED,
+            ).count(),
+        }
+
+    @staticmethod
+    def get_today_appointments(stf_id, ref_date):
+        return list(
+            VetDashboardService._vet_appointments(stf_id)
+            .filter(
+                apt_scheduled_at__date=ref_date,
+                apt_status__in=VetDashboardService.ACTIVE_TODAY_STATUSES,
+            )
+            .select_related(
+                'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
+                'stf_id__usr_id', 'apt_screening__dis_id',
+            )
+            .order_by('apt_scheduled_at')
+        )
+
+    @staticmethod
+    def list_appointments(stf_id, start_date=None, end_date=None):
+        qs = VetDashboardService._vet_appointments(stf_id).select_related(
+            'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
+            'stf_id__usr_id', 'apt_screening__dis_id',
+        )
+        if start_date is not None:
+            qs = qs.filter(apt_scheduled_at__date__gte=start_date)
+        if end_date is not None:
+            qs = qs.filter(apt_scheduled_at__date__lte=end_date)
+        return list(qs.order_by('-apt_scheduled_at'))
+
+    @staticmethod
+    @transaction.atomic
+    def start_consultation(apt_id, stf_id, user_id):
+        try:
+            appointment = Appointment.objects.select_for_update().get(
+                apt_id=apt_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.stf_id_id != stf_id:
+            raise PermissionError(
+                'This appointment is not assigned to you.',
+            )
+
+        if appointment.apt_status == AppointmentStatus.IN_PROGRESS:
+            return appointment
+
+        if appointment.apt_status != AppointmentStatus.CHECKED_IN:
+            raise InvalidTransitionError(
+                f'Cannot start consultation from status {appointment.apt_status}.',
+            )
+
+        old_status = appointment.apt_status
+        appointment.apt_status = AppointmentStatus.IN_PROGRESS
+        appointment.save(update_fields=['apt_status', 'apt_updated_at'])
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Consultation started',
+            old_values={'apt_status': old_status},
+            new_values={'apt_status': AppointmentStatus.IN_PROGRESS},
+        )
+
+        return appointment
 
 
 class OwnerService:
@@ -694,15 +942,34 @@ class OwnerService:
 class ReceptionistPetService:
 
     @staticmethod
-    def list_pets(clinic_id, search=None, owner_id=None, page=1, page_size=20):
+    def _pets_in_clinic(qs, clinic_id):
+        from django.db import models as db_models
+        return qs.filter(
+            db_models.Q(appointments__cln_id_id=clinic_id)
+            & db_models.Q(appointments__apt_deleted_at__isnull=True)
+        ).distinct()
+
+    @staticmethod
+    def _pet_in_clinic(pet, clinic_id):
+        return pet.appointments.filter(
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).exists()
+
+    @staticmethod
+    def list_pets(clinic_id, search=None, owner_id=None, page=1, page_size=20, scope=None):
         from pets.models import Pet
 
         qs = Pet.objects.filter(
             pet_is_active=True, pet_deleted_at__isnull=True,
         ).select_related('own_id__usr_id', 'brd_id')
 
-        if owner_id:
+        if scope == 'owner' and owner_id:
             qs = qs.filter(own_id_id=owner_id)
+        else:
+            qs = ReceptionistPetService._pets_in_clinic(qs, clinic_id)
+            if owner_id:
+                qs = qs.filter(own_id_id=owner_id)
         if search:
             from django.db import models as db_models
             qs = qs.filter(
@@ -724,14 +991,75 @@ class ReceptionistPetService:
         }
 
     @staticmethod
-    def get_pet_detail(pet_id):
+    def get_pet_detail(pet_id, clinic_id):
         from pets.models import Pet
         try:
-            return Pet.objects.select_related(
+            pet = Pet.objects.select_related(
                 'own_id__usr_id', 'brd_id',
             ).get(pet_id=pet_id)
         except Pet.DoesNotExist:
             return None
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
+            return None
+        return pet
+
+    @staticmethod
+    def get_pet_history(pet_id, clinic_id):
+        from pets.models import Pet
+        from consultations.models import Consultation
+        from prescriptions.models import Prescription
+        from vaccinations.models import VaccinationRecord
+        from ai_screenings.models import AiScreening
+        from appointments.models import Appointment
+
+        try:
+            pet = Pet.objects.get(pet_id=pet_id)
+        except Pet.DoesNotExist:
+            return None
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
+            return None
+
+        consultations = Consultation.objects.filter(
+            apt_id__pet_id=pet,
+            apt_id__cln_id_id=clinic_id,
+            apt_id__apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'apt_id',
+        ).order_by('-con_created_at')
+
+        prescriptions = Prescription.objects.filter(
+            con_id__apt_id__pet_id=pet,
+            con_id__apt_id__cln_id_id=clinic_id,
+            con_id__apt_id__apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'con_id',
+        ).prefetch_related('items').order_by('-prs_created_at')
+
+        vaccinations = VaccinationRecord.objects.filter(
+            pet_id=pet,
+        ).select_related(
+            'stf_id__usr_id', 'con_id',
+        ).order_by('-vac_date_given', '-vac_created_at')
+
+        screenings = AiScreening.objects.filter(
+            pet_id=pet,
+        ).select_related('dis_id').order_by('-ais_created_at')
+
+        appointments = Appointment.objects.filter(
+            pet_id=pet,
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'pet_id',
+        ).order_by('-apt_scheduled_at')
+
+        return {
+            'consultations': consultations,
+            'prescriptions': prescriptions,
+            'vaccinations': vaccinations,
+            'screenings': screenings,
+            'appointments': appointments,
+        }
 
     @staticmethod
     def create_pet(validated_data, user_id):
@@ -753,12 +1081,15 @@ class ReceptionistPetService:
         return pet
 
     @staticmethod
-    def update_pet(pet_id, validated_data, user_id):
+    def update_pet(pet_id, validated_data, user_id, clinic_id):
         from pets.models import Pet
 
         try:
             pet = Pet.objects.get(pet_id=pet_id)
         except Pet.DoesNotExist:
+            return None
+
+        if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
             return None
 
         old_values = {}

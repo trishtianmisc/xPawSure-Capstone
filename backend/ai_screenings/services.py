@@ -1,5 +1,5 @@
 import logging
-import random
+import re
 from decimal import Decimal
 
 from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus
@@ -7,9 +7,6 @@ from audit_log.models import AuditAction
 from audit_log.services import AuditService
 
 logger = logging.getLogger(__name__)
-
-MOCK_MODEL_VERSION = 'mock-0.0.1'
-MOCK_DEVICE = 'server-mock'
 
 
 def _audit(**kwargs):
@@ -23,6 +20,10 @@ class UnknownDiseaseError(Exception):
     pass
 
 
+def _normalize(text: str) -> str:
+    return re.sub(r'\s+', ' ', (text or '').strip().lower())
+
+
 class ScreeningService:
 
     @staticmethod
@@ -33,44 +34,6 @@ class ScreeningService:
         if disease is None:
             raise UnknownDiseaseError(f'Unknown disease label: {prediction}')
         return disease
-
-    @staticmethod
-    def create_mock_screening(pet, user) -> AiScreening:
-        diseases = list(Disease.objects.all())
-        if not diseases:
-            raise ValueError('No diseases configured. Seed the DISEASE table first.')
-
-        rng = random.Random()
-        disease = rng.choice(diseases)
-        confidence = Decimal(str(round(rng.uniform(62.0, 97.0), 2)))
-
-        screening = AiScreening.objects.create(
-            pet_id=pet,
-            dis_id=disease,
-            usr_id=user,
-            ais_confidence=confidence,
-            ais_model_version=MOCK_MODEL_VERSION,
-            ais_device=MOCK_DEVICE,
-            ais_status=ScreeningStatus.PENDING_REVIEW,
-            ais_source=ScreeningSource.MOCK,
-        )
-
-        _audit(
-            user_id=str(user.usr_id),
-            action=AuditAction.AI_SCREENING,
-            module='ai_screenings',
-            table_name='AI_SCREENING',
-            record_id=str(screening.ais_id),
-            description=f'Mock AI screening created for pet {pet.pet_name}',
-            new_values={
-                'pet_id': str(pet.pet_id),
-                'disease': disease.dis_name,
-                'confidence': str(confidence),
-                'source': ScreeningSource.MOCK,
-            },
-        )
-
-        return screening
 
     @staticmethod
     def create_device_screening(pet, user, prediction, confidence, model_version,
@@ -109,3 +72,49 @@ class ScreeningService:
         )
 
         return screening
+
+    @staticmethod
+    def compare_with_diagnosis(screening: AiScreening, diagnosis: str) -> bool:
+        """AI never diagnoses; this only records whether the prediction matches
+        the veterinarian's diagnosis, for later model retraining."""
+        predicted = _normalize(screening.dis_id.dis_name)
+        if not predicted or not _normalize(diagnosis):
+            return False
+        return predicted in _normalize(diagnosis)
+
+    @staticmethod
+    def record_comparison(screening: AiScreening, diagnosis: str, consultation=None) -> None:
+        from django.utils import timezone
+
+        screening.ais_is_correct = ScreeningService.compare_with_diagnosis(screening, diagnosis)
+        screening.ais_compared_diagnosis = diagnosis
+        screening.ais_compared_at = timezone.now()
+        if consultation is not None:
+            screening.con_id = consultation
+        screening.save(update_fields=['ais_is_correct', 'ais_compared_diagnosis', 'ais_compared_at', 'con_id'])
+
+    @staticmethod
+    def get_stats(clinic_id) -> dict:
+        from django.db.models import Count
+
+        clinic_screenings = AiScreening.objects.filter(
+            pet_id__appointments__cln_id_id=clinic_id,
+            pet_id__appointments__apt_deleted_at__isnull=True,
+        ).distinct()
+
+        pending = clinic_screenings.filter(ais_status=ScreeningStatus.PENDING_REVIEW).count()
+
+        by_disease = list(
+            clinic_screenings.values('dis_id__dis_name')
+            .annotate(value=Count('ais_id'))
+            .order_by('-value')
+            .values('dis_id__dis_name', 'value')
+        )
+
+        return {
+            'screenings_pending_review': pending,
+            'screenings_by_disease': [
+                {'label': row['dis_id__dis_name'], 'value': row['value']}
+                for row in by_disease
+            ],
+        }

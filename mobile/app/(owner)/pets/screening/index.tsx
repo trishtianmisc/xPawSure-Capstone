@@ -123,6 +123,8 @@ export default function CaptureScreen() {
           petId: selectedPet.id,
           petName: selectedPet.name,
           predictions: JSON.stringify(result.predictions),
+          modelVersion: result.modelVersion,
+          inferenceTimeMs: String(result.inferenceTimeMs),
           state: result.state,
           stateMessage: result.stateMessage,
         },

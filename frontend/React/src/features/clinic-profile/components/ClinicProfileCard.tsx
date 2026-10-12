@@ -51,18 +51,12 @@ export function ClinicProfileCard({
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-3">
-      <h1 className="text-xl font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
-        Clinic Profile
-      </h1>
-      <p className="text-sm text-stone-500 dark:text-stone-400">
-        Manage clinic information, settings, and operating hours.
-      </p>
+    <>
       <Card padding="md">
-        <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">
-          Clinic Settings
-        </h2>
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">
+            Clinic Information
+          </h2>
           <Badge variant={STATUS_VARIANTS[profile.status] ?? 'default'}>
             {profile.status}
           </Badge>
@@ -145,7 +139,7 @@ export function ClinicProfileCard({
           </form>
         </Modal>
       </Card>
-    </div>
+    </>
   )
 }
 

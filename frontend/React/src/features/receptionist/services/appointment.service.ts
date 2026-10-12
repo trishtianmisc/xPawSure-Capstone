@@ -1,6 +1,5 @@
 import http from '../../../services/http'
 import type {
-  Appointment,
   AppointmentDetail,
   AppointmentListResponse,
   CreateAppointmentPayload,
@@ -8,10 +7,13 @@ import type {
 
 export async function listAppointments(params: {
   date?: string
+  date_from?: string
+  date_to?: string
   status?: string
   vet_id?: string
   pet_id?: string
   search?: string
+  overdue?: string
   page?: number
   page_size?: number
 }): Promise<AppointmentListResponse> {

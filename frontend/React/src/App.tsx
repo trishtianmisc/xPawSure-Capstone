@@ -9,6 +9,7 @@ const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPa
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
+const ClinicAdminAppointmentsPage = lazy(() => import('./features/clinic-admin/appointments/pages/ClinicAdminAppointmentsPage').then(m => ({ default: m.ClinicAdminAppointmentsPage })))
 const ClinicProfilePage = lazy(() => import('./features/clinic-profile/pages/ClinicProfilePage').then(m => ({ default: m.ClinicProfilePage })))
 const UserProfilePage = lazy(() => import('./features/clinic-admin/profile/pages/UserProfilePage').then(m => ({ default: m.UserProfilePage })))
 const StaffListPage = lazy(() => import('./features/staff/pages/StaffListPage').then(m => ({ default: m.StaffListPage })))
@@ -32,6 +33,7 @@ const ReceptionistProfilePage = lazy(() => import('./features/receptionist/pages
 const VetDashboardLayout = lazy(() => import('./features/veterinarian/dashboard/components/VetDashboardLayout').then(m => ({ default: m.VetDashboardLayout })))
 const VetDashboardPage = lazy(() => import('./features/veterinarian/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationsPage').then(m => ({ default: m.ConsultationsPage })))
+const VetAppointmentDetailPage = lazy(() => import('./features/veterinarian/dashboard/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
 const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
@@ -102,6 +104,7 @@ function App() {
   <Route path="dashboard" element={<ClinicAdminDashboardPage />} />
   <Route path="staff" element={<StaffListPage />} />
   <Route path="staff/:id" element={<StaffDetailPage />} />
+  <Route path="appointments" element={<ClinicAdminAppointmentsPage />} />
   <Route path="profile" element={<ClinicProfilePage />} />
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
@@ -117,6 +120,7 @@ function App() {
           <Route element={<VetDashboardLayout />} path="/veterinarian">
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
+            <Route element={<VetAppointmentDetailPage />} path="appointments/:id" />
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
             <Route element={<VetSchedulePage />} path="schedule" />

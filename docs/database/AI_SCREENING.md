@@ -49,16 +49,24 @@ Deviations from this document (deliberate, for this iteration):
 | Spec | Implemented | Reason |
 |------|-------------|--------|
 | — | `DISEASE.DIS_CODE` (unique) added | Stable machine label for on-device predictions |
-| — | `AI_SCREENING.AIS_SOURCE` (`MOCK` / `DEVICE`) added | Placeholder rows must be excludable from ML training sets |
-| `CON_ID` FK → CONSULTATION | Deferred | `consultations` app is still a stub |
+| — | `AI_SCREENING.AIS_SOURCE` (`DEVICE` only) added | Original spec allowed no source flag; `MOCK` was retired in `ai_screenings.0003` (legacy MOCK rows deleted) |
+| — | `AI_SCREENING.AIS_IS_CORRECT`, `AI_COMPARED_DIAGNOSIS`, `AI_COMPARED_AT` added | Post-consultation AI-vs-vet verdict for ML training sets |
+| `CON_ID` FK → CONSULTATION | Implemented (`ON DELETE SET NULL`) | Set when the linked consultation is saved with a diagnosis |
 | `AI_SCREENING_IMAGE` table | Deferred | Comes with the real on-device image upload |
 | `USR_ID` NOT NULL | nullable (`ON DELETE SET NULL`) | Preserve dataset rows if a user row is hard-deleted |
 | — | `APPOINTMENT.APT_SCREENING_ID` added | Booking gate + vet visibility (see above) |
 
-Placeholder flow: while on-device AI ships, the mobile booking wizard creates a
-server-fabricated result via `POST /api/owner/screenings/ {"source": "MOCK"}`
-("Run demo scan"). When the model ships, the app posts `{"source": "DEVICE"}`
-with real `prediction`/`confidence`/`model_version` — no backend change needed.
+Creation flow: the mobile app uploads real on-device TFLite results via
+`POST /api/owner/screenings/ {"source": "DEVICE"}` with
+`prediction`/`confidence`/`model_version`. The scan result screen offers
+"Book Appointment" only after the upload succeeds. Server-fabricated
+(`MOCK`) screenings no longer exist.
+
+Verdict flow: when a consultation linked to the appointment is saved with a
+diagnosis, `consultations` signals call `record_comparison()` — a normalized
+substring match of the disease name in the diagnosis sets `AIS_IS_CORRECT`
+and records `AIS_COMPARED_DIAGNOSIS`/`AIS_COMPARED_AT`, plus the `CON_ID`
+link. Receptionist web screens display the verdict next to the AI result.
 
 ---
 
@@ -147,11 +155,15 @@ If the owner later visits a clinic, the screening may be linked to a Consultatio
 | DIS_ID | UUID | FK → DISEASE |
 | CON_ID | UUID | FK → CONSULTATION, NULL |
 | USR_ID | UUID | FK → USER |
+| AIS_SOURCE | ENUM | DEFAULT `DEVICE` |
 | AIS_CONFIDENCE | DECIMAL(5,2) | NOT NULL |
 | AIS_MODEL_VERSION | VARCHAR(50) | NOT NULL |
 | AIS_INFERENCE_TIME_MS | INTEGER | NULL |
 | AIS_DEVICE | VARCHAR(100) | NULL |
 | AIS_STATUS | ENUM | NOT NULL |
+| AIS_IS_CORRECT | BOOLEAN | NULL (verdict, set post-consultation) |
+| AIS_COMPARED_DIAGNOSIS | TEXT | NULL |
+| AIS_COMPARED_AT | TIMESTAMP | NULL |
 | AIS_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 
 ---
@@ -176,11 +188,16 @@ AI Screening may exist without a Consultation.
 
 Only the Pet Owner who owns the Pet may create AI Screenings.
 
+Only on-device (`DEVICE`) screenings may be created; mock screenings are rejected.
+
 Veterinarians may review AI results.
 
 AI predictions are immutable.
 
 Model version must always be recorded.
+
+The AI-vs-vet verdict (`AIS_IS_CORRECT`) is computed once, when the linked
+consultation's diagnosis is saved.
 
 ---
 

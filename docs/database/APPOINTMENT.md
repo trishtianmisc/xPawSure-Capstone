@@ -252,6 +252,12 @@ The creator is stored in:
 
 APT_CREATED_BY
 
+Initial status:
+
+• OWNER → PENDING (awaiting clinic confirmation)
+
+• RECEPTIONIST → CONFIRMED
+
 ---
 
 # Veterinarian Assignment

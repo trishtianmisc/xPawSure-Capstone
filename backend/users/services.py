@@ -1,4 +1,5 @@
 from django.contrib.auth.hashers import check_password
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
@@ -12,6 +13,13 @@ from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
 class AuthService:
+
+    @staticmethod
+    def _clinic_name(user: User) -> str | None:
+        try:
+            return user.staffprofile.cln_id.cln_name
+        except ObjectDoesNotExist:
+            return None
 
     @staticmethod
     def login(email: str, password: str, ip_address: str = '', device: str = '') -> dict:
@@ -57,6 +65,7 @@ class AuthService:
                 'last_name': user.usr_last_name,
                 'phone': user.usr_phone or '',
                 'must_change_password': user.usr_must_change_password,
+                'clinic_name': AuthService._clinic_name(user),
             },
         }
 

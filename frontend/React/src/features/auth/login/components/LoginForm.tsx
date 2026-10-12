@@ -58,7 +58,7 @@ export function LoginForm() {
       <label className="flex w-fit cursor-pointer items-center gap-3 text-sm text-stone-700 dark:text-stone-300">
         <input
           {...register('rememberMe')}
-          className="size-4 rounded border-stone-300 text-amber-800 focus:ring-amber-700 dark:border-stone-600"
+          className="size-4 rounded border-stone-300 text-amber-800 focus:ring-amber-700 dark:text-stone-500"
           type="checkbox"
         />
         Remember me on this device

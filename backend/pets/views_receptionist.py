@@ -2,34 +2,55 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from ai_screenings.serializers import ScreeningSummarySerializer
+from appointments.serializers import AppointmentListSerializer
 from appointments.services import ReceptionistPetService
+from consultations.serializers import ConsultationResponseSerializer
 from core.permissions import IsReceptionist
 from pets.serializers import PetResponseSerializer
 from pets.serializers_receptionist import (
     ReceptionistPetCreateSerializer,
     ReceptionistPetUpdateSerializer,
 )
+from prescriptions.serializers import PrescriptionResponseSerializer
+from vaccinations.serializers import VaccinationResponseSerializer
+
+
+def _get_clinic_id(request):
+    from users.models import StaffProfile
+    try:
+        return StaffProfile.objects.get(usr_id=request.user).cln_id_id
+    except StaffProfile.DoesNotExist:
+        return None
 
 
 class ReceptionistPetListCreateView(APIView):
     permission_classes = [IsReceptionist]
 
     def get(self, request):
-        from users.models import StaffProfile
-        try:
-            staff = StaffProfile.objects.get(usr_id=request.user)
-        except StaffProfile.DoesNotExist:
+        clinic_id = _get_clinic_id(request)
+        if clinic_id is None:
             return Response(
                 {'detail': 'Staff profile not found.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        try:
+            page = max(int(request.query_params.get('page', 1) or 1), 1)
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(max(int(request.query_params.get('page_size', 20) or 20), 1), 100)
+        except (ValueError, TypeError):
+            page_size = 20
+
         result = ReceptionistPetService.list_pets(
-            clinic_id=staff.cln_id_id,
+            clinic_id=clinic_id,
             search=request.query_params.get('search'),
             owner_id=request.query_params.get('owner_id'),
-            page=int(request.query_params.get('page', 1)),
-            page_size=int(request.query_params.get('page_size', 20)),
+            page=page,
+            page_size=page_size,
+            scope=request.query_params.get('scope'),
         )
 
         serializer = PetResponseSerializer(result['results'], many=True)
@@ -72,7 +93,14 @@ class ReceptionistPetDetailView(APIView):
     permission_classes = [IsReceptionist]
 
     def get(self, request, pet_id):
-        pet = ReceptionistPetService.get_pet_detail(pet_id)
+        clinic_id = _get_clinic_id(request)
+        if clinic_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        pet = ReceptionistPetService.get_pet_detail(pet_id, clinic_id)
         if pet is None:
             return Response(
                 {'detail': 'Pet not found.'},
@@ -82,6 +110,13 @@ class ReceptionistPetDetailView(APIView):
         return Response(serializer.data)
 
     def patch(self, request, pet_id):
+        clinic_id = _get_clinic_id(request)
+        if clinic_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = ReceptionistPetUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -89,6 +124,7 @@ class ReceptionistPetDetailView(APIView):
             pet_id=pet_id,
             validated_data=serializer.validated_data,
             user_id=request.user.usr_id,
+            clinic_id=clinic_id,
         )
 
         if pet is None:
@@ -99,3 +135,40 @@ class ReceptionistPetDetailView(APIView):
 
         result = PetResponseSerializer(pet).data
         return Response(result)
+
+
+class ReceptionistPetHistoryView(APIView):
+    permission_classes = [IsReceptionist]
+
+    def get(self, request, pet_id):
+        clinic_id = _get_clinic_id(request)
+        if clinic_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        history = ReceptionistPetService.get_pet_history(pet_id, clinic_id)
+        if history is None:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response({
+            'consultations': ConsultationResponseSerializer(
+                list(history['consultations']), many=True,
+            ).data,
+            'prescriptions': PrescriptionResponseSerializer(
+                list(history['prescriptions']), many=True,
+            ).data,
+            'vaccinations': VaccinationResponseSerializer(
+                list(history['vaccinations']), many=True,
+            ).data,
+            'screenings': ScreeningSummarySerializer(
+                list(history['screenings']), many=True,
+            ).data,
+            'appointments': AppointmentListSerializer(
+                list(history['appointments']), many=True,
+            ).data,
+        })
