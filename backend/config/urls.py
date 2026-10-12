@@ -17,4 +17,5 @@ urlpatterns = [
     path('api/', include('consultations.urls')),
     path('api/', include('prescriptions.urls')),
     path('api/', include('vaccinations.urls')),
+    path('api/', include('veterinarians.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

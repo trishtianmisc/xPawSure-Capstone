@@ -2,57 +2,80 @@ import { LoginForm } from '../components/LoginForm'
 
 export function LoginPage() {
   return (
-    <main className="min-h-screen bg-white lg:grid lg:grid-cols-2 dark:bg-stone-950">
-      <section className="relative flex min-h-[300px] items-center justify-center overflow-hidden p-8 sm:min-h-[360px] lg:min-h-screen lg:p-12">
-        <img
-          src="/Background.png"
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 size-full object-cover"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-black/10"
-        />
-
-        <div className="relative flex flex-col items-center text-center gap-0">
-          <img
-            src="/Logo.png"
-            alt="XPawSure"
-            className="h-36 w-auto drop-shadow-2xl sm:h-44 lg:h-70"
-          />
-          <img
-            src="/Title.png"
-            alt="XPawSure"
-            className="-mt-7 h-8 w-auto drop-shadow-2xl sm:h-10 lg:h-25"
-          />
+    <main className="min-h-screen bg-stone-100 p-4 dark:bg-stone-950 sm:p-5 lg:p-7">
+      <div className="mx-auto grid min-h-[calc(100vh-2rem)] max-w-6xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-stone-900/10 dark:bg-stone-900 dark:shadow-black/30 sm:min-h-[calc(100vh-3rem)] lg:grid-cols-[0.9fr_1.1fr]">
+        <section className="relative hidden overflow-hidden bg-[#f4d0a5] p-12 text-amber-950 lg:flex lg:flex-col lg:justify-center lg:gap-1">
+          <div aria-hidden="true" className="absolute -bottom-13 size-25 rounded-full bg-amber-950/80" />
+          <div aria-hidden="true" className="absolute -left-12 -top-12 size-40 rounded-full bg-amber-950/50" />
+          <div aria-hidden="true" className="absolute -bottom-16 -right-2 size-58 rounded-full border-[1.5rem] border-amber-950/20" />
+          <div aria-hidden="true" className="absolute -top-1 -right-2 size-40 rounded-full bg-amber-950/90" />
           
-        </div>
-      </section>
 
-      <section className="flex items-center justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-16 bg-[#1e120f]">
-        <div className="w-full max-w-md">
-         
-
-          <h1 className="mt-5 text-2xl font-extrabold tracking-tight text-stone-950 sm:text-4xl text-white">
-            Welcome back
-          </h1>
-
-          <p className="mt-4 text-base leading-7 text-stone-500 dark:text-stone-500">
-            Sign in to manage appointments, patients, and medical records for
-            your clinic workspace.
-          </p>
-
-          <div className="mt-10">
-            <LoginForm />
+          <div className="relative flex items-center gap-3 text-xl font-extrabold tracking-tight">
+            <img
+              src="/Component 1.png"
+              alt="XPawSure"
+              className="-mt-2 h-8 w-auto drop-shadow-2xl sm:h-5 lg:h-15"
+            />
           </div>
 
-          <p className="mt-10 text-sm leading-6 text-stone-500 dark:text-stone-500">
-            AI-assisted screening supports, but never replaces, veterinary
-            judgment.
+          <div className="relative max-w-sm">
+            <div className="mb-2 grid size-30 place-items-center rounded-full border-8 border-amber-950/15 bg-white/55 text-6xl">
+              <img
+                src="/xpawsure-logo.png"
+                alt="XPawSure"
+                className="size-30 object-contain"
+              />
+            </div>
+            <p className="text-sm font-bold uppercase tracking-[0.22em] text-amber-900/75">
+              Clinic workspace
+            </p>
+            <h1 className="mt-3 text-4xl font-extrabold leading-tight tracking-tight">
+              Care for every patient with confidence.
+            </h1>
+            <p className="mt-5 max-w-xs text-base leading-7 text-amber-950/75">
+              Securely manage your clinic operations and veterinary records in one place.
+            </p>
+          </div>
+
+          <p className="relative text-sm font-medium text-amber-950/70">
+            AI-assisted screening supports, but never replaces, veterinary judgment.
           </p>
-        </div>
-      </section>
+        </section>
+
+        <section className="flex items-center justify-center px-6 py-12 sm:px-12 lg:px-20">
+          <div className="w-full max-w-md">
+            <div className="mb-10 lg:hidden">
+              <div className="mb-6 flex items-center gap-3 text-xl font-extrabold tracking-tight text-amber-950 dark:text-amber-300">
+                <span className="grid size-11 place-items-center rounded-2xl bg-amber-950 text-2xl text-[#f4d0a5]" aria-hidden="true">
+                  🐾
+                </span>
+                XPawSure
+              </div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-400">
+                Clinic workspace
+              </p>
+            </div>
+
+            <div className="mb-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-800 dark:text-amber-400">
+                Welcome back
+              </p>
+              <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-stone-950 dark:text-stone-100 sm:text-4xl">
+                Sign in to <span><img
+                  src="/Component 1.png"
+                  alt="XPawSure"
+                  className="inline-block h-[1.8em] w-auto align-middle drop-shadow-2xl"
+                /></span>
+              </h2>
+              <p className="mt-3 text-base leading-7 text-stone-600 dark:text-stone-400">
+                Enter your credentials to access your clinic workspace.
+              </p>
+            </div>
+            <LoginForm />
+          </div>
+        </section>
+      </div>
     </main>
   )
 }

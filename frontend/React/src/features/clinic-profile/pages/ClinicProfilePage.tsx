@@ -85,7 +85,7 @@ export function ClinicProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         <PageHero
           title="Clinic Profile"
           subtitle="Manage clinic information, settings, and operating hours."

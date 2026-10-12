@@ -74,21 +74,24 @@ export function ReceptionistLayout() {
           } ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Branding */}
-        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-stone-200 px-1 dark:border-stone-800">
-           <img
-            src="/LogoHalf.png"
-            alt="XPawSure"
-            className=" h-8 w-auto drop-shadow-2xl sm:h-10 lg:h-15 "
-          />
+        <div className="flex h-16 shrink-0 items-center gap-2 border-b border-stone-200 px-5 dark:border-stone-800">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-950/20 dark:bg-stone-300 shadow-sm">
+            <img
+              src="/xpawsure-logo.png"
+              alt="XPawSure"
+              className="size-8 object-contain"
+            />
+          </div>
           {!isCollapsed && (
-            <span className="text-base font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
+            <span className="text-base font-extrabold tracking-tight text-amber-950/90 dark:text-stone-300">
               XPawSure
             </span>
           )}
         </div>
 
         <button
-          className="absolute right-3 top-6 z-10 hidden size-6 place-items-center rounded-full border border-stone-200 text-stone-500 shadow-sm transition hover:bg-stone-700 dark:text-stone-700 dark:bg-stone-900 dark:hover:text-stone-200 lg:grid"
+          className={`absolute z-10 size-7 place-items-center rounded-full text-stone-500 shadow-sm transition hover:bg-stone-300 dark:bg-stone-900 dark:hover:text-stone-200 lg:grid ${isCollapsed ? 'left-1/2 top-20 -translate-x-1/2' : 'right-3 top-4'
+            }`}
           onClick={() => setIsCollapsed((c) => !c)}
           type="button"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -101,7 +104,7 @@ export function ReceptionistLayout() {
         </button>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <nav className={`flex-1 px-3 py-5 pt-8 ${isCollapsed ? 'overflow-visible pt-14' : 'overflow-y-auto'}`}>
           {NAV_SECTIONS.map((section) => (
             <div key={section.label} className="mb-6 last:mb-0">
               {!isCollapsed && (
@@ -109,8 +112,8 @@ export function ReceptionistLayout() {
                   {section.label}
                 </p>
               )}
-        
-          
+
+
               <div className="space-y-0.5">
                 {section.items.map((item) => {
                   const active = isActive(item.path)
@@ -145,14 +148,14 @@ export function ReceptionistLayout() {
                     </Link>
                   )
                 })}
-                
+
               </div>
-              
+
             </div>
           ))}
-          
+
         </nav>
-        
+
 
         {/* User info */}
         <div className="border-t border-stone-200 p-3 dark:border-stone-800">

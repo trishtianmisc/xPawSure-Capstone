@@ -24,6 +24,7 @@ export function useAppointments(params: {
   vet_id?: string
   pet_id?: string
   search?: string
+  overdue?: string
   page?: number
   page_size?: number
 }) {

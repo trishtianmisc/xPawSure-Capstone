@@ -40,6 +40,17 @@ export function formatDate(value: string | Date | null | undefined): string {
   })
 }
 
+export function formatDateLong(value: string | Date | null | undefined): string {
+  const date = toDate(value)
+  if (!date) return '—'
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function formatTime(value: string | Date | null | undefined): string {
   const date = toDate(value)
   if (!date) return '—'

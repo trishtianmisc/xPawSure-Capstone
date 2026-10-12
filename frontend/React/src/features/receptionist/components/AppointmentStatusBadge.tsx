@@ -26,7 +26,7 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: strin
     className: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
   },
   NO_SHOW: {
-    label: 'No Show',
+    label: 'No-Show',
     className: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
   },
 }

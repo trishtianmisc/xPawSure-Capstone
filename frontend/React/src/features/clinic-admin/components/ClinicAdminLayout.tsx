@@ -28,7 +28,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Management',
     items: [
-      { label: 'Appointments', path: '/clinic/appointments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z', disabled: true },
+      { label: 'Appointments', path: '/clinic/appointments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
       { label: 'Patients', path: '/clinic/pets', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', disabled: true },
     ],
   },
@@ -80,18 +80,25 @@ export function ClinicAdminLayout() {
 
         {/* Branding */}
         <div className="flex h-16 shrink-0 items-center gap-2 border-b border-stone-200 px-5 dark:border-stone-800">
-          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-800 to-amber-950 shadow-sm">
-            <span className="text-base leading-none" aria-hidden="true">🐾</span>
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-amber-950/20 dark:bg-stone-300 shadow-sm">
+           
+              <img
+                src="/xpawsure-logo.png"
+                alt="XPawSure"
+                className="size-8 object-contain"
+              />
+            
           </div>
           {!isCollapsed && (
-            <span className="text-base font-extrabold tracking-tight text-stone-900 dark:text-stone-100">
+            <span className="text-base font-extrabold tracking-tight text-amber-950/90 dark:text-stone-300">
               XPawSure
             </span>
           )}
 
         </div>
         <button
-          className="absolute right-3 top-6 z-10 size-6 place-items-center rounded-full border border-stone-200 text-stone-500 shadow-sm transition hover:bg-stone-700 dark:text-stone-700 dark:bg-stone-900 dark:hover:text-stone-20 lg:grid"
+          className={`absolute z-10 size-7 place-items-center rounded-full text-stone-500 shadow-sm transition hover:bg-stone-300 dark:bg-stone-900 dark:hover:text-stone-200 lg:grid ${isCollapsed ? 'left-1/2 top-20 -translate-x-1/2' : 'right-3 top-4'
+            }`}
           onClick={() => setIsCollapsed((c) => !c)}
           type="button"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
@@ -108,7 +115,7 @@ export function ClinicAdminLayout() {
 
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
+        <nav className={`flex-1 px-3 py-5 pt-8 ${isCollapsed ? 'overflow-visible pt-14' : 'overflow-y-auto'}`}>
           {NAV_SECTIONS.map((section) => (
             <div key={section.label} className="mb-6 last:mb-0">
               {!isCollapsed && (

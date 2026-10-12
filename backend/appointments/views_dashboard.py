@@ -31,4 +31,5 @@ class DashboardStatsView(APIView):
             'total_owners': stats['total_owners'],
             'total_pets': stats['total_pets'],
             'recent_appointments': recent_serializer.data,
+            'needs_attention': stats['needs_attention'],
         })

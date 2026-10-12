@@ -10,7 +10,7 @@ interface PageHeroProps {
 
 export function PageHero({ title, subtitle, avatar, meta, actions }: PageHeroProps) {
   return (
-    <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
+    <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-7">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex items-center gap-4">
           {avatar}

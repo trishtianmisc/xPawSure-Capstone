@@ -56,6 +56,7 @@ export interface AppointmentDetail extends Appointment {
   pet_sex: string
   clinic_name: string
   owner_phone: string | null
+  owner_email: string | null
   apt_cancellation_reason: string | null
   apt_updated_at: string
 }
@@ -242,6 +243,7 @@ export interface DashboardStats {
   total_owners: number
   total_pets: number
   recent_appointments: Appointment[]
+  needs_attention: number
 }
 
 export type SlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED'
