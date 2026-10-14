@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { Alert, Badge, Button, Card, Input, Modal, Textarea } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
+import { apiErrorMessage } from '../../../../utils/error'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../services/clinic.service'
 
@@ -75,7 +76,7 @@ export function ClinicDetailPage() {
       showToast(`Status changed to ${updated.status}.`, 'success')
     },
     onError: (err) => {
-      showToast(err instanceof Error ? err.message : 'Failed to update status.', 'error')
+      showToast(apiErrorMessage(err), 'error')
     },
   })
 
@@ -87,7 +88,7 @@ export function ClinicDetailPage() {
       showToast('Clinic updated successfully.', 'success')
     },
     onError: (err) => {
-      showToast(err instanceof Error ? err.message : 'Failed to update clinic.', 'error')
+      showToast(apiErrorMessage(err), 'error')
     },
   })
 
@@ -99,11 +100,11 @@ export function ClinicDetailPage() {
       navigate('/super-admin/clinics', { replace: true })
     },
     onError: (err) => {
-      showToast(err instanceof Error ? err.message : 'Failed to delete clinic.', 'error')
+      showToast(apiErrorMessage(err), 'error')
     },
   })
 
-  const queryError = error instanceof Error ? error.message : null
+  const queryError = error ? apiErrorMessage(error) : null
 
   if (isLoading) {
     return (
@@ -318,7 +319,7 @@ export function ClinicDetailPage() {
           />
           {updateMutation.isError && (
             <Alert variant="error">
-              {updateMutation.error instanceof Error ? updateMutation.error.message : 'Failed to update clinic.'}
+              {apiErrorMessage(updateMutation.error)}
             </Alert>
           )}
           <div className="flex items-center justify-end gap-3 pt-2">

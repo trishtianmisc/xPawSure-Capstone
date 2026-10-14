@@ -2,7 +2,6 @@ import logging
 from datetime import datetime, timedelta
 
 from celery import shared_task
-from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus
 from appointments.services import (
@@ -26,7 +25,7 @@ NO_SHOW_GRACE_MINUTES = 60
 
 @shared_task(name='appointments.generate_vet_slots')
 def generate_vet_slots():
-    today = timezone.localdate(CLINIC_TIMEZONE)
+    today = datetime.now(CLINIC_TIMEZONE).date()
     end_date = today + timedelta(days=SLOT_GENERATION_DAYS)
 
     active_clinics = Clinic.objects.filter(cln_status='ACTIVE')

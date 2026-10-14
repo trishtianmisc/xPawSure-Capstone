@@ -250,9 +250,7 @@ class VetSlotService:
 
     @staticmethod
     def get_vet_list_summary(clinic_id, date=None):
-        from django.utils import timezone as tz
-
-        today = date or tz.localdate(CLINIC_TIMEZONE)
+        today = date or datetime.now(CLINIC_TIMEZONE).date()
         day_of_week = DAY_MAP[today.weekday()]
 
         vets = StaffProfile.objects.filter(

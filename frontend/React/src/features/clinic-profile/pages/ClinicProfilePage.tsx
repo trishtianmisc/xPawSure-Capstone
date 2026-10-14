@@ -1,5 +1,6 @@
 import { Alert } from '../../../components/ui'
 import { useToast } from '../../../components/ui/ToastContext'
+import { apiErrorMessage } from '../../../utils/error'
 import { PageHero } from '../../receptionist/components/PageHero'
 import { useClinicProfile } from '../hooks/useClinicProfile'
 import { useClinicSettings } from '../hooks/useClinicSettings'
@@ -49,7 +50,7 @@ export function ClinicProfilePage() {
       },
       {
         onSuccess: () => showToast('Clinic profile updated.', 'success'),
-        onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update profile.', 'error'),
+        onError: (err) => showToast(apiErrorMessage(err), 'error'),
       },
     )
   }
@@ -65,7 +66,7 @@ export function ClinicProfilePage() {
       },
       {
         onSuccess: () => showToast('Clinic settings updated.', 'success'),
-        onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update settings.', 'error'),
+        onError: (err) => showToast(apiErrorMessage(err), 'error'),
       },
     )
   }
@@ -73,14 +74,14 @@ export function ClinicProfilePage() {
   function handleUploadLogo(file: File) {
     uploadLogo.mutate(file, {
       onSuccess: () => showToast('Logo uploaded successfully.', 'success'),
-      onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to upload logo.', 'error'),
+      onError: (err) => showToast(apiErrorMessage(err), 'error'),
     })
   }
 
   function handleUpdateOperatingHours(data: OperatingHoursDay[]) {
     updateOperatingHours.mutate(data, {
       onSuccess: () => showToast('Operating hours updated.', 'success'),
-      onError: (err) => showToast(err instanceof Error ? err.message : 'Failed to update operating hours.', 'error'),
+      onError: (err) => showToast(apiErrorMessage(err), 'error'),
     })
   }
 
@@ -100,7 +101,7 @@ export function ClinicProfilePage() {
         {error && !profile && (
           <div className="py-8">
             <Alert variant="error">
-              {error instanceof Error ? error.message : 'Failed to load clinic profile.'}
+              {apiErrorMessage(error)}
             </Alert>
           </div>
         )}

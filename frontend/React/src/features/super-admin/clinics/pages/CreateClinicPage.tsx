@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Alert, Button, Card, Input, Textarea } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
+import { apiErrorMessage } from '../../../../utils/error'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicResolver, type CreateClinicFormValues } from '../schemas/clinic.schema'
 import { clinicService } from '../services/clinic.service'
@@ -35,7 +36,7 @@ export function CreateClinicPage() {
       showToast(`"${clinic.name}" registered successfully`, 'success')
       setTimeout(() => navigate('/super-admin/clinics'), 1000)
     } catch (err) {
-      setServerError(err instanceof Error ? err.message : 'Something went wrong.')
+      setServerError(apiErrorMessage(err))
     }
   }
 
