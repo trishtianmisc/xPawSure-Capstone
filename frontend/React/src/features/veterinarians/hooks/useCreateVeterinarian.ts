@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { useToast } from '../../../components/ui/ToastContext'
+import { apiErrorMessage } from '../../../utils/error'
 import { veterinarianService } from '../services/veterinarian.service'
 import type { CreateVeterinarianPayload } from '../types/veterinarian.types'
 
@@ -16,9 +17,7 @@ export const useCreateVeterinarian = (onSuccess?: () => void) => {
       onSuccess?.()
     },
     onError: (error: unknown) => {
-      const message =
-        error instanceof Error ? error.message : 'Failed to create veterinarian'
-      showToast(message, 'error')
+      showToast(apiErrorMessage(error), 'error')
     },
   })
 

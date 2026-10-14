@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
 import { useDebounce } from '../../../../hooks/useDebounce'
+import { apiErrorMessage } from '../../../../utils/error'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import {
   clinicService,
@@ -41,7 +42,7 @@ export function ClinicListPage() {
     staleTime: 30_000,
   })
 
-  const queryError = error instanceof Error ? error.message : null
+  const queryError = error ? apiErrorMessage(error) : null
 
   return (
     <DashboardLayout>

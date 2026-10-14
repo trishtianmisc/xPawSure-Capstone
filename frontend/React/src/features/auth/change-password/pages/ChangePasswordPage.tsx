@@ -1,35 +1,14 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Navigate, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../context/AuthContext'
+import { apiErrorMessage } from '../../../../utils/error'
 import {
   changePasswordSchema,
   type ChangePasswordFormData,
 } from '../schemas/change-password.schema'
-import type { Resolver } from 'react-hook-form'
-import type { FieldErrors } from 'react-hook-form'
-
-const changePasswordResolver: Resolver<ChangePasswordFormData> = async (values) => {
-  const result = changePasswordSchema.safeParse(values)
-  if (result.success) {
-    return { values: result.data, errors: {} }
-  }
-  const errors = result.error.issues.reduce<FieldErrors<ChangePasswordFormData>>(
-    (fieldErrors, issue) => {
-      const fieldName = issue.path[0]
-      if (typeof fieldName === 'string') {
-        fieldErrors[fieldName as keyof ChangePasswordFormData] = {
-          type: issue.code,
-          message: issue.message,
-        }
-      }
-      return fieldErrors
-    },
-    {},
-  )
-  return { values: {} as ChangePasswordFormData, errors }
-}
 
 function getRoleDashboardPath(role: string): string {
   switch (role) {
@@ -58,7 +37,7 @@ export function ChangePasswordPage() {
     register,
   } = useForm<ChangePasswordFormData>({
     defaultValues: { old_password: '', new_password: '', confirm_password: '' },
-    resolver: changePasswordResolver,
+    resolver: zodResolver(changePasswordSchema),
   })
 
   if (!isAuthenticated) {
@@ -79,11 +58,7 @@ export function ChangePasswordPage() {
       }
       navigate(dashboardPath, { replace: true })
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Failed to change password. Please try again.'
-      setErrorMessage(message)
+      setErrorMessage(apiErrorMessage(err))
     } finally {
       setIsSubmitting(false)
     }
