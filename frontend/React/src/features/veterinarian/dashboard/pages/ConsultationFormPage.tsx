@@ -121,7 +121,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     'w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-900 focus:outline-none dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100'
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-7xl">
       <div className="mb-8">
         <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
           <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">

@@ -180,7 +180,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100'
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <button
         className="flex items-center gap-1 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
         onClick={() => navigate(`/veterinarian/consultations/${aptId}`)}
