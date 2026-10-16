@@ -96,7 +96,7 @@ export function AppointmentDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-7xl">
       <button
         className="mb-4 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
         onClick={() => navigate(-1)}
