@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 
+import { apiErrorMessage } from '../../../../utils/error'
 import { useDashboard } from '../hooks/useDashboard'
 import { useStartConsultation } from '../hooks/useVetAppointments'
 import { StatCard, StatCardSkeleton } from '../components/StatCard'
@@ -29,7 +30,7 @@ export function DashboardPage() {
           </div>
           <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100">Failed to load dashboard</h2>
           <p className="mt-2 text-sm text-stone-500 dark:text-stone-400">
-            {error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+            {apiErrorMessage(error)}
           </p>
           <button
             className="mt-6 rounded-md bg-amber-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950"

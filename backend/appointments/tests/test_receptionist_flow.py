@@ -5,8 +5,10 @@ from zoneinfo import ZoneInfo
 from appointments.models import (
     Appointment, AppointmentStatus, AppointmentType, SlotStatus, VetSlot,
 )
-from appointments.services import AppointmentService, DashboardService
-from appointments.tasks import close_past_due_appointments
+from appointments.services import (
+    AppointmentService, DashboardService, VetSlotService,
+)
+from appointments.tasks import close_past_due_appointments, generate_vet_slots
 from appointments.tests.test_owner_booking import OwnerBookingBase, OWNER_EMAIL, RECEPTIONIST_EMAIL
 from clinics.models import Clinic
 from notifications.models import NotificationType
@@ -323,3 +325,33 @@ class PastDueAppointmentTests(OwnerBookingBase):
 
         self.assertEqual(stats['today']['pending'], 0)
         self.assertEqual(stats['needs_attention'], 1)
+
+
+class VetScheduleRegressionTests(OwnerBookingBase):
+
+    def test_vet_list_without_date_returns_200(self):
+        response = self.client.get(
+            '/api/schedule/vet-list/', **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['vets']), 1)
+        self.assertEqual(response.data['vets'][0]['stf_id'], str(self.vet.stf_id))
+
+    def test_get_vet_list_summary_defaults_to_today(self):
+        summary = VetSlotService.get_vet_list_summary(
+            clinic_id=self.clinic.cln_id,
+        )
+
+        vet_ids = [vet['stf_id'] for vet in summary['vets']]
+        self.assertIn(str(self.vet.stf_id), vet_ids)
+
+    def test_generate_vet_slots_task_creates_slots(self):
+        total = generate_vet_slots()
+
+        self.assertGreater(total, 0)
+        self.assertTrue(
+            VetSlot.objects.filter(
+                cln_id=self.clinic, stf_id=self.vet, vsl_date=self.date,
+            ).exists(),
+        )

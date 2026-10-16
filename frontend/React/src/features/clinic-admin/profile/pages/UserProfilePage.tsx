@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 import { useAuth } from '../../../auth/context/AuthContext'
+import { apiErrorMessage } from '../../../../utils/error'
 import { PageHero } from '../../../receptionist/components/PageHero'
 
 const profileSchema = z.object({
@@ -75,9 +76,7 @@ export function UserProfilePage() {
       }
       setSuccess(true)
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Failed to update profile'
-      setServerError(msg)
+      setServerError(apiErrorMessage(err))
     }
   }
 

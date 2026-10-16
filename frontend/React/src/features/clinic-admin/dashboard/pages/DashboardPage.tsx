@@ -43,7 +43,7 @@ export function DashboardPage() {
             </svg>
             <h2 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">Failed to load dashboard</h2>
             <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
-              {error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'}
+              {apiErrorMessage(error)}
             </p>
             <button
               className="mt-5 rounded-md bg-amber-500 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"

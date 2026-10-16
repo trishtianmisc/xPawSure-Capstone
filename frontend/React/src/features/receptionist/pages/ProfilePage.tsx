@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
 import { useAuth } from '../../auth/context/AuthContext'
+import { apiErrorMessage } from '../../../utils/error'
 
 const profileSchema = z.object({
   first_name: z.string().min(1, 'First name is required').max(100),
@@ -54,9 +55,7 @@ export function ProfilePage() {
       })
       setSuccess(true)
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : 'Failed to update profile'
-      setServerError(msg)
+      setServerError(apiErrorMessage(err))
     }
   }
 

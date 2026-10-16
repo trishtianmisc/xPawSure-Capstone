@@ -49,46 +49,46 @@ export function StaffDetailPage() {
 
   if (isLoading) {
     return (
-        <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
+      <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
 
-          <div className="flex items-start gap-4">
-            <div className="h-14 w-14 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" />
-            <div className="flex-1 space-y-3">
-              <div className="h-7 w-48 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-              <div className="h-5 w-24 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" />
-              <div className="h-4 w-36 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-            </div>
-            <div className="flex gap-2">
-              <div className="h-9 w-16 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
-              <div className="h-9 w-28 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
-              <div className="h-9 w-24 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
+        <div className="flex items-start gap-4">
+          <div className="h-14 w-14 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" />
+          <div className="flex-1 space-y-3">
+            <div className="h-7 w-48 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+            <div className="h-5 w-24 animate-pulse rounded-full bg-stone-200 dark:bg-stone-700" />
+            <div className="h-4 w-36 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+          </div>
+          <div className="flex gap-2">
+            <div className="h-9 w-16 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
+            <div className="h-9 w-28 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
+            <div className="h-9 w-24 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-700" />
+          </div>
+        </div>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <div className="h-5 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+            <div className="mt-4 space-y-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i}>
+                  <div className="h-3 w-16 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+                  <div className="mt-1 h-4 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+                </div>
+              ))}
             </div>
           </div>
-          <div className="grid gap-6 sm:grid-cols-2">
-            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-              <div className="h-5 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-              <div className="mt-4 space-y-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i}>
-                    <div className="h-3 w-16 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-                    <div className="mt-1 h-4 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-              <div className="h-5 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-              <div className="mt-4 space-y-4">
-                {[1, 2, 3].map((i) => (
-                  <div key={i}>
-                    <div className="h-3 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-                    <div className="mt-1 h-4 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
-                  </div>
-                ))}
-              </div>
+          <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <div className="h-5 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+            <div className="mt-4 space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i}>
+                  <div className="h-3 w-20 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+                  <div className="mt-1 h-4 w-32 animate-pulse rounded bg-stone-200 dark:bg-stone-700" />
+                </div>
+              ))}
             </div>
           </div>
         </div>
+      </div>
     )
   }
 
@@ -155,7 +155,7 @@ export function StaffDetailPage() {
 
   return (
     <>
-      <div className="mx-auto max-w-5xl px-6 py-8 space-y-6">
+      <div className="mx-auto max-w-7xl px-6 py-8 space-y-6">
         <button
           onClick={() => navigate('/clinic/staff')}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-stone-500 transition-colors hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
@@ -284,178 +284,183 @@ export function StaffDetailPage() {
         {/* Field Cards */}
         <div className="grid gap-6 sm:grid-cols-2">
           {/* Contact & Role Card */}
-          <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+          <section className={`rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900 ${staff.role !== 'VETERINARIAN' ? 'sm:col-span-2' : ''
+            }`}>
             <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-              Contact & Role
-            </h3>
-            <div className="mt-4 space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Role</p>
-                <p className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">{staff.position}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Email</p>
-                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{staff.email}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Phone</p>
-                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{formatPhone(staff.phone)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Clinic</p>
-                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{staff.clinic_name || '\u2014'}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Created</p>
-                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                  {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                </p>
-              </div>
-              {staff.updated_at && (
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Last Updated</p>
-                  <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                    {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                  </p>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Licensing Card (Veterinarians only) */}
-          {staff.role === 'VETERINARIAN' && (
-            <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-              <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-                Licensing
-              </h3>
-              <div className="mt-4 space-y-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">License Number</p>
-                  <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                    {staff.license_number || '\u2014'}
-                    {licenseBadge && (
-                      <span className={`ml-2 inline-flex items-center rounded-full px-1.5 py-px text-[10px] font-semibold ${licenseBadge.className}`}>
-                        {licenseBadge.label}
-                      </span>
-                    )}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">License Expiry</p>
-                  <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                    {expiry ? expiry.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '\u2014'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Status</p>
-                  <p className="mt-1">
-                    {staff.must_change_password ? (
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                        Pending Setup
-                      </span>
-                    ) : staff.is_active ? (
-                      <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                        Active
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                        Inactive
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </section>
-          )}
-        </div>
-
-        {/* Action History */}
-        <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-            Action History
+            Contact & Role
           </h3>
-          {/* TODO: Replace stubbed list with real data from audit log API endpoint */}
-          <div className="mt-4">
-            <div className="flex items-start gap-3 pb-4 last:pb-0">
-              <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-stone-100 dark:bg-stone-800">
-                <svg className="size-3.5 text-stone-500 dark:text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-stone-700 dark:text-stone-300">Account created</p>
-                <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                  {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                </p>
-              </div>
+          <div className={`mt-4 gap-4 ${staff.role !== 'VETERINARIAN' ? 'grid sm:grid-cols-2 lg:grid-cols-3' : 'space-y-4'}`}>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Role</p>
+              <p className="mt-1 text-sm font-medium text-stone-900 dark:text-stone-100">{staff.position}</p>
             </div>
-            {staff.updated_at && staff.updated_at !== staff.created_at && (
-              <div className="flex items-start gap-3 pb-4 last:pb-0">
-                <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-stone-100 dark:bg-stone-800">
-                  <svg className="size-3.5 text-stone-500 dark:text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-stone-700 dark:text-stone-300">Profile updated</p>
-                  <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                    {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                  </p>
-                </div>
-              </div>
-            )}
-            {!staff.is_active && (
-              <div className="flex items-start gap-3 pb-4 last:pb-0">
-                <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-red-100 dark:bg-red-900/30">
-                  <svg className="size-3.5 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-stone-700 dark:text-stone-300">Account deactivated</p>
-                </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Email</p>
+              <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{staff.email}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Phone</p>
+              <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{formatPhone(staff.phone)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Clinic</p>
+              <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">{staff.clinic_name || '\u2014'}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Created</p>
+              <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
+                {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+            {staff.updated_at && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Last Updated</p>
+                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
+                  {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                </p>
               </div>
             )}
           </div>
         </section>
+
+        {/* Licensing Card (Veterinarians only) */}
+        {staff.role === 'VETERINARIAN' && (
+          <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+              Licensing
+            </h3>
+            <div className="mt-4 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">License Number</p>
+                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
+                  {staff.license_number || '\u2014'}
+                  {licenseBadge && (
+                    <span className={`ml-2 inline-flex items-center rounded-full px-1.5 py-px text-[10px] font-semibold ${licenseBadge.className}`}>
+                      {licenseBadge.label}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">License Expiry</p>
+                <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
+                  {expiry ? expiry.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '\u2014'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Status</p>
+                <p className="mt-1">
+                  {staff.must_change_password ? (
+                    <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                      Pending Setup
+                    </span>
+                  ) : staff.is_active ? (
+                    <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      Inactive
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
-      {/* Edit Modal */}
-      {isEditOpen && (
-        <EditStaffModal
-          staff={staff as StaffMember}
-          isOpen={isEditOpen}
-          onClose={() => setIsEditOpen(false)}
-        />
-      )}
-
-      {/* Confirmation Modal */}
-      {confirmAction && (
-        <Modal
-          open={!!confirmAction}
-          onClose={() => setConfirmAction(null)}
-          title={CONFIRM_CONFIG[confirmAction].title}
-        >
-          <p className="text-sm text-stone-600 dark:text-stone-400">
-            {CONFIRM_CONFIG[confirmAction].message}
-          </p>
-          <div className="mt-6 flex justify-end gap-3">
-            <button
-              onClick={() => setConfirmAction(null)}
-              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={() => handleAction(confirmAction)}
-              disabled={actionMutation.isPending}
-              className={CONFIRM_CONFIG[confirmAction].confirmClassName}
-            >
-              {actionMutation.isPending ? 'Processing...' : CONFIRM_CONFIG[confirmAction].confirmLabel}
-            </button>
+      {/* Action History */}
+      <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+          Action History
+        </h3>
+        {/* TODO: Replace stubbed list with real data from audit log API endpoint */}
+        <div className="mt-4">
+          <div className="flex items-start gap-3 pb-4 last:pb-0">
+            <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-stone-100 dark:bg-stone-800">
+              <svg className="size-3.5 text-stone-500 dark:text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-stone-700 dark:text-stone-300">Account created</p>
+              <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
+                {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+              </p>
+            </div>
           </div>
-        </Modal>
-      )}
+          {staff.updated_at && staff.updated_at !== staff.created_at && (
+            <div className="flex items-start gap-3 pb-4 last:pb-0">
+              <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-stone-100 dark:bg-stone-800">
+                <svg className="size-3.5 text-stone-500 dark:text-stone-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-stone-700 dark:text-stone-300">Profile updated</p>
+                <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
+                  {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                </p>
+              </div>
+            </div>
+          )}
+          {!staff.is_active && (
+            <div className="flex items-start gap-3 pb-4 last:pb-0">
+              <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-red-100 dark:bg-red-900/30">
+                <svg className="size-3.5 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-stone-700 dark:text-stone-300">Account deactivated</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div >
+
+      {/* Edit Modal */ }
+  {
+    isEditOpen && (
+      <EditStaffModal
+        staff={staff as StaffMember}
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+      />
+    )
+  }
+
+  {/* Confirmation Modal */ }
+  {
+    confirmAction && (
+      <Modal
+        open={!!confirmAction}
+        onClose={() => setConfirmAction(null)}
+        title={CONFIRM_CONFIG[confirmAction].title}
+      >
+        <p className="text-sm text-stone-600 dark:text-stone-400">
+          {CONFIRM_CONFIG[confirmAction].message}
+        </p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            onClick={() => setConfirmAction(null)}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleAction(confirmAction)}
+            disabled={actionMutation.isPending}
+            className={CONFIRM_CONFIG[confirmAction].confirmClassName}
+          >
+            {actionMutation.isPending ? 'Processing...' : CONFIRM_CONFIG[confirmAction].confirmLabel}
+          </button>
+        </div>
+      </Modal>
+    )
+  }
     </>
     )
 }
