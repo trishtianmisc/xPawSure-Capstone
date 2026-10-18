@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import {
   MOCK_SCHEDULE_BY_DAY,
   MOCK_SCHEDULE_BY_MONTH,
@@ -335,57 +336,57 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
 
-  title: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 16 },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22, marginBottom: 16 },
 
   tabRow: { flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 20 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
   tabActive: { backgroundColor: colors.surface },
-  tabText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
 
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   navArrow: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight },
-  navArrowText: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  monthTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  navArrowText: { ...font.bold, color: colors.text, fontSize: 16 },
+  monthTitle: { ...font.bold, color: colors.text, fontSize: 16 },
 
   calendarCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 12, marginBottom: 24, borderWidth: 1, borderColor: colors.borderLight },
   weekdayRow: { flexDirection: 'row', marginBottom: 8 },
-  weekdayText: { flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  weekdayText: { ...font.semibold, flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 11 },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   dayCell: { width: '14.28%', alignItems: 'center', paddingVertical: 6 },
-  dayText: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  dayText: { ...font.medium, color: colors.text, fontSize: 13 },
   dayTextMuted: { color: colors.textMuted },
-  dayTextToday: { color: colors.primary, fontWeight: '800' },
+  dayTextToday: { ...font.extrabold, color: colors.primary },
   dayDot: { backgroundColor: colors.primaryLight, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   dayDotToday: { backgroundColor: colors.primaryLight, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
   daySelected: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  dayTextSelected: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  dayTextSelected: { ...font.bold, color: '#FFFFFF', fontSize: 13 },
 
   monthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
   monthCell: { width: '30.5%', alignItems: 'center', paddingVertical: 14, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderLight },
   monthCellCurrent: { borderColor: colors.primary },
   monthCellSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  monthCellText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  monthCellText: { ...font.semibold, color: colors.text, fontSize: 14 },
   monthCellTextCurrent: { color: colors.primary },
-  monthCellTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  monthCellTextSelected: { ...font.bold, color: '#FFFFFF' },
 
-  weekDayHeader: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 12, marginBottom: 8 },
+  weekDayHeader: { ...font.bold, color: colors.text, fontSize: 14, marginTop: 12, marginBottom: 8 },
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  sectionTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  sectionTitle: { ...font.bold, color: colors.text, fontSize: 16 },
 
   appointmentsSection: { gap: 10 },
   aptCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.borderLight },
   aptTimeCol: { width: 80 },
-  aptDateLabel: { color: colors.text, fontSize: 12, fontWeight: '600', marginBottom: 2 },
-  aptTime: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  aptDateLabel: { ...font.semibold, color: colors.text, fontSize: 12, marginBottom: 2 },
+  aptTime: { ...font.bold, color: colors.text, fontSize: 13 },
   aptDivider: { width: 3, height: 40, backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12 },
   aptInfoCol: { flex: 1 },
   aptPetRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
-  aptPetName: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  aptBreed: { color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-  aptOwner: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  aptPetName: { ...font.bold, color: colors.text, fontSize: 15 },
+  aptBreed: { ...font.regular, color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
+  aptOwner: { ...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
 
   emptyState: { alignItems: 'center', paddingVertical: 24 },
-  emptyText: { color: colors.textSecondary, fontSize: 14 },
+  emptyText: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
 })

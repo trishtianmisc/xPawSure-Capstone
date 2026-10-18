@@ -3,6 +3,7 @@ import { useMemo, type ComponentProps, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 type EmptyAction = {
   label: string
@@ -124,14 +125,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 12,
   },
   title: {
+    ...font.extrabold,
     color: colors.text,
     fontSize: 17,
-    fontWeight: '800',
   },
   seeAll: {
+    ...font.bold,
     color: colors.primary,
     fontSize: 13,
-    fontWeight: '700',
   },
   headerActions: {
     alignItems: 'center',
@@ -144,9 +145,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 3,
   },
   headerActionText: {
+    ...font.bold,
     color: colors.primary,
     fontSize: 13,
-    fontWeight: '700',
   },
 
   rows: {
@@ -159,6 +160,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     minHeight: 72,
   },
   statusText: {
+    ...font.regular,
     color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
@@ -174,6 +176,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 24,
   },
   emptyText: {
+    ...font.regular,
     color: colors.textMuted,
     fontSize: 13,
     textAlign: 'center',
@@ -187,8 +190,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 8,
   },
   emptyButtonText: {
+    ...font.bold,
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '700',
   },
 })

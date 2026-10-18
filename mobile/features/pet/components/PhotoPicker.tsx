@@ -4,6 +4,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import * as ImagePicker from 'expo-image-picker'
 
 import { useTheme } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 interface PhotoPickerProps {
   value: string | undefined
@@ -110,13 +111,13 @@ const styles = StyleSheet.create({
     width: '80%',
   },
   iconCircle: { borderRadius: 32, height: 64, justifyContent: 'center', width: 64, alignItems: 'center' },
-  uploadTitle: { fontSize: 15, fontWeight: '700' },
-  uploadHint: { fontSize: 12, fontWeight: '500', marginTop: -2 },
+  uploadTitle: { ...font.bold, fontSize: 15 },
+  uploadHint: { ...font.medium, fontSize: 12, marginTop: -2 },
   cameraRow: { alignItems: 'center', flexDirection: 'row', marginTop: 10 },
-  cameraLink: { fontSize: 13, fontWeight: '600' },
+  cameraLink: { ...font.semibold, fontSize: 13 },
   previewWrap: { alignItems: 'center', gap: 12, paddingTop: 20 },
   preview: { borderRadius: 75, height: 150, width: 150 },
   actionRow: { flexDirection: 'row', gap: 10 },
   actionBtn: { borderRadius: 10, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 8 },
-  actionBtnText: { fontSize: 13, fontWeight: '600' },
+  actionBtnText: { ...font.semibold, fontSize: 13 },
 })

@@ -3,6 +3,7 @@ import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View 
 import { useRouter } from 'expo-router'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { MOCK_VET_CONSULTATIONS } from '../../../features/vet/data/mock'
 import type { ConsultationStatus } from '../../../features/vet/types'
 
@@ -92,26 +93,26 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
 
-  title: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 16 },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22, marginBottom: 16 },
 
   tabRow: { flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 20 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
   tabActive: { backgroundColor: colors.surface },
-  tabText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
 
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.borderLight },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
   cardDateTime: {},
-  cardDate: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  cardDate: { ...font.bold, color: colors.text, fontSize: 14 },
   cardInfo: { marginTop: 10 },
-  petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  petBreed: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
-  ownerName: { color: colors.textSecondary, fontSize: 13, marginTop: 4 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  petBreed: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
+  ownerName: { ...font.regular, color: colors.textSecondary, fontSize: 13, marginTop: 4 },
 
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  statusBadgeText: { ...font.bold, fontSize: 11 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
-  emptyText: { color: colors.textSecondary, fontSize: 14 },
+  emptyText: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
 })

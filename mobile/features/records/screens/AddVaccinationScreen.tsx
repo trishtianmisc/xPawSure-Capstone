@@ -6,14 +6,18 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
+
 
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { usePets } from '../../pet/hooks/usePets'
 import { VaccinationForm } from '../components/VaccinationForm'
@@ -71,6 +75,14 @@ export default function AddVaccinationScreen() {
     })
   }
 
+   const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back()
+    } else {
+      router.replace('/(owner)/records')
+    }
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.select({ ios: 'padding', default: undefined })}
@@ -81,13 +93,25 @@ export default function AddVaccinationScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.headerSection}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={handleBack}
+            style={styles.headerBack}
+          >
+            <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
+          </Pressable>
           <Text style={styles.headerTitle}>Record Vaccination</Text>
           <Text style={styles.headerHint}>
-            Log a vaccine your pet received — it becomes part of their health record.
+            Log a vaccine your pet received.
           </Text>
-          {pets.isLoading ? <ActivityIndicator color={colors.primary} style={styles.petsLoader} /> : null}
         </View>
+
+        <View style={styles.section}>
+        {pets.isLoading ? <ActivityIndicator color={colors.primary} style={styles.petsLoader} /> : null}
+
 
         <VaccinationForm
           errorMessage={createVaccination.isError ? apiErrorMessage(createVaccination.error) : null}
@@ -97,6 +121,7 @@ export default function AddVaccinationScreen() {
           pets={petOptions}
           submitLabel="Save Record"
         />
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -105,18 +130,10 @@ export default function AddVaccinationScreen() {
 const createStyles = (colors: AppColors) => StyleSheet.create({
   flex: { flex: 1 },
   scroll: { paddingTop: 20, paddingBottom: 48 },
-  headerSection: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    marginHorizontal: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  headerTitle: { color: colors.text, fontSize: 19, fontWeight: '800' },
-  headerHint: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  header: { height: 30, marginHorizontal: 10, marginBottom: 8, marginTop: -10},
+  headerBack: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
+  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -45, marginLeft: 60 },
+  headerHint: {...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: -3, marginLeft: 60  },
+  section: { gap: 10, paddingHorizontal: 2, paddingTop: 30 },
   petsLoader: { marginTop: 12 },
 })

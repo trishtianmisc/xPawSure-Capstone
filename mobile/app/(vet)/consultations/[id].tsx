@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { MOCK_CONSULTATION_DETAIL } from '../../../features/vet/data/mock'
 import type { ConsultationStatus } from '../../../features/vet/types'
 
@@ -351,76 +352,76 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   backRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   backLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  backText: { color: colors.text, fontSize: 17, fontWeight: '700' },
+  backText: { ...font.bold, color: colors.text, fontSize: 17 },
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  statusBadgeText: { ...font.bold, fontSize: 11 },
 
   infoCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  infoLabel: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
-  infoValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  infoLabel: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
+  infoValue: { ...font.bold, color: colors.text, fontSize: 14 },
   infoDivider: { height: 1, backgroundColor: colors.border },
 
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },
   rescheduleBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  rescheduleText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  rescheduleText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
   cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  cancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  cancelText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
 
-  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 14 },
+  sectionTitle: { ...font.bold, color: colors.text, fontSize: 17, marginBottom: 14 },
 
   screeningCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.borderLight },
   screeningImagePlaceholder: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, height: 120, justifyContent: 'center', marginBottom: 14 },
-  screeningLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '600', marginBottom: 4 },
-  screeningPrediction: { color: colors.primary, fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  screeningDesc: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  screeningLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+  screeningPrediction: { ...font.extrabold, color: colors.primary, fontSize: 16, marginBottom: 6 },
+  screeningDesc: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 
   followUpCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.borderLight },
-  followUpQuestion: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  followUpAnswer: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+  followUpQuestion: { ...font.semibold, color: colors.text, fontSize: 14, marginBottom: 6 },
+  followUpAnswer: { ...font.bold, color: colors.primary, fontSize: 14 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', alignItems: 'center' },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 },
-  modalMessage: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalTitle: { ...font.extrabold, color: colors.text, fontSize: 18, marginBottom: 12 },
+  modalMessage: { ...font.regular, color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
   modalNoBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  modalNoText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  modalNoText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
   modalYesGreenBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  modalYesGreenText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  modalYesGreenText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
   modalYesRedBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#E74C3C' },
-  modalYesRedText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  modalYesRedText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   formCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', maxHeight: '85%' },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  formTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  formLabel: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  formTitle: { ...font.extrabold, color: colors.text, fontSize: 18 },
+  formLabel: { ...font.bold, color: colors.text, fontSize: 14, marginBottom: 10 },
 
   calendarContainer: { backgroundColor: colors.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 10 },
   calendarNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  calendarMonthTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  calendarMonthTitle: { ...font.bold, color: colors.text, fontSize: 15 },
   weekdayRow: { flexDirection: 'row', marginBottom: 6 },
-  weekdayText: { flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  weekdayText: { ...font.semibold, flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 11 },
   daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   dayCell: { width: '14.28%', alignItems: 'center', paddingVertical: 4 },
-  dayText: { color: colors.text, fontSize: 13, fontWeight: '500' },
+  dayText: { ...font.medium, color: colors.text, fontSize: 13 },
   daySelected: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  dayTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  dayTextSelected: { ...font.bold, color: '#FFFFFF' },
   dayDisabled: { opacity: 0.3 },
   dayTextDisabled: { color: colors.textMuted },
-  selectedDateText: { color: colors.primary, fontSize: 13, fontWeight: '600', marginBottom: 16 },
+  selectedDateText: { ...font.semibold, color: colors.primary, fontSize: 13, marginBottom: 16 },
 
-  textInput: { backgroundColor: colors.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, padding: 14, color: colors.text, fontSize: 14, minHeight: 80, marginBottom: 20 },
+  textInput: { ...font.regular, backgroundColor: colors.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, padding: 14, color: colors.text, fontSize: 14, minHeight: 80, marginBottom: 20 },
 
   formActions: { flexDirection: 'row', gap: 12 },
   formCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  formCancelText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  formCancelText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
   formSubmitGreenBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  formSubmitGreenText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  formSubmitGreenText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
   formSubmitRedBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#E74C3C' },
-  formSubmitRedText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  formSubmitRedText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   successIconContainer: { alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: '#27AE60', marginBottom: 16 },
   successBtn: { width: '100%', alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  successBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  successBtnText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 })

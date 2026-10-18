@@ -3,6 +3,7 @@ import { useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import type { ConsultationRecord, VaccinationRecordItem } from '../../../src/services/records'
 import { VaccinationStatusPill } from '../../records/components/VaccinationStatusPill'
 import { STATUS_STYLES } from '../../screening/constants'
@@ -120,14 +121,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 2,
   },
   rowTitle: {
+    ...font.bold,
     color: colors.text,
     fontSize: 14,
-    fontWeight: '700',
   },
   rowMeta: {
+    ...font.semibold,
     color: colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600',
   },
   rowAside: {
     alignItems: 'center',
@@ -141,7 +142,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 3,
   },
   statusPillText: {
+    ...font.bold,
     fontSize: 11,
-    fontWeight: '700',
   },
 })

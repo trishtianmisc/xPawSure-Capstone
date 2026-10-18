@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { VaccinationForm } from '../components/VaccinationForm'
 import { useUpdateVaccination } from '../hooks/useUpdateVaccination'
@@ -145,8 +146,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  stateText: { color: colors.textSecondary, fontSize: 15, textAlign: 'center' },
-  readOnlyTitle: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  stateText: { ...font.regular, color: colors.textSecondary, fontSize: 15, textAlign: 'center' },
+  readOnlyTitle: { ...font.bold, color: colors.text, fontSize: 20 },
   backButton: {
     alignItems: 'center',
     backgroundColor: colors.primary,
@@ -156,7 +157,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 8,
     paddingHorizontal: 24,
   },
-  backButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  backButtonText: { ...font.bold, color: '#FFFFFF', fontSize: 15 },
   headerSection: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -168,6 +169,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  headerTitle: { color: colors.text, fontSize: 19, fontWeight: '800' },
-  headerHint: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 19 },
+  headerHint: { ...font.regular, color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 6 },
 })

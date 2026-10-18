@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
+import { font } from '../../../../src/theme/typography'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
@@ -156,13 +157,13 @@ export default function AdjustScreen() {
               {result.changed ? (
                 <>
                   Your answers point to{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.originalTop.label}</Text>.
+                  <Text style={{ ...font.extrabold }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
                 </>
               ) : (
                 <>
                   Your answers are consistent with the AI&rsquo;s suggestion of{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.originalTop.label}</Text>.
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
                 </>
               )}
             </Text>
@@ -180,7 +181,7 @@ export default function AdjustScreen() {
                       {i === 0 ? '\u2605 ' : '  '}
                       {pred.label}
                     </Text>
-                    <Text style={[styles.barPct, i === 0 && { color: colors.text, fontWeight: '700' }]}>{pct}%</Text>
+                    <Text style={[styles.barPct, i === 0 && { ...font.bold, color: colors.text }]}>{pct}%</Text>
                   </View>
                   <View style={[styles.barTrack, { backgroundColor: colors.surfaceAlt }]}>
                     <View
@@ -301,11 +302,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerBack: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitle: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  headerTitle: { ...font.bold, color: colors.text, flex: 1, fontSize: 17, textAlign: 'center' },
   headerRight: { width: 48 },
 
   progressSection: { backgroundColor: colors.surface, gap: 8, paddingHorizontal: 24, paddingBottom: 14 },
-  progressLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  progressLabel: { ...font.semibold, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
   progressTrack: { borderRadius: 4, height: 6, overflow: 'hidden', width: '100%' },
   progressFill: { backgroundColor: '#B96534', borderRadius: 4, height: '100%' },
 
@@ -320,8 +321,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 18,
     padding: 18,
   },
-  questionText: { color: colors.text, fontSize: 16, fontWeight: '700', lineHeight: 23 },
-  questionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  questionText: { ...font.bold, color: colors.text, fontSize: 16, lineHeight: 23 },
+  questionHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
 
   optionsList: { gap: 10 },
   option: {
@@ -348,8 +349,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   optionMarkMulti: { borderRadius: 6 },
   optionMarkActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   optionDot: { backgroundColor: '#FFF', borderRadius: 4, height: 8, width: 8 },
-  optionText: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 19 },
-  optionTextActive: { fontWeight: '700' },
+  optionText: { ...font.medium, color: colors.text, flex: 1, fontSize: 14, lineHeight: 19 },
+  optionTextActive: { ...font.bold },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
@@ -362,8 +363,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 56,
   },
   imageInfo: { flex: 1 },
-  petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  timestamp: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
 
   verdictCard: {
     alignItems: 'flex-start',
@@ -375,7 +376,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 16,
   },
-  verdictText: { color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
+  verdictText: { ...font.regular, color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
 
   breakdownCard: {
     backgroundColor: colors.surface,
@@ -385,11 +386,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 18,
   },
-  breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
   barRow: { gap: 6, marginBottom: 14 },
   barLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { color: '#A0A0A0', flex: 1, fontSize: 13, fontWeight: '500' },
-  barPct: { color: '#A0A0A0', fontSize: 13, fontWeight: '600', marginLeft: 8, minWidth: 36, textAlign: 'right' },
+  barLabel: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
+  barPct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
   barTrack: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
   barFill: { borderRadius: 4, height: '100%' },
 
@@ -401,11 +402,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  infoText: { color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
 
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
-  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  emptyText: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
+  emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
+  emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
 
   bottomBar: {
     backgroundColor: colors.surface,
@@ -431,5 +432,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   primaryBtn: { backgroundColor: '#B96534' },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
-  actionBtnText: { fontSize: 14, fontWeight: '700' },
+  actionBtnText: { ...font.bold, fontSize: 14 },
 })

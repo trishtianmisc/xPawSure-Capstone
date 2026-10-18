@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
 
@@ -105,14 +106,14 @@ export default function PetsScreen() {
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 15 },
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  title: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22 },
   addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 36, paddingHorizontal: 16, justifyContent: 'center' },
-  addButtonText: { color: colors.inverse, fontSize: 14, fontWeight: '700' },
-  searchRow: { alignItems: 'center', flexDirection: 'row', gap: 10, marginTop: 20 },
-  searchField: { borderColor: colors.border, borderRadius: 12, borderWidth: 1, flex: 1, height: 42, justifyContent: 'center' },
-  searchInput: { color: colors.text, fontSize: 15, height: '100%', paddingHorizontal: 16, paddingVertical: 0 },
+  addButtonText: { ...font.semibold, color: colors.inverse, fontSize: 14 },
+  searchRow: { alignItems: 'center', flexDirection: 'row', gap: 1, marginTop: 20 },
+  searchField: { borderColor: colors.border, borderRadius: 10, borderWidth: 1, flex: 1, height: 40, justifyContent: 'center' },
+  searchInput: { ...font.regular, color: colors.text, fontSize: 15, height: '100%', paddingHorizontal: 16, paddingVertical: 0 },
   sortButton: { alignItems: 'center', borderRadius: 12, height: 42, justifyContent: 'center', width: 42 },
   sortButtonActive: { backgroundColor: colors.primaryLight },
   list: { gap: 12, marginTop: 20 },
@@ -120,9 +121,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   petPhoto: { borderRadius: 12, height: 50, width: 50 },
   petPhotoPlaceholder: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 12, height: 50, justifyContent: 'center', width: 50 },
   petInfo: { flex: 1, marginLeft: 14 },
-  petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  petBreed: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  petBreed: { ...font.regular, color: colors.textSecondary, fontSize: 13, marginTop: 2 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 120 },
   emptyState: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 12, minHeight: 120, justifyContent: 'center', paddingHorizontal: 24 },
-  statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
 })

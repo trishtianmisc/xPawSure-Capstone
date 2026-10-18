@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 export type VaccinationTone = 'overdue' | 'due' | 'ok'
 
@@ -50,8 +51,8 @@ const createStyles = (colors: AppColors) =>
       paddingVertical: 3,
     },
     pillText: {
+      ...font.bold,
       fontSize: 11,
-      fontWeight: '700',
     },
     overdue: {
       backgroundColor: '#FFE5E5',
