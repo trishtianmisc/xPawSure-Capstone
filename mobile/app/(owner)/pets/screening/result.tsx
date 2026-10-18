@@ -90,6 +90,8 @@ export default function ResultScreen() {
     state: ScreeningResultState
     stateMessage: string
     alreadySaved: string
+    refined?: string
+    changed?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -104,18 +106,30 @@ export default function ResultScreen() {
     }
   }, [params.predictions])
 
+  const refinedPredictions: Prediction[] | null = useMemo(() => {
+    try {
+      const parsed = params.refined ? JSON.parse(params.refined) : null
+      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
+    } catch {
+      return null
+    }
+  }, [params.refined])
+
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
-  const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = top ? Math.round(top.confidence) : 0
+  const finalTop = refinedPredictions ? refinedPredictions[0] : top
+  const isChanged = params.changed === 'true'
+  const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
+  const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
+  const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
 
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
 
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!top && !!params.petId && params.petId !== 'unknown'
+  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
 
   const handleSaveAndBook = () => {
-    if (!canBook || createScreening.isPending) return
+    if (!canBook || !finalTop || createScreening.isPending) return
     if (params.alreadySaved === 'true') {
       router.replace('/(owner)/appointments/book')
       return
@@ -125,8 +139,8 @@ export default function ResultScreen() {
       {
         pet_id: params.petId,
         source: 'DEVICE',
-        prediction: top.disease,
-        confidence: Math.round(top.confidence),
+        prediction: finalTop.disease,
+        confidence: Math.round(finalTop.confidence),
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
@@ -165,23 +179,32 @@ export default function ResultScreen() {
           </View>
         </View>
 
-        {screeningState === 'DISEASE_DETECTED' && top && topMeta && (
+        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>Predicted Condition</Text>
-              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
+              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
                 <Text style={styles.confidenceLabel}>confidence</Text>
               </View>
+              {refinedPredictions && (
+                <Text style={styles.comparisonText}>
+                  {isChanged
+                    ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
+                    : 'Consistent with the preliminary AI screen.'}
+                </Text>
+              )}
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>All Predictions</Text>
-              {sorted.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>
+                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
+              </Text>
+              {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -193,27 +216,12 @@ export default function ResultScreen() {
                   />
                 )
               })}
+              {refinedPredictions && (
+                <Text style={styles.moreCountText}>
+                  2 other conditions were also considered and scored lower.
+                </Text>
+              )}
             </View>
-
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/(owner)/pets/screening/adjust',
-                  params: {
-                    predictions: params.predictions,
-                    petId: params.petId,
-                    petName: params.petName,
-                    imageUri: params.imageUri ?? '',
-                  },
-                })
-              }
-              style={styles.narrowBtn}
-            >
-              <MaterialCommunityIcons color={colors.primary} name="file-tree-outline" size={16} />
-              <Text style={[styles.narrowBtnText, { color: colors.primary }]}>
-                Doesn&rsquo;t look right? Narrow it down
-              </Text>
-            </Pressable>
           </>
         )}
 
@@ -344,20 +352,20 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 18,
   },
   breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
-
-  narrowBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    marginBottom: 16,
-    paddingVertical: 12,
+  comparisonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: 10,
+    textAlign: 'center',
   },
-  narrowBtnText: { fontSize: 13, fontWeight: '700' },
+  moreCountText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
 
   stateCard: {
     alignItems: 'center',
