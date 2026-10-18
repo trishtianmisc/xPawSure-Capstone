@@ -12,11 +12,8 @@ export default function OwnerTabLayout() {
   const { colors } = useTheme()
   const { isLoading, isAuthenticated, user } = useAuth()
 
-  if (isLoading) return null
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
-  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
-
   useEffect(() => {
+    preloadModel()
     const task = InteractionManager.runAfterInteractions(() => {
       preloadModel()
     })
@@ -24,6 +21,10 @@ export default function OwnerTabLayout() {
       task.cancel()
     }
   }, [])
+
+  if (isLoading) return null
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
+  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
