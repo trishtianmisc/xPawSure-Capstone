@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { CONFIDENCE_THRESHOLDS } from '../../../ai/constants/diseases'
 import { STATUS_STYLES } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
 
@@ -22,6 +23,13 @@ export default function ScreeningHistoryScreen() {
   const { data, isLoading, isError } = useAllScreenings()
 
   const screenings = data?.results ?? []
+  const pendingScreenings = screenings.filter((s) => s.ais_status === 'PENDING_REVIEW')
+  const hasPending = pendingScreenings.length > 0
+  const hasLowConfidence = pendingScreenings.some(
+    (s) => Number(s.ais_confidence) / 100 < CONFIDENCE_THRESHOLDS.MODERATE,
+  )
+
+  const openBooking = () => router.push('/(owner)/appointments/book')
 
   return (
     <View style={styles.screen}>
@@ -35,17 +43,54 @@ export default function ScreeningHistoryScreen() {
             We couldn&apos;t load your screening history. Please try again.
           </Text>
         ) : screenings.length > 0 ? (
-          screenings.map((screening) => {
-            const status = STATUS_STYLES[screening.ais_status]
-            return (
-              <View key={screening.ais_id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
-                  <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-                    <Text style={[styles.statusPillText, { color: status.fg }]}>{status.label}</Text>
-                  </View>
+          <>
+            {hasPending && (
+              <View style={styles.guideCard}>
+                <View style={styles.guideRow}>
+                  <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={22} />
+                  <Text style={styles.guideText}>
+                    {hasLowConfidence
+                      ? 'This result was uncertain. For a reliable assessment, please book a veterinary appointment.'
+                      : "Concerned about your dog's skin condition? Book a veterinary appointment for a professional assessment."}
+                  </Text>
                 </View>
-                <Text numberOfLines={1} style={styles.disease}>{screening.disease}</Text>
+                <Pressable
+                  accessibilityHint="Opens the appointment booking flow"
+                  accessibilityLabel="Book a veterinary appointment"
+                  accessibilityRole="button"
+                  onPress={openBooking}
+                  style={styles.guideBtn}
+                >
+                  <MaterialCommunityIcons color="#FFFFFF" name="calendar-check-outline" size={16} />
+                  <Text style={styles.guideBtnText}>Book an Appointment</Text>
+                </Pressable>
+              </View>
+            )}
+            {screenings.map((screening) => {
+              const status = STATUS_STYLES[screening.ais_status]
+              const showBookAction = screening.ais_status === 'PENDING_REVIEW'
+              return (
+                <View key={screening.ais_id} style={styles.card}>
+                  <View style={styles.cardHeader}>
+                    <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
+                    {showBookAction ? (
+                      <Pressable
+                        accessibilityHint="Opens the appointment booking flow"
+                        accessibilityLabel={`Book a veterinary appointment for ${screening.pet_name}`}
+                        accessibilityRole="button"
+                        onPress={openBooking}
+                        style={styles.bookChip}
+                      >
+                        <MaterialCommunityIcons color="#FFFFFF" name="calendar-outline" size={13} />
+                        <Text style={styles.bookChipText}>Book</Text>
+                      </Pressable>
+                    ) : (
+                      <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+                        <Text style={[styles.statusPillText, { color: status.fg }]}>{status.label}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text numberOfLines={1} style={styles.disease}>{screening.disease}</Text>
                 <View style={styles.cardFooter}>
                   <Text style={styles.meta}>
                     {screening.ais_confidence}% confidence · {formatDate(screening.ais_created_at)}
@@ -54,7 +99,8 @@ export default function ScreeningHistoryScreen() {
                 </View>
               </View>
             )
-          })
+          })}
+          </>
         ) : (
           <View style={styles.emptyState}>
             <MaterialCommunityIcons color={colors.textMuted} name="face-man-profile" size={28} />
@@ -78,6 +124,37 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   content: { gap: 12, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 16 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
   statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+
+  guideCard: {
+    backgroundColor: colors.primaryLight,
+    borderRadius: 14,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  guideRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 10 },
+  guideText: { color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
+  guideBtn: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  guideBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+
+  bookChip: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  bookChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,

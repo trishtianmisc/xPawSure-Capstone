@@ -300,6 +300,7 @@ export default function PetProfileScreen() {
               key={screening.ais_id}
               screening={screening}
               onPress={() => router.push('/(owner)/screenings')}
+              onBook={() => router.push('/(owner)/appointments/book')}
             />
           ))}
         </PetRecordSection>

@@ -89,6 +89,7 @@ export default function ResultScreen() {
     inferenceTimeMs: string
     state: ScreeningResultState
     stateMessage: string
+    alreadySaved: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -115,6 +116,10 @@ export default function ResultScreen() {
 
   const handleSaveAndBook = () => {
     if (!canBook || createScreening.isPending) return
+    if (params.alreadySaved === 'true') {
+      router.replace('/(owner)/appointments/book')
+      return
+    }
     setSaveError(false)
     createScreening.mutate(
       {

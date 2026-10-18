@@ -104,16 +104,22 @@ export default function CaptureScreen() {
     try {
       const result = await screenImage(imageUri)
 
+      let alreadySaved = false
       if (result.state === 'DISEASE_DETECTED') {
-        createScreening.mutate({
-          pet_id: selectedPet.id,
-          source: 'DEVICE',
-          prediction: result.topPrediction.disease,
-          confidence: result.topPrediction.confidence,
-          model_version: result.modelVersion,
-          inference_time_ms: result.inferenceTimeMs,
-          device: 'react-native',
-        })
+        try {
+          await createScreening.mutateAsync({
+            pet_id: selectedPet.id,
+            source: 'DEVICE',
+            prediction: result.topPrediction.disease,
+            confidence: result.topPrediction.confidence,
+            model_version: result.modelVersion,
+            inference_time_ms: result.inferenceTimeMs,
+            device: 'react-native',
+          })
+          alreadySaved = true
+        } catch {
+          // Auto-save failed — the result screen's Save&Book will retry.
+        }
       }
 
       router.push({
@@ -127,6 +133,7 @@ export default function CaptureScreen() {
           inferenceTimeMs: String(result.inferenceTimeMs),
           state: result.state,
           stateMessage: result.stateMessage,
+          alreadySaved: alreadySaved ? 'true' : 'false',
         },
       })
     } catch {
