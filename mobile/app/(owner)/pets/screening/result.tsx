@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
-import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
@@ -92,6 +92,7 @@ export default function ResultScreen() {
     alreadySaved: string
     refined?: string
     changed?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -114,6 +115,15 @@ export default function ResultScreen() {
       return null
     }
   }, [params.refined])
+
+  const imageReports: ImageReport[] = useMemo(() => {
+    try {
+      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
+      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
+    } catch {
+      return []
+    }
+  }, [params.imageReports])
 
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
@@ -170,14 +180,38 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
-          {params.imageUri && (
-            <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
+          {(params.imageUri || imageReports.length > 0) && (
+            <Image
+              source={{ uri: imageReports.find((r) => r.status === 'ok')?.uri ?? params.imageUri }}
+              style={styles.thumbnail}
+            />
           )}
           <View style={styles.imageInfo}>
             <Text style={styles.petName}>{params.petName}</Text>
-            <Text style={styles.timestamp}>Just now</Text>
+            <Text style={styles.timestamp}>
+              {imageReports.length > 0
+                ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
+                : 'Just now'}
+            </Text>
           </View>
         </View>
+
+        {imageReports.length > 0 && (
+          <View style={styles.reportStrip}>
+            {imageReports.map((report, i) => (
+              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
+                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
+                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
+                  <MaterialCommunityIcons
+                    color="#FFF"
+                    name={report.status === 'ok' ? 'check' : 'close'}
+                    size={10}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
           <>
@@ -314,6 +348,22 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
+  reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
+  reportItem: { position: 'relative' },
+  reportThumb: { borderRadius: 12, height: 56, width: 56 },
+  reportThumbFailed: { opacity: 0.4 },
+  reportBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    bottom: -4,
+    height: 18,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -4,
+    width: 18,
+  },
+  reportBadgeOk: { backgroundColor: '#27AE60' },
+  reportBadgeFail: { backgroundColor: '#C0392B' },
   imageInfo: { flex: 1 },
   petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
   timestamp: { color: colors.textMuted, fontSize: 12, marginTop: 2 },

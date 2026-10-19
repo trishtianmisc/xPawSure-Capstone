@@ -13,13 +13,22 @@ export interface Prediction {
   label: string
 }
 
+export type ImageReportStatus = 'ok' | 'quality_failed' | 'low_similarity'
+
+export interface ImageReport {
+  uri: string
+  status: ImageReportStatus
+  similarity: number
+}
+
 export interface ScreeningResult {
   predictions: Prediction[]
-  topPrediction: Prediction
+  topPrediction?: Prediction
   inferenceTimeMs: number
   modelVersion: string
   state: ScreeningResultState
   stateMessage: string
+  imageReports?: ImageReport[]
 }
 
 export interface ScreeningUploadPayload {

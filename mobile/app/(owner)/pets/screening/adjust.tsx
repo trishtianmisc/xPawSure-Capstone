@@ -31,6 +31,7 @@ export default function AdjustScreen() {
     imageUri?: string
     modelVersion?: string
     inferenceTimeMs?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -105,6 +106,7 @@ export default function AdjustScreen() {
         refined: JSON.stringify(refined.refined),
         changed: refined.changed ? 'true' : 'false',
         alreadySaved: alreadySaved ? 'true' : 'false',
+        imageReports: params.imageReports ?? '',
       },
     })
   }

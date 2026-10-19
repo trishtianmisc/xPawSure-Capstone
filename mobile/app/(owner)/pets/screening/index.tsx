@@ -28,18 +28,21 @@ export default function CaptureScreen() {
   const { user } = useAuth()
   const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
   const { data: pets } = usePets(user?.id)
-  const { screenImage, isScreening, isModelLoading, modelError } = useAIScreening()
+  const { screenImages, isScreening, isModelLoading, modelError } = useAIScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
-  const [imageUri, setImageUri] = useState<string | null>(null)
+  const [imageUris, setImageUris] = useState<(string | null)[]>([null, null, null, null, null])
+  const [activeIndex, setActiveIndex] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
   const isBusy = isScreening || isModelLoading
   const petsLoaded = pets !== undefined
   const hasPets = (pets?.length ?? 0) > 0
-  const canRun = !!imageUri && !!selectedPet && !isBusy
+  const filledCount = imageUris.filter((uri) => uri !== null).length
+  const allImagesCaptured = filledCount === imageUris.length
+  const canRun = allImagesCaptured && !!selectedPet && !isBusy
 
   useEffect(() => {
     if (!pets || selectedPetId) return
@@ -57,6 +60,18 @@ export default function CaptureScreen() {
     return () => task.cancel()
   }, [])
 
+  const setSlotImage = (uri: string) => {
+    setImageUris((prev) => {
+      const next = [...prev]
+      next[activeIndex] = uri
+      return next
+    })
+    const nextEmpty = imageUris.findIndex((existing, i) => existing === null && i !== activeIndex)
+    if (nextEmpty !== -1) {
+      setActiveIndex(nextEmpty)
+    }
+  }
+
   const handlePickGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) return
@@ -70,7 +85,7 @@ export default function CaptureScreen() {
         quality: 0.85,
       })
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri)
+        setSlotImage(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -89,7 +104,7 @@ export default function CaptureScreen() {
         quality: 0.85,
       })
       if (!result.canceled && result.assets[0]) {
-        setImageUri(result.assets[0].uri)
+        setSlotImage(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -97,21 +112,26 @@ export default function CaptureScreen() {
   }
 
   const handleRunScreening = async () => {
-    if (!imageUri || !selectedPet) return
+    if (!selectedPet || !allImagesCaptured) return
+    const uris = imageUris.filter((uri): uri is string => uri !== null)
 
     try {
-      const result = await screenImage(imageUri)
+      const result = await screenImages(uris)
+      const firstOkReport = result.imageReports?.find((r) => r.status === 'ok')
+      const coverUri = firstOkReport?.uri ?? uris[0]
+      const reportsJson = JSON.stringify(result.imageReports ?? [])
 
       if (result.state === 'DISEASE_DETECTED') {
         router.push({
           pathname: '/(owner)/pets/screening/adjust',
           params: {
-            imageUri,
+            imageUri: coverUri,
             petId: selectedPet.id,
             petName: selectedPet.name,
             predictions: JSON.stringify(result.predictions),
             modelVersion: result.modelVersion,
             inferenceTimeMs: String(result.inferenceTimeMs),
+            imageReports: reportsJson,
           },
         })
         return
@@ -120,7 +140,7 @@ export default function CaptureScreen() {
       router.push({
         pathname: '/(owner)/pets/screening/result',
         params: {
-          imageUri,
+          imageUri: coverUri,
           petId: selectedPet.id,
           petName: selectedPet.name,
           predictions: JSON.stringify(result.predictions),
@@ -129,6 +149,7 @@ export default function CaptureScreen() {
           state: result.state,
           stateMessage: result.stateMessage,
           alreadySaved: 'false',
+          imageReports: reportsJson,
         },
       })
     } catch {
@@ -205,24 +226,38 @@ export default function CaptureScreen() {
         )}
 
         <View style={styles.imageSection}>
-          {imageUri ? (
-            <View style={styles.previewContainer}>
-              <Image source={{ uri: imageUri }} style={styles.previewImage} />
-              <Pressable onPress={() => setImageUri(null)} style={styles.removeBtn}>
-                <MaterialCommunityIcons color="#FFF" name="close" size={16} />
+          <Text style={styles.slotHint}>
+            Take 5 photos of the affected area from different angles
+          </Text>
+          <View style={styles.slotRow}>
+            {imageUris.map((uri, i) => (
+              <Pressable
+                key={i}
+                onPress={() => setActiveIndex(i)}
+                style={[
+                  styles.slot,
+                  activeIndex === i && styles.slotActive,
+                  uri && styles.slotFilled,
+                ]}
+              >
+                {uri ? (
+                  <Image source={{ uri }} style={styles.slotImage} />
+                ) : (
+                  <MaterialCommunityIcons
+                    color={activeIndex === i ? colors.primary : colors.textMuted}
+                    name="camera-outline"
+                    size={20}
+                  />
+                )}
+                <View style={[styles.slotBadge, uri && styles.slotBadgeFilled]}>
+                  <Text style={styles.slotBadgeText}>{i + 1}</Text>
+                </View>
               </Pressable>
-            </View>
-          ) : (
-            <View style={styles.placeholder}>
-              <View style={styles.placeholderIcon}>
-                <MaterialCommunityIcons color={colors.primary} name="dog" size={40} />
-              </View>
-              <Text style={styles.placeholderTitle}>Upload a skin photo</Text>
-              <Text style={styles.placeholderHint}>
-                Take a photo or choose from gallery{'\n'}for AI-powered analysis
-              </Text>
-            </View>
-          )}
+            ))}
+          </View>
+          <Text style={styles.slotProgress}>
+            Photo {activeIndex + 1} of {imageUris.length} · {filledCount} captured
+          </Text>
         </View>
 
         <View style={styles.sourceButtons}>
@@ -262,13 +297,15 @@ export default function CaptureScreen() {
             <>
               <ActivityIndicator color="#FFF" size="small" />
               <Text style={styles.screenBtnText}>
-                {isModelLoading ? 'Loading model...' : 'Analyzing...'}
+                {isModelLoading ? 'Loading model...' : 'Analyzing 5 photos...'}
               </Text>
             </>
           ) : (
             <>
               <MaterialCommunityIcons color="#FFF" name="face-man-profile" size={18} />
-              <Text style={styles.screenBtnText}>Run Screening</Text>
+              <Text style={styles.screenBtnText}>
+                {allImagesCaptured ? 'Run Screening' : `Capture ${filledCount}/5 Photos`}
+              </Text>
             </>
           )}
         </Pressable>
@@ -279,12 +316,12 @@ export default function CaptureScreen() {
           <View style={styles.overlayCard}>
             <ActivityIndicator color={colors.primary} size="large" />
             <Text style={styles.overlayTitle}>
-              {isModelLoading ? 'Preparing AI model...' : 'Analyzing image...'}
+              {isModelLoading ? 'Preparing AI model...' : 'Analyzing 5 photos...'}
             </Text>
             <Text style={styles.overlayHint}>
               {isModelLoading
                 ? 'First-time loading may take up to a minute'
-                : 'This usually takes a few seconds'}
+                : 'This usually takes around 10 seconds'}
             </Text>
           </View>
         </View>
@@ -361,48 +398,39 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   petPillNameActive: { color: '#FFFFFF' },
 
   imageSection: { marginBottom: 20 },
-  placeholder: {
+  slotHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: 12 },
+  slotRow: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  slot: {
     alignItems: 'center',
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.borderLight,
-    borderRadius: 20,
-    borderStyle: 'dashed',
-    borderWidth: 1.5,
-    gap: 8,
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingVertical: 48,
-  },
-  placeholderIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.primaryLight,
-    borderRadius: 32,
-    height: 72,
-    justifyContent: 'center',
-    marginBottom: 4,
-    width: 72,
-  },
-  placeholderTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  placeholderHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-
-  previewContainer: { alignItems: 'center', position: 'relative' },
-  previewImage: { borderRadius: 20, height: 280, width: '100%' },
-  removeBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.error,
     borderRadius: 14,
-    bottom: 12,
-    elevation: 4,
-    height: 28,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    height: 62,
+    justifyContent: 'center',
+    overflow: 'visible',
+    width: 62,
+  },
+  slotActive: { borderColor: colors.primary, borderStyle: 'solid' },
+  slotFilled: { borderStyle: 'solid', padding: 0 },
+  slotImage: { borderRadius: 12, height: '100%', width: '100%' },
+  slotBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 9,
+    borderWidth: 1,
+    bottom: -6,
+    height: 18,
     justifyContent: 'center',
     position: 'absolute',
-    right: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    width: 28,
+    right: -6,
+    width: 18,
   },
+  slotBadgeFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
+  slotBadgeText: { color: colors.text, fontSize: 10, fontWeight: '800' },
+  slotProgress: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: 14 },
 
   sourceButtons: { flexDirection: 'row', gap: 12 },
   sourceBtn: {
