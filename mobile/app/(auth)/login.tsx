@@ -19,6 +19,8 @@ import { z } from 'zod'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { font } from '../../src/theme/typography'
+import { Image } from 'react-native'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Invalid email address'),
@@ -35,13 +37,13 @@ const blobStyle = { borderRadius: 999, position: 'absolute' } as const
 
 function PawPattern({ style }: { style: ReturnType<typeof StyleSheet.create> }) {
   const { isDark } = useTheme()
-  const pawColor = isDark ? '#5A4A40' : '#D3B29A'
-  const pawColor2 = isDark ? '#4A3A30' : '#B8957E'
+  const pawColor = isDark ? '#5A4A40' : '#bb5f1e6c'
+  const pawColor2 = isDark ? '#4A3A30' : '#8d491291'
   const pawColor3 = isDark ? '#6A5A50' : '#E9CDB7'
   return (
     <View pointerEvents="none" style={style.pawPattern}>
-      <MaterialCommunityIcons color={pawColor} name="paw" size={28} style={style.pawOne} />
-      <MaterialCommunityIcons color={pawColor2} name="paw" size={20} style={style.pawTwo} />
+      <MaterialCommunityIcons color={pawColor} name="paw" size={35} style={style.pawOne} />
+      <MaterialCommunityIcons color={pawColor2} name="paw" size={60} style={style.pawTwo} />
       <MaterialCommunityIcons color={pawColor3} name="paw" size={16} style={style.pawThree} />
     </View>
   )
@@ -103,9 +105,19 @@ export default function LoginScreen() {
           <View style={styles.formContainer}>
             <View style={styles.brandSection}>
               <View style={styles.brandIconWrap}>
-                <MaterialCommunityIcons color={colors.primary} name="dog" size={30} />
+                <Image
+                  source={require('../../assets/xpawsure-logo.png')}
+                  style={styles.splashLogoImage}
+                  resizeMode="contain"
+                  accessibilityLabel="XPawSure"
+                />
               </View>
-              <Text style={styles.brandName}>XPawSure</Text>
+              <Image
+                source={require('../../assets/Component 1.png')}
+                style={styles.brandLogo}
+                resizeMode="contain"
+                accessibilityLabel="XPawSure"
+              />
               <Text style={styles.brandTagline}>AI-Assisted Canine Skin Condition Preliminary Screening</Text>
             </View>
 
@@ -114,7 +126,7 @@ export default function LoginScreen() {
 
             {serverError && (
               <View style={styles.errorBanner}>
-                <MaterialCommunityIcons color={colors.inverse} name="alert-circle" size={16} />
+                <MaterialCommunityIcons color={colors.error} name="alert-circle" size={16} />
                 <Text style={styles.errorBannerText}>{serverError}</Text>
               </View>
             )}
@@ -208,44 +220,46 @@ export default function LoginScreen() {
 const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.bg, flex: 1 },
   keyboardView: { flex: 1 },
+  splashLogoImage: { height: 55, width: 55 },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
   topBlob: { height: 190, left: -95, top: -94, width: 225 },
   bottomBlob: { bottom: -118, height: 220, right: -92, width: 220 },
   pawPattern: { height: 160, position: 'absolute', right: 0, top: 90, width: 130 },
-  pawOne: { position: 'absolute', right: 10, top: 5, transform: [{ rotate: '21deg' }] },
-  pawTwo: { left: 8, position: 'absolute', top: 70, transform: [{ rotate: '-23deg' }] },
-  pawThree: { bottom: 5, position: 'absolute', right: 6, transform: [{ rotate: '12deg' }] },
-  topBar: { left: 20, position: 'absolute', top: 8, zIndex: 10 },
+  pawOne: { position: 'absolute', right: 50, top: 430, transform: [{ rotate: '-30deg' }] },
+  pawTwo: { right: 20, position: 'absolute', top: 10, transform: [{ rotate: '30deg' }] },
+  pawThree: { bottom: -50, position: 'absolute', left: -150, transform: [{ rotate: '10deg' }] },
+  topBar: { left: 20, position: 'absolute', top: 50, zIndex: 10 },
   backLink: { alignItems: 'center', flexDirection: 'row' },
-  backText: { color: colors.text, fontSize: 15, fontWeight: '500' },
+  backText: { ...font.medium, color: colors.text, fontSize: 15 },
   formContainer: { paddingHorizontal: 28, paddingTop: 60 },
   brandSection: { alignItems: 'center', marginBottom: 32 },
-  brandIconWrap: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: 22, height: 44, justifyContent: 'center', marginBottom: 8, width: 44 },
-  brandName: { color: colors.primaryDark, fontSize: 26, fontWeight: '800', letterSpacing: -0.7 },
-  brandTagline: { color: colors.textSecondary, fontSize: 10, fontWeight: '500', marginTop: 2 },
-  welcomeText: { color: colors.text, fontSize: 22, fontWeight: '700', marginBottom: 2, textAlign: 'center' },
-  subtitle: { color: colors.textSecondary, fontSize: 14, marginBottom: 28, textAlign: 'center' },
+  brandIconWrap: { alignItems: 'center', backgroundColor: colors.primaryLight, borderColor: '#8B4324', borderWidth: 2, borderRadius: 33, height: 60, justifyContent: 'center', marginBottom: 3, width: 60 },
+  brandLogo: { height: 50, width: 176 },
+  brandName: { ...font.extrabold, color: colors.primaryDark, fontSize: 26, letterSpacing: -0.7 },
+  brandTagline: { ...font.medium, color: colors.textSecondary, fontSize: 10, marginTop: -5 },
+  welcomeText: { ...font.bold, color: colors.text, fontSize: 22, marginBottom: -6, textAlign: 'center' },
+  subtitle: { ...font.regular, color: colors.textSecondary, fontSize: 14, marginBottom: 5, textAlign: 'center' },
   errorBanner: { alignItems: 'center', backgroundColor: colors.errorBg, borderRadius: 8, flexDirection: 'row', gap: 8, marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10 },
-  errorBannerText: { color: colors.inverse, flex: 1, fontSize: 13, fontWeight: '500' },
+  errorBannerText: { ...font.medium, color: colors.error, flex: 1, fontSize: 13 },
   form: { width: '100%' },
-  label: { color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 16 },
-  input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
+  label: { ...font.semibold, color: colors.text, fontSize: 13, marginBottom: 6, marginTop: 16 },
+  input: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
   inputError: { borderColor: colors.error },
-  fieldError: { color: colors.error, fontSize: 12, marginTop: 4 },
+  fieldError: { ...font.regular, color: colors.error, fontSize: 12, marginTop: 4 },
   passwordField: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, flexDirection: 'row', height: 48 },
-  passwordInput: { color: colors.text, flex: 1, fontSize: 15, paddingHorizontal: 14 },
+  passwordInput: { ...font.regular, color: colors.text, flex: 1, fontSize: 15, paddingHorizontal: 14 },
   visibilityButton: { alignItems: 'center', justifyContent: 'center', width: 44 },
   optionsRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 14 },
   rememberOption: { alignItems: 'center', flexDirection: 'row' },
   checkbox: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 4, borderWidth: 1.5, height: 18, justifyContent: 'center', marginRight: 8, width: 18 },
   checkboxSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  optionText: { color: colors.linkMuted, fontSize: 13 },
-  forgotText: { color: colors.primary, fontSize: 13, fontWeight: '600' },
+  optionText: { ...font.regular, color: colors.linkMuted, fontSize: 13 },
+  forgotText: { ...font.semibold, color: colors.primary, fontSize: 13 },
   submitButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, height: 52, justifyContent: 'center', marginTop: 28 },
   submitButtonPressed: { opacity: 0.85 },
   submitButtonDisabled: { opacity: 0.6 },
-  submitText: { color: colors.inverse, fontSize: 16, fontWeight: '800' },
+  submitText: { ...font.extrabold, color: colors.inverse, fontSize: 16 },
   switchRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
-  switchText: { color: colors.linkMuted, fontSize: 14 },
-  switchLink: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+  switchText: { ...font.regular, color: colors.linkMuted, fontSize: 14 },
+  switchLink: { ...font.bold, color: colors.primary, fontSize: 14 },
 })

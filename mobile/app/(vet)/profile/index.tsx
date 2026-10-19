@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { getProfile } from '../../../src/services/auth'
+import { font } from '../../../src/theme/typography'
 
 type FormState = {
   first_name: string
@@ -386,7 +387,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
 
-  title: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 20 },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22, marginBottom: 20 },
 
   avatarSection: { alignItems: 'center', marginBottom: 24, position: 'relative' },
   avatar: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 32, height: 64, justifyContent: 'center', width: 64, overflow: 'hidden' },
@@ -394,33 +395,33 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   editAvatarBtn: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 10, bottom: 0, height: 20, justifyContent: 'center', position: 'absolute', right: '38%', width: 20 },
 
   formSection: { marginBottom: 24 },
-  label: { color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 14 },
-  input: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
+  label: { ...font.semibold, color: colors.text, fontSize: 13, marginBottom: 6, marginTop: 14 },
+  input: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
   inputDisabled: { backgroundColor: colors.surfaceAlt, opacity: 0.7 },
 
   actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
   cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  cancelBtnText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  cancelBtnText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
   saveBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  saveBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  saveBtnText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   actionsSection: { gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: colors.borderLight },
-  rowText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '500', marginLeft: 12 },
+  rowText: { ...font.medium, flex: 1, color: colors.text, fontSize: 15, marginLeft: 12 },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', alignItems: 'center' },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 },
-  modalMessage: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalTitle: { ...font.extrabold, color: colors.text, fontSize: 18, marginBottom: 12 },
+  modalMessage: { ...font.regular, color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
   modalNoBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  modalNoText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  modalNoText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
   modalYesGreenBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  modalYesGreenText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  modalYesGreenText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
   modalYesRedBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#E74C3C' },
-  modalYesRedText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  modalYesRedText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   successIconContainer: { alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: '#27AE60', marginBottom: 16 },
   successBtn: { width: '100%', alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
-  successBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  successBtnText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 })

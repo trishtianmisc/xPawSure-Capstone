@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native'
 
+import { font } from '../../../src/theme/typography'
 import type { AppointmentStatus } from '../types'
 
 const STATUS_STYLES: Record<AppointmentStatus, { label: string; bg: string; text: string }> = {
@@ -24,5 +25,5 @@ export function StatusPill({ status }: { status: AppointmentStatus }) {
 
 const styles = StyleSheet.create({
   pill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  text: { fontSize: 11, fontWeight: '700' },
+  text: { ...font.bold, fontSize: 11 },
 })

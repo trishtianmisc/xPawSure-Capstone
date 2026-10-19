@@ -5,6 +5,7 @@ import { View } from 'react-native'
 import { AppHeader } from '../../src/components/AppHeader'
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
+import { font } from '../../src/theme/typography'
 
 export default function VetTabLayout() {
   const { colors } = useTheme()
@@ -21,7 +22,7 @@ export default function VetTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
+        tabBarLabelStyle: { fontSize: 10, ...font.semibold },
         tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 100, paddingTop: 8, paddingBottom: 50 },
       }}>
         <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} /> }} />

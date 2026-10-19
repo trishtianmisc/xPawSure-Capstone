@@ -8,6 +8,7 @@ import { useMarkReadNotification } from '../../../features/notification/hooks/us
 import { useNotifications } from '../../../features/notification/hooks/useNotifications'
 import type { OwnerNotification } from '../../../features/notification/types'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -140,21 +141,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  title: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22 },
   markAllButton: { backgroundColor: colors.surfaceAlt, borderRadius: 10, minHeight: 36, paddingHorizontal: 14, justifyContent: 'center' },
-  markAllButtonText: { color: colors.primary, fontSize: 13, fontWeight: '700' },
+  markAllButtonText: { ...font.bold, color: colors.primary, fontSize: 13 },
   list: { gap: 12, paddingBottom: 24, paddingTop: 20 },
   card: { alignItems: 'flex-start', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   iconCircle: { alignItems: 'center', backgroundColor: colors.primaryLight, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
   iconCircleRead: { backgroundColor: colors.surfaceAlt },
   cardBody: { flex: 1, gap: 4 },
   cardHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  cardTitle: { color: colors.text, flex: 1, fontSize: 15, fontWeight: '600' },
-  cardTitleUnread: { fontWeight: '800' },
+  cardTitle: { ...font.semibold, color: colors.text, flex: 1, fontSize: 15 },
+  cardTitleUnread: { ...font.extrabold },
   unreadDot: { backgroundColor: colors.primary, borderRadius: 4, height: 8, width: 8 },
-  message: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
-  time: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  message: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  time: { ...font.semibold, color: colors.textMuted, fontSize: 12 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
   emptyState: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 12, justifyContent: 'center', minHeight: 160, paddingHorizontal: 24 },
-  statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
 })

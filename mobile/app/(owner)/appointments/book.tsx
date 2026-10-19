@@ -23,6 +23,7 @@ import type { Pet } from '../../../features/pet/types'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 const TOTAL_STEPS = 7
 
@@ -122,6 +123,14 @@ export default function BookAppointmentScreen() {
     setStep((current) => current - 1)
   }
 
+  function handleHeaderBack() {
+    if (router.canGoBack()) {
+      router.back()
+    } else {
+      router.replace('/(owner)/appointments')
+    }
+  }
+
   function selectClinic(clinic: { cln_id: string; cln_name: string }) {
     if (clinic.cln_id !== clinicId) {
       setClinicId(clinic.cln_id)
@@ -201,6 +210,20 @@ export default function BookAppointmentScreen() {
 
   return (
     <View style={styles.screen}>
+      <View style={styles.header}>
+        <Pressable
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={handleHeaderBack}
+          style={styles.headerBack}
+        >
+          <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
+        </Pressable>
+        <Text style={styles.headerTitle}>Book Appointment</Text>
+        <View style={styles.headerRight} />
+      </View>
+
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.progressHeader}>
           <View style={styles.progressTrack}>
@@ -497,63 +520,73 @@ export default function BookAppointmentScreen() {
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
+  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: 4 },
+  headerBack: {
+    alignItems: 'center',
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+    marginTop: 5,
+  },
+  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
+  headerRight: { width: 20 },
   content: { gap: 16, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 20 },
   progressHeader: { gap: 8 },
   progressTrack: { backgroundColor: colors.surfaceAlt, borderRadius: 999, height: 6, overflow: 'hidden' },
   progressFill: { backgroundColor: colors.primary, borderRadius: 999, height: '100%' },
-  stepLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  stepTitle: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  stepLabel: { ...font.bold, color: colors.textMuted, fontSize: 12, textTransform: 'uppercase' },
+  stepTitle: { ...font.extrabold, color: colors.text, fontSize: 20 },
   list: { gap: 12 },
   stateBox: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, justifyContent: 'center', minHeight: 140, paddingHorizontal: 24 },
-  statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   optionCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, minHeight: 72, paddingHorizontal: 14 },
   optionCardSelected: { borderColor: colors.primary, borderWidth: 2 },
   optionIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 12, height: 44, justifyContent: 'center', width: 44 },
   optionBody: { flex: 1 },
-  optionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  optionSubtitle: { color: colors.textSecondary, fontSize: 13, marginTop: 2 },
+  optionTitle: { ...font.bold, color: colors.text, fontSize: 15 },
+  optionSubtitle: { ...font.regular, color: colors.textSecondary, fontSize: 13, marginTop: 2 },
   dayRow: { gap: 10, paddingVertical: 4 },
   dayChip: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 2, paddingHorizontal: 12, paddingVertical: 10, width: 64 },
   dayChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   dayChipTextSelected: { color: colors.inverse },
-  dayWeekday: { color: colors.textSecondary, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  dayNumber: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  dayMonth: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  dayWeekday: { ...font.bold, color: colors.textSecondary, fontSize: 11, textTransform: 'uppercase' },
+  dayNumber: { ...font.extrabold, color: colors.text, fontSize: 18 },
+  dayMonth: { ...font.semibold, color: colors.textSecondary, fontSize: 11 },
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   slotChip: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 44, minWidth: 100, paddingHorizontal: 14 },
   slotChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  slotText: { ...font.bold, color: colors.text, fontSize: 14 },
   slotTextSelected: { color: colors.inverse },
   summaryCard: { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 6, padding: 16 },
-  summaryTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
-  summaryLine: { color: colors.textSecondary, fontSize: 14 },
-  fieldLabel: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  summaryTitle: { ...font.extrabold, color: colors.text, fontSize: 15 },
+  summaryLine: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
+  fieldLabel: { ...font.bold, color: colors.text, fontSize: 14 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 999, borderWidth: 1, minHeight: 38, paddingHorizontal: 14, justifyContent: 'center' },
   typeChipSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  typeText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  typeTextSelected: { color: colors.primaryDark, fontWeight: '700' },
-  reasonInput: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, fontSize: 14, minHeight: 96, padding: 14, textAlignVertical: 'top' },
+  typeText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  typeTextSelected: { ...font.bold, color: colors.primaryDark },
+  reasonInput: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, fontSize: 14, minHeight: 96, padding: 14, textAlignVertical: 'top' },
   scanCard: { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 16 },
   scanHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  scanTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  scanTitle: { ...font.extrabold, color: colors.text, fontSize: 15 },
   scanBadge: { borderRadius: 999, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3 },
   scanBadgeReal: { backgroundColor: colors.primaryLight },
-  scanBadgeText: { fontSize: 11, fontWeight: '700' },
+  scanBadgeText: { ...font.bold, fontSize: 11 },
   scanBadgeTextReal: { color: colors.primaryDark },
-  scanDisease: { color: colors.text, fontSize: 20, fontWeight: '800' },
-  scanMeta: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  scanNote: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  scanDisease: { ...font.extrabold, color: colors.text, fontSize: 20 },
+  scanMeta: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  scanNote: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   blockCard: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center', minHeight: 220, paddingHorizontal: 24, paddingVertical: 24 },
-  blockTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  blockText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  blockTitle: { ...font.extrabold, color: colors.text, fontSize: 16 },
+  blockText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
   scanButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, justifyContent: 'center', minHeight: 48, paddingHorizontal: 28 },
-  scanButtonText: { color: colors.inverse, fontSize: 15, fontWeight: '700' },
-  errorText: { color: colors.error, fontSize: 13, fontWeight: '600' },
+  scanButtonText: { ...font.bold, color: colors.inverse, fontSize: 15 },
+  errorText: { ...font.semibold, color: colors.error, fontSize: 13 },
   footer: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
   backButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 48, paddingHorizontal: 22 },
-  backButtonText: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  backButtonText: { ...font.bold, color: colors.text, fontSize: 15 },
   nextButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 48 },
   nextButtonDisabled: { opacity: 0.5 },
-  nextButtonText: { color: colors.inverse, fontSize: 15, fontWeight: '700' },
+  nextButtonText: { ...font.bold, color: colors.inverse, fontSize: 15 },
 })

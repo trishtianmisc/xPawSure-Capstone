@@ -9,10 +9,12 @@ import type {
   PrescriptionRecord,
   VaccinationRecordItem,
 } from '../../../src/services/records'
+import { font } from '../../../src/theme/typography'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useConsultations } from '../hooks/useConsultations'
 import { usePrescriptions } from '../hooks/usePrescriptions'
 import { useVaccinations } from '../hooks/useVaccinations'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 type Tab = 'consultations' | 'prescriptions' | 'vaccinations'
 
@@ -171,9 +173,16 @@ export default function RecordsScreen() {
     </View>
   )
 
+
+
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
+        <View style={styles.header}>
+
+          <Text style={styles.title}>Records</Text>
+        </View>
+
         <View style={styles.tabs}>
           {TABS.map(({ value, label }) => (
             <Pressable
@@ -189,26 +198,31 @@ export default function RecordsScreen() {
           ))}
         </View>
 
-        {tab === 'vaccinations' ? (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/(owner)/records/vaccinations/new')}
-            style={styles.addButton}
-          >
-            <MaterialCommunityIcons color={colors.primary} name="plus" size={18} />
-            <Text style={styles.addButtonText}>Add vaccination record</Text>
-          </Pressable>
-        ) : null}
+        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+          {tab === 'vaccinations' ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(owner)/records/vaccinations/new')}
+              style={styles.addButton}
+            >
+              <MaterialCommunityIcons color={colors.primary} name="plus" size={18} />
+              <Text style={styles.addButtonText}>Add vaccination record</Text>
+            </Pressable>
+          ) : null}
 
-        <View style={styles.list}>{renderList()}</View>
-      </ScrollView>
+          <View style={styles.list}>{renderList()}</View>
+        </ScrollView>
+      </View>
     </View>
   )
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: colors.bg },
   screen: { backgroundColor: colors.surface, flex: 1 },
-  content: { paddingHorizontal: 20, paddingBottom: 24, paddingTop: 16 },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
+  header: { marginHorizontal: 5, marginBottom: 8, marginTop: 4 },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22},
   tabs: {
     backgroundColor: colors.surfaceAlt,
     borderRadius: 12,
@@ -224,7 +238,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   tabActive: { backgroundColor: colors.surface },
-  tabText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
   addButton: {
     alignItems: 'center',
@@ -236,10 +250,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 8,
     justifyContent: 'center',
     minHeight: 44,
-    marginTop: 12,
+    marginTop: -5,
   },
-  addButtonText: { color: colors.primary, fontSize: 14, fontWeight: '700' },
-  list: { gap: 12, paddingTop: 20 },
+  addButtonText: { ...font.bold, color: colors.primary, fontSize: 14 },
+  list: { gap: 12, paddingTop: 30 },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.border,
@@ -247,14 +261,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 15,
   },
   cardHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  petName: { color: colors.text, flex: 1, fontSize: 16, fontWeight: '700', marginRight: 10 },
-  cardTitle: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  meta: { color: colors.textSecondary, fontSize: 13 },
+  petName: { ...font.bold, color: colors.text, flex: 1, fontSize: 16, marginRight: 10 },
+  cardTitle: { ...font.semibold, color: colors.text, fontSize: 14 },
+  meta: { ...font.regular, color: colors.textSecondary, fontSize: 13 },
   cardFooter: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  dateText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  dateText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
   emptyState: {
     alignItems: 'center',
@@ -267,5 +281,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     minHeight: 160,
     paddingHorizontal: 24,
   },
-  statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
 })

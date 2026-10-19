@@ -1,12 +1,15 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useRef } from 'react'
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
+import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { font } from '../../../src/theme/typography'
 import { useConsultations } from '../../records/hooks/useConsultations'
 import { useVaccinations } from '../../records/hooks/useVaccinations'
 import { useScreenings } from '../../screening/hooks/useScreenings'
@@ -52,8 +55,10 @@ export default function PetProfileScreen() {
   const consultations = useConsultations(pet?.id, !!pet)
   const screenings = useScreenings(pet?.id, !!pet)
   const styles = useMemo(() => createStyles(colors), [colors])
+  const insets = useSafeAreaInsets()
   const scrollViewRef = useRef<ScrollView>(null)
   const qrSectionY = useRef(0)
+  const [confirmVisible, setConfirmVisible] = useState(false)
 
   const scrollToQrSection = () => {
     scrollViewRef.current?.scrollTo({ y: qrSectionY.current, animated: true })
@@ -61,56 +66,29 @@ export default function PetProfileScreen() {
 
   const confirmDelete = () => {
     if (!pet) return
-    Alert.alert(
-      'Delete pet?',
-      `${pet.name}'s profile will be removed from your pets. Existing medical records are preserved.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            deletePet.mutate(pet.id, {
-              onSuccess: () => router.back(),
-            })
-          },
-        },
-      ],
-    )
+    setConfirmVisible(true)
   }
 
-  const renderHeader = (title?: string) => (
-    <View style={styles.header}>
-      <Pressable
-        accessibilityLabel="Go back"
-        accessibilityRole="button"
-        hitSlop={8}
-        onPress={() => router.back()}
-        style={styles.headerBack}
-      >
-        <Ionicons color={colors.text} name="arrow-back" size={22} />
-      </Pressable>
-      <Text style={styles.headerTitle} numberOfLines={1}>{title || 'Pet Profile'}</Text>
-      {pet ? (
-        <Pressable
-          accessibilityLabel={`Edit ${pet.name}`}
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => router.push(`/(owner)/pets/edit/${pet.id}`)}
-          style={styles.headerBack}
-        >
-          <Ionicons color={colors.text} name="pencil-outline" size={20} />
-        </Pressable>
-      ) : (
-        <View style={styles.headerRight} />
-      )}
-    </View>
-  )
+  const handleConfirmDelete = () => {
+    if (!pet) return
+    deletePet.mutate(pet.id, {
+      onSuccess: () => router.back(),
+      onSettled: () => setConfirmVisible(false),
+    })
+  }
 
   if (isLoading) {
     return (
       <View style={styles.screen}>
-        {renderHeader()}
+        <Pressable
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => router.back()}
+          style={[styles.backButton, { top: insets.top + 4 }]}
+        >
+          <Ionicons color={colors.text} name="arrow-back" size={22} />
+        </Pressable>
         <View style={styles.loadingContainer}>
           <ActivityIndicator color={colors.primary} size="large" />
           <Text style={styles.loadingText}>Loading pet details...</Text>
@@ -122,7 +100,15 @@ export default function PetProfileScreen() {
   if (isError || !pet) {
     return (
       <View style={styles.screen}>
-        {renderHeader()}
+        <Pressable
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => router.back()}
+          style={[styles.backButton, { top: insets.top + 4 }]}
+        >
+          <Ionicons color={colors.text} name="arrow-back" size={22} />
+        </Pressable>
         <View style={styles.errorContainer}>
           <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={48} />
           <Text style={styles.errorTitle}>Unable to Load</Text>
@@ -143,25 +129,44 @@ export default function PetProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      {renderHeader(pet.name)}
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.coverSection}>
+        <View style={[styles.coverSection, { height: 160 + insets.top }]}>
           <View style={styles.coverGradient}>
-            <MaterialCommunityIcons color="rgba(255,255,255,0.12)" name="paw" size={100} style={styles.coverPaw1} />
-            <MaterialCommunityIcons color="rgba(255,255,255,0.08)" name="paw" size={70} style={styles.coverPaw2} />
+            <Pressable
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => router.back()}
+              style={[styles.backButton, styles.backButtonOnCover, { top: insets.top + 8 }]}
+            >
+              <Ionicons color="#FFFFFF" name="arrow-back" size={22} />
+            </Pressable>
+            <MaterialCommunityIcons color="rgba(245, 213, 183, 0.53)" name="paw" size={100} style={styles.coverPaw1} />
+            <MaterialCommunityIcons color="rgba(224, 146, 127, 0.48)" name="paw" size={70} style={styles.coverPaw2} />
             <MaterialCommunityIcons color="rgba(255,255,255,0.10)" name="paw" size={50} style={styles.coverPaw3} />
           </View>
         </View>
 
         <View style={styles.profileSection}>
-          <View style={styles.avatarFrame}>
-            {pet.profile_picture ? (
-              <Image source={{ uri: pet.profile_picture }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <MaterialCommunityIcons color={colors.primary} name="dog" size={36} />
-              </View>
-            )}
+          <View style={styles.avatarWrap}>
+            <View style={styles.avatarFrame}>
+              {pet.profile_picture ? (
+                <Image source={{ uri: pet.profile_picture }} style={styles.avatar} />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <MaterialCommunityIcons color={colors.primary} name="dog" size={36} />
+                </View>
+              )}
+            </View>
+            <Pressable
+              accessibilityLabel={`Edit ${pet.name}`}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => router.push(`/(owner)/pets/edit/${pet.id}`)}
+              style={styles.editBadge}
+            >
+              <Ionicons color="#FFFFFF" name="pencil" size={14} />
+            </Pressable>
           </View>
           <Text style={styles.petName}>{pet.name}</Text>
           <Text style={styles.petBreed}>{pet.breed_name || 'Breed not specified'}</Text>
@@ -293,13 +298,17 @@ export default function PetProfileScreen() {
             onPress: () => router.push(`/(owner)/pets/screening?petId=${pet.id}`),
           }}
           seeAllLabel="See all"
-          onSeeAll={() => router.push('/(owner)/screenings')}
+          onSeeAll={() =>
+            router.push({ pathname: '/(owner)/screenings', params: { petId: pet.id } })
+          }
         >
           {(screenings.data?.results ?? []).slice(0, 3).map((screening) => (
             <ScreeningRow
               key={screening.ais_id}
               screening={screening}
-              onPress={() => router.push('/(owner)/screenings')}
+              onPress={() =>
+                router.push({ pathname: '/(owner)/screenings', params: { petId: pet.id } })
+              }
             />
           ))}
         </PetRecordSection>
@@ -316,7 +325,7 @@ export default function PetProfileScreen() {
               <ActivityIndicator color={colors.error} size="small" />
             ) : (
               <>
-                <MaterialCommunityIcons color={colors.error} name="trash-can-outline" size={18} />
+                <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.error} />
                 <Text style={styles.deleteButtonText}>Delete Pet</Text>
               </>
             )}
@@ -328,6 +337,17 @@ export default function PetProfileScreen() {
 
         <View style={styles.spacer} />
       </ScrollView>
+
+      {pet && (
+        <ConfirmDialog
+          visible={confirmVisible}
+          title="Delete pet?"
+          message={`${pet.name}'s profile will be removed from your pets. Existing medical records are preserved.`}
+          busy={deletePet.isPending}
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setConfirmVisible(false)}
+        />
+      )}
     </View>
   )
 }
@@ -341,34 +361,22 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingBottom: 32,
   },
 
-  header: {
+  backButton: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    height: 48,
-    paddingHorizontal: 4,
-  },
-  headerBack: {
-    alignItems: 'center',
-    height: 48,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 48,
+    left: 12,
+    position: 'absolute',
+    width: 40,
+    zIndex: 10,
   },
-  headerTitle: {
-    color: colors.text,
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  headerRight: {
-    width: 48,
+  backButtonOnCover: {
+    backgroundColor: 'rgba(0, 0, 0, 0.39)',
   },
 
   coverSection: {
-    height: 160,
     overflow: 'hidden',
   },
   coverGradient: {
@@ -382,22 +390,28 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     left: 24,
     position: 'absolute',
     top: 10,
+    transform: [{ rotate: '-30deg' }] ,
   },
   coverPaw2: {
     bottom: 15,
     position: 'absolute',
     right: 30,
+    transform: [{ rotate: '20deg' }] ,
   },
   coverPaw3: {
-    bottom: 50,
+    bottom: 100,
     left: '55%',
     position: 'absolute',
+    transform: [{ rotate: '-30deg' }] ,
   },
 
   profileSection: {
     alignItems: 'center',
     marginTop: -44,
     paddingBottom: 4,
+  },
+  avatarWrap: {
+    position: 'relative',
   },
   avatarFrame: {
     borderRadius: 48,
@@ -406,6 +420,19 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     height: 88,
     overflow: 'hidden',
     width: 88,
+  },
+  editBadge: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderColor: colors.surface,
+    borderRadius: 15,
+    borderWidth: 2.5,
+    bottom: 0,
+    height: 30,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 30,
   },
   avatar: {
     height: '100%',
@@ -418,12 +445,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   petName: {
+    ...font.extrabold,
     color: colors.text,
     fontSize: 24,
-    fontWeight: '800',
     marginTop: 10,
   },
   petBreed: {
+    ...font.regular,
     color: colors.textSecondary,
     fontSize: 15,
     marginTop: 2,
@@ -451,9 +479,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1.5,
   },
   actionButtonText: {
+    ...font.bold,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
   },
   actionButtonTextSecondary: {
     color: colors.primary,
@@ -464,9 +492,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 20,
   },
   sectionTitle: {
+    ...font.extrabold,
     color: colors.text,
     fontSize: 17,
-    fontWeight: '800',
     marginBottom: 12,
   },
 
@@ -495,15 +523,15 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 44,
   },
   infoCardLabel: {
+    ...font.medium,
     color: colors.textSecondary,
     fontSize: 11,
-    fontWeight: '500',
     textTransform: 'uppercase',
   },
   infoCardValue: {
+    ...font.bold,
     color: colors.text,
     fontSize: 16,
-    fontWeight: '700',
   },
 
   identificationCard: {
@@ -519,15 +547,15 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     minHeight: 36,
   },
   identificationLabel: {
+    ...font.medium,
     color: colors.textSecondary,
     fontSize: 13,
-    fontWeight: '500',
   },
   identificationValue: {
+    ...font.bold,
     color: colors.text,
     flex: 1,
     fontSize: 13,
-    fontWeight: '700',
     marginLeft: 16,
     textAlign: 'right',
   },
@@ -550,6 +578,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 12,
   },
   qrHint: {
+    ...font.regular,
     color: colors.textMuted,
     fontSize: 12,
     marginTop: 12,
@@ -571,11 +600,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     opacity: 0.6,
   },
   deleteButtonText: {
+    ...font.bold,
     color: colors.error,
     fontSize: 15,
-    fontWeight: '700',
   },
   deleteError: {
+    ...font.regular,
     color: colors.error,
     fontSize: 12,
     marginTop: 8,
@@ -589,6 +619,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
+    ...font.regular,
     color: colors.textSecondary,
     fontSize: 15,
   },
@@ -601,12 +632,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 32,
   },
   errorTitle: {
+    ...font.bold,
     color: colors.text,
     fontSize: 20,
-    fontWeight: '700',
     marginTop: 12,
   },
   errorMessage: {
+    ...font.regular,
     color: colors.textSecondary,
     fontSize: 14,
     lineHeight: 20,
@@ -623,9 +655,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 24,
   },
   errorButtonText: {
+    ...font.bold,
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
   },
 
   spacer: {
