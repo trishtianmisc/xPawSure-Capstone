@@ -214,7 +214,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   detailRow: { gap: 2 },
   detailLabel: { ...font.semibold, color: colors.textMuted, fontSize: 12, textTransform: 'uppercase' },
   detailValue: { ...font.semibold, color: colors.text, fontSize: 14, lineHeight: 20 },
-  cancelButton: { alignItems: 'center', backgroundColor: colors.errorBg, borderRadius: 12, justifyContent: 'center', minHeight: 48 },
+  cancelButton: { alignItems: 'center', backgroundColor: colors.error, borderRadius: 12, justifyContent: 'center', minHeight: 48 },
   cancelButtonDisabled: { opacity: 0.6 },
   cancelButtonText: { ...font.bold, color: colors.inverse, fontSize: 15 },
 })

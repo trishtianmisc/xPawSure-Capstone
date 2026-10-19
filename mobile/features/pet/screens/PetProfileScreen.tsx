@@ -325,7 +325,7 @@ export default function PetProfileScreen() {
               <ActivityIndicator color={colors.error} size="small" />
             ) : (
               <>
-                <MaterialCommunityIcons name="trash-can-outline" size={18} />
+                <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.error} />
                 <Text style={styles.deleteButtonText}>Delete Pet</Text>
               </>
             )}

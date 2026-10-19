@@ -126,7 +126,7 @@ export default function LoginScreen() {
 
             {serverError && (
               <View style={styles.errorBanner}>
-                <MaterialCommunityIcons color={colors.inverse} name="alert-circle" size={16} />
+                <MaterialCommunityIcons color={colors.error} name="alert-circle" size={16} />
                 <Text style={styles.errorBannerText}>{serverError}</Text>
               </View>
             )}
@@ -240,7 +240,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   welcomeText: { ...font.bold, color: colors.text, fontSize: 22, marginBottom: -6, textAlign: 'center' },
   subtitle: { ...font.regular, color: colors.textSecondary, fontSize: 14, marginBottom: 5, textAlign: 'center' },
   errorBanner: { alignItems: 'center', backgroundColor: colors.errorBg, borderRadius: 8, flexDirection: 'row', gap: 8, marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10 },
-  errorBannerText: { ...font.medium, color: colors.inverse, flex: 1, fontSize: 13 },
+  errorBannerText: { ...font.medium, color: colors.error, flex: 1, fontSize: 13 },
   form: { width: '100%' },
   label: { ...font.semibold, color: colors.text, fontSize: 13, marginBottom: 6, marginTop: 16 },
   input: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, color: colors.text, fontSize: 15, height: 48, paddingHorizontal: 14 },
