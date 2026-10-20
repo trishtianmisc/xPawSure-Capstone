@@ -153,105 +153,6 @@ export default function AdjustScreen() {
     )
   }
 
-  if (done && result) {
-    const top3 = result.refined.slice(0, 3)
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-        {header}
-
-        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-          <View style={styles.imageRow}>
-            {params.imageUri ? (
-              <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
-            ) : (
-              <View style={styles.thumbnailPlaceholder}>
-                <MaterialCommunityIcons color={colors.iconColor} name="paw" size={20} />
-              </View>
-            )}
-            <View style={styles.imageInfo}>
-              <Text style={styles.petName}>{params.petName}</Text>
-              <Text style={styles.timestamp}>Based on your answers</Text>
-            </View>
-          </View>
-
-          <View
-            style={[
-              styles.verdictCard,
-              { borderColor: (result.changed ? colors.primary : DISEASE_COLORS[result.refinedTop.disease]) + '30' },
-            ]}
-          >
-            <MaterialCommunityIcons
-              color={result.changed ? colors.primary : DISEASE_COLORS[result.refinedTop.disease]}
-              name={result.changed ? 'swap-horizontal' : 'check-circle-outline'}
-              size={22}
-            />
-            <Text style={styles.verdictText}>
-              {result.changed ? (
-                <>
-                  Your answers point to{' '}
-                  <Text style={{ ...font.extrabold }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
-                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
-                </>
-              ) : (
-                <>
-                  Your answers are consistent with the AI&rsquo;s suggestion of{' '}
-                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
-                </>
-              )}
-            </Text>
-          </View>
-
-          <View style={styles.breakdownCard}>
-            <Text style={styles.breakdownTitle}>Refined Suggestions</Text>
-            {top3.map((pred, i) => {
-              const pct = Math.round(pred.confidence)
-              const color = DISEASE_COLORS[pred.disease] ?? colors.primary
-              return (
-                <View key={pred.disease} style={styles.barRow}>
-                  <View style={styles.barLabelRow}>
-                    <Text style={[styles.barLabel, i === 0 && { color: colors.text }]} numberOfLines={1}>
-                      {i === 0 ? '\u2605 ' : '  '}
-                      {pred.label}
-                    </Text>
-                    <Text style={[styles.barPct, i === 0 && { ...font.bold, color: colors.text }]}>{pct}%</Text>
-                  </View>
-                  <View style={[styles.barTrack, { backgroundColor: colors.surfaceAlt }]}>
-                    <View
-                      style={[
-                        styles.barFill,
-                        { backgroundColor: i === 0 ? color : colors.border, width: `${pct}%` },
-                      ]}
-                    />
-                  </View>
-                </View>
-              )
-            })}
-          </View>
-
-          <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
-            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
-            <Text style={styles.infoText}>
-              This refinement is an AI-assisted screening aid based on your answers and does not replace
-              professional veterinary diagnosis. Consult a vet for definitive results.
-            </Text>
-          </View>
-        </ScrollView>
-
-        <View style={styles.bottomBar}>
-          <Pressable onPress={goBack} style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}>
-            <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={16} />
-            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Back to Result</Text>
-          </Pressable>
-          <Pressable onPress={() => router.dismissTo('/(owner)')} style={[styles.actionBtn, styles.primaryBtn]}>
-            <MaterialCommunityIcons color="#FFF" name="home" size={16} />
-            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Home</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    )
-  }
-
   const progressPct = Math.round(((step + 1) / total) * 100)
 
   return (
@@ -465,6 +366,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 14,
   },
+  actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534' },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
   actionBtnText: { ...font.bold, fontSize: 14 },

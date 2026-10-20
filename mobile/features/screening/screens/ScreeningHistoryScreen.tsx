@@ -73,18 +73,6 @@ export default function ScreeningHistoryScreen() {
                       ? 'This result was uncertain. For a reliable assessment, please book a veterinary appointment.'
                       : "Concerned about your dog's skin condition? Book a veterinary appointment for a professional assessment."}
                   </Text>
-          screenings.map((screening) => {
-            const status = STATUS_STYLES[screening.ais_status]
-          
-
-            return (
-              
-              <View key={screening.ais_id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
-                  <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-                    <Text style={[styles.statusPillText, { color: status.fg }]}>{status.label}</Text>
-                  </View>
                 </View>
                 <Pressable
                   accessibilityHint="Opens the appointment booking flow"
