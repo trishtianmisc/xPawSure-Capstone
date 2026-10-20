@@ -41,6 +41,52 @@ export interface VetAppointment {
   screening: VetScreeningSummary | null
 }
 
+export interface VetConsultationInfo {
+  id: string
+  appointment_id: string
+  pet_id: string
+  pet_name: string
+  veterinarian: string
+  chief_complaint: string | null
+  subjective: string | null
+  objective: string | null
+  assessment: string | null
+  plan: string | null
+  diagnosis: string
+  specific_disease: string | null
+  treatment: string | null
+  notes: string | null
+  created_at: string
+}
+
+export interface VetPrescriptionItemInfo {
+  id: string
+  medicine_name: string
+  generic_name: string | null
+  dosage: string
+  frequency: string
+  duration: string
+  route: string
+  quantity: number | null
+  notes: string | null
+}
+
+export interface VetPrescriptionInfo {
+  id: string
+  consultation_id: string
+  pet_id: string
+  pet_name: string
+  veterinarian: string
+  instructions: string | null
+  items: VetPrescriptionItemInfo[]
+  created_at: string
+}
+
+export interface VetAppointmentDetail extends VetAppointment {
+  consultation: VetConsultationInfo | null
+  prescription: VetPrescriptionInfo | null
+}
+
 export interface VetDashboardStats {
   consultations_this_month: number
   pending: number

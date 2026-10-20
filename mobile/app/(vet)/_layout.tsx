@@ -1,6 +1,8 @@
 import { Redirect, Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
-import { View } from 'react-native'
+import { useQueryClient } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { AppState, View } from 'react-native'
 
 import { AppHeader } from '../../src/components/AppHeader'
 import { useAuth } from '../../src/context/AuthContext'
@@ -10,6 +12,19 @@ import { font } from '../../src/theme/typography'
 export default function VetTabLayout() {
   const { colors } = useTheme()
   const { isLoading, isAuthenticated, user } = useAuth()
+  const queryClient = useQueryClient()
+  const appState = useRef(AppState.currentState)
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (appState.current === 'background' && nextState === 'active') {
+        void queryClient.invalidateQueries({ queryKey: ['vet'] })
+      }
+      appState.current = nextState
+    })
+
+    return () => subscription.remove()
+  }, [queryClient])
 
   if (isLoading) return null
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />

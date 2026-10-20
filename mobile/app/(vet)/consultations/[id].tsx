@@ -1,14 +1,18 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { ConsultationSummary } from '../../../features/vet/components/ConsultationSummary'
+import { PrescriptionSummary } from '../../../features/vet/components/PrescriptionSummary'
+import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
+import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment'
 import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
 import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
-import { ageFromBirthDate, formatShortDate, formatTime } from '../../../features/vet/lib/format'
+import { ageFromBirthDate, formatAppointmentStatus, formatShortDate, formatTime } from '../../../features/vet/lib/format'
 import type { AppointmentStatus } from '../../../features/vet/types'
 import { apiErrorMessage } from '../../../src/utils/error'
 
@@ -28,7 +32,9 @@ export default function VetConsultationDetailScreen() {
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  const { data: detail, isLoading, isError } = useVetAppointment(id)
+  const { data: detail, isLoading, isError, refetch } = useVetAppointment(id)
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
+  useRefreshVetOnFocus('appointment')
   const requestReschedule = useRequestVetReschedule()
   const requestCancel = useRequestVetCancel()
 
@@ -44,6 +50,7 @@ export default function VetConsultationDetailScreen() {
     detail?.apt_status === 'CONFIRMED' &&
     !detail.apt_reschedule_request_reason &&
     !detail.apt_cancellation_request_reason
+  const showCompletedRecords = detail?.apt_status === 'COMPLETED'
   const requesting = requestReschedule.isPending || requestCancel.isPending
 
   const handleRescheduleContinue = () => {
@@ -99,17 +106,23 @@ export default function VetConsultationDetailScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <Pressable onPress={() => router.back()} style={styles.backRow}>
           <View style={styles.backLeft}>
             <MaterialCommunityIcons color={colors.text} name="chevron-left" size={22} />
             <Text style={styles.backText}>Appointment Detail</Text>
           </View>
-          {detail && (
-            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-              <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{detail.apt_status}</Text>
-            </View>
-          )}
         </Pressable>
 
         {isLoading ? (
@@ -121,6 +134,15 @@ export default function VetConsultationDetailScreen() {
         ) : (
           <>
             <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Status</Text>
+                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                    {formatAppointmentStatus(detail.apt_status)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Date of appointment</Text>
                 <Text style={styles.infoValue}>{formatShortDate(detail.apt_scheduled_at)}</Text>
@@ -168,6 +190,14 @@ export default function VetConsultationDetailScreen() {
                   </Text>
                 </View>
               </>
+            )}
+
+            {showCompletedRecords && detail.consultation && (
+              <ConsultationSummary consultation={detail.consultation} />
+            )}
+
+            {showCompletedRecords && detail.prescription && (
+              <PrescriptionSummary prescription={detail.prescription} />
             )}
 
             {(detail.apt_reschedule_request_reason || detail.apt_cancellation_request_reason) && (

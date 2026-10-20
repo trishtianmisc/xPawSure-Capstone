@@ -1,8 +1,11 @@
+import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
+import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
 import { formatTime, localDateStr } from '../../../features/vet/lib/format'
 import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'
@@ -65,18 +68,41 @@ function toDayItem(apt: VetAppointment): ScheduleDayAppointment {
   }
 }
 
+type AppointmentPressHandler = (aptId: string) => void
+
+interface AppointmentViewProps {
+  styles: ReturnType<typeof createStyles>
+  appointments: VetAppointment[]
+  onAppointmentPress: AppointmentPressHandler
+}
+
 export default function ScheduleScreen() {
+  const router = useRouter()
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Day')
 
-  const { data, isLoading, isError } = useVetAppointments({})
+  const { data, isLoading, isError, refetch } = useVetAppointments({})
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
+  useRefreshVetOnFocus('appointments')
   const appointments = data ?? []
+  const openAppointment = (aptId: string) => router.push(`/(vet)/consultations/${aptId}`)
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Schedule</Text>
 
         <View style={styles.tabRow}>
@@ -99,9 +125,27 @@ export default function ScheduleScreen() {
           </View>
         ) : (
           <>
-            {activeTab === 'Day' && <DayView styles={styles} appointments={appointments} />}
-            {activeTab === 'Week' && <WeekView styles={styles} appointments={appointments} />}
-            {activeTab === 'Month' && <MonthView styles={styles} appointments={appointments} />}
+            {activeTab === 'Day' && (
+              <DayView
+                appointments={appointments}
+                onAppointmentPress={openAppointment}
+                styles={styles}
+              />
+            )}
+            {activeTab === 'Week' && (
+              <WeekView
+                appointments={appointments}
+                onAppointmentPress={openAppointment}
+                styles={styles}
+              />
+            )}
+            {activeTab === 'Month' && (
+              <MonthView
+                appointments={appointments}
+                onAppointmentPress={openAppointment}
+                styles={styles}
+              />
+            )}
           </>
         )}
       </ScrollView>
@@ -109,7 +153,7 @@ export default function ScheduleScreen() {
   )
 }
 
-function DayView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
+function DayView({ styles, appointments, onAppointmentPress }: AppointmentViewProps) {
   const [viewMonth, setViewMonth] = useState(CURRENT_MONTH)
   const [viewYear, setViewYear] = useState(CURRENT_YEAR)
   const [selectedDay, setSelectedDay] = useState(TODAY)
@@ -216,7 +260,11 @@ function DayView({ styles, appointments }: { styles: ReturnType<typeof createSty
           </View>
         ) : (
           dayAppointments.map((apt) => (
-            <View key={apt.id} style={styles.aptCard}>
+            <Pressable
+              key={apt.id}
+              onPress={() => onAppointmentPress(apt.id)}
+              style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
+            >
               <View style={styles.aptTimeCol}>
                 <Text style={styles.aptTime}>{apt.time}</Text>
               </View>
@@ -228,7 +276,7 @@ function DayView({ styles, appointments }: { styles: ReturnType<typeof createSty
                 </View>
                 <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
               </View>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -236,7 +284,7 @@ function DayView({ styles, appointments }: { styles: ReturnType<typeof createSty
   )
 }
 
-function WeekView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
+function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewProps) {
   const [weekOffset, setWeekOffset] = useState(0)
 
   const { start, end } = useMemo(() => {
@@ -295,7 +343,11 @@ function WeekView({ styles, appointments }: { styles: ReturnType<typeof createSt
                 <>
                   <Text style={styles.weekDayHeader}>{dayGroup.dayLabel}</Text>
                   {dayGroup.appointments.map((apt) => (
-                    <View key={apt.id} style={styles.aptCard}>
+                    <Pressable
+                      key={apt.id}
+                      onPress={() => onAppointmentPress(apt.id)}
+                      style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
+                    >
                       <View style={styles.aptTimeCol}>
                         <Text style={styles.aptTime}>{apt.time}</Text>
                       </View>
@@ -307,7 +359,7 @@ function WeekView({ styles, appointments }: { styles: ReturnType<typeof createSt
                         </View>
                         <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
                       </View>
-                    </View>
+                    </Pressable>
                   ))}
                 </>
               )}
@@ -319,7 +371,7 @@ function WeekView({ styles, appointments }: { styles: ReturnType<typeof createSt
   )
 }
 
-function MonthView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
+function MonthView({ styles, appointments, onAppointmentPress }: AppointmentViewProps) {
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH)
 
   const monthAppointments: ScheduleMonthAppointment[] = useMemo(() => {
@@ -379,7 +431,11 @@ function MonthView({ styles, appointments }: { styles: ReturnType<typeof createS
           </View>
         ) : (
           monthAppointments.map((apt) => (
-            <View key={apt.id} style={styles.aptCard}>
+            <Pressable
+              key={apt.id}
+              onPress={() => onAppointmentPress(apt.id)}
+              style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
+            >
               <View style={styles.aptTimeCol}>
                 <Text style={styles.aptDateLabel}>{apt.date}</Text>
                 <Text style={styles.aptTime}>{apt.time}</Text>
@@ -392,7 +448,7 @@ function MonthView({ styles, appointments }: { styles: ReturnType<typeof createS
                 </View>
                 <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
               </View>
-            </View>
+            </Pressable>
           ))
         )}
       </View>
@@ -447,6 +503,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   appointmentsSection: { gap: 10 },
   aptCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.borderLight },
+  aptCardPressed: { opacity: 0.7 },
   aptTimeCol: { width: 80 },
   aptDateLabel: { ...font.semibold, color: colors.text, fontSize: 12, marginBottom: 2 },
   aptTime: { ...font.bold, color: colors.text, fontSize: 13 },

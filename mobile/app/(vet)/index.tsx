@@ -1,12 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
-import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
 import { font } from '../../src/theme/typography'
+import { usePullToRefresh } from '../../features/vet/hooks/usePullToRefresh'
+import { useRefreshVetOnFocus } from '../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetDashboard } from '../../features/vet/hooks/useVetDashboard'
-import { formatTime, localDateStr } from '../../features/vet/lib/format'
+import { formatAppointmentStatus, formatTime, localDateStr } from '../../features/vet/lib/format'
 import type { AppointmentStatus } from '../../features/vet/types'
 
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
@@ -20,10 +23,13 @@ const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
 }
 
 export default function VetHomeScreen() {
+  const router = useRouter()
   const { user } = useAuth()
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data, isLoading, isError } = useVetDashboard(localDateStr())
+  const { data, isLoading, isError, refetch } = useVetDashboard(localDateStr())
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
+  useRefreshVetOnFocus('dashboard')
   const firstName = user?.first_name || 'Vet'
 
   const stats = data?.stats
@@ -47,7 +53,18 @@ export default function VetHomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View>
             <Text style={styles.welcome}>Welcome Back {firstName}!</Text>
@@ -96,7 +113,11 @@ export default function VetHomeScreen() {
           schedule.map((item) => {
             const statusStyle = STATUS_COLORS[item.status]
             return (
-              <View key={item.id} style={styles.scheduleCard}>
+              <Pressable
+                key={item.id}
+                onPress={() => router.push(`/(vet)/consultations/${item.id}`)}
+                style={({ pressed }) => [styles.scheduleCard, pressed && styles.scheduleCardPressed]}
+              >
                 <View style={styles.scheduleTimeCol}>
                   <Text style={styles.scheduleTime}>{item.time}</Text>
                 </View>
@@ -112,9 +133,11 @@ export default function VetHomeScreen() {
                   )}
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.status}</Text>
+                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                    {formatAppointmentStatus(item.status)}
+                  </Text>
                 </View>
-              </View>
+              </Pressable>
             )
           })
         )}
@@ -145,6 +168,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   sectionTitle: { ...font.bold, color: colors.text, fontSize: 17 },
 
   scheduleCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.borderLight },
+  scheduleCardPressed: { opacity: 0.7 },
   scheduleTimeCol: { width: 70 },
   scheduleTime: { ...font.bold, color: colors.text, fontSize: 13 },
   scheduleDivider: { width: 3, height: 40, backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12 },
