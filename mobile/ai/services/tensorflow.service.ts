@@ -4,7 +4,7 @@ import { Asset } from 'expo-asset'
 import { File } from 'expo-file-system'
 
 import { MODEL_INFO } from '../constants/diseases'
-import type { ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
+import type { ImageReport, ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
 import { SCREENING_THRESHOLDS, SCREENING_STATE_MESSAGES } from '../constants/diseases'
 import { Normalization, Rescaling } from './customLayers'
 
@@ -235,7 +235,6 @@ export async function runScreening(
       console.log(`[TF SCREENING] INVALID_IMAGE: brightness ${meanVal.toFixed(1)} outside [${SCREENING_THRESHOLDS.IMAGE_MIN_BRIGHTNESS}, ${SCREENING_THRESHOLDS.IMAGE_MAX_BRIGHTNESS}]`)
       return {
         predictions: [],
-        topPrediction: { disease: 'UNKNOWN' as any, confidence: 0, label: 'Unknown' },
         inferenceTimeMs: 0,
         modelVersion: modelInfo.version,
         state: 'INVALID_IMAGE',
@@ -247,7 +246,6 @@ export async function runScreening(
       console.log(`[TF SCREENING] INVALID_IMAGE: variance ${variance.toFixed(1)} < ${SCREENING_THRESHOLDS.IMAGE_MIN_VARIANCE}`)
       return {
         predictions: [],
-        topPrediction: { disease: 'UNKNOWN' as any, confidence: 0, label: 'Unknown' },
         inferenceTimeMs: 0,
         modelVersion: modelInfo.version,
         state: 'INVALID_IMAGE',
@@ -258,6 +256,172 @@ export async function runScreening(
     return await runInference(imageTensor, modelInfo)
   } finally {
     imageTensor.dispose()
+  }
+}
+
+const MIN_USABLE_IMAGES = 3
+
+export async function runMultiScreening(
+  imageUris: string[],
+  modelInfo: ModelInfo = MODEL_INFO,
+): Promise<ScreeningResult> {
+  if (!isModelLoaded) {
+    await loadModel()
+  }
+
+  const qualityFlags: boolean[] = []
+  const keptTensors: tf.Tensor4D[] = []
+
+  for (const uri of imageUris) {
+    const tensor = await preprocessImage(uri, modelInfo.inputSize)
+    const moments = tf.moments(tensor)
+    const meanVal = (await moments.mean.data())[0]
+    const variance = (await moments.variance.data())[0]
+    moments.mean.dispose()
+    moments.variance.dispose()
+
+    const qualityOk =
+      meanVal >= SCREENING_THRESHOLDS.IMAGE_MIN_BRIGHTNESS &&
+      meanVal <= SCREENING_THRESHOLDS.IMAGE_MAX_BRIGHTNESS &&
+      variance >= SCREENING_THRESHOLDS.IMAGE_MIN_VARIANCE
+
+    qualityFlags.push(qualityOk)
+    if (qualityOk) {
+      keptTensors.push(tensor)
+    } else {
+      tensor.dispose()
+    }
+  }
+
+  try {
+    const buildReports = (similarities: number[] | null): ImageReport[] => {
+      let k = 0
+      return imageUris.map((uri, i) => {
+        if (!qualityFlags[i]) {
+          return { uri, status: 'quality_failed' as const, similarity: 0 }
+        }
+        const sim = similarities ? similarities[k] : 0
+        k += 1
+        if (sim < SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN) {
+          return { uri, status: 'low_similarity' as const, similarity: sim }
+        }
+        return { uri, status: 'ok' as const, similarity: sim }
+      })
+    }
+
+    if (keptTensors.length < MIN_USABLE_IMAGES) {
+      const message = `Only ${keptTensors.length} of ${imageUris.length} photos were usable (too dark or blurry). Retake the affected area in good light.`
+      console.log(`[TF SCREENING] MULTI INVALID_IMAGE: ${keptTensors.length}/${imageUris.length} passed quality gates`)
+      return {
+        predictions: [],
+        inferenceTimeMs: 0,
+        modelVersion: modelInfo.version,
+        state: 'INVALID_IMAGE',
+        stateMessage: message,
+        imageReports: buildReports(null),
+      }
+    }
+
+    if (!combinedModel) {
+      throw new Error('Model not loaded. Call loadModel() first.')
+    }
+
+    const batch = tf.concat(keptTensors, 0)
+    const startTime = Date.now()
+    const outputs = combinedModel.predict(batch) as tf.Tensor[]
+    const probabilities = (await outputs[0].data()) as Float32Array
+    const featureData = (await outputs[1].data()) as Float32Array
+    const inferenceTimeMs = Date.now() - startTime
+    outputs[0].dispose()
+    outputs[1].dispose()
+    batch.dispose()
+
+    const numKept = keptTensors.length
+    const numClasses = modelInfo.labels.length
+    const featDim = trainingMeanVector?.length ?? 0
+
+    const similarities: number[] = []
+    for (let i = 0; i < numKept; i++) {
+      if (trainingMeanVector) {
+        const feat = featureData.slice(i * featDim, (i + 1) * featDim)
+        similarities.push(cosineSimilarity(new Float32Array(feat), trainingMeanVector))
+      } else {
+        similarities.push(1.0)
+      }
+    }
+
+    const validIndices = similarities
+      .map((sim, i) => ({ sim, i }))
+      .filter(({ sim }) => sim >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN)
+      .map(({ i }) => i)
+
+    const imageReports = buildReports(similarities)
+
+    console.log(`[TF SCREENING] MULTI: ${numKept}/${imageUris.length} quality-ok, ${validIndices.length} skin-valid, sims=[${similarities.map(s => s.toFixed(3)).join(', ')}]`)
+
+    const buildPredictions = (indices: number[]): Prediction[] => {
+      const avg = new Float32Array(numClasses)
+      for (const i of indices) {
+        for (let c = 0; c < numClasses; c++) {
+          avg[c] += probabilities[i * numClasses + c] / indices.length
+        }
+      }
+      const preds: Prediction[] = Array.from(avg).map((prob, i) => ({
+        disease: modelInfo.labels[i] as Prediction['disease'],
+        confidence: Math.round(prob * 10000) / 100,
+        label: modelInfo.labels[i] ?? `Class ${i}`,
+      }))
+      preds.sort((a, b) => b.confidence - a.confidence)
+      return preds
+    }
+
+    const allKept = Array.from({ length: numKept }, (_, i) => i)
+
+    if (validIndices.length < MIN_USABLE_IMAGES) {
+      const message = `Only ${validIndices.length} of ${imageUris.length} photos looked like dog skin. Retake close-up photos of the affected skin area.`
+      console.log(`[TF SCREENING] MULTI NOT_SKIN_IMAGE: ${validIndices.length}/${imageUris.length} skin-valid below minimum ${MIN_USABLE_IMAGES}`)
+      const fallbackPredictions = buildPredictions(allKept)
+      return {
+        predictions: fallbackPredictions,
+        topPrediction: fallbackPredictions[0],
+        inferenceTimeMs,
+        modelVersion: modelInfo.version,
+        state: 'NOT_SKIN_IMAGE',
+        stateMessage: message,
+        imageReports,
+      }
+    }
+
+    const predictions = buildPredictions(validIndices)
+
+    const meanSim =
+      validIndices.reduce((sum, i) => sum + similarities[i], 0) / validIndices.length
+
+    let state: ScreeningResultState
+    let stateMessage: string
+    if (meanSim >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH) {
+      state = 'DISEASE_DETECTED'
+      stateMessage = SCREENING_STATE_MESSAGES.DISEASE_DETECTED.message
+    } else {
+      state = 'UNCERTAIN'
+      stateMessage = SCREENING_STATE_MESSAGES.UNCERTAIN.message
+    }
+
+    console.log(`[TF SCREENING] MULTI RESULT: state=${state} meanSim=${meanSim.toFixed(3)} top=${predictions[0].label} ${predictions[0].confidence}% inference=${inferenceTimeMs}ms`)
+
+    return {
+      predictions,
+      topPrediction: predictions[0],
+      inferenceTimeMs,
+      modelVersion: modelInfo.version,
+      state,
+      stateMessage,
+      imageReports,
+    }
+  } finally {
+    for (const tensor of keptTensors) {
+      tensor.dispose()
+    }
   }
 }
 

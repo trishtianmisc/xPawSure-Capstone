@@ -2,7 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import {
-  Image,
+  ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -18,23 +19,20 @@ import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
 import type { Answers } from '../../../../ai/decisionTree/types'
-
-const DISEASE_COLORS: Record<string, string> = {
-  ALLERGIC_DERMATITIS: '#E67E22',
-  BACTERIAL: '#C0392B',
-  FUNGAL: '#8E44AD',
-  HOTSPOT: '#D35400',
-  MANGE: '#27AE60',
-}
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 export default function AdjustScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
+  const createScreening = useCreateScreening()
   const params = useLocalSearchParams<{
     predictions: string
     petId: string
     petName: string
     imageUri?: string
+    modelVersion?: string
+    inferenceTimeMs?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -51,17 +49,14 @@ export default function AdjustScreen() {
 
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
-  const [done, setDone] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const hasResult = predictions.length > 0
-  const result = useMemo(
-    () => (done && hasResult ? refinePredictions(predictions, answers, KNOWLEDGE) : null),
-    [done, hasResult, predictions, answers],
-  )
 
   const question = questions[step]
   const selected = answers[question.id] ?? []
   const isLast = step === total - 1
+  const canProceed = selected.length > 0
 
   const selectOption = (optionId: string) => {
     setAnswers((prev) => {
@@ -76,19 +71,57 @@ export default function AdjustScreen() {
     })
   }
 
+  const finish = async () => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+
+    const refined = refinePredictions(predictions, answers, KNOWLEDGE)
+
+    let alreadySaved = false
+    try {
+      await createScreening.mutateAsync({
+        pet_id: params.petId,
+        source: 'DEVICE',
+        prediction: refined.refinedTop.disease,
+        confidence: Math.round(refined.refinedTop.confidence),
+        model_version: params.modelVersion || 'unknown',
+        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+        device: Platform.OS,
+      })
+      alreadySaved = true
+    } catch {
+      // Auto-save failed — the result screen's Save&Book will retry.
+    }
+
+    router.replace({
+      pathname: '/(owner)/pets/screening/result',
+      params: {
+        imageUri: params.imageUri ?? '',
+        petId: params.petId,
+        petName: params.petName,
+        predictions: params.predictions,
+        modelVersion: params.modelVersion ?? '',
+        inferenceTimeMs: params.inferenceTimeMs ?? '0',
+        state: 'DISEASE_DETECTED',
+        stateMessage: '',
+        refined: JSON.stringify(refined.refined),
+        changed: refined.changed ? 'true' : 'false',
+        alreadySaved: alreadySaved ? 'true' : 'false',
+        imageReports: params.imageReports ?? '',
+      },
+    })
+  }
+
   const goNext = () => {
+    if (!canProceed || isSubmitting) return
     if (!isLast) {
       setStep(step + 1)
     } else {
-      setDone(true)
+      void finish()
     }
   }
 
   const goBack = () => {
-    if (done) {
-      router.back()
-      return
-    }
     if (step > 0) {
       setStep(step - 1)
     } else {
@@ -101,7 +134,7 @@ export default function AdjustScreen() {
       <Pressable onPress={goBack} hitSlop={8} style={styles.headerBack}>
         <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
       </Pressable>
-      <Text style={styles.headerTitle}>Narrow It Down</Text>
+      <Text style={styles.headerTitle}>Quick Skin Check</Text>
       <View style={styles.headerRight} />
     </View>
   )
@@ -273,16 +306,18 @@ export default function AdjustScreen() {
 
       <View style={styles.bottomBar}>
         <Pressable
-          onPress={() => {
-            setAnswers((prev) => ({ ...prev, [question.id]: [] }))
-            goNext()
-          }}
-          style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}
+          onPress={goNext}
+          disabled={!canProceed || isSubmitting}
+          style={[
+            styles.actionBtn,
+            styles.primaryBtn,
+            (!canProceed || isSubmitting) && styles.actionBtnDisabled,
+          ]}
         >
-          <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>Skip</Text>
-        </Pressable>
-        <Pressable onPress={goNext} style={[styles.actionBtn, styles.primaryBtn]}>
-          <Text style={[styles.actionBtnText, { color: '#FFF' }]}>{isLast ? 'See Suggestions' : 'Next'}</Text>
+          {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
+          <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
+            {isSubmitting ? 'Saving...' : isLast ? 'See Suggestions' : 'Next'}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>

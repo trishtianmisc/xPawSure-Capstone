@@ -16,7 +16,7 @@ import {
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
-import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
 import { usePet } from '../../../../features/pet/hooks/usePet'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
@@ -91,6 +91,10 @@ export default function ResultScreen() {
     inferenceTimeMs: string
     state: ScreeningResultState
     stateMessage: string
+    alreadySaved: string
+    refined?: string
+    changed?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pet } = usePet(
@@ -108,25 +112,50 @@ export default function ResultScreen() {
     }
   }, [params.predictions])
 
+  const refinedPredictions: Prediction[] | null = useMemo(() => {
+    try {
+      const parsed = params.refined ? JSON.parse(params.refined) : null
+      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
+    } catch {
+      return null
+    }
+  }, [params.refined])
+
+  const imageReports: ImageReport[] = useMemo(() => {
+    try {
+      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
+      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
+    } catch {
+      return []
+    }
+  }, [params.imageReports])
+
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
-  const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = top ? Math.round(top.confidence) : 0
+  const finalTop = refinedPredictions ? refinedPredictions[0] : top
+  const isChanged = params.changed === 'true'
+  const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
+  const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
+  const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
 
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
 
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!top && !!params.petId && params.petId !== 'unknown'
+  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
 
   const handleSaveAndBook = () => {
-    if (!canBook || createScreening.isPending) return
+    if (!canBook || !finalTop || createScreening.isPending) return
+    if (params.alreadySaved === 'true') {
+      router.replace('/(owner)/appointments/book')
+      return
+    }
     setSaveError(false)
     createScreening.mutate(
       {
         pet_id: params.petId,
         source: 'DEVICE',
-        prediction: top.disease,
-        confidence: Math.round(top.confidence),
+        prediction: finalTop.disease,
+        confidence: Math.round(finalTop.confidence),
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
@@ -156,6 +185,11 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
+          {(params.imageUri || imageReports.length > 0) && (
+            <Image
+              source={{ uri: imageReports.find((r) => r.status === 'ok')?.uri ?? params.imageUri }}
+              style={styles.thumbnail}
+            />
           {pet?.profile_picture ? (
             <Image source={{ uri: pet.profile_picture }} style={styles.thumbnail} />
           ) : (
@@ -165,27 +199,57 @@ export default function ResultScreen() {
           )}
           <View style={styles.imageInfo}>
             <Text style={styles.petName}>{params.petName}</Text>
-            <Text style={styles.timestamp}>Just now</Text>
+            <Text style={styles.timestamp}>
+              {imageReports.length > 0
+                ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
+                : 'Just now'}
+            </Text>
           </View>
         </View>
 
-        {screeningState === 'DISEASE_DETECTED' && top && topMeta && (
+        {imageReports.length > 0 && (
+          <View style={styles.reportStrip}>
+            {imageReports.map((report, i) => (
+              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
+                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
+                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
+                  <MaterialCommunityIcons
+                    color="#FFF"
+                    name={report.status === 'ok' ? 'check' : 'close'}
+                    size={10}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>Predicted Condition</Text>
-              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
+              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
                 <Text style={styles.confidenceLabel}>confidence</Text>
               </View>
+              {refinedPredictions && (
+                <Text style={styles.comparisonText}>
+                  {isChanged
+                    ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
+                    : 'Consistent with the preliminary AI screen.'}
+                </Text>
+              )}
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>All Predictions</Text>
-              {sorted.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>
+                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
+              </Text>
+              {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -197,27 +261,12 @@ export default function ResultScreen() {
                   />
                 )
               })}
+              {refinedPredictions && (
+                <Text style={styles.moreCountText}>
+                  2 other conditions were also considered and scored lower.
+                </Text>
+              )}
             </View>
-
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/(owner)/pets/screening/adjust',
-                  params: {
-                    predictions: params.predictions,
-                    petId: params.petId,
-                    petName: params.petName,
-                    imageUri: params.imageUri ?? '',
-                  },
-                })
-              }
-              style={styles.narrowBtn}
-            >
-              <MaterialCommunityIcons color={colors.primary} name="file-tree-outline" size={16} />
-              <Text style={[styles.narrowBtnText, { color: colors.primary }]}>
-                Doesn&rsquo;t look right? Narrow it down
-              </Text>
-            </Pressable>
           </>
         )}
 
@@ -300,6 +349,22 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
+  reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
+  reportItem: { position: 'relative' },
+  reportThumb: { borderRadius: 12, height: 56, width: 56 },
+  reportThumbFailed: { opacity: 0.4 },
+  reportBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    bottom: -4,
+    height: 18,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -4,
+    width: 18,
+  },
+  reportBadgeOk: { backgroundColor: '#27AE60' },
+  reportBadgeFail: { backgroundColor: '#C0392B' },
   thumbnailPlaceholder: {
     alignItems: 'center',
     backgroundColor: colors.surfaceAlt,
@@ -344,6 +409,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderWidth: 1,
     marginBottom: 16,
     padding: 18,
+  },
+  breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+  comparisonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  moreCountText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
   },
   breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
 
