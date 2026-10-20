@@ -558,7 +558,9 @@ otherwise `404`.
 Requires authentication. Receptionist or clinic admin.
 
 Update appointment status. Clinic staff can only update appointments within their own
-clinic, otherwise `404`.
+clinic, otherwise `404`. Veterinarians cannot change status directly: a veterinarian
+`PATCH` returns `403`. Veterinarians submit reschedule or cancellation requests through
+the endpoints in section 5A instead.
 
 Time-based rules (Asia/Manila "now"):
 
@@ -598,6 +600,82 @@ Response:
 
 Days are bucketed on Asia/Manila calendar boundaries and zero-filled across the
 window so chart timelines have no gaps.
+
+---
+
+# 5A. Veterinarian Appointment Endpoints
+
+Requires authentication with the `VETERINARIAN` role. A veterinarian may only act on
+appointments assigned to them at their own clinic; appointments belonging to another
+veterinarian return `403`, and unknown ones return `404`. Callers without a staff
+profile receive `400`.
+
+## GET /api/veterinarian/dashboard/
+
+Query parameters:
+
+- date (optional, `YYYY-MM-DD`, defaults to the clinic-local today). `400` for an
+  invalid date.
+
+Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed },
+today_consultations: [ ...appointment summaries ] }`.
+
+---
+
+## GET /api/veterinarian/appointments/
+
+Query parameters: `start_date`, `end_date` (optional `YYYY-MM-DD`; `400` for invalid
+values or when `start_date` is after `end_date`). Returns the vet's own appointments as
+appointment summaries (each includes `apt_reschedule_request_reason` and
+`apt_cancellation_request_reason`).
+
+---
+
+## POST /api/veterinarian/appointments/{id}/start/
+
+Starts the consultation for an assigned appointment. Responses: `200` with the
+appointment detail, `403` when the appointment belongs to another veterinarian, `409`
+when the appointment is not in a startable status.
+
+---
+
+## POST /api/veterinarian/appointments/{id}/request-reschedule/
+
+Requires the appointment to be `CONFIRMED`. Records the reason without changing
+`apt_status`.
+
+Request body:
+
+- reason (required): non-empty string
+
+Response (200): Appointment detail with `apt_reschedule_request_reason` set.
+
+Responses:
+
+- 400: missing/blank reason, or the caller has no staff profile
+- 403: appointment belongs to another veterinarian, or caller is not a veterinarian
+- 404: unknown appointment
+- 409: appointment is not `CONFIRMED`
+
+---
+
+## POST /api/veterinarian/appointments/{id}/request-cancel/
+
+Requires the appointment to be `CONFIRMED`. Records the reason without changing
+`apt_status`; cancellation is a request, not a direct cancellation.
+
+Request body:
+
+- reason (required): non-empty string
+
+Response (200): Appointment detail with `apt_cancellation_request_reason` set.
+
+Responses:
+
+- 400: missing/blank reason, or the caller has no staff profile
+- 403: appointment belongs to another veterinarian, or caller is not a veterinarian
+- 404: unknown appointment
+- 409: appointment is not `CONFIRMED`
 
 ---
 
@@ -788,8 +866,10 @@ Query params:
   list; invalid UUID returns 400.
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
-chief_complaint, subjective, objective, assessment, plan, diagnosis, treatment,
-notes, created_at }
+chief_complaint, subjective, objective, assessment, plan, diagnosis,
+specific_disease, treatment, notes, created_at }
+
+`specific_disease` is `null` when no specific disease/subtype is recorded.
 
 ---
 
@@ -816,6 +896,8 @@ Request body:
 - objective (optional): string
 - diagnosis (required): non-empty string (a seeded skin disease, or a
   free-text disease name when the UI "Other" option is used)
+- specific_disease (optional): string, a more specific disease/subtype for the
+  diagnosis (stored as null when blank)
 - notes (optional): string
 
 Responses:

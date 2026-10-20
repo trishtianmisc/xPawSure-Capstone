@@ -7,6 +7,7 @@ const consultationPayload = {
   chief_complaint: 'Itchy skin',
   objective: 'Red patches',
   diagnosis: 'Fungal',
+  specific_disease: 'Microsporum canis',
   notes: 'Follow up',
 }
 
@@ -61,6 +62,32 @@ describe('dashboardService consultation and prescription saves', () => {
     const result = await dashboardService.savePrescription(prescriptionPayload)
 
     expect(http.post).toHaveBeenCalledWith('/prescriptions/', prescriptionPayload)
+    expect(result).toEqual(mockResponse.data)
+  })
+
+  it('requestReschedule posts reason to the reschedule request endpoint', async () => {
+    const mockResponse = { data: { apt_id: 'apt-1', apt_reschedule_request_reason: 'Conflict' } }
+    vi.mocked(http.post).mockResolvedValue(mockResponse)
+
+    const result = await dashboardService.requestReschedule('apt-1', 'Conflict')
+
+    expect(http.post).toHaveBeenCalledWith(
+      '/veterinarian/appointments/apt-1/request-reschedule/',
+      { reason: 'Conflict' },
+    )
+    expect(result).toEqual(mockResponse.data)
+  })
+
+  it('requestCancellation posts reason to the cancel request endpoint', async () => {
+    const mockResponse = { data: { apt_id: 'apt-1', apt_cancellation_request_reason: 'Sick' } }
+    vi.mocked(http.post).mockResolvedValue(mockResponse)
+
+    const result = await dashboardService.requestCancellation('apt-1', 'Sick')
+
+    expect(http.post).toHaveBeenCalledWith(
+      '/veterinarian/appointments/apt-1/request-cancel/',
+      { reason: 'Sick' },
+    )
     expect(result).toEqual(mockResponse.data)
   })
 })

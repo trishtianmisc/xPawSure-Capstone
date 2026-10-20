@@ -270,6 +270,10 @@ Table APPOINTMENT {
 
   APT_CANCELLED_AT timestamp
 
+  APT_RESCHEDULE_REQUEST_REASON text
+
+  APT_CANCELLATION_REQUEST_REASON text
+
   APT_CREATED_AT timestamp
 
   APT_UPDATED_AT timestamp
@@ -309,6 +313,8 @@ Table CONSULTATION {
   CON_PLAN text
 
   CON_DIAGNOSIS text [not null]
+
+  CON_SPECIFIC_DISEASE text
 
   CON_DIAGNOSIS_STATUS DiagnosisStatus
 

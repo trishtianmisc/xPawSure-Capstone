@@ -1,13 +1,10 @@
 import { useMemo, useState } from 'react'
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
-import {
-  MOCK_SCHEDULE_BY_DAY,
-  MOCK_SCHEDULE_BY_MONTH,
-  MOCK_SCHEDULE_WEEKS,
-} from '../../../features/vet/data/mock'
-import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay } from '../../../features/vet/types'
+import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
+import { formatTime, localDateStr } from '../../../features/vet/lib/format'
+import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'
 
 const TABS = ['Day', 'Week', 'Month'] as const
 const WEEKDAYS = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
@@ -18,6 +15,8 @@ const NOW = new Date()
 const TODAY = NOW.getDate()
 const CURRENT_MONTH = NOW.getMonth()
 const CURRENT_YEAR = NOW.getFullYear()
+
+const pad = (n: number) => `${n}`.padStart(2, '0')
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate()
@@ -46,11 +45,7 @@ function buildCalendarDays(year: number, month: number) {
   return days
 }
 
-function getWeekKey(date: Date): string {
-  const start = new Date(date)
-  start.setDate(start.getDate() - start.getDay())
-  const end = new Date(start)
-  end.setDate(end.getDate() + 6)
+function getWeekKey(start: Date, end: Date): string {
   const sMonth = MONTHS_FULL[start.getMonth()]
   const eMonth = MONTHS_FULL[end.getMonth()]
   if (start.getMonth() === end.getMonth()) {
@@ -59,10 +54,23 @@ function getWeekKey(date: Date): string {
   return `${sMonth.slice(0, 3)} ${start.getDate()} – ${eMonth.slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`
 }
 
+function toDayItem(apt: VetAppointment): ScheduleDayAppointment {
+  return {
+    id: apt.apt_id,
+    time: formatTime(apt.apt_scheduled_at),
+    pet_name: apt.pet_name,
+    breed: apt.pet_breed ?? apt.pet_species ?? '',
+    owner_name: apt.owner_name ?? '',
+  }
+}
+
 export default function ScheduleScreen() {
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Day')
+
+  const { data, isLoading, isError } = useVetAppointments({})
+  const appointments = data ?? []
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -82,22 +90,45 @@ export default function ScheduleScreen() {
           ))}
         </View>
 
-        {activeTab === 'Day' && <DayView styles={styles} />}
-        {activeTab === 'Week' && <WeekView styles={styles} />}
-        {activeTab === 'Month' && <MonthView styles={styles} />}
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : isError ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Unable to load schedule.</Text>
+          </View>
+        ) : (
+          <>
+            {activeTab === 'Day' && <DayView styles={styles} appointments={appointments} />}
+            {activeTab === 'Week' && <WeekView styles={styles} appointments={appointments} />}
+            {activeTab === 'Month' && <MonthView styles={styles} appointments={appointments} />}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
 }
 
-function DayView({ styles }: { styles: ReturnType<typeof createStyles> }) {
+function DayView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
   const [viewMonth, setViewMonth] = useState(CURRENT_MONTH)
   const [viewYear, setViewYear] = useState(CURRENT_YEAR)
   const [selectedDay, setSelectedDay] = useState(TODAY)
 
   const calendarDays = useMemo(() => buildCalendarDays(viewYear, viewMonth), [viewYear, viewMonth])
-  const dayAppointments: ScheduleDayAppointment[] = MOCK_SCHEDULE_BY_DAY[selectedDay] || []
-  const isCurrentMonth = viewMonth === CURRENT_MONTH && viewYear === CURRENT_YEAR
+  const selectedStr = `${viewYear}-${pad(viewMonth + 1)}-${pad(selectedDay)}`
+  const todayStr = localDateStr(NOW)
+
+  const appointmentsByDate = useMemo(() => {
+    const map = new Map<string, ScheduleDayAppointment[]>()
+    for (const apt of appointments) {
+      const key = localDateStr(new Date(apt.apt_scheduled_at))
+      const list = map.get(key) ?? []
+      list.push(toDayItem(apt))
+      map.set(key, list)
+    }
+    return map
+  }, [appointments])
+
+  const dayAppointments = appointmentsByDate.get(selectedStr) ?? []
 
   const prevMonth = () => {
     if (viewMonth === 0) {
@@ -138,9 +169,10 @@ function DayView({ styles }: { styles: ReturnType<typeof createStyles> }) {
         <View style={styles.daysGrid}>
           {calendarDays.map((day, index) => {
             const isCurrent = day.monthType === 'current'
-            const isToday = isCurrentMonth && isCurrent && day.day === TODAY
+            const dayStr = `${viewYear}-${pad(viewMonth + 1)}-${pad(day.day)}`
+            const isToday = isCurrent && dayStr === todayStr
             const isSelected = isCurrent && day.day === selectedDay
-            const hasAppointments = isCurrent && MOCK_SCHEDULE_BY_DAY[day.day]?.length > 0
+            const hasAppointments = isCurrent && (appointmentsByDate.get(dayStr)?.length ?? 0) > 0
             return (
               <Pressable
                 key={index}
@@ -203,17 +235,40 @@ function DayView({ styles }: { styles: ReturnType<typeof createStyles> }) {
   )
 }
 
-function WeekView({ styles }: { styles: ReturnType<typeof createStyles> }) {
+function WeekView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
   const [weekOffset, setWeekOffset] = useState(0)
 
-  const baseDate = useMemo(() => {
+  const { start, end } = useMemo(() => {
     const d = new Date(CURRENT_YEAR, CURRENT_MONTH, TODAY)
     d.setDate(d.getDate() + weekOffset * 7)
-    return d
+    const s = new Date(d)
+    s.setDate(s.getDate() - s.getDay())
+    const e = new Date(s)
+    e.setDate(e.getDate() + 6)
+    return { start: s, end: e }
   }, [weekOffset])
 
-  const weekKey = getWeekKey(baseDate)
-  const weekData: ScheduleWeekDay[] = MOCK_SCHEDULE_WEEKS[weekKey] || []
+  const weekKey = getWeekKey(start, end)
+
+  const weekData: ScheduleWeekDay[] = useMemo(() => {
+    const days: ScheduleWeekDay[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(start)
+      date.setDate(start.getDate() + i)
+      const dateStr = localDateStr(date)
+      const dayAppointments = appointments
+        .filter((apt) => localDateStr(new Date(apt.apt_scheduled_at)) === dateStr)
+        .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
+        .map(toDayItem)
+      days.push({
+        dayLabel: `${WEEKDAYS[date.getDay()]} · ${MONTHS[date.getMonth()]} ${date.getDate()}`,
+        appointments: dayAppointments,
+      })
+    }
+    return days
+  }, [start, appointments])
+
+  const hasAny = weekData.some((day) => day.appointments.length > 0)
 
   return (
     <>
@@ -228,7 +283,7 @@ function WeekView({ styles }: { styles: ReturnType<typeof createStyles> }) {
       </View>
 
       <View style={styles.appointmentsSection}>
-        {weekData.length === 0 ? (
+        {!hasAny ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No appointments this week</Text>
           </View>
@@ -263,11 +318,24 @@ function WeekView({ styles }: { styles: ReturnType<typeof createStyles> }) {
   )
 }
 
-function MonthView({ styles }: { styles: ReturnType<typeof createStyles> }) {
+function MonthView({ styles, appointments }: { styles: ReturnType<typeof createStyles>; appointments: VetAppointment[] }) {
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH)
 
-  const monthKey = `${selectedMonth + 1}-${CURRENT_YEAR}`
-  const monthAppointments: ScheduleMonthAppointment[] = MOCK_SCHEDULE_BY_MONTH[monthKey] || []
+  const monthAppointments: ScheduleMonthAppointment[] = useMemo(() => {
+    return appointments
+      .filter((apt) => {
+        const d = new Date(apt.apt_scheduled_at)
+        return d.getMonth() === selectedMonth && d.getFullYear() === CURRENT_YEAR
+      })
+      .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
+      .map((apt) => {
+        const d = new Date(apt.apt_scheduled_at)
+        return {
+          ...toDayItem(apt),
+          date: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
+        }
+      })
+  }, [appointments, selectedMonth])
 
   return (
     <>
@@ -342,6 +410,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   tabActive: { backgroundColor: colors.surface },
   tabText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   tabTextActive: { color: colors.text },
+
+  loading: { marginVertical: 40 },
 
   monthNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   navArrow: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight },

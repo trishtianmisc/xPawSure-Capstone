@@ -40,6 +40,8 @@ class Appointment(models.Model):
     apt_completed_at = models.DateTimeField(null=True, blank=True, db_column='APT_COMPLETED_AT')
     apt_cancelled_at = models.DateTimeField(null=True, blank=True, db_column='APT_CANCELLED_AT')
     apt_cancellation_reason = models.TextField(null=True, blank=True, db_column='APT_CANCELLATION_REASON')
+    apt_reschedule_request_reason = models.TextField(null=True, blank=True, db_column='APT_RESCHEDULE_REQUEST_REASON')
+    apt_cancellation_request_reason = models.TextField(null=True, blank=True, db_column='APT_CANCELLATION_REQUEST_REASON')
     apt_created_at = models.DateTimeField(auto_now_add=True, db_column='APT_CREATED_AT')
     apt_updated_at = models.DateTimeField(auto_now=True, db_column='APT_UPDATED_AT')
     apt_deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, db_column='APT_DELETED_AT')

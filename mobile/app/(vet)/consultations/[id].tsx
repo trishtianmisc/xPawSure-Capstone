@@ -1,26 +1,24 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { Alert, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
-import { MOCK_CONSULTATION_DETAIL } from '../../../features/vet/data/mock'
-import type { ConsultationStatus } from '../../../features/vet/types'
+import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment'
+import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
+import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
+import { ageFromBirthDate, formatShortDate, formatTime } from '../../../features/vet/lib/format'
+import type { AppointmentStatus } from '../../../features/vet/types'
+import { apiErrorMessage } from '../../../src/utils/error'
 
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-const STATUS_BADGE_COLORS: Record<ConsultationStatus, { bg: string; text: string }> = {
-  TODAY: { bg: '#FDEBD0', text: '#E67E22' },
-  UPCOMING: { bg: '#D6EAF8', text: '#2E86C1' },
-  COMPLETED: { bg: '#D5F5E3', text: '#27AE60' },
-}
-
-function getDaysInMonth(year: number, month: number) {
-  return new Date(year, month + 1, 0).getDate()
-}
-
-function getFirstDayOfMonth(year: number, month: number) {
-  return new Date(year, month, 1).getDay()
+const STATUS_BADGE_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
+  PENDING: { bg: '#FDEBD0', text: '#E67E22' },
+  CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
+  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
+  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
+  COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
+  CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
+  NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
 }
 
 export default function VetConsultationDetailScreen() {
@@ -29,58 +27,73 @@ export default function VetConsultationDetailScreen() {
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  const detail = MOCK_CONSULTATION_DETAIL
-  const isToday = detail.status === 'TODAY'
-  const statusStyle = STATUS_BADGE_COLORS[detail.status]
+  const { data: detail, isLoading, isError } = useVetAppointment(id)
+  const requestReschedule = useRequestVetReschedule()
+  const requestCancel = useRequestVetCancel()
 
-  const [showRescheduleConfirm, setShowRescheduleConfirm] = useState(false)
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [showRescheduleForm, setShowRescheduleForm] = useState(false)
   const [showCancelForm, setShowCancelForm] = useState(false)
+  const [showRescheduleReview, setShowRescheduleReview] = useState(false)
+  const [showCancelReview, setShowCancelReview] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
-
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth())
-  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const canRequest =
+    detail?.apt_status === 'CONFIRMED' &&
+    !detail.apt_reschedule_request_reason &&
+    !detail.apt_cancellation_request_reason
+  const requesting = requestReschedule.isPending || requestCancel.isPending
 
-  const daysInMonth = getDaysInMonth(calendarYear, calendarMonth)
-  const firstDay = getFirstDayOfMonth(calendarYear, calendarMonth)
-  const calendarDays: (number | null)[] = []
-  for (let i = 0; i < firstDay; i++) calendarDays.push(null)
-  for (let i = 1; i <= daysInMonth; i++) calendarDays.push(i)
-
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-
-  const handleRescheduleSubmit = () => {
+  const handleRescheduleContinue = () => {
     if (!rescheduleReason.trim()) {
       Alert.alert('Required', 'Please enter a reason for rescheduling.')
       return
     }
     setShowRescheduleForm(false)
-    setRescheduleReason('')
-    setShowSuccessModal(true)
+    setShowRescheduleReview(true)
   }
 
-  const handleCancelSubmit = () => {
+  const confirmReschedule = () => {
+    if (!detail) return
+    requestReschedule.mutate(
+      { aptId: detail.apt_id, reason: rescheduleReason.trim() },
+      {
+        onSuccess: () => {
+          setShowRescheduleReview(false)
+          setRescheduleReason('')
+          setShowSuccessModal(true)
+        },
+        onError: (error) => Alert.alert('Request failed', apiErrorMessage(error)),
+      },
+    )
+  }
+
+  const handleCancelContinue = () => {
     if (!cancelReason.trim()) {
       Alert.alert('Required', 'Please enter a reason for cancellation.')
       return
     }
     setShowCancelForm(false)
-    setCancelReason('')
-    setShowSuccessModal(true)
+    setShowCancelReview(true)
   }
 
-  const isDateDisabled = (day: number) => {
-    const d = new Date(calendarYear, calendarMonth, day)
-    d.setHours(0, 0, 0, 0)
-    return d < today
+  const confirmCancel = () => {
+    if (!detail) return
+    requestCancel.mutate(
+      { aptId: detail.apt_id, reason: cancelReason.trim() },
+      {
+        onSuccess: () => {
+          setShowCancelReview(false)
+          setCancelReason('')
+          setShowSuccessModal(true)
+        },
+        onError: (error) => Alert.alert('Request failed', apiErrorMessage(error)),
+      },
+    )
   }
+
+  const statusStyle = detail ? STATUS_BADGE_COLORS[detail.apt_status] : STATUS_BADGE_COLORS.PENDING
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -91,114 +104,178 @@ export default function VetConsultationDetailScreen() {
             <MaterialCommunityIcons color={colors.text} name="chevron-left" size={22} />
             <Text style={styles.backText}>Appointment Detail</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-            <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{detail.status}</Text>
-          </View>
+          {detail && (
+            <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{detail.apt_status}</Text>
+            </View>
+          )}
         </Pressable>
 
-        <View style={styles.infoCard}>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Date of appointment</Text>
-            <Text style={styles.infoValue}>{detail.date}</Text>
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : isError || !detail ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Unable to load this appointment.</Text>
           </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Time</Text>
-            <Text style={styles.infoValue}>{detail.time}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Pet Name</Text>
-            <Text style={styles.infoValue}>{detail.pet_name}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Breed</Text>
-            <Text style={styles.infoValue}>{detail.breed}</Text>
-          </View>
-          <View style={styles.infoDivider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Age</Text>
-            <Text style={styles.infoValue}>{detail.age}</Text>
-          </View>
-        </View>
-
-        {detail.screening && (
+        ) : (
           <>
-            <Text style={styles.sectionTitle}>AI Screening Analysis</Text>
-
-            <View style={styles.screeningCard}>
-              <View style={styles.screeningImagePlaceholder}>
-                <MaterialCommunityIcons color={colors.textMuted} name="image-outline" size={40} />
+            <View style={styles.infoCard}>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Date of appointment</Text>
+                <Text style={styles.infoValue}>{formatShortDate(detail.apt_scheduled_at)}</Text>
               </View>
-              <Text style={styles.screeningLabel}>Final Assessment</Text>
-              <Text style={styles.screeningPrediction}>{detail.screening.prediction}</Text>
-              <Text style={styles.screeningDesc}>
-                An allergic reaction of atopic dermatitis - a chronic allergic condition.
-              </Text>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Time</Text>
+                <Text style={styles.infoValue}>{formatTime(detail.apt_scheduled_at)}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Pet Name</Text>
+                <Text style={styles.infoValue}>{detail.pet_name}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Breed</Text>
+                <Text style={styles.infoValue}>{detail.pet_breed ?? '—'}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Age</Text>
+                <Text style={styles.infoValue}>{ageFromBirthDate(detail.pet_birth_date)}</Text>
+              </View>
+              <View style={styles.infoDivider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Owner</Text>
+                <Text style={styles.infoValue}>{detail.owner_name ?? '—'}</Text>
+              </View>
             </View>
 
-            <Text style={styles.sectionTitle}>Follow-up answers</Text>
+            {detail.screening && (
+              <>
+                <Text style={styles.sectionTitle}>AI Screening Analysis</Text>
 
-            {detail.screening.follow_up_answers.map((item, index) => (
-              <View key={index} style={styles.followUpCard}>
-                <Text style={styles.followUpQuestion}>{item.question}</Text>
-                <Text style={styles.followUpAnswer}>{item.answer}</Text>
+                <View style={styles.screeningCard}>
+                  <View style={styles.screeningImagePlaceholder}>
+                    <MaterialCommunityIcons color={colors.textMuted} name="image-outline" size={40} />
+                  </View>
+                  <Text style={styles.screeningLabel}>Final Assessment</Text>
+                  <Text style={styles.screeningPrediction}>{detail.screening.disease}</Text>
+                  <Text style={styles.screeningDesc}>
+                    {Math.round(Number(detail.screening.ais_confidence))}% confidence · Model{' '}
+                    {detail.screening.ais_model_version}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {(detail.apt_reschedule_request_reason || detail.apt_cancellation_request_reason) && (
+              <View style={styles.requestCard}>
+                {detail.apt_reschedule_request_reason && (
+                  <Text style={styles.requestText}>
+                    Reschedule request: {detail.apt_reschedule_request_reason}
+                  </Text>
+                )}
+                {detail.apt_cancellation_request_reason && (
+                  <Text style={styles.requestText}>
+                    Cancellation request: {detail.apt_cancellation_request_reason}
+                  </Text>
+                )}
               </View>
-            ))}
-          </>
-        )}
+            )}
 
-        {isToday && (
-          <View style={styles.actionRow}>
-            <Pressable style={styles.rescheduleBtn} onPress={() => setShowRescheduleConfirm(true)}>
-              <Text style={styles.rescheduleText}>Reschedule</Text>
-            </Pressable>
-            <Pressable style={styles.cancelBtn} onPress={() => setShowCancelConfirm(true)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-          </View>
+            {canRequest && (
+              <View style={styles.actionRow}>
+                <Pressable
+                  style={styles.rescheduleBtn}
+                  onPress={() => {
+                    setRescheduleReason('')
+                    setShowRescheduleForm(true)
+                  }}
+                >
+                  <Text style={styles.rescheduleText}>Reschedule</Text>
+                </Pressable>
+                <Pressable
+                  style={styles.cancelBtn}
+                  onPress={() => {
+                    setCancelReason('')
+                    setShowCancelForm(true)
+                  }}
+                >
+                  <Text style={styles.cancelText}>Cancel</Text>
+                </Pressable>
+              </View>
+            )}
+          </>
         )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Reschedule Confirmation Modal */}
-      <Modal visible={showRescheduleConfirm} transparent animationType="fade">
+      {/* Reschedule Review Modal */}
+      <Modal visible={showRescheduleReview} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Request to Reschedule</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to reschedule this appointment?</Text>
+            <Text style={styles.modalTitle}>Submit reschedule request?</Text>
+            <Text style={styles.modalMessage}>
+              You&apos;re requesting to reschedule {detail?.pet_name} on{' '}
+              {detail ? formatShortDate(detail.apt_scheduled_at) : ''} at{' '}
+              {detail ? formatTime(detail.apt_scheduled_at) : ''}. The appointment stays Confirmed
+              until clinic staff reviews this request.
+            </Text>
+            <View style={styles.reasonEcho}>
+              <Text style={styles.reasonEchoLabel}>Reason</Text>
+              <Text style={styles.reasonEchoText}>{rescheduleReason.trim()}</Text>
+            </View>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalNoBtn} onPress={() => setShowRescheduleConfirm(false)}>
-                <Text style={styles.modalNoText}>No</Text>
+              <Pressable
+                style={styles.modalNoBtn}
+                onPress={() => {
+                  setShowRescheduleReview(false)
+                  setShowRescheduleForm(true)
+                }}
+                disabled={requesting}
+              >
+                <Text style={styles.modalNoText}>Go Back</Text>
               </Pressable>
-              <Pressable style={styles.modalYesGreenBtn} onPress={() => {
-                setShowRescheduleConfirm(false)
-                setShowRescheduleForm(true)
-              }}>
-                <Text style={styles.modalYesGreenText}>Yes</Text>
+              <Pressable style={styles.modalYesGreenBtn} onPress={confirmReschedule} disabled={requesting}>
+                <Text style={styles.modalYesGreenText}>{requesting ? 'Submitting...' : 'Submit Request'}</Text>
               </Pressable>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* Cancel Confirmation Modal */}
-      <Modal visible={showCancelConfirm} transparent animationType="fade">
+      {/* Cancel Review Modal */}
+      <Modal visible={showCancelReview} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Request for Cancellation</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to cancel this appointment?</Text>
+            <Text style={styles.modalTitle}>Submit cancellation request?</Text>
+            <Text style={styles.modalMessage}>
+              You&apos;re requesting to cancel {detail?.pet_name} on{' '}
+              {detail ? formatShortDate(detail.apt_scheduled_at) : ''} at{' '}
+              {detail ? formatTime(detail.apt_scheduled_at) : ''}. The appointment stays Confirmed
+              until clinic staff reviews this request.
+            </Text>
+            <View style={styles.reasonEcho}>
+              <Text style={styles.reasonEchoLabel}>Reason</Text>
+              <Text style={styles.reasonEchoText}>{cancelReason.trim()}</Text>
+            </View>
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalNoBtn} onPress={() => setShowCancelConfirm(false)}>
-                <Text style={styles.modalNoText}>No</Text>
+              <Pressable
+                style={styles.modalNoBtn}
+                onPress={() => {
+                  setShowCancelReview(false)
+                  setShowCancelForm(true)
+                }}
+                disabled={requesting}
+              >
+                <Text style={styles.modalNoText}>Go Back</Text>
               </Pressable>
-              <Pressable style={styles.modalYesRedBtn} onPress={() => {
-                setShowCancelConfirm(false)
-                setShowCancelForm(true)
-              }}>
-                <Text style={styles.modalYesRedText}>Yes</Text>
+              <Pressable style={styles.modalYesRedBtn} onPress={confirmCancel} disabled={requesting}>
+                <Text style={styles.modalYesRedText}>
+                  {requesting ? 'Submitting...' : 'Submit Cancellation Request'}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -216,54 +293,6 @@ export default function VetConsultationDetailScreen() {
               </Pressable>
             </View>
 
-            <Text style={styles.formLabel}>Select New Date</Text>
-            <View style={styles.calendarContainer}>
-              <View style={styles.calendarNav}>
-                <Pressable onPress={() => {
-                  if (calendarMonth === 0) { setCalendarMonth(11); setCalendarYear(calendarYear - 1) }
-                  else { setCalendarMonth(calendarMonth - 1) }
-                }}>
-                  <MaterialCommunityIcons color={colors.text} name="chevron-left" size={22} />
-                </Pressable>
-                <Text style={styles.calendarMonthTitle}>{monthNames[calendarMonth]} {calendarYear}</Text>
-                <Pressable onPress={() => {
-                  if (calendarMonth === 11) { setCalendarMonth(0); setCalendarYear(calendarYear + 1) }
-                  else { setCalendarMonth(calendarMonth + 1) }
-                }}>
-                  <MaterialCommunityIcons color={colors.text} name="chevron-right" size={22} />
-                </Pressable>
-              </View>
-              <View style={styles.weekdayRow}>
-                {WEEKDAYS.map((d) => (
-                  <Text key={d} style={styles.weekdayText}>{d}</Text>
-                ))}
-              </View>
-              <View style={styles.daysGrid}>
-                {calendarDays.map((day, index) => {
-                  if (day === null) return <View key={`empty-${index}`} style={styles.dayCell} />
-                  const d = new Date(calendarYear, calendarMonth, day)
-                  d.setHours(0, 0, 0, 0)
-                  const isSelected = selectedDate.getTime() === d.getTime()
-                  const disabled = isDateDisabled(day)
-                  return (
-                    <Pressable
-                      key={`day-${day}`}
-                      style={styles.dayCell}
-                      onPress={() => { if (!disabled) setSelectedDate(d) }}
-                      disabled={disabled}
-                    >
-                      <View style={[isSelected && styles.daySelected, disabled && styles.dayDisabled]}>
-                        <Text style={[styles.dayText, isSelected && styles.dayTextSelected, disabled && styles.dayTextDisabled]}>
-                          {day}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  )
-                })}
-              </View>
-            </View>
-            <Text style={styles.selectedDateText}>Selected: {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</Text>
-
             <Text style={styles.formLabel}>Reason for Rescheduling</Text>
             <TextInput
               style={styles.textInput}
@@ -280,8 +309,8 @@ export default function VetConsultationDetailScreen() {
               <Pressable style={styles.formCancelBtn} onPress={() => { setShowRescheduleForm(false); setRescheduleReason('') }}>
                 <Text style={styles.formCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.formSubmitGreenBtn} onPress={handleRescheduleSubmit}>
-                <Text style={styles.formSubmitGreenText}>Submit</Text>
+              <Pressable style={styles.formSubmitGreenBtn} onPress={handleRescheduleContinue} disabled={requesting}>
+                <Text style={styles.formSubmitGreenText}>Continue</Text>
               </Pressable>
             </View>
           </View>
@@ -315,8 +344,8 @@ export default function VetConsultationDetailScreen() {
               <Pressable style={styles.formCancelBtn} onPress={() => { setShowCancelForm(false); setCancelReason('') }}>
                 <Text style={styles.formCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.formSubmitRedBtn} onPress={handleCancelSubmit}>
-                <Text style={styles.formSubmitRedText}>Submit</Text>
+              <Pressable style={styles.formSubmitRedBtn} onPress={handleCancelContinue} disabled={requesting}>
+                <Text style={styles.formSubmitRedText}>Continue</Text>
               </Pressable>
             </View>
           </View>
@@ -355,6 +384,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
 
+  loading: { marginVertical: 40 },
+
   infoCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   infoLabel: { color: colors.textSecondary, fontSize: 14, fontWeight: '500' },
@@ -375,14 +406,19 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   screeningPrediction: { color: colors.primary, fontSize: 16, fontWeight: '800', marginBottom: 6 },
   screeningDesc: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 
-  followUpCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.borderLight },
-  followUpQuestion: { color: colors.text, fontSize: 14, fontWeight: '600', marginBottom: 6 },
-  followUpAnswer: { color: colors.primary, fontSize: 14, fontWeight: '700' },
+  requestCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight, gap: 6 },
+  requestText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', alignItems: 'center' },
   modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 },
-  modalMessage: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalMessage: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
+  reasonEcho: { width: '100%', backgroundColor: colors.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: colors.borderLight, padding: 12, marginBottom: 20 },
+  reasonEchoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  reasonEchoText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
   modalNoBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
   modalNoText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
@@ -395,20 +431,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
   formTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
   formLabel: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
-
-  calendarContainer: { backgroundColor: colors.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 10 },
-  calendarNav: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  calendarMonthTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  weekdayRow: { flexDirection: 'row', marginBottom: 6 },
-  weekdayText: { flex: 1, textAlign: 'center', color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
-  daysGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  dayCell: { width: '14.28%', alignItems: 'center', paddingVertical: 4 },
-  dayText: { color: colors.text, fontSize: 13, fontWeight: '500' },
-  daySelected: { backgroundColor: colors.primary, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 },
-  dayTextSelected: { color: '#FFFFFF', fontWeight: '700' },
-  dayDisabled: { opacity: 0.3 },
-  dayTextDisabled: { color: colors.textMuted },
-  selectedDateText: { color: colors.primary, fontSize: 13, fontWeight: '600', marginBottom: 16 },
 
   textInput: { backgroundColor: colors.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: colors.borderLight, padding: 14, color: colors.text, fontSize: 14, minHeight: 80, marginBottom: 20 },
 

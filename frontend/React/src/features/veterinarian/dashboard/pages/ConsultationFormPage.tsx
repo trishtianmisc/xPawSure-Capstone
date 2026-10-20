@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
-import { DISEASE_OPTIONS, OTHER_DISEASE, isSkinDisease } from '../constants/diseases'
+import { OTHER_DISEASE, isSkinDisease } from '../constants/diseases'
+import { DiseaseCombobox } from '../components/DiseaseCombobox'
 import { useAppointmentDetail, useSaveConsultation } from '../hooks/useVetAppointments'
 import type { VetAppointmentDetail } from '../types/dashboard.types'
 import { apiErrorMessage } from '../../../../utils/error'
@@ -25,7 +26,8 @@ function buildInitialForm(appointment: VetAppointmentDetail) {
     chief_complaint: appointment.consultation?.chief_complaint ?? '',
     observations: appointment.consultation?.objective ?? '',
     diagnosis: isKnownDisease || !stored ? stored : OTHER_DISEASE,
-    other_disease: isKnownDisease || !stored ? '' : stored,
+    custom_diagnosis: isKnownDisease || !stored ? '' : stored,
+    specific_disease: appointment.consultation?.specific_disease ?? '',
     notes: appointment.consultation?.notes ?? '',
   }
 }
@@ -79,11 +81,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
   }
 
   function handleDiagnosisChange(value: string) {
-    setForm((prev) => ({
-      ...prev,
-      diagnosis: value,
-      other_disease: value === OTHER_DISEASE ? prev.other_disease : '',
-    }))
+    setForm((prev) => ({ ...prev, diagnosis: value }))
   }
 
   async function handleNext() {
@@ -93,7 +91,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
       return
     }
 
-    const diagnosis = selection === OTHER_DISEASE ? form.other_disease.trim() : selection
+    const diagnosis = selection === OTHER_DISEASE ? form.custom_diagnosis.trim() : selection
     if (!diagnosis) {
       setError('Please enter the disease name.')
       return
@@ -108,6 +106,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
           chief_complaint: form.chief_complaint,
           objective: form.observations,
           diagnosis,
+          specific_disease: form.specific_disease.trim(),
           notes: form.notes,
         },
       })
@@ -212,27 +211,33 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300">Diagnosis</label>
-            <select
-              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
-              onChange={(e) => handleDiagnosisChange(e.target.value)}
-              value={form.diagnosis}
+            <label
+              className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300"
+              htmlFor="consultation-diagnosis"
             >
-              <option value="">Select disease</option>
-              {DISEASE_OPTIONS.map((disease) => (
-                <option key={disease} value={disease}>
-                  {disease}
-                </option>
-              ))}
-            </select>
+              Diagnosis
+            </label>
+            <DiseaseCombobox
+              customValue={form.custom_diagnosis}
+              id="consultation-diagnosis"
+              onCustomChange={(value) => handleChange('custom_diagnosis', value)}
+              onSelect={handleDiagnosisChange}
+              value={form.diagnosis}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300">Other Disease</label>
+            <label
+              className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300"
+              htmlFor="consultation-specific-disease"
+            >
+              Specific Disease
+            </label>
             <input
-              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 disabled:cursor-not-allowed disabled:bg-stone-100 disabled:text-stone-400 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:disabled:bg-stone-800"
-              disabled={form.diagnosis !== OTHER_DISEASE}
-              onChange={(e) => handleChange('other_disease', e.target.value)}
-              value={form.other_disease}
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder:text-stone-400 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:placeholder:text-stone-500"
+              id="consultation-specific-disease"
+              onChange={(e) => handleChange('specific_disease', e.target.value)}
+              placeholder="Optional"
+              value={form.specific_disease}
             />
           </div>
         </div>

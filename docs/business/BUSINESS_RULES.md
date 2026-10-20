@@ -158,6 +158,7 @@ Veterinarians can
 - Review AI screening results
 - Create prescriptions
 - Maintain medical records
+- Request a reschedule or cancellation of their own `CONFIRMED` appointments (submitted as a request with a required reason)
 
 Veterinarians may perform these actions only for appointments and records within their own clinic.
 
@@ -167,6 +168,7 @@ Veterinarians cannot
 - Delete medical history
 - Manage user accounts
 - Access records outside their own clinic
+- Directly cancel or reschedule an appointment; both are submitted as requests that do not change the appointment status
 
 ---
 

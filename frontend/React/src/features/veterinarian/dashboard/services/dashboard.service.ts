@@ -46,14 +46,25 @@ export const dashboardService = {
     return data
   },
 
-  async cancelAppointment(
+  async requestReschedule(
     aptId: string,
     reason: string,
   ): Promise<VetAppointmentDetail> {
-    const { data } = await http.patch<VetAppointmentDetail>(`/appointments/${aptId}/`, {
-      apt_status: 'CANCELLED',
-      cancellation_reason: reason,
-    })
+    const { data } = await http.post<VetAppointmentDetail>(
+      `/veterinarian/appointments/${aptId}/request-reschedule/`,
+      { reason },
+    )
+    return data
+  },
+
+  async requestCancellation(
+    aptId: string,
+    reason: string,
+  ): Promise<VetAppointmentDetail> {
+    const { data } = await http.post<VetAppointmentDetail>(
+      `/veterinarian/appointments/${aptId}/request-cancel/`,
+      { reason },
+    )
     return data
   },
 

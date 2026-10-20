@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { ConsultationSummary } from '../components/ConsultationSummary'
 import { PrescriptionSummary } from '../components/PrescriptionSummary'
 import {
   useAppointmentDetail,
+  useRequestCancellation,
+  useRequestReschedule,
   useStartConsultation,
 } from '../hooks/useVetAppointments'
 import type { AppointmentStatus } from '../types/dashboard.types'
@@ -54,6 +57,13 @@ export function AppointmentDetailPage() {
   const navigate = useNavigate()
   const { data: appointment, isLoading, error } = useAppointmentDetail(id ?? '')
   const startConsultation = useStartConsultation()
+  const requestReschedule = useRequestReschedule()
+  const requestCancellation = useRequestCancellation()
+  const [requestType, setRequestType] = useState<'RESCHEDULE' | 'CANCEL' | null>(null)
+  const [requestReason, setRequestReason] = useState('')
+  const [requestError, setRequestError] = useState('')
+  const [requestReview, setRequestReview] = useState(false)
+  const [requestSubmitted, setRequestSubmitted] = useState(false)
 
   if (isLoading) {
     return (
@@ -86,6 +96,10 @@ export function AppointmentDetailPage() {
 
   const canStart = appointment.apt_status === 'CHECKED_IN'
   const canEditConsultation = appointment.apt_status === 'IN_PROGRESS'
+  const canRequest =
+    appointment.apt_status === 'CONFIRMED' &&
+    !appointment.apt_reschedule_request_reason &&
+    !appointment.apt_cancellation_request_reason
 
   function handleStart() {
     if (!appointment) return
@@ -93,6 +107,54 @@ export function AppointmentDetailPage() {
     startConsultation.mutate(aptId, {
       onSuccess: () => navigate(`/veterinarian/consultations/${aptId}`),
     })
+  }
+
+  const requestPending = requestReschedule.isPending || requestCancellation.isPending
+
+  function openRequest(type: 'RESCHEDULE' | 'CANCEL') {
+    setRequestType(type)
+    setRequestReason('')
+    setRequestError('')
+    setRequestReview(false)
+    setRequestSubmitted(false)
+  }
+
+  function closeRequest() {
+    setRequestType(null)
+    setRequestReason('')
+    setRequestError('')
+    setRequestReview(false)
+  }
+
+  function handleRequestContinue() {
+    if (!requestReason.trim()) {
+      setRequestError('Please enter a reason.')
+      return
+    }
+    setRequestError('')
+    setRequestReview(true)
+  }
+
+  function confirmRequest() {
+    if (!appointment || !requestType) return
+    const reason = requestReason.trim()
+    const mutation = requestType === 'RESCHEDULE' ? requestReschedule : requestCancellation
+    mutation.mutate(
+      { aptId: appointment.apt_id, reason },
+      {
+        onSuccess: () => {
+          closeRequest()
+          setRequestSubmitted(true)
+        },
+        onError: (err) => {
+          const detail = (
+            err as { response?: { data?: { detail?: string } } }
+          )?.response?.data?.detail
+          setRequestReview(false)
+          setRequestError(detail ?? 'Something went wrong. Please try again.')
+        },
+      },
+    )
   }
 
   return (
@@ -149,6 +211,22 @@ export function AppointmentDetailPage() {
             <dt className="text-sm text-stone-500 dark:text-stone-400">Ref. No</dt>
             <dd className="text-sm text-stone-400 dark:text-stone-500">Not yet added</dd>
           </div>
+          {appointment.apt_reschedule_request_reason && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">Reschedule request</dt>
+              <dd className="text-right text-sm font-semibold text-amber-800 dark:text-amber-500">
+                {appointment.apt_reschedule_request_reason}
+              </dd>
+            </div>
+          )}
+          {appointment.apt_cancellation_request_reason && (
+            <div className="flex items-center justify-between gap-4">
+              <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">Cancellation request</dt>
+              <dd className="text-right text-sm font-semibold text-red-700 dark:text-red-400">
+                {appointment.apt_cancellation_request_reason}
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 
@@ -208,6 +286,29 @@ export function AppointmentDetailPage() {
 
       {/* Actions */}
       <div className="flex flex-col items-end gap-3">
+        {requestSubmitted && (
+          <p className="w-full rounded-md bg-green-50 px-4 py-2 text-right text-sm font-semibold text-green-800 dark:bg-green-900/30 dark:text-green-400">
+            Request submitted. You will be notified once it is reviewed.
+          </p>
+        )}
+        {canRequest && (
+          <div className="flex w-full justify-end gap-3">
+            <button
+              className="w-56 rounded-md border border-green-700 px-5 py-2.5 text-sm font-semibold text-green-800 transition hover:bg-green-50 dark:border-green-700 dark:text-green-300 dark:hover:bg-green-900/40"
+              onClick={() => openRequest('RESCHEDULE')}
+              type="button"
+            >
+              Reschedule
+            </button>
+            <button
+              className="w-56 rounded-md border border-red-300 px-5 py-2.5 text-sm font-semibold text-red-700 transition hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/40"
+              onClick={() => openRequest('CANCEL')}
+              type="button"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         {canStart && (
           <button
             className="w-56 rounded-md bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950 disabled:opacity-50"
@@ -228,6 +329,115 @@ export function AppointmentDetailPage() {
           </button>
         )}
       </div>
+
+      {/* Request Modal */}
+      {requestType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-stone-900">
+            {!requestReview ? (
+              <>
+                <h3 className="mb-2 text-lg font-semibold text-stone-900 dark:text-stone-100">
+                  {requestType === 'RESCHEDULE'
+                    ? 'Request to Reschedule'
+                    : 'Request for Cancellation'}
+                </h3>
+                <p className="mb-4 text-sm text-stone-600 dark:text-stone-300">
+                  {requestType === 'RESCHEDULE'
+                    ? 'Enter a reason for rescheduling this appointment. You will be asked to confirm before it is submitted.'
+                    : 'Enter a reason for cancelling this appointment. You will be asked to confirm before it is submitted.'}
+                </p>
+                <textarea
+                  value={requestReason}
+                  onChange={(e) => setRequestReason(e.target.value)}
+                  placeholder="Enter reason..."
+                  className="mb-4 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100"
+                  rows={3}
+                />
+                {requestError && (
+                  <p className="mb-4 text-sm font-medium text-red-700 dark:text-red-400">
+                    {requestError}
+                  </p>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={closeRequest}
+                    disabled={requestPending}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300"
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleRequestContinue}
+                    disabled={requestPending}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                      requestType === 'RESCHEDULE'
+                        ? 'bg-green-700 hover:bg-green-800'
+                        : 'bg-red-700 hover:bg-red-800'
+                    }`}
+                    type="button"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h3 className="mb-2 text-lg font-semibold text-stone-900 dark:text-stone-100">
+                  {requestType === 'RESCHEDULE'
+                    ? 'Submit reschedule request?'
+                    : 'Submit cancellation request?'}
+                </h3>
+                <p className="mb-4 text-sm text-stone-600 dark:text-stone-300">
+                  You&apos;re requesting to{' '}
+                  {requestType === 'RESCHEDULE' ? 'reschedule' : 'cancel'}{' '}
+                  {appointment.pet_name} on {formatDateTime(appointment.apt_scheduled_at)}. The
+                  appointment stays Confirmed until clinic staff reviews this request.
+                </p>
+                <div className="mb-4 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-900">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    Reason
+                  </p>
+                  <p className="mt-1 text-sm text-stone-800 dark:text-stone-200">
+                    {requestReason.trim()}
+                  </p>
+                </div>
+                {requestError && (
+                  <p className="mb-4 text-sm font-medium text-red-700 dark:text-red-400">
+                    {requestError}
+                  </p>
+                )}
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setRequestReview(false)}
+                    disabled={requestPending}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300"
+                    type="button"
+                  >
+                    Go Back
+                  </button>
+                  <button
+                    onClick={confirmRequest}
+                    disabled={requestPending}
+                    className={`rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
+                      requestType === 'RESCHEDULE'
+                        ? 'bg-green-700 hover:bg-green-800'
+                        : 'bg-red-700 hover:bg-red-800'
+                    }`}
+                    type="button"
+                  >
+                    {requestPending
+                      ? 'Submitting…'
+                      : requestType === 'RESCHEDULE'
+                        ? 'Submit Request'
+                        : 'Submit Cancellation Request'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
