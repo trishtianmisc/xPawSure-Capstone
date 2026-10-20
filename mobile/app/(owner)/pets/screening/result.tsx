@@ -185,11 +185,6 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
-          {(params.imageUri || imageReports.length > 0) && (
-            <Image
-              source={{ uri: imageReports.find((r) => r.status === 'ok')?.uri ?? params.imageUri }}
-              style={styles.thumbnail}
-            />
           {pet?.profile_picture ? (
             <Image source={{ uri: pet.profile_picture }} style={styles.thumbnail} />
           ) : (
@@ -410,7 +405,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 18,
   },
-  breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
   comparisonText: {
     color: colors.textMuted,
     fontSize: 12,
