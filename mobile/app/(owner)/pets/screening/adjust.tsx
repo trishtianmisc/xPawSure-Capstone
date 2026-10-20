@@ -2,7 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import {
-  Image,
+  ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -13,27 +14,25 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
+import { font } from '../../../../src/theme/typography'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
 import type { Answers } from '../../../../ai/decisionTree/types'
-
-const DISEASE_COLORS: Record<string, string> = {
-  ALLERGIC_DERMATITIS: '#E67E22',
-  BACTERIAL: '#C0392B',
-  FUNGAL: '#8E44AD',
-  HOTSPOT: '#D35400',
-  MANGE: '#27AE60',
-}
+import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 export default function AdjustScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
+  const createScreening = useCreateScreening()
   const params = useLocalSearchParams<{
     predictions: string
     petId: string
     petName: string
     imageUri?: string
+    modelVersion?: string
+    inferenceTimeMs?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -50,17 +49,14 @@ export default function AdjustScreen() {
 
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
-  const [done, setDone] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const hasResult = predictions.length > 0
-  const result = useMemo(
-    () => (done && hasResult ? refinePredictions(predictions, answers, KNOWLEDGE) : null),
-    [done, hasResult, predictions, answers],
-  )
 
   const question = questions[step]
   const selected = answers[question.id] ?? []
   const isLast = step === total - 1
+  const canProceed = selected.length > 0
 
   const selectOption = (optionId: string) => {
     setAnswers((prev) => {
@@ -75,19 +71,57 @@ export default function AdjustScreen() {
     })
   }
 
+  const finish = async () => {
+    if (isSubmitting) return
+    setIsSubmitting(true)
+
+    const refined = refinePredictions(predictions, answers, KNOWLEDGE)
+
+    let alreadySaved = false
+    try {
+      await createScreening.mutateAsync({
+        pet_id: params.petId,
+        source: 'DEVICE',
+        prediction: refined.refinedTop.disease,
+        confidence: Math.round(refined.refinedTop.confidence),
+        model_version: params.modelVersion || 'unknown',
+        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+        device: Platform.OS,
+      })
+      alreadySaved = true
+    } catch {
+      // Auto-save failed — the result screen's Save&Book will retry.
+    }
+
+    router.replace({
+      pathname: '/(owner)/pets/screening/result',
+      params: {
+        imageUri: params.imageUri ?? '',
+        petId: params.petId,
+        petName: params.petName,
+        predictions: params.predictions,
+        modelVersion: params.modelVersion ?? '',
+        inferenceTimeMs: params.inferenceTimeMs ?? '0',
+        state: 'DISEASE_DETECTED',
+        stateMessage: '',
+        refined: JSON.stringify(refined.refined),
+        changed: refined.changed ? 'true' : 'false',
+        alreadySaved: alreadySaved ? 'true' : 'false',
+        imageReports: params.imageReports ?? '',
+      },
+    })
+  }
+
   const goNext = () => {
+    if (!canProceed || isSubmitting) return
     if (!isLast) {
       setStep(step + 1)
     } else {
-      setDone(true)
+      void finish()
     }
   }
 
   const goBack = () => {
-    if (done) {
-      router.back()
-      return
-    }
     if (step > 0) {
       setStep(step - 1)
     } else {
@@ -100,7 +134,7 @@ export default function AdjustScreen() {
       <Pressable onPress={goBack} hitSlop={8} style={styles.headerBack}>
         <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
       </Pressable>
-      <Text style={styles.headerTitle}>Narrow It Down</Text>
+      <Text style={styles.headerTitle}>Quick Skin Check</Text>
       <View style={styles.headerRight} />
     </View>
   )
@@ -156,13 +190,13 @@ export default function AdjustScreen() {
               {result.changed ? (
                 <>
                   Your answers point to{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.originalTop.label}</Text>.
+                  <Text style={{ ...font.extrabold }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
                 </>
               ) : (
                 <>
                   Your answers are consistent with the AI&rsquo;s suggestion of{' '}
-                  <Text style={{ fontWeight: '800' }}>{result.originalTop.label}</Text>.
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
                 </>
               )}
             </Text>
@@ -180,7 +214,7 @@ export default function AdjustScreen() {
                       {i === 0 ? '\u2605 ' : '  '}
                       {pred.label}
                     </Text>
-                    <Text style={[styles.barPct, i === 0 && { color: colors.text, fontWeight: '700' }]}>{pct}%</Text>
+                    <Text style={[styles.barPct, i === 0 && { ...font.bold, color: colors.text }]}>{pct}%</Text>
                   </View>
                   <View style={[styles.barTrack, { backgroundColor: colors.surfaceAlt }]}>
                     <View
@@ -272,16 +306,18 @@ export default function AdjustScreen() {
 
       <View style={styles.bottomBar}>
         <Pressable
-          onPress={() => {
-            setAnswers((prev) => ({ ...prev, [question.id]: [] }))
-            goNext()
-          }}
-          style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}
+          onPress={goNext}
+          disabled={!canProceed || isSubmitting}
+          style={[
+            styles.actionBtn,
+            styles.primaryBtn,
+            (!canProceed || isSubmitting) && styles.actionBtnDisabled,
+          ]}
         >
-          <Text style={[styles.actionBtnText, { color: colors.textMuted }]}>Skip</Text>
-        </Pressable>
-        <Pressable onPress={goNext} style={[styles.actionBtn, styles.primaryBtn]}>
-          <Text style={[styles.actionBtnText, { color: '#FFF' }]}>{isLast ? 'See Suggestions' : 'Next'}</Text>
+          {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
+          <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
+            {isSubmitting ? 'Saving...' : isLast ? 'See Suggestions' : 'Next'}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -301,11 +337,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerBack: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitle: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  headerTitle: { ...font.bold, color: colors.text, flex: 1, fontSize: 17, textAlign: 'center' },
   headerRight: { width: 48 },
 
   progressSection: { backgroundColor: colors.surface, gap: 8, paddingHorizontal: 24, paddingBottom: 14 },
-  progressLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  progressLabel: { ...font.semibold, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
   progressTrack: { borderRadius: 4, height: 6, overflow: 'hidden', width: '100%' },
   progressFill: { backgroundColor: '#B96534', borderRadius: 4, height: '100%' },
 
@@ -320,8 +356,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 18,
     padding: 18,
   },
-  questionText: { color: colors.text, fontSize: 16, fontWeight: '700', lineHeight: 23 },
-  questionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  questionText: { ...font.bold, color: colors.text, fontSize: 16, lineHeight: 23 },
+  questionHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
 
   optionsList: { gap: 10 },
   option: {
@@ -348,8 +384,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   optionMarkMulti: { borderRadius: 6 },
   optionMarkActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   optionDot: { backgroundColor: '#FFF', borderRadius: 4, height: 8, width: 8 },
-  optionText: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 19 },
-  optionTextActive: { fontWeight: '700' },
+  optionText: { ...font.medium, color: colors.text, flex: 1, fontSize: 14, lineHeight: 19 },
+  optionTextActive: { ...font.bold },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
@@ -362,8 +398,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 56,
   },
   imageInfo: { flex: 1 },
-  petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  timestamp: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
 
   verdictCard: {
     alignItems: 'flex-start',
@@ -375,7 +411,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 16,
   },
-  verdictText: { color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
+  verdictText: { ...font.regular, color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
 
   breakdownCard: {
     backgroundColor: colors.surface,
@@ -385,11 +421,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 18,
   },
-  breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
   barRow: { gap: 6, marginBottom: 14 },
   barLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { color: '#A0A0A0', flex: 1, fontSize: 13, fontWeight: '500' },
-  barPct: { color: '#A0A0A0', fontSize: 13, fontWeight: '600', marginLeft: 8, minWidth: 36, textAlign: 'right' },
+  barLabel: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
+  barPct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
   barTrack: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
   barFill: { borderRadius: 4, height: '100%' },
 
@@ -401,11 +437,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  infoText: { color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
 
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
-  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  emptyText: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
+  emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
+  emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
 
   bottomBar: {
     backgroundColor: colors.surface,
@@ -431,5 +467,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   primaryBtn: { backgroundColor: '#B96534' },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
-  actionBtnText: { fontSize: 14, fontWeight: '700' },
+  actionBtnText: { ...font.bold, fontSize: 14 },
 })

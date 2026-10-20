@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 
 import { useTheme } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { useBreeds } from '../hooks/useBreeds'
 
 interface BreedPickerProps {
@@ -120,8 +121,8 @@ const styles = StyleSheet.create({
     height: 50,
     paddingHorizontal: 16,
   },
-  triggerText: { flex: 1, fontSize: 15 },
-  chevron: { fontSize: 18, fontWeight: '700' },
+  triggerText: { ...font.regular, flex: 1, fontSize: 15 },
+  chevron: { ...font.bold, fontSize: 18 },
   screen: { flex: 1, paddingTop: 60 },
   header: {
     alignItems: 'center',
@@ -131,10 +132,10 @@ const styles = StyleSheet.create({
     paddingBottom: 14,
     paddingHorizontal: 20,
   },
-  cancel: { fontSize: 15, fontWeight: '600' },
-  title: { fontSize: 17, fontWeight: '700' },
+  cancel: { ...font.semibold, fontSize: 15 },
+  title: { ...font.bold, fontSize: 17 },
   doneWrap: { minWidth: 50, alignItems: 'flex-end' },
-  done: { fontSize: 15, fontWeight: '600' },
+  done: { ...font.semibold, fontSize: 15 },
   searchWrap: {
     alignItems: 'center',
     borderRadius: 12,
@@ -147,9 +148,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 8,
   },
-  searchIcon: { fontSize: 14 },
-  searchInput: { flex: 1, fontSize: 15, height: '100%', padding: 0 },
-  clearBtn: { fontSize: 16, fontWeight: '600', paddingLeft: 4 },
+  searchIcon: { ...font.regular, fontSize: 14 },
+  searchInput: { ...font.regular, flex: 1, fontSize: 15, height: '100%', padding: 0 },
+  clearBtn: { ...font.semibold, fontSize: 16, paddingLeft: 4 },
   list: { flex: 1 },
   listContent: { paddingHorizontal: 20, paddingTop: 4, paddingBottom: 24 },
   item: {
@@ -162,8 +163,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   itemLeft: { alignItems: 'center', flexDirection: 'row', gap: 10, flex: 1 },
-  itemEmoji: { fontSize: 16 },
-  itemText: { flex: 1, fontSize: 15 },
+  itemEmoji: { ...font.regular, fontSize: 16 },
+  itemText: { ...font.regular, flex: 1, fontSize: 15 },
   checkCircle: {
     borderRadius: 12,
     height: 24,
@@ -171,5 +172,5 @@ const styles = StyleSheet.create({
     width: 24,
     alignItems: 'center',
   },
-  checkMark: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  checkMark: { ...font.extrabold, color: '#FFFFFF', fontSize: 13 },
 })

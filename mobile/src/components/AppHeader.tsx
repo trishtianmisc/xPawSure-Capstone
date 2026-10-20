@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useUnreadCount } from '../../features/notification/hooks/useUnreadCount'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
+import { font } from '../theme/typography'
 
 export function AppHeader() {
   const { colors, theme, toggleTheme } = useTheme()
@@ -18,12 +19,15 @@ export function AppHeader() {
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
       <View style={styles.left}>
-        <Image
-          source={theme === 'dark' ? require('../../assets/Xpaw_Logo_ForDark.png') : require('../../assets/Xpaw_Logo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={[styles.brand, { color: colors.primary }]}>xPawSure</Text>
+        <View style={styles.logoWrap}>
+          <Image
+            source={require('../../assets/xpawsure-logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="XPawSure"
+          />
+        </View>
+        <Text style={[styles.brand, { color: colors.primary }]}>XPawsure</Text>
       </View>
 
       <View style={styles.right}>
@@ -61,10 +65,20 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     paddingHorizontal: 20,
   },
-  left: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  logo: { height: 28, width: 28 },
-  brand: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
+  left: { alignItems: 'center', flexDirection: 'row', gap: 7 },
+  logo: { height: 23, width: 23 },
+  brand: { ...font.extrabold, fontSize: 20, letterSpacing: -0.3 },
   right: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  logoWrap: {
+    alignItems: 'center',
+    backgroundColor: '#F8C98F',
+    borderColor: '#8B4324',
+    borderRadius: 15,
+    borderWidth: 2,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
   iconBtn: {
     alignItems: 'center',
     borderRadius: 12,
@@ -89,5 +103,5 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     width: 32,
   },
-  avatarText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  avatarText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 })

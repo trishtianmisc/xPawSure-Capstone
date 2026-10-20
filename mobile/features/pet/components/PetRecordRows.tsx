@@ -3,6 +3,7 @@ import { useMemo, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import type { ConsultationRecord, VaccinationRecordItem } from '../../../src/services/records'
 import { VaccinationStatusPill } from '../../records/components/VaccinationStatusPill'
 import { STATUS_STYLES } from '../../screening/constants'
@@ -80,22 +81,38 @@ export function ConsultationRow({
 export function ScreeningRow({
   screening,
   onPress,
+  onBook,
 }: {
   screening: Screening
   onPress: () => void
+  onBook?: () => void
 }) {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const status = STATUS_STYLES[screening.ais_status]
+  const showBookAction = screening.ais_status === 'PENDING_REVIEW' && onBook !== undefined
 
   return (
     <RowShell
       title={screening.disease}
       meta={`${screening.ais_confidence}% confidence · ${formatDate(screening.ais_created_at)}`}
       badge={
-        <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-          <Text style={[styles.statusPillText, { color: status.fg }]}>{status.label}</Text>
-        </View>
+        showBookAction ? (
+          <Pressable
+            accessibilityHint="Opens the appointment booking flow"
+            accessibilityLabel={`Book a veterinary appointment for ${screening.disease} screening`}
+            accessibilityRole="button"
+            onPress={() => onBook?.()}
+            style={styles.bookChip}
+          >
+            <Ionicons color="#FFFFFF" name="calendar-outline" size={13} />
+            <Text style={styles.bookChipText}>Book</Text>
+          </Pressable>
+        ) : (
+          <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+            <Text style={[styles.statusPillText, { color: status.fg }]}>{status.label}</Text>
+          </View>
+        )
       }
       onPress={onPress}
     />
@@ -120,14 +137,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     gap: 2,
   },
   rowTitle: {
+    ...font.bold,
     color: colors.text,
     fontSize: 14,
-    fontWeight: '700',
   },
   rowMeta: {
+    ...font.semibold,
     color: colors.textSecondary,
     fontSize: 12,
-    fontWeight: '600',
   },
   rowAside: {
     alignItems: 'center',
@@ -141,6 +158,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 3,
   },
   statusPillText: {
+    ...font.bold,
+    fontSize: 11,
+  },
+
+  bookChip: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  bookChipText: {
+    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
   },

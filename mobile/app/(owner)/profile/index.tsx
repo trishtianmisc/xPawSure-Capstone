@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useOwnerProfile } from '../../../features/profile/hooks/useOwnerProfile'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 export default function ProfileScreen() {
   const router = useRouter()
@@ -88,11 +89,11 @@ const styles = StyleSheet.create({
   card: { alignItems: 'center', marginHorizontal: 24, borderRadius: 16, padding: 24, marginBottom: 24 },
   avatar: { marginBottom: 12 },
   avatarImage: { borderRadius: 40, height: 80, width: 80, marginBottom: 12 },
-  name: { fontSize: 18, fontWeight: '700', marginBottom: 4 },
-  email: { fontSize: 13, marginBottom: 4 },
+  name: { ...font.bold, fontSize: 18, marginBottom: 4 },
+  email: { ...font.regular, fontSize: 13, marginBottom: 4 },
   infoRow: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 4 },
-  infoText: { fontSize: 13 },
-  role: { fontSize: 12, fontWeight: '600', marginTop: 8, textTransform: 'capitalize' },
+  infoText: { ...font.regular, fontSize: 13 },
+  role: { ...font.semibold, fontSize: 12, marginTop: 8, textTransform: 'capitalize' },
   row: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, borderRadius: 12, padding: 16, marginBottom: 12 },
-  rowText: { flex: 1, fontSize: 15, fontWeight: '500', marginLeft: 12 },
+  rowText: { ...font.medium, flex: 1, fontSize: 15, marginLeft: 12 },
 })

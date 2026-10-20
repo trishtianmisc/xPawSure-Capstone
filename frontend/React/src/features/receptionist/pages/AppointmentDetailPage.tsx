@@ -40,7 +40,7 @@ function DetailCell({ label, value, className = '' }: DetailCellProps) {
 const ROW_CLASS = 'grid grid-cols-1 border-b border-stone-200 last:border-b-0 dark:border-stone-700'
 const FIRST_CELL_CLASS = 'sm:border-r sm:border-stone-200 dark:sm:border-stone-700'
 
-// Mirrors NO_SHOW_GRACE_MINUTES in backend appointments/tasks.py.
+// Mirrors NO_SHOW_GRACE_MINUTES in backend appointments/services.py.
 const GRACE_PERIOD_MINUTES = 60
 
 export function AppointmentDetailPage() {

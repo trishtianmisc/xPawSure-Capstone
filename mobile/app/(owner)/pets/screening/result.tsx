@@ -15,8 +15,10 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
-import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import { font } from '../../../../src/theme/typography'
+import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { usePet } from '../../../../features/pet/hooks/usePet'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 const DISEASE_META: Record<string, { color: string; icon: string }> = {
@@ -49,7 +51,7 @@ function ConfidenceBar({ label, confidence, isTop, color }: {
         <Text style={[barStyles.label, isTop && { color: colors.text }]} numberOfLines={1}>
           {isTop ? '★ ' : '  '}{label}
         </Text>
-        <Text style={[barStyles.pct, isTop && { color: colors.text, fontWeight: '700' }]}>{pct}%</Text>
+        <Text style={[barStyles.pct, isTop && { ...font.bold, color: colors.text }]}>{pct}%</Text>
       </View>
       <View style={[barStyles.track, { backgroundColor: colors.surfaceAlt }]}>
         <View
@@ -69,8 +71,8 @@ function ConfidenceBar({ label, confidence, isTop, color }: {
 const barStyles = StyleSheet.create({
   row: { gap: 6, marginBottom: 14 },
   labelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  label: { color: '#A0A0A0', flex: 1, fontSize: 13, fontWeight: '500' },
-  pct: { color: '#A0A0A0', fontSize: 13, fontWeight: '600', marginLeft: 8, minWidth: 36, textAlign: 'right' },
+  label: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
+  pct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
   track: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
   fill: { borderRadius: 4, height: '100%' },
 })
@@ -89,8 +91,15 @@ export default function ResultScreen() {
     inferenceTimeMs: string
     state: ScreeningResultState
     stateMessage: string
+    alreadySaved: string
+    refined?: string
+    changed?: string
+    imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
+  const { data: pet } = usePet(
+    params.petId && params.petId !== 'unknown' ? params.petId : undefined,
+  )
 
   const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
   const stateMessage = params.stateMessage || ''
@@ -103,25 +112,50 @@ export default function ResultScreen() {
     }
   }, [params.predictions])
 
+  const refinedPredictions: Prediction[] | null = useMemo(() => {
+    try {
+      const parsed = params.refined ? JSON.parse(params.refined) : null
+      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
+    } catch {
+      return null
+    }
+  }, [params.refined])
+
+  const imageReports: ImageReport[] = useMemo(() => {
+    try {
+      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
+      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
+    } catch {
+      return []
+    }
+  }, [params.imageReports])
+
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
-  const topMeta = top ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = top ? Math.round(top.confidence) : 0
+  const finalTop = refinedPredictions ? refinedPredictions[0] : top
+  const isChanged = params.changed === 'true'
+  const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
+  const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
+  const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
 
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
 
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!top && !!params.petId && params.petId !== 'unknown'
+  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
 
   const handleSaveAndBook = () => {
-    if (!canBook || createScreening.isPending) return
+    if (!canBook || !finalTop || createScreening.isPending) return
+    if (params.alreadySaved === 'true') {
+      router.replace('/(owner)/appointments/book')
+      return
+    }
     setSaveError(false)
     createScreening.mutate(
       {
         pet_id: params.petId,
         source: 'DEVICE',
-        prediction: top.disease,
-        confidence: Math.round(top.confidence),
+        prediction: finalTop.disease,
+        confidence: Math.round(finalTop.confidence),
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
@@ -151,32 +185,71 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
-          {params.imageUri && (
-            <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
+          {(params.imageUri || imageReports.length > 0) && (
+            <Image
+              source={{ uri: imageReports.find((r) => r.status === 'ok')?.uri ?? params.imageUri }}
+              style={styles.thumbnail}
+            />
+          {pet?.profile_picture ? (
+            <Image source={{ uri: pet.profile_picture }} style={styles.thumbnail} />
+          ) : (
+            <View style={styles.thumbnailPlaceholder}>
+              <MaterialCommunityIcons color={colors.primary} name="paw" size={24} />
+            </View>
           )}
           <View style={styles.imageInfo}>
             <Text style={styles.petName}>{params.petName}</Text>
-            <Text style={styles.timestamp}>Just now</Text>
+            <Text style={styles.timestamp}>
+              {imageReports.length > 0
+                ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
+                : 'Just now'}
+            </Text>
           </View>
         </View>
 
-        {screeningState === 'DISEASE_DETECTED' && top && topMeta && (
+        {imageReports.length > 0 && (
+          <View style={styles.reportStrip}>
+            {imageReports.map((report, i) => (
+              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
+                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
+                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
+                  <MaterialCommunityIcons
+                    color="#FFF"
+                    name={report.status === 'ok' ? 'check' : 'close'}
+                    size={10}
+                  />
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>Predicted Condition</Text>
-              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
+              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
                 <Text style={styles.confidenceLabel}>confidence</Text>
               </View>
+              {refinedPredictions && (
+                <Text style={styles.comparisonText}>
+                  {isChanged
+                    ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
+                    : 'Consistent with the preliminary AI screen.'}
+                </Text>
+              )}
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>All Predictions</Text>
-              {sorted.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>
+                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
+              </Text>
+              {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -188,27 +261,12 @@ export default function ResultScreen() {
                   />
                 )
               })}
+              {refinedPredictions && (
+                <Text style={styles.moreCountText}>
+                  2 other conditions were also considered and scored lower.
+                </Text>
+              )}
             </View>
-
-            <Pressable
-              onPress={() =>
-                router.push({
-                  pathname: '/(owner)/pets/screening/adjust',
-                  params: {
-                    predictions: params.predictions,
-                    petId: params.petId,
-                    petName: params.petName,
-                    imageUri: params.imageUri ?? '',
-                  },
-                })
-              }
-              style={styles.narrowBtn}
-            >
-              <MaterialCommunityIcons color={colors.primary} name="file-tree-outline" size={16} />
-              <Text style={[styles.narrowBtnText, { color: colors.primary }]}>
-                Doesn&rsquo;t look right? Narrow it down
-              </Text>
-            </Pressable>
           </>
         )}
 
@@ -229,31 +287,8 @@ export default function ResultScreen() {
             Consult a vet for definitive results.
           </Text>
         </View>
-      </ScrollView>
 
-      {saveError && (
-        <View style={styles.saveErrorRow}>
-          <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
-          <Text style={styles.saveErrorText}>
-            Couldn&apos;t save the scan. Check your connection and try again.
-          </Text>
-        </View>
-      )}
-
-      <View style={styles.bottomBar}>
-        <Pressable
-          onPress={() =>
-            router.replace({
-              pathname: '/(owner)/pets/screening',
-              params: { petId: params.petId, petName: params.petName },
-            })
-          }
-          style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}
-        >
-          <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
-          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Scan Again</Text>
-        </Pressable>
-        {canBook ? (
+        {canBook && (
           <Pressable
             disabled={createScreening.isPending}
             onPress={handleSaveAndBook}
@@ -268,42 +303,79 @@ export default function ResultScreen() {
               {createScreening.isPending ? 'Saving...' : 'Book Appointment'}
             </Text>
           </Pressable>
-        ) : (
-          <Pressable
-            onPress={() => router.dismissTo('/(owner)')}
-            style={[styles.actionBtn, styles.primaryBtn]}
-          >
-            <MaterialCommunityIcons color="#FFF" name="home" size={16} />
-            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Home</Text>
-          </Pressable>
         )}
-      </View>
+
+        {saveError && (
+          <View style={styles.saveErrorRow}>
+            <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
+            <Text style={styles.saveErrorText}>
+              Couldn&apos;t save the scan. Check your connection and try again.
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          onPress={() =>
+            router.replace({
+              pathname: '/(owner)/pets/screening',
+              params: { petId: params.petId, petName: params.petName },
+            })
+          }
+          style={[styles.actionBtn, styles.secondaryBtn, styles.scanAgainBtn, { borderColor: colors.border }]}
+        >
+          <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
+          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Scan Again</Text>
+        </Pressable>
+      </ScrollView>
     </SafeAreaView>
   )
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
-  header: {
+  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: -10 },
+  headerBack: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderBottomColor: colors.border,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    height: 48,
-    paddingHorizontal: 4,
-  },
-  headerBack: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitle: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
-  headerRight: { width: 48 },
+    height: 50,
+    justifyContent: 'center',
+    width: 50,
+    marginTop: 20,
+  }, 
+  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
+  headerRight: { width: 20 },
 
-  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 140 },
+
+  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
+  reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
+  reportItem: { position: 'relative' },
+  reportThumb: { borderRadius: 12, height: 56, width: 56 },
+  reportThumbFailed: { opacity: 0.4 },
+  reportBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    bottom: -4,
+    height: 18,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: -4,
+    width: 18,
+  },
+  reportBadgeOk: { backgroundColor: '#27AE60' },
+  reportBadgeFail: { backgroundColor: '#C0392B' },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 14,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
   imageInfo: { flex: 1 },
-  petName: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  timestamp: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
 
   topCard: {
     alignItems: 'center',
@@ -324,11 +396,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 12,
     width: 64,
   },
-  topLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
-  topDisease: { fontSize: 22, fontWeight: '800', marginTop: 6 },
+  topLabel: { ...font.semibold, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
+  topDisease: { ...font.extrabold, fontSize: 22, marginTop: 6 },
   confidenceBadge: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 10 },
-  confidenceText: { fontSize: 32, fontWeight: '800' },
-  confidenceLabel: { color: colors.textMuted, fontSize: 13, fontWeight: '500' },
+  confidenceText: { ...font.extrabold, fontSize: 32 },
+  confidenceLabel: { ...font.medium, color: colors.textMuted, fontSize: 13 },
 
   breakdownCard: {
     backgroundColor: colors.surface,
@@ -339,6 +411,21 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 18,
   },
   breakdownTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 16 },
+  comparisonText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontStyle: 'italic',
+    lineHeight: 17,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  moreCountText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
 
   narrowBtn: {
     alignItems: 'center',
@@ -352,7 +439,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     paddingVertical: 12,
   },
-  narrowBtnText: { fontSize: 13, fontWeight: '700' },
+  narrowBtnText: { ...font.bold, fontSize: 13 },
 
   stateCard: {
     alignItems: 'center',
@@ -373,8 +460,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     width: 80,
   },
-  stateTitle: { fontSize: 20, fontWeight: '800', textAlign: 'center' },
+  stateTitle: { ...font.extrabold, fontSize: 20, textAlign: 'center' },
   stateMessage: {
+    ...font.regular,
     color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
@@ -390,34 +478,22 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  infoText: { color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
 
-  bottomBar: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    bottom: 0,
-    flexDirection: 'row',
-    gap: 12,
-    left: 0,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    position: 'absolute',
-    right: 0,
-  },
   actionBtn: {
     alignItems: 'center',
     borderRadius: 12,
-    flex: 1,
     flexDirection: 'row',
     gap: 6,
     justifyContent: 'center',
     paddingVertical: 14,
+    width: '100%',
   },
   actionBtnDisabled: { opacity: 0.6 },
-  primaryBtn: { backgroundColor: '#B96534' },
+  primaryBtn: { backgroundColor: '#B96534', marginTop: 16 },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
-  actionBtnText: { fontSize: 14, fontWeight: '700' },
+  scanAgainBtn: { marginTop: 12 },
+  actionBtnText: { ...font.bold, fontSize: 14 },
 
   saveErrorRow: {
     alignItems: 'center',
@@ -425,14 +501,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderColor: '#C0392B',
     borderRadius: 12,
     borderWidth: 1,
-    bottom: 84,
     flexDirection: 'row',
     gap: 8,
-    left: 24,
+    marginTop: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    position: 'absolute',
-    right: 24,
   },
-  saveErrorText: { color: '#C0392B', flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 17 },
+  saveErrorText: { ...font.semibold, color: '#C0392B', flex: 1, fontSize: 12, lineHeight: 17 },
 })

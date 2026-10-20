@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
-import { useAppointments, useUpdateAppointmentStatus } from '../hooks/useAppointments'
+import { useAppointments } from '../hooks/useAppointments'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { PageHero } from '../components/PageHero'
 import { formatDateTime } from '../../../utils/format'
@@ -29,50 +29,6 @@ function labelize(value: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
-type StatusMutation = ReturnType<typeof useUpdateAppointmentStatus>
-
-function QuickStatusAction({
-  aptId,
-  status,
-  updateStatus,
-}: {
-  aptId: string
-  status: string
-  updateStatus: StatusMutation
-}) {
-  const pending = updateStatus.isPending && updateStatus.variables?.aptId === aptId
-
-  if (status === 'PENDING') {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        loading={pending}
-        onClick={() => updateStatus.mutate({ aptId, status: 'CONFIRMED' })}
-      >
-        Confirm
-      </Button>
-    )
-  }
-
-  if (status === 'CONFIRMED') {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="secondary"
-        loading={pending}
-        onClick={() => updateStatus.mutate({ aptId, status: 'CHECKED_IN' })}
-      >
-        Check In
-      </Button>
-    )
-  }
-
-  return null
-}
-
 export function AppointmentsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -83,8 +39,6 @@ export function AppointmentsPage() {
   const [page, setPage] = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
-
-  const updateStatus = useUpdateAppointmentStatus()
 
   const params = useMemo(
     () => ({

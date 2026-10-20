@@ -1,5 +1,5 @@
 import http from '../../../services/http'
-import type { Owner, OwnerDetail, OwnerListResponse } from '../types/receptionist.types'
+import type { OwnerDetail, OwnerListResponse } from '../types/receptionist.types'
 
 export async function listOwners(params: {
   search?: string

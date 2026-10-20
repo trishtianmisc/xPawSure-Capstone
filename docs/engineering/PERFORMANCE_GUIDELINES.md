@@ -32,7 +32,8 @@ Always ask yourself:
 - Can this avoid unnecessary API calls?
 - Can this component avoid unnecessary rerenders?
 - Can this data be cached?
-- Can this operation run asynchronously?
+- Can this operation run asynchronously? (no queue or worker exists today —
+  keep it fast enough to finish inline)
 - Can this be lazy loaded?
 - Can this be paginated?
 - Can this use indexes?
@@ -217,11 +218,17 @@ Repeated API calls
 
 # Backend Performance
 
+Note: no background worker, queue, or cache service is deployed — Celery and
+Redis were removed. "Background jobs" and "Queues" apply only if a
+queue/worker is introduced through an approved architecture change; today
+emails are sent synchronously after commit and overdue appointment statuses
+are refreshed on read.
+
 Always
 
-Background jobs
+Background jobs (requires an approved worker)
 
-Queues
+Queues (requires an approved worker)
 
 Caching
 
@@ -381,7 +388,7 @@ Use
 
 Memory Cache
 
-Redis
+Redis (not configured — no cache service in this stack)
 
 HTTP Cache
 

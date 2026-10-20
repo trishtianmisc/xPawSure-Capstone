@@ -8,7 +8,6 @@ from appointments.models import (
 from appointments.services import (
     AppointmentService, DashboardService, VetSlotService,
 )
-from appointments.tasks import close_past_due_appointments, generate_vet_slots
 from appointments.tests.test_owner_booking import OwnerBookingBase, OWNER_EMAIL, RECEPTIONIST_EMAIL
 from clinics.models import Clinic
 from notifications.models import NotificationType
@@ -142,15 +141,24 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
 
     def test_dashboard_today_uses_manila_day_range(self):
         mnl = ZoneInfo('Asia/Manila')
-        today = datetime.now(mnl).date()
+        now = datetime.now(mnl)
+        today = now.date()
 
-        evening = Appointment.objects.create(
+        # Stay eligible under the read-time past-due reconcile: schedule in
+        # the future while the Manila day has room, otherwise inside the
+        # 60-minute no-show grace window, so CONFIRMED stays CONFIRMED
+        # whenever this test runs.
+        scheduled = now + timedelta(minutes=75)
+        if scheduled.date() != today:
+            scheduled = now - timedelta(minutes=30)
+
+        today_appointment = Appointment.objects.create(
             pet_id=self.pet,
             cln_id=self.clinic,
             stf_id=self.vet,
             apt_type=AppointmentType.CONSULTATION,
             apt_status=AppointmentStatus.CONFIRMED,
-            apt_scheduled_at=datetime.combine(today, time(16, 30), tzinfo=mnl),
+            apt_scheduled_at=scheduled,
         )
         Appointment.objects.create(
             pet_id=self.pet,
@@ -172,7 +180,7 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
                 self.clinic.cln_id,
             ).values_list('apt_id', flat=True),
         )
-        self.assertEqual(today_ids, {evening.apt_id})
+        self.assertEqual(today_ids, {today_appointment.apt_id})
 
 
 class PastDueAppointmentTests(OwnerBookingBase):
@@ -247,7 +255,7 @@ class PastDueAppointmentTests(OwnerBookingBase):
         apt.refresh_from_db()
         self.assertEqual(apt.apt_status, AppointmentStatus.CONFIRMED)
 
-    def test_auto_close_job_handles_past_due_appointments(self):
+    def test_close_past_due_handles_past_due_appointments(self):
         mnl = ZoneInfo('Asia/Manila')
         now = datetime.now(mnl)
         # 06:00 PHT is 22:00 UTC the previous day — early-morning boundary.
@@ -271,7 +279,7 @@ class PastDueAppointmentTests(OwnerBookingBase):
         )
         past_no_show = self._apt(AppointmentStatus.NO_SHOW, yesterday_six_am)
 
-        summary = close_past_due_appointments()
+        summary = AppointmentService.close_past_due()
 
         self.assertEqual(summary, {'cancelled': 1, 'no_show': 1})
         past_pending.refresh_from_db()
@@ -293,20 +301,20 @@ class PastDueAppointmentTests(OwnerBookingBase):
         past_no_show.refresh_from_db()
         self.assertEqual(past_no_show.apt_status, AppointmentStatus.NO_SHOW)
 
-    def test_auto_close_job_is_idempotent(self):
+    def test_close_past_due_is_idempotent(self):
         mnl = ZoneInfo('Asia/Manila')
         now = datetime.now(mnl)
         self._apt(AppointmentStatus.PENDING, now - timedelta(hours=3))
         self._apt(AppointmentStatus.CONFIRMED, now - timedelta(hours=3))
 
-        close_past_due_appointments()
+        AppointmentService.close_past_due()
 
         first_run = {
             apt.apt_id: (apt.apt_status, apt.apt_updated_at)
             for apt in Appointment.objects.all()
         }
 
-        second_summary = close_past_due_appointments()
+        second_summary = AppointmentService.close_past_due()
 
         self.assertEqual(second_summary, {'cancelled': 0, 'no_show': 0})
         second_run = {
@@ -315,16 +323,37 @@ class PastDueAppointmentTests(OwnerBookingBase):
         }
         self.assertEqual(first_run, second_run)
 
-    def test_dashboard_stats_exclude_past_due_pending(self):
+    def test_dashboard_stats_refresh_past_due_statuses_on_read(self):
+        # Overdue statuses are refreshed on reads: the past-due PENDING is
+        # closed by the reconcile that runs at the start of get_stats().
         mnl = ZoneInfo('Asia/Manila')
-        self._apt(
+        past_pending = self._apt(
             AppointmentStatus.PENDING, datetime.now(mnl) - timedelta(minutes=15),
         )
 
         stats = DashboardService.get_stats(clinic_id=self.clinic.cln_id)
 
         self.assertEqual(stats['today']['pending'], 0)
+        self.assertEqual(stats['needs_attention'], 0)
+        past_pending.refresh_from_db()
+        self.assertEqual(past_pending.apt_status, AppointmentStatus.CANCELLED)
+        self.assertEqual(
+            past_pending.apt_cancellation_reason, 'Not confirmed in time',
+        )
+
+    def test_dashboard_needs_attention_keeps_late_confirmed_within_grace(self):
+        # A confirmed appointment that is late but still inside the grace
+        # window stays actionable and must surface in needs_attention.
+        mnl = ZoneInfo('Asia/Manila')
+        late_confirmed = self._apt(
+            AppointmentStatus.CONFIRMED, datetime.now(mnl) - timedelta(minutes=10),
+        )
+
+        stats = DashboardService.get_stats(clinic_id=self.clinic.cln_id)
+
         self.assertEqual(stats['needs_attention'], 1)
+        late_confirmed.refresh_from_db()
+        self.assertEqual(late_confirmed.apt_status, AppointmentStatus.CONFIRMED)
 
 
 class VetScheduleRegressionTests(OwnerBookingBase):
@@ -345,13 +374,3 @@ class VetScheduleRegressionTests(OwnerBookingBase):
 
         vet_ids = [vet['stf_id'] for vet in summary['vets']]
         self.assertIn(str(self.vet.stf_id), vet_ids)
-
-    def test_generate_vet_slots_task_creates_slots(self):
-        total = generate_vet_slots()
-
-        self.assertGreater(total, 0)
-        self.assertTrue(
-            VetSlot.objects.filter(
-                cln_id=self.clinic, stf_id=self.vet, vsl_date=self.date,
-            ).exists(),
-        )

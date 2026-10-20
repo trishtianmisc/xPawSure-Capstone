@@ -432,16 +432,55 @@ Rules:
 
 # 17. Background Tasks
 
-Long-running operations should use background workers.
+This project does **not** use Celery, Redis, a job queue, a cron/scheduler, or
+a background worker process. Everything runs inside the request lifecycle:
 
-Examples:
+## Email delivery (synchronous, after commit)
 
-- Email notifications
-- Report generation
-- Image processing
-- Scheduled reminders
+Welcome emails for clinics, staff, and veterinarians — plus the staff
+`reset-password` and `resend-welcome` re-sends — are sent synchronously
+through `transaction.on_commit()` → `core.email_service.send_templated_email()`:
 
-Avoid blocking API responses.
+- The transport is selected by `EMAIL_BACKEND`, so callers and templates are
+  unchanged between environments:
+  - **Local development:** Django's built-in SMTP backend through Gmail
+    (`django.core.mail.backends.smtp.EmailBackend`, `smtp.gmail.com:587`,
+    STARTTLS). `EMAIL_HOST_USER` holds the Gmail address and
+    `EMAIL_HOST_PASSWORD` a Google **App Password** — read from the
+    environment only, never from source; `DEFAULT_FROM_EMAIL` defaults to
+    `EMAIL_HOST_USER`.
+  - **Production (Render Free):** `core.backends.brevo.BrevoEmailBackend`,
+    which sends over Brevo's HTTPS API because Render Free blocks outbound
+    SMTP ports. `BREVO_API_KEY` and `DEFAULT_FROM_EMAIL` (a Brevo-verified
+    sender) come from the environment.
+- Every attempt is capped by `EMAIL_TIMEOUT` (default 10s), applied as the
+  SMTP socket timeout locally and the HTTP request timeout for Brevo.
+- Failures (connection errors, Gmail auth errors, SMTP server errors, Brevo
+  non-2xx responses, timeouts, render errors) are logged with
+  `logger.exception()` — never with secrets — and converted into a failed
+  `EmailResult`. An email failure never turns a committed registration or
+  staff/clinic/veterinarian creation into an HTTP 500.
+- A timeout leaves delivery uncertain, so sends are **never retried
+  automatically** (a blind retry could deliver the message twice). The Brevo
+  backend converts `requests.Timeout` into Python's built-in `TimeoutError`,
+  preserving the existing uncertainty warning.
+- Tests use Django's in-memory backend, a mocked `smtplib.SMTP`, or a mocked
+  `requests.post` — they never contact Gmail or the Brevo API.
+
+## Past-due appointments (refreshed on read)
+
+There is no hourly job. Dashboard and appointment-list reads run
+`AppointmentService.close_past_due(clinic_id)` for the requesting clinic
+before returning — clinic-scoped, idempotent, and row-locked via
+`select_for_update()`, so concurrent readers cannot double-apply a
+transition. See `docs/api/API_SPEC.md` for the exact rules.
+
+## Guidance
+
+Avoid blocking API responses. If genuinely long-running work (report
+generation, image processing, scheduled reminders) becomes a requirement,
+introduce a queue and worker through an approved architecture change — do not
+reintroduce Celery or Redis unilaterally.
 
 ---
 

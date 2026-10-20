@@ -199,7 +199,8 @@ Never commit:
 - API keys
 - JWT secrets
 - Database passwords
-- SMTP credentials
+- SMTP credentials and Brevo API keys
+- Supabase service role keys
 - Cloud credentials
 
 Use environment variables or a secure secret manager.

@@ -2,21 +2,21 @@ import { Ionicons } from '@expo/vector-icons'
 import { Redirect, Tabs } from 'expo-router'
 import { useEffect } from 'react'
 import { InteractionManager, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../src/components/AppHeader'
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme } from '../../src/context/ThemeContext'
 import { preloadModel } from '../../ai/services/tensorflow.service'
+import { font } from '../../src/theme/typography'
 
 export default function OwnerTabLayout() {
   const { colors } = useTheme()
   const { isLoading, isAuthenticated, user } = useAuth()
-
-  if (isLoading) return null
-  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
-  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
+  const insets = useSafeAreaInsets()
 
   useEffect(() => {
+    preloadModel()
     const task = InteractionManager.runAfterInteractions(() => {
       preloadModel()
     })
@@ -25,6 +25,10 @@ export default function OwnerTabLayout() {
     }
   }, [])
 
+  if (isLoading) return null
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />
+  if (user?.role === 'VETERINARIAN') return <Redirect href="/(vet)/" />
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <AppHeader />
@@ -32,15 +36,15 @@ export default function OwnerTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600' },
-        tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 64, paddingTop: 5 },
+        tabBarLabelStyle: { fontSize: 10, ...font.semibold },
+        tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 64 + insets.bottom, paddingTop: 5 },
       }}>
         <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="pets" options={{ title: 'My Pets', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'paw' : 'paw-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="appointments" options={{ title: 'Appointments', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="records" options={{ title: 'Records', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'folder' : 'folder-outline'} size={20} color={color} /> }} />
-        <Tabs.Screen name="notifications" options={{ href: null, title: 'Notifications' }} />
-        <Tabs.Screen name="screenings" options={{ href: null, title: 'Screenings' }} />
+        <Tabs.Screen name="notifications/index" options={{ href: null }} />
+        <Tabs.Screen name="screenings" options={{ href: null }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} /> }} />
       </Tabs>
     </View>

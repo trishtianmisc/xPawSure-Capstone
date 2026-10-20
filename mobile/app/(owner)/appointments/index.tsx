@@ -7,6 +7,7 @@ import { StatusPill } from '../../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../../features/appointment/types'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
 type Tab = 'upcoming' | 'history'
@@ -128,15 +129,7 @@ export default function AppointmentsScreen() {
                   ? 'No upcoming appointments. Book one to get started.'
                   : 'No past appointments yet.'}
               </Text>
-              {tab === 'upcoming' && !isLoading && !isError && (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push('/(owner)/appointments/book')}
-                  style={styles.emptyButton}
-                >
-                  <Text style={styles.emptyButtonText}>Book an appointment</Text>
-                </Pressable>
-              )}
+             
             </View>
           )}
         </ScrollView>
@@ -149,24 +142,24 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  title: { color: colors.text, fontSize: 22, fontWeight: '800' },
-  addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 36, paddingHorizontal: 16, justifyContent: 'center' },
-  addButtonText: { color: colors.inverse, fontSize: 14, fontWeight: '700' },
+  title: { ...font.extrabold, color: colors.text, fontSize: 22 },
+  addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 35, paddingHorizontal: 20, justifyContent: 'center' },
+  addButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
   tabs: { backgroundColor: colors.surfaceAlt, borderRadius: 12, flexDirection: 'row', gap: 4, marginTop: 20, padding: 4 },
   tab: { alignItems: 'center', borderRadius: 9, flex: 1, minHeight: 36, justifyContent: 'center' },
   tabActive: { backgroundColor: colors.surface },
-  tabText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
   list: { gap: 12, paddingBottom: 24, paddingTop: 20 },
   card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 6, paddingHorizontal: 16, paddingVertical: 14 },
   cardHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  petName: { color: colors.text, flex: 1, fontSize: 16, fontWeight: '700', marginRight: 10 },
-  meta: { color: colors.textSecondary, fontSize: 13 },
+  petName: { ...font.bold, color: colors.text, flex: 1, fontSize: 16, marginRight: 10 },
+  meta: { ...font.regular, color: colors.textSecondary, fontSize: 13 },
   cardFooter: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  dateTime: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  dateTime: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
-  emptyState: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 12, justifyContent: 'center', minHeight: 160, paddingHorizontal: 24 },
-  statusText: { color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  emptyState: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center', minHeight: 140, paddingHorizontal: 24 },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
   emptyButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 40, paddingHorizontal: 18, justifyContent: 'center' },
-  emptyButtonText: { color: colors.inverse, fontSize: 14, fontWeight: '700' },
+  emptyButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
 })

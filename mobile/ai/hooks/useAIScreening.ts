@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-import { loadModel, runScreening, isReady } from '../services/tensorflow.service'
+import { loadModel, runMultiScreening, runScreening, isReady } from '../services/tensorflow.service'
 import type { ScreeningResult } from '../types/ai.types'
 
 interface UseAIScreeningReturn {
@@ -11,6 +11,7 @@ interface UseAIScreeningReturn {
   result: ScreeningResult | null
   screeningError: string | null
   screenImage: (imageUri: string) => Promise<ScreeningResult>
+  screenImages: (imageUris: string[]) => Promise<ScreeningResult>
   reset: () => void
 }
 
@@ -62,6 +63,25 @@ export function useAIScreening(): UseAIScreeningReturn {
     }
   }, [ensureModel])
 
+  const screenImages = useCallback(async (imageUris: string[]): Promise<ScreeningResult> => {
+    setIsScreening(true)
+    setScreeningError(null)
+    setResult(null)
+
+    try {
+      await ensureModel()
+      const screeningResult = await runMultiScreening(imageUris)
+      setResult(screeningResult)
+      return screeningResult
+    } catch (error) {
+      const message = `Screening failed: ${error}`
+      setScreeningError(message)
+      throw new Error(message)
+    } finally {
+      setIsScreening(false)
+    }
+  }, [ensureModel])
+
   const reset = useCallback(() => {
     setResult(null)
     setScreeningError(null)
@@ -75,6 +95,7 @@ export function useAIScreening(): UseAIScreeningReturn {
     result,
     screeningError,
     screenImage,
+    screenImages,
     reset,
   }
 }

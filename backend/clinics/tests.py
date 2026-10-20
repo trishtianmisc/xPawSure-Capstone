@@ -396,10 +396,83 @@ class ClinicProvisioningTests(ClinicAPITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(Clinic.objects.filter(cln_name='Rollback Clinic').exists())
+
     def test_create_clinic_email_sent_flag_false_when_no_email(self):
         response = self._create_clinic('No Email Flag Test', email=None)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertFalse(response.data.get('email_sent'))
+
+    def test_create_clinic_sends_welcome_email_after_commit(self):
+        from django.core import mail
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self._create_clinic(
+                'Outbox Clinic',
+                email='admin@outbox.test',
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ['admin@outbox.test'])
+        self.assertEqual(message.subject, 'Welcome to XPawSure — Outbox Clinic')
+        html = next(
+            content for content, mimetype in message.alternatives
+            if mimetype == 'text/html'
+        )
+        self.assertIn('Outbox Clinic', html)
+        # Plain-text alternative travels alongside the HTML.
+        self.assertTrue(message.body)
+
+    def test_create_clinic_survives_smtp_delivery_failure(self):
+        import smtplib
+        from unittest.mock import patch
+
+        with self.settings(
+            EMAIL_BACKEND='django.core.mail.backends.smtp.EmailBackend',
+            EMAIL_HOST='smtp.gmail.com',
+            EMAIL_PORT=587,
+            EMAIL_USE_TLS=True,
+            EMAIL_HOST_USER='sender.test@gmail.com',
+            EMAIL_HOST_PASSWORD='test-app-password',
+        ):
+            with patch('smtplib.SMTP') as smtp_cls:
+                smtp_cls.return_value.sendmail.side_effect = (
+                    smtplib.SMTPException('550 relay not permitted')
+                )
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self._create_clinic(
+                        'SMTP Error Clinic',
+                        email='admin@smtperror.test',
+                    )
+
+        # A delivery failure must never turn a committed creation into a 500.
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        smtp_cls.assert_called_once()
+        self.assertTrue(
+            Clinic.objects.filter(cln_name='SMTP Error Clinic').exists(),
+        )
+
+    def test_create_clinic_sends_no_email_when_transaction_rolls_back(self):
+        from django.core import mail
+        from django.db import transaction
+
+        with self.captureOnCommitCallbacks(execute=True):
+            try:
+                with transaction.atomic():
+                    response = self._create_clinic(
+                        'Rolled Back Email Clinic',
+                        email='admin@rolledback.test',
+                    )
+                    raise RuntimeError('forced rollback')
+            except RuntimeError:
+                pass
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(
+            Clinic.objects.filter(cln_name='Rolled Back Email Clinic').exists(),
+        )
 
 
 class ClinicSettingsAutoCreationTests(ClinicAPITestCase):

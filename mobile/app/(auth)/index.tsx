@@ -11,8 +11,11 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { font } from '../../src/theme/typography'
+import { Image } from 'react-native'
 
-const SPLASH_DURATION_MS = 1300
+
+const SPLASH_DURATION_MS = 3000
 
 const onboardingPages = [
   {
@@ -57,24 +60,24 @@ function PawPattern({ style }: { style: ReturnType<typeof StyleSheet.create> }) 
   const c4 = isDark ? '#55453B' : '#C49C81'
   return (
     <View pointerEvents="none" style={style.pawPattern}>
-      <MaterialCommunityIcons color={c1} name="paw" size={31} style={style.pawOne} />
+      <MaterialCommunityIcons color={c1} name="paw" size={70} style={style.pawOne} />
       <MaterialCommunityIcons color={c2} name="paw" size={24} style={style.pawTwo} />
-      <MaterialCommunityIcons color={c3} name="paw" size={19} style={style.pawThree} />
+      <MaterialCommunityIcons color={c3} name="paw" size={45} style={style.pawThree} />
       <MaterialCommunityIcons color={c4} name="paw" size={27} style={style.pawFour} />
     </View>
   )
 }
 
-function BrandMark({ light = false, style }: { light?: boolean; style: ReturnType<typeof StyleSheet.create> }) {
-  const color = light ? '#2D190E' : '#8B4324'
-
+function BrandMark({ style }: { style: ReturnType<typeof createStyles> }) {
   return (
     <View style={style.brandMark}>
-      <MaterialCommunityIcons color={color} name="dog" size={43} />
-      <View>
-        <Text style={[style.brandName, light && style.brandNameDark]}>XPawSure</Text>
-        <Text style={style.brandTagline}>Veterinary Management System</Text>
-      </View>
+      <Image
+        source={require('../../assets/Component 1.png')}
+        style={style.brandLogo}
+        resizeMode="contain"
+        accessibilityLabel="XPawSure"
+      />
+      <Text style={style.brandTagline}>AI-Assisted Canine Skin Condition Preliminary Screening</Text>
     </View>
   )
 }
@@ -106,14 +109,19 @@ export default function WelcomeScreen() {
   if (!showOnboarding) {
     return (
       <SafeAreaView style={styles.splashScreen}>
-        <DecorativeBlob backgroundColor="#7B3A20" style={styles.splashTopBlob} />
+        <DecorativeBlob backgroundColor="#7b3a2069" style={styles.splashTopBlob} />
         <DecorativeBlob backgroundColor="#5A2A16" style={styles.splashBottomBlob} />
         <DecorativeBlob backgroundColor="#B77752" style={styles.splashSideBlob} />
         <View style={styles.splashContent}>
           <View style={styles.splashLogoCircle}>
-            <MaterialCommunityIcons color="#FFF7EB" name="dog" size={74} />
+            <Image
+              source={require('../../assets/xpawsure-logo.png')}
+              style={styles.splashLogoImage}
+              resizeMode="contain"
+              accessibilityLabel="XPawSure"
+            />
           </View>
-          <BrandMark light style={styles} />
+          <BrandMark style={styles} />
         </View>
       </SafeAreaView>
     )
@@ -181,45 +189,45 @@ export default function WelcomeScreen() {
 const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, overflow: 'hidden' },
   splashScreen: { flex: 1, backgroundColor: '#FFE1B8', overflow: 'hidden' },
-  content: { flex: 1, alignItems: 'center', paddingHorizontal: 28, paddingTop: 18, paddingBottom: 20 },
-  splashContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20 },
-  brandMark: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  brandName: { color: colors.primaryDark, fontSize: 23, fontWeight: '800', letterSpacing: -0.7 },
-  brandNameDark: { color: '#2D190E' },
-  brandTagline: { color: colors.textSecondary, fontSize: 9, fontWeight: '500', marginTop: 1 },
+  splashLogoImage: { height: 200, width: 200 },
+  content: { flex: 1, alignItems: 'center', paddingHorizontal: 30, paddingTop: 40, paddingBottom: 20 },
+  splashContent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  brandMark: { alignItems: 'center', gap: 2 },
+  brandLogo: { width: 176, height: 50 },
+  brandTagline: { ...font.medium, color: colors.textSecondary, fontSize: 10, marginTop: -5, textAlign: 'center' },
   splashLogoCircle: {
-    alignItems: 'center', backgroundColor: '#8B4324', borderColor: '#F8C98F', borderRadius: 60,
-    borderWidth: 6, height: 120, justifyContent: 'center', width: 120,
+    alignItems: 'center', backgroundColor: '#F8C98F', borderColor: '#8B4324', borderRadius: 150,
+    borderWidth: 9, height: 220, justifyContent: 'center', width: 220,
   },
   illustration: {
     alignItems: 'center', borderRadius: 140, height: 220, justifyContent: 'center', marginTop: 44,
     overflow: 'hidden', width: 220,
   },
   illustrationCircle: { alignItems: 'center', borderRadius: 93, borderWidth: 9, height: 186, justifyContent: 'center', width: 186 },
-  illustrationPaw: { bottom: 17, position: 'absolute', right: 26, transform: [{ rotate: '-15deg' }] },
+  illustrationPaw: { bottom: 17, position: 'absolute', right: 23, transform: [{ rotate: '-15deg' }] },
   copyContainer: { alignItems: 'center', marginTop: 35, minHeight: 86 },
-  title: { fontSize: 24, fontWeight: '800', letterSpacing: -0.7, textAlign: 'center' },
-  description: { color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10, maxWidth: 275, textAlign: 'center' },
+  title: { ...font.extrabold, fontSize: 24, letterSpacing: -0.7, textAlign: 'center' },
+  description: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 10, maxWidth: 275, textAlign: 'center' },
   footer: { alignItems: 'center', marginTop: 'auto', width: '100%' },
   pagination: { flexDirection: 'row', gap: 7, marginBottom: 22 },
   paginationDot: { backgroundColor: colors.border, borderRadius: 5, height: 5, width: 17 },
   paginationDotActive: { backgroundColor: colors.primary, width: 28 },
   primaryButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, justifyContent: 'center', minHeight: 52, width: '100%' },
   primaryButtonPressed: { opacity: 0.85 },
-  primaryButtonText: { color: colors.inverse, fontSize: 16, fontWeight: '800' },
-  skipLink: { paddingTop: 14, paddingBottom: 2 },
-  skipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-  signInLink: { paddingTop: 14, paddingBottom: 2 },
-  signInText: { color: colors.textSecondary, fontSize: 12 },
-  signInTextStrong: { color: colors.primary, fontWeight: '800' },
-  topBlob: { height: 190, left: -95, top: -94, width: 225 },
+  primaryButtonText: { ...font.extrabold, color: colors.inverse, fontSize: 16 },
+  skipLink: { paddingTop: 14, paddingBottom: 25 },
+  skipText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  signInLink: { paddingTop: 14, paddingBottom: 40 },
+  signInText: { ...font.regular, color: colors.textSecondary, fontSize: 12 },
+  signInTextStrong: { ...font.extrabold, color: colors.primary },
+  topBlob: { height: 200, left: -95, top: -94, width: 225 },
   bottomBlob: { bottom: -118, height: 220, right: -92, width: 220 },
   splashTopBlob: { height: 175, left: -70, top: -92, width: 255 },
   splashBottomBlob: { bottom: -80, height: 225, left: -105, width: 260 },
   splashSideBlob: { height: 175, right: -115, top: 200, width: 195 },
-  pawPattern: { height: 215, position: 'absolute', right: -4, top: 68, width: 155 },
-  pawOne: { position: 'absolute', right: 24, top: 3, transform: [{ rotate: '21deg' }] },
-  pawTwo: { left: 13, position: 'absolute', top: 86, transform: [{ rotate: '-23deg' }] },
-  pawThree: { bottom: 12, position: 'absolute', right: 11, transform: [{ rotate: '12deg' }] },
+  pawPattern: { height: 215, position: 'absolute', right: -4, top: 68, width: 200 },
+  pawOne: { position: 'absolute', right: 50, top: 430, transform: [{ rotate: '-30deg' }] },
+  pawTwo: { right: 20, position: 'absolute', top: 10, transform: [{ rotate: '30deg' }] },
+  pawThree: { bottom: -50, position: 'absolute', left: -150, transform: [{ rotate: '10deg' }] },
   pawFour: { bottom: 42, left: 47, position: 'absolute', transform: [{ rotate: '-18deg' }] },
 })
