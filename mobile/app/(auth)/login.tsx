@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { Link, router } from 'expo-router'
+import { Link } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import {
@@ -67,7 +67,6 @@ export default function LoginScreen() {
     setServerError(null)
     try {
       await login(data.email, data.password)
-      router.replace('/(owner)/')
     } catch (error: unknown) {
       if (error && typeof error === 'object') {
         const axiosError = error as { response?: { data?: { detail?: string } }; code?: string }
