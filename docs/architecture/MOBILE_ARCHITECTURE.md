@@ -163,9 +163,13 @@ Veterinarians have read-only access to:
 
 **Schedule** — view their daily/weekly appointment schedule.
 
-**Appointments** — view appointment list and details (pet, owner, reason, status).
+**Appointments** — view appointment list and details (pet, owner, reason, status). Tapping an appointment from Home or Schedule opens its detail.
 
-**Consultations** — view consultation records associated with their appointments.
+**Consultations** — view consultation and prescription records associated with completed appointments.
+
+Completed appointment details include read-only consultation and prescription records from the appointment detail response.
+
+Veterinarian mobile lists and schedules exclude `PENDING` owner bookings; clinic staff manage pending bookings through the web receptionist workflow.
 
 Veterinarians cannot register owners, manage pets, perform AI screening, or book appointments through the mobile app.
 
