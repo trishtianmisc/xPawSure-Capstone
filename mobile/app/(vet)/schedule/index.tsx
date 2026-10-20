@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
 import { formatTime, localDateStr } from '../../../features/vet/lib/format'
 import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'

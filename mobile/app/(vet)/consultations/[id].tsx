@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { ActivityIndicator, Alert, Modal, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment'
 import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
 import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
