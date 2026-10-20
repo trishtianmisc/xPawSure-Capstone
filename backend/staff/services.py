@@ -110,7 +110,7 @@ class StaffService:
                 )
 
         login_url = f'{settings.FRONTEND_URL}/login'
-        transaction.on_commit(lambda: send_staff_welcome_email.delay(
+        transaction.on_commit(lambda: send_staff_welcome_email(
             email=data['email'],
             first_name=data['first_name'],
             last_name=data['last_name'],
@@ -233,7 +233,7 @@ class StaffService:
 
         clinic = staff.cln_id
         login_url = f'{settings.FRONTEND_URL}/login'
-        transaction.on_commit(lambda: send_staff_welcome_email.delay(
+        transaction.on_commit(lambda: send_staff_welcome_email(
             email=user.usr_email,
             first_name=user.usr_first_name,
             last_name=user.usr_last_name,
@@ -264,7 +264,7 @@ class StaffService:
 
         clinic = staff.cln_id
         login_url = f'{settings.FRONTEND_URL}/login'
-        transaction.on_commit(lambda: send_staff_welcome_email.delay(
+        transaction.on_commit(lambda: send_staff_welcome_email(
             email=user.usr_email,
             first_name=user.usr_first_name,
             last_name=user.usr_last_name,

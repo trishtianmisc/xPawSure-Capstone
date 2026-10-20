@@ -95,7 +95,7 @@ class ClinicService:
 
         if clinic_email:
             login_url = f'{settings.FRONTEND_URL}/login'
-            transaction.on_commit(lambda: send_clinic_welcome_email.delay(
+            transaction.on_commit(lambda: send_clinic_welcome_email(
                 clinic_name=clinic.cln_name,
                 clinic_email=clinic_email,
                 admin_email=admin_email,

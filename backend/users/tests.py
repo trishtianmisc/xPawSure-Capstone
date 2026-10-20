@@ -1,5 +1,8 @@
 from datetime import date
+from io import StringIO
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
@@ -218,3 +221,72 @@ class ProfileStaffFieldsTestCase(TestCase):
         self.assertIsNone(response.data['position'])
         self.assertIsNone(response.data['license_number'])
         self.assertIsNone(response.data['license_expiration_date'])
+
+
+class CreateSuperAdminCommandTests(TestCase):
+    def test_creates_app_super_admin(self):
+        out = StringIO()
+
+        call_command(
+            'create_super_admin',
+            '--email=root@example.com',
+            '--password=StrongPass123!',
+            '--first-name=Root',
+            '--last-name=Admin',
+            stdout=out,
+        )
+
+        user = User.objects.get(usr_email='root@example.com')
+        self.assertEqual(user.usr_role, UserRole.SUPER_ADMIN)
+        self.assertEqual(user.usr_first_name, 'Root')
+        self.assertEqual(user.usr_last_name, 'Admin')
+        self.assertTrue(user.usr_is_active)
+        self.assertTrue(user.usr_email_verified)
+        self.assertFalse(user.usr_must_change_password)
+        self.assertTrue(user.check_password('StrongPass123!'))
+        self.assertIn('Created Super Admin', out.getvalue())
+
+    def test_existing_user_requires_force(self):
+        existing = User.objects.create(
+            usr_email='owner@example.com',
+            usr_first_name='Owner',
+            usr_last_name='User',
+            usr_role=UserRole.OWNER,
+        )
+        existing.set_password('OldPass123!')
+        existing.save()
+
+        with self.assertRaises(CommandError):
+            call_command(
+                'create_super_admin',
+                '--email=owner@example.com',
+                '--password=StrongPass123!',
+            )
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.usr_role, UserRole.OWNER)
+        self.assertTrue(existing.check_password('OldPass123!'))
+
+    def test_force_updates_existing_user(self):
+        existing = User.objects.create(
+            usr_email='root@example.com',
+            usr_first_name='Old',
+            usr_last_name='Name',
+            usr_role=UserRole.OWNER,
+        )
+        existing.set_password('OldPass123!')
+        existing.save()
+
+        call_command(
+            'create_super_admin',
+            '--email=root@example.com',
+            '--password=StrongPass123!',
+            '--first-name=Root',
+            '--last-name=Admin',
+            '--force',
+        )
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.usr_role, UserRole.SUPER_ADMIN)
+        self.assertTrue(existing.usr_is_active)
+        self.assertTrue(existing.check_password('StrongPass123!'))

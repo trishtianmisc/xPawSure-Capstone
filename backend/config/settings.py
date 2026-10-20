@@ -2,7 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import environ
-from celery.schedules import crontab
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -17,6 +17,26 @@ SECRET_KEY = env('SECRET_KEY', default='django-insecure-7(=l&5z!r3b&s14$-%bb2e#s
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['*'])
+
+
+# Production must never boot with development defaults: a public SECRET_KEY
+# lets anyone forge auth tokens, and a wildcard ALLOWED_HOSTS enables Host
+# header attacks. Fail during the Render build/start instead of silently
+# accepting an unsafe configuration.
+if not DEBUG:
+    if (
+        not SECRET_KEY
+        or SECRET_KEY.startswith('django-insecure-')
+        or len(SECRET_KEY) < 50
+    ):
+        raise ImproperlyConfigured(
+            'SECRET_KEY must be a strong, unique value of at least 50 '
+            'characters when DEBUG=False.',
+        )
+    if not ALLOWED_HOSTS or '*' in ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            'ALLOWED_HOSTS must list the production hostnames when DEBUG=False.',
+        )
 
 
 INSTALLED_APPS = [
@@ -55,6 +75,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+if not DEBUG:
+    # Render runs collectstatic during the build; WhiteNoise serves the
+    # collected files in production. Locally, Django's staticfiles app serves
+    # them, so the middleware is omitted and no STATIC_ROOT is required.
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+
 ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
@@ -75,43 +101,49 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 
+database_url = env('DATABASE_URL', default='')
+
 DATABASES = {
     'default': env.db_url(
         'DATABASE_URL',
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        engine='django.db.backends.postgresql',
     ),
 }
 DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=60)
 
+if not DEBUG and (not database_url or database_url.lower().startswith('sqlite')):
+    raise ImproperlyConfigured(
+        'DATABASE_URL must point to PostgreSQL when DEBUG=False; the local '
+        'SQLite fallback would lose data on Render.',
+    )
 
-EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = env('EMAIL_HOST', default='')
+
+# Email delivery. Local development uses Django's built-in SMTP backend
+# through Gmail; production on Render Free uses the Brevo HTTPS backend
+# (core.backends.brevo.BrevoEmailBackend) because Render Free blocks outbound
+# SMTP ports. Credentials and addresses come exclusively from the environment
+# — never hardcode a Gmail address, App Password, or Brevo API key here.
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = env('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = env.int('EMAIL_PORT', default=587)
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=True)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='antpayton12@gmail.com')
-SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='antpayton12@gmail.com.com')
+# Seconds allowed for a single delivery attempt; the SMTP backend honours it
+# as the socket timeout for the connection to EMAIL_HOST.
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=10)
+# Sender shown on outgoing mail. Defaults to the Gmail account so the From
+# address matches the authenticated sender Gmail expects.
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'noreply@localhost')
+SUPPORT_EMAIL = env('SUPPORT_EMAIL', default=EMAIL_HOST_USER or 'support@localhost')
+
+# Brevo API (production email). The sender in DEFAULT_FROM_EMAIL must be a
+# verified sender in Brevo. The API uses HTTPS/443, which Render Free allows.
+BREVO_API_KEY = env('BREVO_API_KEY', default='')
+BREVO_API_URL = env('BREVO_API_URL', default='https://api.brevo.com/v3/smtp/email')
 
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
-
-CELERY_BROKER_URL = env('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = env('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_TASK_ALWAYS_EAGER = env.bool('CELERY_TASK_ALWAYS_EAGER', default=False)
-
-# Hourly housekeeping: close past-due appointments (pending -> cancelled,
-# confirmed past the grace period -> no-show). Requires `celery -A config
-# beat` and a worker in the deployment environment.
-CELERY_BEAT_SCHEDULE = {
-    'appointments.close_past_due_appointments': {
-        'task': 'appointments.close_past_due_appointments',
-        'schedule': crontab(minute=0),
-    },
-}
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -138,7 +170,8 @@ USE_I18N = True
 USE_TZ = True
 
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
@@ -187,6 +220,31 @@ if DEBUG:
     ])
 else:
     CORS_ALLOWED_ORIGINS = env.list('CORS_ALLOWED_ORIGINS')
+    if not CORS_ALLOWED_ORIGINS:
+        raise ImproperlyConfigured(
+            'CORS_ALLOWED_ORIGINS must list at least one frontend origin '
+            'when DEBUG=False.',
+        )
+
+# Render terminates TLS and forwards the original scheme in this header.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = env.list('CSRF_TRUSTED_ORIGINS', default=[])
+
+# Secure cookies only outside local development; DEBUG defaults to True, so
+# local HTTP development keeps working unchanged.
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+
+if not DEBUG:
+    # Render serves the app over HTTPS. Trust its proxy header, redirect any
+    # plain-HTTP request, and enable HSTS. HSTS applies to the service host and
+    # its subdomains only; it does not affect sibling onrender.com services.
+    SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=True)
+    SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=31536000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
+        'SECURE_HSTS_INCLUDE_SUBDOMAINS', default=True,
+    )
+    SECURE_HSTS_PRELOAD = env.bool('SECURE_HSTS_PRELOAD', default=True)
 
 
 REST_FRAMEWORK = {
