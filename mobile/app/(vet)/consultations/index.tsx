@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, Styl
 import { useRouter } from 'expo-router'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
 import { formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
 import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'

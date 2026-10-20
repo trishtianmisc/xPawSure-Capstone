@@ -109,7 +109,7 @@ DATABASES = {
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
     ),
 }
-DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=60)
+DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=0)
 
 if not DEBUG and (not database_url or database_url.lower().startswith('sqlite')):
     raise ImproperlyConfigured(

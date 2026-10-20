@@ -4,6 +4,7 @@ import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, StyleSheet, Tex
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { font } from '../../src/theme/typography'
 import { useVetDashboard } from '../../features/vet/hooks/useVetDashboard'
 import { formatTime, localDateStr } from '../../features/vet/lib/format'
 import type { AppointmentStatus } from '../../features/vet/types'

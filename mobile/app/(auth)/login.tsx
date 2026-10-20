@@ -66,8 +66,8 @@ export default function LoginScreen() {
   const onSubmit = async (data: LoginForm) => {
     setServerError(null)
     try {
-      await login(data.email, data.password)
-      router.replace('/(owner)/')
+      const signedInUser = await login(data.email, data.password)
+      router.replace(signedInUser.role === 'VETERINARIAN' ? '/(vet)/' : '/(owner)/')
     } catch (error: unknown) {
       if (error && typeof error === 'object') {
         const axiosError = error as { response?: { data?: { detail?: string } }; code?: string }
