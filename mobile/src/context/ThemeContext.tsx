@@ -47,7 +47,7 @@ const lightColors: AppColors = {
   iconBg: '#F4E3D6',
   iconColor: '#8E4A2B',
   error: '#C0392B',
-  errorBg: '#C0392B',
+  errorBg: '#FDECEA',
   link: '#8B4324',
   linkMuted: '#5A4539',
 }

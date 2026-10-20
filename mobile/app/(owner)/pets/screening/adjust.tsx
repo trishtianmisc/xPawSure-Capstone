@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
+import { font } from '../../../../src/theme/typography'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
@@ -152,6 +153,105 @@ export default function AdjustScreen() {
     )
   }
 
+  if (done && result) {
+    const top3 = result.refined.slice(0, 3)
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.imageRow}>
+            {params.imageUri ? (
+              <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
+            ) : (
+              <View style={styles.thumbnailPlaceholder}>
+                <MaterialCommunityIcons color={colors.iconColor} name="paw" size={20} />
+              </View>
+            )}
+            <View style={styles.imageInfo}>
+              <Text style={styles.petName}>{params.petName}</Text>
+              <Text style={styles.timestamp}>Based on your answers</Text>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.verdictCard,
+              { borderColor: (result.changed ? colors.primary : DISEASE_COLORS[result.refinedTop.disease]) + '30' },
+            ]}
+          >
+            <MaterialCommunityIcons
+              color={result.changed ? colors.primary : DISEASE_COLORS[result.refinedTop.disease]}
+              name={result.changed ? 'swap-horizontal' : 'check-circle-outline'}
+              size={22}
+            />
+            <Text style={styles.verdictText}>
+              {result.changed ? (
+                <>
+                  Your answers point to{' '}
+                  <Text style={{ ...font.extrabold }}>{result.refinedTop.label}</Text> instead of the AI&rsquo;s{' '}
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
+                </>
+              ) : (
+                <>
+                  Your answers are consistent with the AI&rsquo;s suggestion of{' '}
+                  <Text style={{ ...font.extrabold }}>{result.originalTop.label}</Text>.
+                </>
+              )}
+            </Text>
+          </View>
+
+          <View style={styles.breakdownCard}>
+            <Text style={styles.breakdownTitle}>Refined Suggestions</Text>
+            {top3.map((pred, i) => {
+              const pct = Math.round(pred.confidence)
+              const color = DISEASE_COLORS[pred.disease] ?? colors.primary
+              return (
+                <View key={pred.disease} style={styles.barRow}>
+                  <View style={styles.barLabelRow}>
+                    <Text style={[styles.barLabel, i === 0 && { color: colors.text }]} numberOfLines={1}>
+                      {i === 0 ? '\u2605 ' : '  '}
+                      {pred.label}
+                    </Text>
+                    <Text style={[styles.barPct, i === 0 && { ...font.bold, color: colors.text }]}>{pct}%</Text>
+                  </View>
+                  <View style={[styles.barTrack, { backgroundColor: colors.surfaceAlt }]}>
+                    <View
+                      style={[
+                        styles.barFill,
+                        { backgroundColor: i === 0 ? color : colors.border, width: `${pct}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
+              )
+            })}
+          </View>
+
+          <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
+            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
+            <Text style={styles.infoText}>
+              This refinement is an AI-assisted screening aid based on your answers and does not replace
+              professional veterinary diagnosis. Consult a vet for definitive results.
+            </Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <Pressable onPress={goBack} style={[styles.actionBtn, styles.secondaryBtn, { borderColor: colors.border }]}>
+            <MaterialCommunityIcons color={colors.primary} name="arrow-left" size={16} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>Back to Result</Text>
+          </Pressable>
+          <Pressable onPress={() => router.dismissTo('/(owner)')} style={[styles.actionBtn, styles.primaryBtn]}>
+            <MaterialCommunityIcons color="#FFF" name="home" size={16} />
+            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Home</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
   const progressPct = Math.round(((step + 1) / total) * 100)
 
   return (
@@ -237,11 +337,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerBack: { alignItems: 'center', height: 48, justifyContent: 'center', width: 48 },
-  headerTitle: { color: colors.text, flex: 1, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+  headerTitle: { ...font.bold, color: colors.text, flex: 1, fontSize: 17, textAlign: 'center' },
   headerRight: { width: 48 },
 
   progressSection: { backgroundColor: colors.surface, gap: 8, paddingHorizontal: 24, paddingBottom: 14 },
-  progressLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' },
+  progressLabel: { ...font.semibold, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, textTransform: 'uppercase' },
   progressTrack: { borderRadius: 4, height: 6, overflow: 'hidden', width: '100%' },
   progressFill: { backgroundColor: '#B96534', borderRadius: 4, height: '100%' },
 
@@ -256,8 +356,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 18,
     padding: 18,
   },
-  questionText: { color: colors.text, fontSize: 16, fontWeight: '700', lineHeight: 23 },
-  questionHint: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  questionText: { ...font.bold, color: colors.text, fontSize: 16, lineHeight: 23 },
+  questionHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
 
   optionsList: { gap: 10 },
   option: {
@@ -284,12 +384,64 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   optionMarkMulti: { borderRadius: 6 },
   optionMarkActive: { backgroundColor: colors.primary, borderColor: colors.primary },
   optionDot: { backgroundColor: '#FFF', borderRadius: 4, height: 8, width: 8 },
-  optionText: { color: colors.text, flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 19 },
-  optionTextActive: { fontWeight: '700' },
+  optionText: { ...font.medium, color: colors.text, flex: 1, fontSize: 14, lineHeight: 19 },
+  optionTextActive: { ...font.bold },
+
+  imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
+  thumbnail: { borderRadius: 14, height: 56, width: 56 },
+  thumbnailPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBg,
+    borderRadius: 14,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  imageInfo: { flex: 1 },
+  petName: { ...font.bold, color: colors.text, fontSize: 16 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+
+  verdictCard: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    padding: 16,
+  },
+  verdictText: { ...font.regular, color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
+
+  breakdownCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 18,
+  },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
+  barRow: { gap: 6, marginBottom: 14 },
+  barLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  barLabel: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
+  barPct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
+  barTrack: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
+  barFill: { borderRadius: 4, height: '100%' },
+
+  infoCard: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
 
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
-  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  emptyText: { color: colors.textMuted, fontSize: 13, textAlign: 'center' },
+  emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
+  emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
 
   bottomBar: {
     backgroundColor: colors.surface,
@@ -314,6 +466,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 14,
   },
   primaryBtn: { backgroundColor: '#B96534' },
-  actionBtnDisabled: { opacity: 0.6 },
-  actionBtnText: { fontSize: 14, fontWeight: '700' },
+  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
+  actionBtnText: { ...font.bold, fontSize: 14 },
 })

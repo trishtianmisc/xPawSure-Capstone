@@ -1,3 +1,16 @@
+function flattenErrorValues(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(flattenErrorValues)
+  }
+  if (typeof value === 'object' && value !== null) {
+    return Object.values(value).flatMap(flattenErrorValues)
+  }
+  if (value === null || value === undefined) {
+    return []
+  }
+  return [String(value)]
+}
+
 export function apiErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     const err = error as Error & { response?: { data?: unknown } }
@@ -7,7 +20,8 @@ export function apiErrorMessage(error: unknown): string {
       if (typeof record.detail === 'string') {
         return record.detail
       }
-      return Object.values(record).flat().join(', ')
+      const flattened = flattenErrorValues(record).join(', ')
+      return flattened || err.message
     }
     return err.message
   }

@@ -3,6 +3,7 @@ import { Controller, type UseFormReturn } from 'react-hook-form'
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { font } from '../../../src/theme/typography'
 import { type VaccinationFormValues } from '../schemas/vaccination'
 
 const ROUTE_OPTIONS = [
@@ -268,10 +269,11 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
   },
-  sectionTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  hintText: { color: colors.textMuted, fontSize: 13, marginTop: 12 },
-  label: { color: colors.text, fontSize: 13, fontWeight: '600', marginBottom: 6, marginTop: 16 },
+  sectionTitle: { ...font.bold, color: colors.text, fontSize: 17 },
+  hintText: { ...font.regular, color: colors.textMuted, fontSize: 13, marginTop: 12 },
+  label: { ...font.semibold, color: colors.text, fontSize: 13, marginBottom: 6, marginTop: 16 },
   input: {
+    ...font.regular,
     backgroundColor: colors.bg,
     borderColor: colors.border,
     borderRadius: 12,
@@ -288,7 +290,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     textAlignVertical: 'top',
   },
   inputError: { borderColor: colors.error },
-  fieldError: { color: colors.error, fontSize: 12, marginTop: 4 },
+  fieldError: { ...font.regular, color: colors.error, fontSize: 12, marginTop: 4 },
   petRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   petChip: {
     backgroundColor: colors.bg,
@@ -299,7 +301,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 9,
   },
   petChipActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  petChipText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600' },
+  petChipText: { ...font.semibold, color: colors.textSecondary, fontSize: 14 },
   petChipTextActive: { color: colors.primary },
   routeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   routeChip: {
@@ -311,7 +313,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 8,
   },
   routeChipActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  routeChipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
+  routeChipText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   routeChipTextActive: { color: colors.primary },
   submitButton: {
     alignItems: 'center',
@@ -330,8 +332,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     elevation: 4,
   },
   submitDisabled: { opacity: 0.6 },
-  submitText: { color: '#FFFFFF', fontSize: 17, fontWeight: '800' },
-  submitArrow: { color: '#FFFFFF', fontSize: 20, fontWeight: '600', marginTop: -2 },
+  submitText: { ...font.extrabold, color: '#FFFFFF', fontSize: 17 },
+  submitArrow: { ...font.semibold, color: '#FFFFFF', fontSize: 20, marginTop: -2 },
   apiErrorWrap: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -345,16 +347,16 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     padding: 14,
   },
   apiErrorIcon: {
+    ...font.extrabold,
     backgroundColor: colors.error,
     borderRadius: 12,
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '800',
     height: 24,
     overflow: 'hidden',
     textAlign: 'center',
     width: 24,
     lineHeight: 24,
   },
-  apiErrorText: { color: colors.error, flex: 1, fontSize: 13 },
+  apiErrorText: { ...font.regular, color: colors.error, flex: 1, fontSize: 13 },
 })

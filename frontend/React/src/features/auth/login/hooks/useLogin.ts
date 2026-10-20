@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 
 import { useAuth } from '../../context/AuthContext'
+import { apiErrorMessage } from '../../../../utils/error'
 import type { LoginCredentials } from '../types/auth.types'
 
 export const useLogin = () => {
@@ -17,7 +18,8 @@ export const useLogin = () => {
   return {
     submitLogin,
     isSubmitting: loginMutation.isPending,
-    errorMessage:
-      loginMutation.error instanceof Error ? loginMutation.error.message : null,
+    errorMessage: loginMutation.error
+      ? apiErrorMessage(loginMutation.error)
+      : null,
   }
 }

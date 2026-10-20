@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
+import { apiErrorMessage } from '../../../utils/error'
 import type { SlotStatus } from '../types/receptionist.types'
 
 function formatDate(date: Date): string {
@@ -32,7 +33,6 @@ function generateTimeSlots(): string[] {
 }
 
 function SlotCell({
-  time,
   slot,
   isWorking,
   onAppointmentClick,
@@ -351,7 +351,7 @@ export function SchedulePage() {
             </div>
             {generateMutation.isError && (
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">
-                {(generateMutation.error as Error)?.message || 'Failed to generate slots'}
+                {apiErrorMessage(generateMutation.error)}
               </p>
             )}
             {generateMutation.isSuccess && (

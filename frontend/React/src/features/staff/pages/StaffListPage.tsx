@@ -212,7 +212,7 @@ export function StaffListPage() {
             </button>
             <button
               onClick={() => setIsModalOpen(true)}
-              className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+              className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
               type="button"
             >
               + Add Staff
@@ -260,7 +260,7 @@ export function StaffListPage() {
         </div>
 
         {/* Tabs + Filters */}
-        <Card padding="md">
+        <Card padding="sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-1 rounded-lg bg-stone-100 p-1 dark:bg-stone-800">
             {tabs.map((t) => (

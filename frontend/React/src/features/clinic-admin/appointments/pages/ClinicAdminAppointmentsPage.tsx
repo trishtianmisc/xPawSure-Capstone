@@ -6,6 +6,7 @@ import { formatDateTime } from '../../../../utils/format'
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { ChartSkeleton } from '../../dashboard/components/Charts/AppointmentsByMonthChart'
 import type { ChartDataPoint } from '../../dashboard/types/dashboard.types'
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { AppointmentVolumeChart } from '../components/AppointmentVolumeChart'
 import {
   useAppointmentVolume,
@@ -76,16 +77,11 @@ export function ClinicAdminAppointmentsPage() {
   }
 
   return (
-    <div className="p-6">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-stone-900 dark:text-stone-100">
-            Appointments
-          </h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            Full appointment oversight across all veterinarians in your clinic.
-          </p>
-        </div>
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+        <PageHero
+          title="Appointments"
+          subtitle="View and manage all appointments for your clinic."
+        />
 
         {/* Volume trends */}
         <div className="mb-6">
@@ -118,7 +114,7 @@ export function ClinicAdminAppointmentsPage() {
         </div>
 
         {/* Filter card */}
-        <Card padding="md">
+        <Card padding="sm">
           <div className="flex flex-wrap items-center gap-3">
             <select
               className={`${INPUT_CLASSES} w-56 shrink-0`}
@@ -296,6 +292,6 @@ export function ClinicAdminAppointmentsPage() {
           )}
         </div>
       </div>
-    </div>
+    
   )
 }
