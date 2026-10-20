@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
-  InteractionManager,
   Modal,
   Pressable,
   ScrollView,
@@ -21,21 +20,28 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import { usePets } from '../../../../features/pet/hooks/usePets'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
-import { preloadModel } from '../../../../ai/services/tensorflow.service'
+import { prepareImageForInference } from '../../../../ai/services/imagePreprocess'
+import { isReady, loadModel } from '../../../../ai/services/tensorflow.service'
+
+interface SlotImage {
+  original: string
+  prepared: string
+}
 
 export default function CaptureScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
   const { user } = useAuth()
   const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
-  const { data: pets } = usePets(user?.id)
+  const { data: pets, isLoading: petsLoading } = usePets(user?.id)
   const { screenImages, isScreening, isModelLoading, modelError } = useAIScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
-  const [imageUris, setImageUris] = useState<(string | null)[]>([null, null, null, null, null])
+  const [imageUris, setImageUris] = useState<(SlotImage | null)[]>([null, null, null, null, null])
   const [activeIndex, setActiveIndex] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
+  const [isModelPrepared, setIsModelPrepared] = useState(isReady())
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
   const isBusy = isScreening || isModelLoading
@@ -43,7 +49,7 @@ export default function CaptureScreen() {
   const hasPets = (pets?.length ?? 0) > 0
   const filledCount = imageUris.filter((uri) => uri !== null).length
   const allImagesCaptured = filledCount === imageUris.length
-  const canRun = allImagesCaptured && !!selectedPet && !isBusy
+  const canRun = allImagesCaptured && !!selectedPet && !isBusy && isModelPrepared
 
   useEffect(() => {
     if (!pets || selectedPetId) return
@@ -55,16 +61,22 @@ export default function CaptureScreen() {
   }, [pets, petIdParam, selectedPetId])
 
   useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      preloadModel()
-    })
-    return () => task.cancel()
+    if (isReady()) return
+    let mounted = true
+    loadModel()
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setIsModelPrepared(true)
+      })
+    return () => {
+      mounted = false
+    }
   }, [])
 
-  const setSlotImage = (uri: string) => {
+  const setSlotImage = (original: string, prepared: string) => {
     setImageUris((prev) => {
       const next = [...prev]
-      next[activeIndex] = uri
+      next[activeIndex] = { original, prepared }
       return next
     })
     const nextEmpty = imageUris.findIndex((existing, i) => existing === null && i !== activeIndex)
@@ -83,10 +95,13 @@ export default function CaptureScreen() {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
+        quality: 0.7,
+        exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        setSlotImage(result.assets[0].uri)
+        const original = result.assets[0].uri
+        const prepared = await prepareImageForInference(original)
+        setSlotImage(original, prepared)
       }
     } finally {
       setPickerLoading(false)
@@ -102,10 +117,13 @@ export default function CaptureScreen() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.85,
+        quality: 0.7,
+        exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        setSlotImage(result.assets[0].uri)
+        const original = result.assets[0].uri
+        const prepared = await prepareImageForInference(original)
+        setSlotImage(original, prepared)
       }
     } finally {
       setPickerLoading(false)
@@ -114,7 +132,9 @@ export default function CaptureScreen() {
 
   const handleRunScreening = async () => {
     if (!selectedPet || !allImagesCaptured) return
-    const uris = imageUris.filter((uri): uri is string => uri !== null)
+    const uris = imageUris
+      .filter((slot): slot is SlotImage => slot !== null)
+      .map((slot) => slot.prepared)
 
     try {
       const result = await screenImages(uris)
@@ -178,6 +198,23 @@ export default function CaptureScreen() {
           </View>
         )}
 
+        {!isModelPrepared && !modelError && (
+          <View style={styles.statusBanner}>
+            <ActivityIndicator color={colors.primary} size="small" />
+            <Text style={styles.statusText}>Preparing AI model...</Text>
+          </View>
+        )}
+
+        {petsLoading && (
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>SELECT PET</Text>
+            <View style={styles.petLoadingRow}>
+              <ActivityIndicator color={colors.primary} size="small" />
+              <Text style={styles.loadingText}>Loading your pets...</Text>
+            </View>
+          </View>
+        )}
+
         {petsLoaded && !hasPets && (
           <View style={styles.emptyPetCard}>
             <MaterialCommunityIcons color={colors.primary} name="paw" size={28} />
@@ -194,7 +231,7 @@ export default function CaptureScreen() {
           </View>
         )}
 
-        {pets && pets.length > 1 && (
+        {pets && pets.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>SELECT PET</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.petPills}>
@@ -203,6 +240,9 @@ export default function CaptureScreen() {
                 return (
                   <Pressable
                     key={pet.id}
+                    accessibilityLabel={`Select ${pet.name}`}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     onPress={() => setSelectedPetId(pet.id)}
                     style={[styles.petPill, active && styles.petPillActive]}
                   >
@@ -216,6 +256,9 @@ export default function CaptureScreen() {
                     <Text style={[styles.petPillName, active && styles.petPillNameActive]} numberOfLines={1}>
                       {pet.name}
                     </Text>
+                    {active && (
+                      <MaterialCommunityIcons color="#FFFFFF" name="check-circle" size={14} />
+                    )}
                   </Pressable>
                 )
               })}
@@ -231,18 +274,18 @@ export default function CaptureScreen() {
             Take 5 photos of the affected area from different angles
           </Text>
           <View style={styles.slotRow}>
-            {imageUris.map((uri, i) => (
+            {imageUris.map((slot, i) => (
               <Pressable
                 key={i}
                 onPress={() => setActiveIndex(i)}
                 style={[
                   styles.slot,
                   activeIndex === i && styles.slotActive,
-                  uri && styles.slotFilled,
+                  slot && styles.slotFilled,
                 ]}
               >
-                {uri ? (
-                  <Image source={{ uri }} style={styles.slotImage} />
+                {slot ? (
+                  <Image source={{ uri: slot.original }} style={styles.slotImage} />
                 ) : (
                   <MaterialCommunityIcons
                     color={activeIndex === i ? colors.primary : colors.textMuted}
@@ -250,8 +293,8 @@ export default function CaptureScreen() {
                     size={20}
                   />
                 )}
-                <View style={[styles.slotBadge, uri && styles.slotBadgeFilled]}>
-                  <Text style={styles.slotBadgeText}>{i + 1}</Text>
+                <View style={[styles.slotBadge, slot && styles.slotBadgeFilled]}>
+                  <Text style={[styles.slotBadgeText, slot && styles.slotBadgeTextFilled]}>{i + 1}</Text>
                 </View>
               </Pressable>
             ))}
@@ -283,7 +326,7 @@ export default function CaptureScreen() {
         {pickerLoading && (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.primary} size="small" />
-            <Text style={styles.loadingText}>Loading image...</Text>
+            <Text style={styles.loadingText}>Optimizing photo...</Text>
           </View>
         )}
 
@@ -304,7 +347,6 @@ export default function CaptureScreen() {
             <Text style={styles.tipsDot}>•</Text>
             <Text style={styles.tipsText}>Avoid blurry images for better analysis</Text>
           </View>
-         
         </View>
 
         <Pressable
@@ -316,12 +358,17 @@ export default function CaptureScreen() {
             <>
               <ActivityIndicator color="#FFF" size="small" />
               <Text style={styles.screenBtnText}>
-                {isModelLoading ? 'Loading model...' : 'Analyzing 5 photos...'}
+                {isModelLoading ? 'Preparing AI model...' : 'Analyzing 5 photos...'}
               </Text>
+            </>
+          ) : !isModelPrepared ? (
+            <>
+              <ActivityIndicator color="#FFF" size="small" />
+              <Text style={styles.screenBtnText}>Preparing AI model...</Text>
             </>
           ) : (
             <>
-              <MaterialCommunityIcons color="#FFF" name="face-man-profile" size={18} />
+              <MaterialCommunityIcons color="#FFF" name="magnify" size={18} />
               <Text style={styles.screenBtnText}>
                 {allImagesCaptured ? 'Run Screening' : `Capture ${filledCount}/5 Photos`}
               </Text>
@@ -340,7 +387,7 @@ export default function CaptureScreen() {
             <Text style={styles.overlayHint}>
               {isModelLoading
                 ? 'First-time loading may take up to a minute'
-                : 'This usually takes around 10 seconds'}
+                : 'Quality checks and AI analysis — usually a few seconds'}
             </Text>
           </View>
         </View>
@@ -351,22 +398,29 @@ export default function CaptureScreen() {
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
-  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: -10 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
   headerBack: {
     alignItems: 'center',
-    height: 50,
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 50,
-    marginTop: 20,
-  }, 
-  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
-  headerRight: { width: 20 },
+    width: 40,
+  },
+  headerTitle: { ...font.extrabold, color: colors.text, flex: 1, fontSize: 20 },
+  headerRight: { width: 40 },
 
-  content: { paddingHorizontal: 24, paddingTop: 30, paddingBottom: 24 },
+  content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
 
   section: { marginBottom: 20 },
   sectionLabel: { ...font.semibold, color: colors.textMuted, fontSize: 11, letterSpacing: 0.5, marginBottom: 10 },
   selectHint: { ...font.semibold, color: colors.error, fontSize: 12, marginTop: 8 },
+  petLoadingRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   emptyPetCard: {
     alignItems: 'center',
     backgroundColor: colors.surfaceAlt,
@@ -416,50 +470,38 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   imageSection: { marginBottom: 20 },
   slotHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: 12 },
-  slotRow: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  slotRow: { flexDirection: 'row', gap: 8 },
   slot: {
     alignItems: 'center',
+    aspectRatio: 1,
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.borderLight,
     borderRadius: 14,
-    borderWidth: 1.5,
     borderStyle: 'dashed',
-    height: 62,
+    borderWidth: 1.5,
+    flex: 1,
     justifyContent: 'center',
     overflow: 'visible',
-    width: 62,
   },
   slotActive: { borderColor: colors.primary, borderStyle: 'solid' },
   slotFilled: { borderStyle: 'solid', padding: 0 },
   slotImage: { borderRadius: 12, height: '100%', width: '100%' },
   slotBadge: {
     alignItems: 'center',
-    backgroundColor: colors.primaryLight,
-    borderRadius: 32,
-    height: 72,
-    justifyContent: 'center',
-    marginBottom: 4,
-    width: 72,
-  },
-  placeholderTitle: { ...font.bold, color: colors.text, fontSize: 16 },
-  placeholderHint: { ...font.regular, color: colors.textMuted, fontSize: 13, lineHeight: 18, textAlign: 'center' },
-
-  previewContainer: { alignItems: 'center', position: 'relative' },
-  previewImage: { borderRadius: 20, height: 280, width: '100%' },
-  removeBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.error,
-    borderRadius: 14,
-    bottom: 12,
-    elevation: 4,
-    height: 28,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
+    borderRadius: 9,
+    borderWidth: 1,
+    height: 18,
     justifyContent: 'center',
     position: 'absolute',
-    right: -6,
+    right: -5,
+    top: -5,
     width: 18,
   },
   slotBadgeFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotBadgeText: { color: colors.text, fontSize: 10, fontWeight: '800' },
+  slotBadgeText: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  slotBadgeTextFilled: { color: '#FFFFFF' },
   slotProgress: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: 14 },
 
   sourceButtons: { flexDirection: 'row', gap: 12 },

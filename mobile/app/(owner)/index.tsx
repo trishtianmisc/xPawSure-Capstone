@@ -11,6 +11,8 @@ import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../features/appointment/types'
 import { usePets } from '../../features/pet/hooks/usePets'
+import { STATUS_STYLES } from '../../features/screening/constants'
+import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 type Shortcut = {
   label: string
@@ -26,6 +28,10 @@ const shortcuts: Shortcut[] = [
   { label: 'Find Vet', icon: 'map-marker-outline', route: '/(owner)/appointments' },
 ]
 
+function formatScreeningDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}
+
 export default function HomeScreen() {
   const router = useRouter()
   const { user } = useAuth()
@@ -34,6 +40,7 @@ export default function HomeScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
   const { data: appointments } = useMyAppointments()
+  const { data: screeningsData, isLoading: screeningsLoading, isError: screeningsError } = useAllScreenings()
 
   const handleShortcut = (shortcut: Shortcut) => {
     if (shortcut.action === 'open-qr') {
@@ -58,6 +65,17 @@ export default function HomeScreen() {
           new Date(first.apt_scheduled_at).getTime() - new Date(second.apt_scheduled_at).getTime(),
       )[0]
   }, [appointments])
+
+  const recentScreenings = useMemo(
+    () =>
+      [...(screeningsData?.results ?? [])]
+        .sort(
+          (first, second) =>
+            new Date(second.ais_created_at).getTime() - new Date(first.ais_created_at).getTime(),
+        )
+        .slice(0, 3),
+    [screeningsData],
+  )
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -174,16 +192,52 @@ export default function HomeScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Recent Screenings</Text>
-          <Pressable onPress={() => router.push('/(owner)/records')}><Text style={styles.seeAll}>See All</Text></Pressable>
+          <Pressable onPress={() => router.push('/(owner)/screenings')}><Text style={styles.seeAll}>See All</Text></Pressable>
         </View>
-        <Pressable onPress={() => router.push('/(owner)/records')} style={styles.screeningPreview}>
-          <View style={styles.previewIcon}><MaterialCommunityIcons color="#B96534" name="dog" size={19} /></View>
-          <View style={styles.previewText}>
-            <Text style={styles.previewTitle}>Allergic Dermatitis</Text>
-            <Text style={styles.previewMeta}>Milo · 12 Mar, 10:30 AM</Text>
+        {screeningsLoading ? (
+          <View style={styles.screeningPreview}>
+            <Text style={styles.emptyPetsText}>Loading...</Text>
           </View>
-          <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={20} />
-        </Pressable>
+        ) : screeningsError ? (
+          <View style={styles.screeningPreview}>
+            <Text style={styles.emptyPetsText}>We couldn&apos;t load recent screenings. Please try again.</Text>
+          </View>
+        ) : recentScreenings.length > 0 ? (
+          <View style={styles.screeningList}>
+            {recentScreenings.map((screening) => {
+              const status = STATUS_STYLES[screening.ais_status]
+              return (
+                <Pressable
+                  key={screening.ais_id}
+                  onPress={() => router.push('/(owner)/screenings')}
+                  style={styles.screeningPreview}
+                >
+                  <View style={styles.previewIcon}>
+                    <MaterialCommunityIcons color="#B96534" name="dog" size={19} />
+                  </View>
+                  <View style={styles.previewText}>
+                    <Text numberOfLines={1} style={styles.previewTitle}>{screening.disease}</Text>
+                    <Text numberOfLines={1} style={styles.previewMeta}>
+                      {screening.pet_name} · {formatScreeningDate(screening.ais_created_at)}
+                    </Text>
+                  </View>
+                  <View style={[styles.previewStatus, { backgroundColor: status.bg }]}>
+                    <Text style={[styles.previewStatusText, { color: status.fg }]}>{status.label}</Text>
+                  </View>
+                  <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={18} />
+                </Pressable>
+              )
+            })}
+          </View>
+        ) : (
+          <Pressable
+            onPress={() => router.push('/(owner)/pets/screening')}
+            style={[styles.screeningPreview, styles.screeningEmpty]}
+          >
+            <MaterialCommunityIcons color={colors.textMuted} name="camera-outline" size={18} />
+            <Text style={styles.previewMeta}>No screenings yet. Start your first scan.</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -231,8 +285,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   emptyPetsText: { ...font.regular, color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
 
   screeningPreview: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, flexDirection: 'row', padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  screeningList: { gap: 8 },
+  screeningEmpty: { borderColor: colors.borderLight, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center' },
   previewIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 10, height: 40, justifyContent: 'center', width: 40 },
   previewText: { flex: 1, marginLeft: 12 },
   previewTitle: { ...font.semibold, color: colors.text, fontSize: 14 },
   previewMeta: { ...font.regular, color: colors.textSecondary, fontSize: 11, marginTop: 3 },
+  previewStatus: { borderRadius: 6, marginRight: 4, paddingHorizontal: 8, paddingVertical: 3 },
+  previewStatusText: { ...font.bold, fontSize: 10 },
 })
