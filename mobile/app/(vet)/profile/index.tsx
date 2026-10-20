@@ -1,24 +1,23 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View, Image } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 import { useEffect, useMemo, useState } from 'react'
-import * as ImagePicker from 'expo-image-picker'
 
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
-import { getProfile } from '../../../src/services/auth'
+import { getProfile, updateProfile } from '../../../src/services/auth'
 import { font } from '../../../src/theme/typography'
+import { apiErrorMessage } from '../../../src/utils/error'
 
 type FormState = {
   first_name: string
   last_name: string
   phone: string
   email: string
-  date_of_birth: string
-  address: string
-  associated_clinic: string
-  specialization: string
+  clinic_name: string
+  position: string
   license_number: string
+  license_expiration_date: string
 }
 
 const INITIAL_FORM: FormState = {
@@ -26,17 +25,20 @@ const INITIAL_FORM: FormState = {
   last_name: '',
   phone: '',
   email: '',
-  date_of_birth: '',
-  address: '',
-  associated_clinic: 'Escardo Paw Pet Clinic',
-  specialization: '',
+  clinic_name: '',
+  position: '',
   license_number: '',
+  license_expiration_date: '',
 }
 
-const READ_ONLY_FIELDS = ['email', 'associated_clinic']
+const POSITION_LABELS: Record<string, string> = {
+  CLINIC_ADMIN: 'Clinic Admin',
+  VETERINARIAN: 'Veterinarian',
+  RECEPTIONIST: 'Receptionist',
+}
 
 export default function VetProfileScreen() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, refreshUser } = useAuth()
   const { colors, isDark, toggleTheme } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -46,6 +48,7 @@ export default function VetProfileScreen() {
     last_name: user?.last_name || '',
     phone: user?.phone || '',
     email: user?.email || '',
+    clinic_name: user?.clinic_name || '',
   })
 
   const [isEditing, setIsEditing] = useState(false)
@@ -53,38 +56,39 @@ export default function VetProfileScreen() {
   const [showSaveConfirm, setShowSaveConfirm] = useState(false)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
   const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [profileImage, setProfileImage] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    getProfile().then((profile) => {
-      setForm((prev) => ({
-        ...prev,
-        first_name: profile.first_name || prev.first_name,
-        last_name: profile.last_name || prev.last_name,
-        phone: profile.phone || prev.phone,
-        email: profile.email || prev.email,
-      }))
-    }).catch(() => {})
+    let isActive = true
+
+    getProfile()
+      .then((profile) => {
+        if (!isActive) return
+
+        const next: FormState = {
+          first_name: profile.first_name || '',
+          last_name: profile.last_name || '',
+          phone: profile.phone || '',
+          email: profile.email || '',
+          clinic_name: profile.clinic_name || '',
+          position: profile.position || '',
+          license_number: profile.license_number || '',
+          license_expiration_date: profile.license_expiration_date || '',
+        }
+
+        setForm(next)
+        setOriginalForm(next)
+      })
+      .catch(() => {})
+
+    return () => {
+      isActive = false
+    }
   }, [])
 
   function handleChange(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
-  }
-
-  async function handlePickImage() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) return
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    })
-
-    if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri)
-    }
   }
 
   function enterEditMode() {
@@ -101,13 +105,51 @@ export default function VetProfileScreen() {
   }
 
   function handleSave() {
+    setSaveError(null)
     setShowSaveConfirm(true)
   }
 
-  function confirmSave() {
-    setShowSaveConfirm(false)
-    setIsEditing(false)
-    setShowSuccessModal(true)
+  async function confirmSave() {
+    const firstName = form.first_name.trim()
+    const lastName = form.last_name.trim()
+
+    if (!firstName || !lastName) {
+      setSaveError('First name and last name are required.')
+      return
+    }
+
+    setSaveError(null)
+    setIsSaving(true)
+
+    try {
+      const updated = await updateProfile({
+        first_name: firstName,
+        last_name: lastName,
+        phone: form.phone.trim(),
+      })
+
+      const next: FormState = {
+        first_name: updated.first_name || firstName,
+        last_name: updated.last_name || lastName,
+        phone: updated.phone || form.phone.trim(),
+        email: updated.email || form.email,
+        clinic_name: updated.clinic_name || form.clinic_name,
+        position: updated.position || form.position,
+        license_number: updated.license_number || form.license_number,
+        license_expiration_date: updated.license_expiration_date || form.license_expiration_date,
+      }
+
+      setForm(next)
+      setOriginalForm(next)
+      setShowSaveConfirm(false)
+      setIsEditing(false)
+      setShowSuccessModal(true)
+      await refreshUser()
+    } catch (error) {
+      setSaveError(apiErrorMessage(error))
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   function handleCancel() {
@@ -131,6 +173,10 @@ export default function VetProfileScreen() {
     return value.trim() || 'N/A'
   }
 
+  function displayPosition(value: string) {
+    return value.trim() ? (POSITION_LABELS[value] ?? value) : 'N/A'
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
@@ -139,21 +185,15 @@ export default function VetProfileScreen() {
 
         <View style={styles.avatarSection}>
           <View style={styles.avatar}>
-            {profileImage ? (
-              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
-            ) : (
-              <MaterialCommunityIcons color={colors.primary} name="account-circle" size={56} />
-            )}
+            <MaterialCommunityIcons color={colors.primary} name="account-circle" size={56} />
           </View>
-          {isEditing ? (
-            <Pressable style={styles.editAvatarBtn} onPress={handlePickImage}>
-              <MaterialCommunityIcons color={colors.inverse} name="plus" size={12} />
-            </Pressable>
-          ) : (
-            <Pressable style={styles.editAvatarBtn} onPress={handlePencilPress}>
-              <MaterialCommunityIcons color={colors.inverse} name="pencil" size={12} />
-            </Pressable>
-          )}
+          <Pressable
+            accessibilityLabel={isEditing ? 'Discard profile edits' : 'Edit profile'}
+            style={styles.editAvatarBtn}
+            onPress={handlePencilPress}
+          >
+            <MaterialCommunityIcons color={colors.inverse} name="pencil" size={12} />
+          </Pressable>
         </View>
 
         <View style={styles.formSection}>
@@ -193,24 +233,6 @@ export default function VetProfileScreen() {
             />
           )}
 
-          <Text style={styles.label}>Date of Birth</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={form.date_of_birth}
-              onChangeText={(v) => handleChange('date_of_birth', v)}
-              placeholder="mm/dd/yyyy"
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={displayValue(form.date_of_birth)}
-              editable={false}
-              placeholderTextColor={colors.textMuted}
-            />
-          )}
-
           <Text style={styles.label}>Phone Number</Text>
           {isEditing ? (
             <TextInput
@@ -230,24 +252,6 @@ export default function VetProfileScreen() {
             />
           )}
 
-          <Text style={styles.label}>Address</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={form.address}
-              onChangeText={(v) => handleChange('address', v)}
-              placeholder="Enter your address"
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={displayValue(form.address)}
-              editable={false}
-              placeholderTextColor={colors.textMuted}
-            />
-          )}
-
           <Text style={styles.label}>Email Address</Text>
           <TextInput
             style={[styles.input, styles.inputDisabled]}
@@ -259,46 +263,34 @@ export default function VetProfileScreen() {
           <Text style={styles.label}>Associated Clinic</Text>
           <TextInput
             style={[styles.input, styles.inputDisabled]}
-            value={displayValue(form.associated_clinic)}
+            value={displayValue(form.clinic_name)}
             editable={false}
             placeholderTextColor={colors.textMuted}
           />
 
-          <Text style={styles.label}>Specialization</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={form.specialization}
-              onChangeText={(v) => handleChange('specialization', v)}
-              placeholder="e.g. Dermatology"
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={displayValue(form.specialization)}
-              editable={false}
-              placeholderTextColor={colors.textMuted}
-            />
-          )}
+          <Text style={styles.label}>Position</Text>
+          <TextInput
+            style={[styles.input, styles.inputDisabled]}
+            value={displayPosition(form.position)}
+            editable={false}
+            placeholderTextColor={colors.textMuted}
+          />
 
           <Text style={styles.label}>License Number</Text>
-          {isEditing ? (
-            <TextInput
-              style={styles.input}
-              value={form.license_number}
-              onChangeText={(v) => handleChange('license_number', v)}
-              placeholder="Enter license number"
-              placeholderTextColor={colors.textMuted}
-            />
-          ) : (
-            <TextInput
-              style={[styles.input, styles.inputDisabled]}
-              value={displayValue(form.license_number)}
-              editable={false}
-              placeholderTextColor={colors.textMuted}
-            />
-          )}
+          <TextInput
+            style={[styles.input, styles.inputDisabled]}
+            value={displayValue(form.license_number)}
+            editable={false}
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <Text style={styles.label}>License Expiration Date</Text>
+          <TextInput
+            style={[styles.input, styles.inputDisabled]}
+            value={displayValue(form.license_expiration_date)}
+            editable={false}
+            placeholderTextColor={colors.textMuted}
+          />
         </View>
 
         {isEditing && (
@@ -334,12 +326,25 @@ export default function VetProfileScreen() {
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Save Changes?</Text>
             <Text style={styles.modalMessage}>Are you sure you want to save these changes to your profile?</Text>
+            {saveError && <Text style={styles.modalErrorText}>{saveError}</Text>}
             <View style={styles.modalActions}>
-              <Pressable style={styles.modalNoBtn} onPress={() => setShowSaveConfirm(false)}>
+              <Pressable
+                disabled={isSaving}
+                style={[styles.modalNoBtn, isSaving && styles.modalButtonDisabled]}
+                onPress={() => setShowSaveConfirm(false)}
+              >
                 <Text style={styles.modalNoText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.modalYesGreenBtn} onPress={confirmSave}>
-                <Text style={styles.modalYesGreenText}>Save</Text>
+              <Pressable
+                disabled={isSaving}
+                style={[styles.modalYesGreenBtn, isSaving && styles.modalButtonDisabled]}
+                onPress={confirmSave}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.modalYesGreenText}>Save</Text>
+                )}
               </Pressable>
             </View>
           </View>
@@ -391,7 +396,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   avatarSection: { alignItems: 'center', marginBottom: 24, position: 'relative' },
   avatar: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 32, height: 64, justifyContent: 'center', width: 64, overflow: 'hidden' },
-  avatarImage: { width: 64, height: 64, borderRadius: 32 },
   editAvatarBtn: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 10, bottom: 0, height: 20, justifyContent: 'center', position: 'absolute', right: '38%', width: 20 },
 
   formSection: { marginBottom: 24 },
@@ -413,6 +417,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', alignItems: 'center' },
   modalTitle: { ...font.extrabold, color: colors.text, fontSize: 18, marginBottom: 12 },
   modalMessage: { ...font.regular, color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
+  modalErrorText: { ...font.medium, color: colors.error, fontSize: 13, marginBottom: 16, textAlign: 'center' },
+  modalButtonDisabled: { opacity: 0.6 },
   modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
   modalNoBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
   modalNoText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },

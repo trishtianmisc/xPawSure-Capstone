@@ -8,6 +8,10 @@ interface User {
   phone?: string
   role: string
   full_name?: string
+  clinic_name?: string | null
+  position?: string | null
+  license_number?: string | null
+  license_expiration_date?: string | null
 }
 
 interface LoginResponse {

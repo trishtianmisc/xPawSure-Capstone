@@ -11,6 +11,11 @@ interface User {
   last_name: string
   phone?: string
   role: string
+  full_name?: string
+  clinic_name?: string | null
+  position?: string | null
+  license_number?: string | null
+  license_expiration_date?: string | null
 }
 
 interface AuthContextType {
@@ -86,6 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         last_name: profile.last_name,
         phone: profile.phone ?? '',
         role: profile.role,
+        full_name: profile.full_name,
+        clinic_name: profile.clinic_name ?? null,
+        position: profile.position ?? null,
+        license_number: profile.license_number ?? null,
+        license_expiration_date: profile.license_expiration_date ?? null,
       }
       await setItem(STORAGE_USER, JSON.stringify(next))
       setUser(next)
