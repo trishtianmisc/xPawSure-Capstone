@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs'
-import '@tensorflow/tfjs-react-native'
+import { decodeJpeg } from '@tensorflow/tfjs-react-native'
 import { Asset } from 'expo-asset'
 import { File } from 'expo-file-system'
 
@@ -103,8 +103,6 @@ export async function preprocessImage(
   uri: string,
   inputSize: number = MODEL_INFO.inputSize,
 ): Promise<tf.Tensor4D> {
-  const { decodeJpeg } = await import('@tensorflow/tfjs-react-native')
-
   const file = new File(uri)
   const imageBytes = await file.bytes()
   const imageTensor = decodeJpeg(imageBytes, 3)
@@ -273,7 +271,9 @@ export async function runMultiScreening(
   const keptTensors: tf.Tensor4D[] = []
 
   for (const uri of imageUris) {
+    const preprocessStart = Date.now()
     const tensor = await preprocessImage(uri, modelInfo.inputSize)
+    console.log(`[TF SCREENING] PREP: ${Date.now() - preprocessStart}ms`)
     const moments = tf.moments(tensor)
     const meanVal = (await moments.mean.data())[0]
     const variance = (await moments.variance.data())[0]
@@ -312,6 +312,9 @@ export async function runMultiScreening(
     if (keptTensors.length < MIN_USABLE_IMAGES) {
       const message = `Only ${keptTensors.length} of ${imageUris.length} photos were usable (too dark or blurry). Retake the affected area in good light.`
       console.log(`[TF SCREENING] MULTI INVALID_IMAGE: ${keptTensors.length}/${imageUris.length} passed quality gates`)
+      for (const tensor of keptTensors) {
+        tensor.dispose()
+      }
       return {
         predictions: [],
         inferenceTimeMs: 0,
@@ -327,14 +330,27 @@ export async function runMultiScreening(
     }
 
     const batch = tf.concat(keptTensors, 0)
+    for (const tensor of keptTensors) {
+      tensor.dispose()
+    }
+
     const startTime = Date.now()
-    const outputs = combinedModel.predict(batch) as tf.Tensor[]
-    const probabilities = (await outputs[0].data()) as Float32Array
-    const featureData = (await outputs[1].data()) as Float32Array
-    const inferenceTimeMs = Date.now() - startTime
-    outputs[0].dispose()
-    outputs[1].dispose()
-    batch.dispose()
+    let probabilities: Float32Array
+    let featureData: Float32Array
+    let inferenceTimeMs = 0
+    try {
+      const outputs = combinedModel.predict(batch) as tf.Tensor[]
+      try {
+        probabilities = (await outputs[0].data()) as Float32Array
+        featureData = (await outputs[1].data()) as Float32Array
+      } finally {
+        outputs[0].dispose()
+        outputs[1].dispose()
+      }
+      inferenceTimeMs = Date.now() - startTime
+    } finally {
+      batch.dispose()
+    }
 
     const numKept = keptTensors.length
     const numClasses = modelInfo.labels.length

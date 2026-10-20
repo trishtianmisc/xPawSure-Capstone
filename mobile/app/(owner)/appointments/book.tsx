@@ -172,7 +172,7 @@ export default function BookAppointmentScreen() {
   }
 
   function handleGoScan() {
-    router.push('/(owner)/pets/screening')
+    router.push(pet ? `/(owner)/pets/screening?petId=${pet.id}` : '/(owner)/pets/screening')
   }
 
   function handleBook() {
