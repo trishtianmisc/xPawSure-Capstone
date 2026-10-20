@@ -24,12 +24,12 @@ export const settingsSchema = z.object({
   opening_time: z.string().min(1, 'Opening time is required.'),
   closing_time: z.string().min(1, 'Closing time is required.'),
   appointment_duration: z
-    .number({ invalid_type_error: 'Must be a number.' })
+    .number({ error: 'Must be a number.' })
     .int('Must be a whole number.')
     .min(1, 'Must be greater than 0.')
     .max(240, 'Must be 240 minutes or less.'),
   max_appointments_per_day: z
-    .number({ invalid_type_error: 'Must be a number.' })
+    .number({ error: 'Must be a number.' })
     .int('Must be a whole number.')
     .min(1, 'Must be greater than 0.')
     .max(500, 'Must be 500 or less.'),

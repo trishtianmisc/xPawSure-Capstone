@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
-import { Alert, Badge, Button, Card, Input, Modal, Textarea } from '../../../components/ui'
+import { Badge, Button, Card, Input, Modal, Textarea } from '../../../components/ui'
 import { profileSchema, type ProfileFormValues } from '../schemas/clinicProfile.schema'
 import type { ClinicProfile } from '../types/clinicProfile.types'
 import { LogoUpload } from './LogoUpload'

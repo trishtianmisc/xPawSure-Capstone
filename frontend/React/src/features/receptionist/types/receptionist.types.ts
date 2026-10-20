@@ -9,6 +9,7 @@ export interface ScreeningSummary {
   ais_status: string
   ais_source: 'MOCK' | 'DEVICE'
   ais_created_at: string
+  ais_is_correct: boolean | null
 }
 
 export interface VetSlot {

@@ -180,9 +180,3 @@ function formatTime(time: string | null): string {
   const displayHour = hour % 12 || 12
   return `${displayHour}:${m} ${ampm}`
 }
-
-function toTimeInputValue(timeStr: string | null): string {
-  if (!timeStr) return ''
-  const parts = timeStr.split(':')
-  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
-}

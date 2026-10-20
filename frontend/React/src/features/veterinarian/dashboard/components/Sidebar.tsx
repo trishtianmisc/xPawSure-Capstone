@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { id: 'settings', label: 'Settings' },
 ]
 
-export function Sidebar({ clinicName, vetName, activePage, onNavigate, onLogout }: SidebarProps) {
+export function Sidebar({ vetName, activePage, onNavigate, onLogout }: SidebarProps) {
   return (
     <aside className="flex h-screen w-64 flex-col border-r border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
       <div className="flex flex-col items-center gap-3 border-b border-stone-200 px-6 py-8 dark:border-stone-800">

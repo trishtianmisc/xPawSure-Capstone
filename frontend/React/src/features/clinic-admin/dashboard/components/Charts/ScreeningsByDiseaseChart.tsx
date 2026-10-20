@@ -39,7 +39,7 @@ export function ScreeningsByDiseaseChart({ data }: ScreeningsByDiseaseChartProps
                 border: '1px solid #e7e5e4',
                 fontSize: '13px',
               }}
-              formatter={(value: number, name: string) => [`${value} (${name})`, 'Screenings']}
+              formatter={(value, name) => [`${value ?? ''} (${name ?? ''})`, 'Screenings']}
             />
           </PieChart>
         </ResponsiveContainer>

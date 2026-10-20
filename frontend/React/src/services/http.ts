@@ -38,8 +38,16 @@ function clearAuthStorage(): void {
   removeFromStorage(STORAGE_KEY_REFRESH)
 }
 
+// Local development uses Vite's /api proxy. In production the frontend is on
+// Cloudflare Pages and the backend is a separate Render service, so the full
+// API base URL is supplied at build time (for example
+// https://xpawsure-api.onrender.com/api). Strip trailing slashes so callers
+// can append paths safely.
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim()
+const API_BASE_URL = (configuredApiUrl || '/api').replace(/\/+$/, '')
+
 const http = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
 })
 
@@ -95,7 +103,7 @@ http.interceptors.response.use(
           throw new Error('No refresh token')
         }
 
-        const { data } = await axios.post('/api/auth/refresh/', {
+        const { data } = await axios.post(`${API_BASE_URL}/auth/refresh/`, {
           refresh: refreshToken,
         })
 
