@@ -500,16 +500,22 @@ Notes:
 Requires authentication. Receptionist dashboard summary.
 
 Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
-`recent_appointments`, and `needs_attention` — the count of past-due appointments
-(`PENDING`/`CONFIRMED` with `apt_scheduled_at` already past) awaiting action.
-`today.pending` counts only upcoming `PENDING` appointments; past-due ones surface
-through `needs_attention` instead of double-counting in Pending/Confirmed.
+`recent_appointments`, and `needs_attention` — the count of past-due
+appointments still awaiting action. `today.pending` counts only upcoming
+`PENDING` appointments; past-due ones surface through `needs_attention`
+instead of double-counting in Pending/Confirmed.
 
-Background job: `appointments.close_past_due_appointments` runs hourly via
-`CELERY_BEAT_SCHEDULE` (`crontab(minute=0)`). It cancels past-due `PENDING`
-appointments (reason "Not confirmed in time") and marks `CONFIRMED` appointments
-more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as `NO_SHOW`. Idempotent;
-deployment must run both the Celery worker and beat scheduler.
+Refresh on read: overdue statuses are refreshed on reads. This endpoint and
+`GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
+for the requesting clinic before returning. It cancels past-due `PENDING`
+appointments (reason "Not confirmed in time") and marks `CONFIRMED`
+appointments more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as
+`NO_SHOW`. The work is idempotent, clinic-scoped, and row-locked
+(`select_for_update`), so no scheduler, Celery worker, or beat process is
+required. Because the refresh runs first, past-due `PENDING` rows are already
+`CANCELLED` and expired `CONFIRMED` rows are already `NO_SHOW` when the
+counts are taken — `needs_attention` therefore surfaces late-but-actionable
+`CONFIRMED` appointments (inside the grace window).
 
 ---
 
@@ -568,8 +574,9 @@ Time-based rules (Asia/Manila "now"):
   `{ "detail": "Cannot mark an appointment as no-show before its scheduled time." }`
 - `NO_SHOW` is allowed immediately once the scheduled time has passed (no grace
   period on this endpoint). `CHECKED_IN` is not blocked for late arrivals; the
-  60-minute grace period (`NO_SHOW_GRACE_MINUTES`) only gates the hourly auto-close
-  job and the UI's Check In action.
+  60-minute grace period (`NO_SHOW_GRACE_MINUTES`) only gates the read-time
+  auto-close (`AppointmentService.close_past_due`) and the UI's Check In
+  action.
 - Invalid status transitions still return `400` as before.
 
 ---

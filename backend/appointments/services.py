@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 # so no other module's day semantics are affected.
 CLINIC_TIMEZONE = ZoneInfo('Asia/Manila')
 
+# How long past the scheduled time a CONFIRMED appointment may still be
+# checked in before the auto-close logic marks it as NO_SHOW. The frontend
+# mirrors this value when hiding the Check In action.
+NO_SHOW_GRACE_MINUTES = 60
+
 
 def _clinic_day_bounds(day):
     start = timezone.make_aware(datetime.combine(day, time.min), CLINIC_TIMEZONE)
@@ -31,6 +36,19 @@ class SlotUnavailableError(Exception):
 
 class InvalidTransitionError(Exception):
     pass
+
+
+def _reconcile_past_due(clinic_id):
+    """Refresh overdue appointment statuses during reads.
+
+    There is no scheduler: past-due PENDING/CONFIRMED appointments are closed
+    when the dashboard or the appointment list is read. The work is scoped to
+    one clinic and never breaks the read that triggered it.
+    """
+    try:
+        AppointmentService.close_past_due(clinic_id=clinic_id)
+    except Exception:
+        logger.exception('Past-due reconcile failed for clinic %s', clinic_id)
 
 
 def _audit(**kwargs):
@@ -519,9 +537,10 @@ class AppointmentService:
 
         appointment.save()
 
-        # System-triggered changes (auto-close job) pass user_id=None; there is
-        # no system user to attribute and a failed audit insert would poison the
-        # enclosing atomic block, so skip auditing when there is no actor.
+        # System-triggered changes (the past-due reconcile on read) pass
+        # user_id=None; there is no system user to attribute and a failed
+        # audit insert would poison the enclosing atomic block, so skip
+        # auditing when there is no actor.
         if user_id:
             _audit(
                 user_id=str(user_id),
@@ -571,9 +590,76 @@ class AppointmentService:
         return appointment
 
     @staticmethod
+    def close_past_due(clinic_id=None):
+        """Close appointments whose scheduled time has passed.
+
+        PENDING past its scheduled time becomes CANCELLED ("Not confirmed in
+        time"); CONFIRMED more than NO_SHOW_GRACE_MINUTES past becomes
+        NO_SHOW. Replaces the removed hourly Celery beat job — reads trigger
+        it instead.
+
+        Idempotent and concurrency-safe: candidate rows are scoped to a
+        single clinic, and every transition re-checks the row under
+        ``select_for_update()`` inside ``update_status()``, so two readers
+        racing on the same appointment cannot both apply a transition.
+
+        Returns a summary dict: ``{'cancelled': n, 'no_show': n}``.
+        """
+        now = datetime.now(CLINIC_TIMEZONE)
+        grace_cutoff = now - timedelta(minutes=NO_SHOW_GRACE_MINUTES)
+        summary = {'cancelled': 0, 'no_show': 0}
+
+        def _past_due_ids(status, cutoff):
+            qs = Appointment.objects.filter(
+                apt_status=status,
+                apt_scheduled_at__lt=cutoff,
+                apt_deleted_at__isnull=True,
+            )
+            if clinic_id is not None:
+                qs = qs.filter(cln_id_id=clinic_id)
+            return list(qs.values_list('apt_id', flat=True))
+
+        for apt_id in _past_due_ids(AppointmentStatus.PENDING, now):
+            try:
+                AppointmentService.update_status(
+                    apt_id=apt_id,
+                    new_status=AppointmentStatus.CANCELLED,
+                    user_id=None,
+                    cancellation_reason='Not confirmed in time',
+                )
+                summary['cancelled'] += 1
+            except (InvalidTransitionError, ValueError):
+                # Another reader already moved this row, or it is no longer
+                # eligible — skip it and keep processing the rest.
+                continue
+
+        for apt_id in _past_due_ids(AppointmentStatus.CONFIRMED, grace_cutoff):
+            try:
+                AppointmentService.update_status(
+                    apt_id=apt_id,
+                    new_status=AppointmentStatus.NO_SHOW,
+                    user_id=None,
+                )
+                summary['no_show'] += 1
+            except (InvalidTransitionError, ValueError):
+                continue
+
+        if summary['cancelled'] or summary['no_show']:
+            logger.info(
+                'Past-due close for %s: %d cancelled, %d no-show.',
+                clinic_id or 'all clinics',
+                summary['cancelled'],
+                summary['no_show'],
+            )
+        return summary
+
+    @staticmethod
     def list_appointments(clinic_id, date=None, status=None, vet_id=None,
                           pet_id=None, search=None, date_from=None,
                           date_to=None, page=1, page_size=20, overdue=False):
+        # Statuses shown in this list (and the overdue filter) must be
+        # current, so refresh past-due appointments for this clinic first.
+        _reconcile_past_due(clinic_id)
         qs = Appointment.objects.filter(
             cln_id_id=clinic_id, apt_deleted_at__isnull=True,
         ).select_related('pet_id', 'stf_id__usr_id', 'apt_created_by')
@@ -704,6 +790,9 @@ class DashboardService:
 
     @staticmethod
     def get_stats(clinic_id):
+        # Dashboard status counts (cancelled / no-show) come from apt_status,
+        # so overdue statuses are refreshed on read before counting.
+        _reconcile_past_due(clinic_id)
         now = datetime.now(CLINIC_TIMEZONE)
         day_start, day_end = _clinic_day_bounds(now.date())
 
