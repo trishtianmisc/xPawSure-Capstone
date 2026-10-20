@@ -394,7 +394,7 @@ class VetAppointmentDetailTests(VetDashboardBase):
 
 class VetCancellationTests(VetDashboardBase):
 
-    def test_vet_can_cancel_own_appointment(self):
+    def test_vet_cannot_cancel_directly(self):
         appointment = self._make_appointment(
             self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
         )
@@ -408,11 +408,11 @@ class VetCancellationTests(VetDashboardBase):
             content_type='application/json',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['apt_status'], 'CANCELLED')
+        self.assertEqual(response.status_code, 403)
 
         appointment.refresh_from_db()
-        self.assertEqual(appointment.apt_cancellation_reason, 'Vet unavailable')
+        self.assertEqual(appointment.apt_status, AppointmentStatus.CONFIRMED)
+        self.assertIsNone(appointment.apt_cancellation_reason)
 
     def test_vet_cannot_use_other_status_transitions(self):
         appointment = self._make_appointment(
@@ -437,6 +437,103 @@ class VetCancellationTests(VetDashboardBase):
             data=json.dumps({'apt_status': 'CANCELLED'}),
             content_type='application/json',
             **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class VetAppointmentRequestTests(VetDashboardBase):
+
+    def _request(self, action, apt_id, payload, email=VET_EMAIL):
+        return self.client.post(
+            f'/api/veterinarian/appointments/{apt_id}/{action}/',
+            data=json.dumps(payload),
+            content_type='application/json',
+            **self._auth(email),
+        )
+
+    def test_vet_requests_reschedule_on_confirmed(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self._request(
+            'request-reschedule', appointment.apt_id, {'reason': 'Conflict'},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data['apt_reschedule_request_reason'], 'Conflict',
+        )
+
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.apt_reschedule_request_reason, 'Conflict')
+        self.assertEqual(appointment.apt_status, AppointmentStatus.CONFIRMED)
+
+    def test_vet_requests_cancellation_on_confirmed(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self._request(
+            'request-cancel', appointment.apt_id, {'reason': 'Sick'},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data['apt_cancellation_request_reason'], 'Sick',
+        )
+
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.apt_cancellation_request_reason, 'Sick')
+        self.assertEqual(appointment.apt_status, AppointmentStatus.CONFIRMED)
+
+    def test_request_requires_reason(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self._request(
+            'request-reschedule', appointment.apt_id, {'reason': '   '},
+        )
+        self.assertEqual(response.status_code, 400)
+
+        appointment.refresh_from_db()
+        self.assertIsNone(appointment.apt_reschedule_request_reason)
+
+    def test_request_rejected_when_not_confirmed(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.PENDING, self.today_9am,
+        )
+
+        response = self._request(
+            'request-cancel', appointment.apt_id, {'reason': 'Nope'},
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_request_rejected_for_other_vets_appointment(self):
+        appointment = self._make_appointment(
+            self.other_vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self._request(
+            'request-reschedule', appointment.apt_id, {'reason': 'Mine now'},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_request_missing_appointment_returns_404(self):
+        import uuid
+
+        response = self._request(
+            'request-cancel', uuid.uuid4(), {'reason': 'Gone'},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_receptionist_cannot_submit_request(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self._request(
+            'request-cancel', appointment.apt_id, {'reason': 'Desk'},
+            email=RECEPTIONIST_EMAIL,
         )
         self.assertEqual(response.status_code, 403)
 
@@ -483,6 +580,44 @@ class VetConsultationSaveTests(VetDashboardBase):
         self.assertTrue(
             Consultation.objects.filter(apt_id=appointment).exists(),
         )
+
+    def test_vet_creates_consultation_with_specific_disease(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+
+        response = self._post(
+            self._payload(appointment, specific_disease='Microsporum canis'),
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['specific_disease'], 'Microsporum canis')
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertEqual(consultation.con_specific_disease, 'Microsporum canis')
+
+    def test_specific_disease_defaults_to_null(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+
+        response = self._post(self._payload(appointment))
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['specific_disease'])
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertIsNone(consultation.con_specific_disease)
+
+    def test_blank_specific_disease_is_stored_as_null(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+
+        response = self._post(self._payload(appointment, specific_disease='   '))
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['specific_disease'])
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertIsNone(consultation.con_specific_disease)
 
     def test_cannot_save_before_start(self):
         appointment = self._make_appointment(
@@ -562,6 +697,22 @@ class VetConsultationSaveTests(VetDashboardBase):
         self.assertEqual(
             Consultation.objects.filter(apt_id=appointment).count(), 1,
         )
+
+    def test_vet_updates_specific_disease(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        created = self._post(self._payload(appointment))
+
+        response = self._put(
+            created.data['id'],
+            self._payload(appointment, specific_disease='Microsporum canis'),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['specific_disease'], 'Microsporum canis')
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertEqual(consultation.con_specific_disease, 'Microsporum canis')
 
     def test_update_rejected_after_completion(self):
         appointment = self._make_appointment(

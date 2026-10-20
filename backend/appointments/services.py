@@ -38,6 +38,8 @@ class InvalidTransitionError(Exception):
     pass
 
 
+class InvalidRequestError(Exception):
+    pass
 def _reconcile_past_due(clinic_id):
     """Refresh overdue appointment statuses during reads.
 
@@ -981,6 +983,88 @@ class VetDashboardService:
             description='Consultation started',
             old_values={'apt_status': old_status},
             new_values={'apt_status': AppointmentStatus.IN_PROGRESS},
+        )
+
+        return appointment
+
+    # Reschedule/cancel are requests a veterinarian submits; the clinic decides
+    # whether to act on them. Only confirmed appointments may be requested.
+    REQUESTABLE_STATUSES = (AppointmentStatus.CONFIRMED,)
+
+    @staticmethod
+    def _get_requestable_appointment(apt_id, stf_id, action):
+        try:
+            appointment = Appointment.objects.get(
+                apt_id=apt_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.stf_id_id != stf_id:
+            raise PermissionError(
+                'This appointment is not assigned to you.',
+            )
+
+        if appointment.apt_status not in VetDashboardService.REQUESTABLE_STATUSES:
+            raise InvalidTransitionError(
+                f'A {action} can only be requested for a confirmed appointment.',
+            )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
+    def request_reschedule(apt_id, stf_id, user_id, reason):
+        reason = (reason or '').strip()
+        if not reason:
+            raise InvalidRequestError('A reason is required.')
+
+        appointment = VetDashboardService._get_requestable_appointment(
+            apt_id, stf_id, 'reschedule',
+        )
+
+        appointment.apt_reschedule_request_reason = reason
+        appointment.save(
+            update_fields=['apt_reschedule_request_reason', 'apt_updated_at'],
+        )
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Reschedule requested',
+            new_values={'apt_reschedule_request_reason': reason},
+        )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
+    def request_cancellation(apt_id, stf_id, user_id, reason):
+        reason = (reason or '').strip()
+        if not reason:
+            raise InvalidRequestError('A reason is required.')
+
+        appointment = VetDashboardService._get_requestable_appointment(
+            apt_id, stf_id, 'cancellation',
+        )
+
+        appointment.apt_cancellation_request_reason = reason
+        appointment.save(
+            update_fields=['apt_cancellation_request_reason', 'apt_updated_at'],
+        )
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Cancellation requested',
+            new_values={'apt_cancellation_request_reason': reason},
         )
 
         return appointment

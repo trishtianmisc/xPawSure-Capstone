@@ -15,6 +15,7 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     assessment = serializers.CharField(source='con_assessment', read_only=True)
     plan = serializers.CharField(source='con_plan', read_only=True)
     diagnosis = serializers.CharField(source='con_diagnosis', read_only=True)
+    specific_disease = serializers.CharField(source='con_specific_disease', read_only=True, allow_null=True)
     treatment = serializers.CharField(source='con_treatment', read_only=True)
     notes = serializers.CharField(source='con_notes', read_only=True)
     created_at = serializers.DateTimeField(source='con_created_at', read_only=True)
@@ -24,7 +25,7 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
             'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-            'diagnosis', 'treatment', 'notes', 'created_at',
+            'diagnosis', 'specific_disease', 'treatment', 'notes', 'created_at',
         ]
 
     def get_veterinarian(self, obj) -> str:
@@ -37,6 +38,7 @@ class ConsultationCreateSerializer(serializers.Serializer):
     chief_complaint = serializers.CharField(required=False, allow_blank=True, default='')
     objective = serializers.CharField(required=False, allow_blank=True, default='')
     diagnosis = serializers.CharField()
+    specific_disease = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
     notes = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate_diagnosis(self, value):
@@ -50,6 +52,7 @@ class ConsultationUpdateSerializer(serializers.Serializer):
     chief_complaint = serializers.CharField(required=False, allow_blank=True, default='')
     objective = serializers.CharField(required=False, allow_blank=True, default='')
     diagnosis = serializers.CharField()
+    specific_disease = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
     notes = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate_diagnosis(self, value):

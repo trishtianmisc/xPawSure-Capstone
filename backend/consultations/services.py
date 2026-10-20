@@ -57,6 +57,7 @@ class ConsultationService:
             con_chief_complaint=validated_data.get('chief_complaint') or None,
             con_objective=validated_data.get('objective') or None,
             con_diagnosis=validated_data['diagnosis'],
+            con_specific_disease=(validated_data.get('specific_disease') or '').strip() or None,
             con_notes=validated_data.get('notes') or None,
         )
 
@@ -67,7 +68,10 @@ class ConsultationService:
             table_name='CONSULTATION',
             record_id=str(consultation.con_id),
             description=f'Veterinarian created consultation for appointment {appointment.apt_id}',
-            new_values={'con_diagnosis': consultation.con_diagnosis},
+            new_values={
+                'con_diagnosis': consultation.con_diagnosis,
+                'con_specific_disease': consultation.con_specific_disease,
+            },
             ip_address=ip_address,
         )
 
@@ -86,10 +90,14 @@ class ConsultationService:
                 'Consultations can only be edited while the appointment is in progress.',
             )
 
-        old_values = {'con_diagnosis': consultation.con_diagnosis}
+        old_values = {
+            'con_diagnosis': consultation.con_diagnosis,
+            'con_specific_disease': consultation.con_specific_disease,
+        }
         consultation.con_chief_complaint = validated_data.get('chief_complaint') or None
         consultation.con_objective = validated_data.get('objective') or None
         consultation.con_diagnosis = validated_data['diagnosis']
+        consultation.con_specific_disease = (validated_data.get('specific_disease') or '').strip() or None
         consultation.con_notes = validated_data.get('notes') or None
         consultation.save()
 
@@ -101,7 +109,10 @@ class ConsultationService:
             record_id=str(consultation.con_id),
             description='Veterinarian updated consultation',
             old_values=old_values,
-            new_values={'con_diagnosis': consultation.con_diagnosis},
+            new_values={
+                'con_diagnosis': consultation.con_diagnosis,
+                'con_specific_disease': consultation.con_specific_disease,
+            },
             ip_address=ip_address,
         )
 

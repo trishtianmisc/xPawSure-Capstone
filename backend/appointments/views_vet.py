@@ -9,7 +9,11 @@ from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
 )
-from appointments.services import InvalidTransitionError, VetDashboardService
+from appointments.services import (
+    InvalidRequestError,
+    InvalidTransitionError,
+    VetDashboardService,
+)
 from core.permissions import IsVeterinarian
 from users.models import StaffProfile
 
@@ -128,3 +132,43 @@ class VetAppointmentStartView(APIView):
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
+
+
+class _VetAppointmentRequestView(APIView):
+    permission_classes = [IsVeterinarian]
+    service_method = None
+
+    def post(self, request, apt_id):
+        staff = _get_staff(request.user)
+        if staff is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = self.service_method(
+                apt_id=apt_id,
+                stf_id=staff.stf_id,
+                user_id=request.user.usr_id,
+                reason=request.data.get('reason', ''),
+            )
+        except InvalidRequestError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except PermissionError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except InvalidTransitionError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+
+        serializer = AppointmentDetailSerializer(appointment)
+        return Response(serializer.data)
+
+
+class VetAppointmentRescheduleRequestView(_VetAppointmentRequestView):
+    service_method = staticmethod(VetDashboardService.request_reschedule)
+
+
+class VetAppointmentCancelRequestView(_VetAppointmentRequestView):
+    service_method = staticmethod(VetDashboardService.request_cancellation)

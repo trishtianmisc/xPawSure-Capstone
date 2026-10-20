@@ -14,7 +14,9 @@ from appointments.views import (
 )
 from appointments.views_dashboard import DashboardStatsView
 from appointments.views_vet import (
+    VetAppointmentCancelRequestView,
     VetAppointmentListView,
+    VetAppointmentRescheduleRequestView,
     VetAppointmentStartView,
     VetDashboardView,
 )
@@ -43,6 +45,8 @@ urlpatterns = [
     path('veterinarian/dashboard/', VetDashboardView.as_view(), name='veterinarian-dashboard'),
     path('veterinarian/appointments/', VetAppointmentListView.as_view(), name='veterinarian-appointment-list'),
     path('veterinarian/appointments/<uuid:apt_id>/start/', VetAppointmentStartView.as_view(), name='veterinarian-appointment-start'),
+    path('veterinarian/appointments/<uuid:apt_id>/request-reschedule/', VetAppointmentRescheduleRequestView.as_view(), name='veterinarian-appointment-request-reschedule'),
+    path('veterinarian/appointments/<uuid:apt_id>/request-cancel/', VetAppointmentCancelRequestView.as_view(), name='veterinarian-appointment-request-cancel'),
     path('schedule/', ScheduleView.as_view(), name='schedule'),
     path('schedule/vet-list/', VetScheduleListView.as_view(), name='schedule-vet-list'),
     path('schedule/slots/<uuid:slot_id>/status/', SlotStatusView.as_view(), name='slot-status'),

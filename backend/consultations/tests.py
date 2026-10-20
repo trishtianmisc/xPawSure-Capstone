@@ -19,7 +19,7 @@ NO_PROFILE_EMAIL = 'connoprofile@example.com'
 LIST_FIELDS = {
     'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
     'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-    'diagnosis', 'treatment', 'notes', 'created_at',
+    'diagnosis', 'specific_disease', 'treatment', 'notes', 'created_at',
 }
 
 

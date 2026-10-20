@@ -54,11 +54,20 @@ export function useStartConsultation() {
   })
 }
 
-export function useCancelAppointment() {
+export function useRequestReschedule() {
   const refresh = useVetCacheRefresh()
   return useMutation({
     mutationFn: ({ aptId, reason }: { aptId: string; reason: string }) =>
-      dashboardService.cancelAppointment(aptId, reason),
+      dashboardService.requestReschedule(aptId, reason),
+    onSuccess: refresh,
+  })
+}
+
+export function useRequestCancellation() {
+  const refresh = useVetCacheRefresh()
+  return useMutation({
+    mutationFn: ({ aptId, reason }: { aptId: string; reason: string }) =>
+      dashboardService.requestCancellation(aptId, reason),
     onSuccess: refresh,
   })
 }

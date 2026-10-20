@@ -23,6 +23,7 @@ class Consultation(models.Model):
     con_assessment = models.TextField(null=True, blank=True, db_column='CON_ASSESSMENT')
     con_plan = models.TextField(null=True, blank=True, db_column='CON_PLAN')
     con_diagnosis = models.TextField(db_column='CON_DIAGNOSIS')
+    con_specific_disease = models.TextField(null=True, blank=True, db_column='CON_SPECIFIC_DISEASE')
     con_treatment = models.TextField(null=True, blank=True, db_column='CON_TREATMENT')
     con_notes = models.TextField(null=True, blank=True, db_column='CON_NOTES')
     con_created_at = models.DateTimeField(auto_now_add=True, db_column='CON_CREATED_AT')

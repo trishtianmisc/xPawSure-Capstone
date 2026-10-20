@@ -371,10 +371,13 @@ class AppointmentDetailView(APIView):
 
         if (
             getattr(request.user, 'usr_role', None) == UserRole.VETERINARIAN
-            and new_status != AppointmentStatus.CANCELLED
         ):
             return Response(
-                {'detail': 'Veterinarians can only cancel appointments.'},
+                {
+                    'detail': 'Veterinarians must submit a reschedule or '
+                    'cancellation request instead of changing the status '
+                    'directly.',
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 

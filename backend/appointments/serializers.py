@@ -50,6 +50,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             'apt_reason', 'created_by_name', 'screening',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_created_at',
+            'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
         ]
 
     def get_pet_species(self, obj):
@@ -101,6 +102,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_reason', 'created_by_name',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
+            'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
         ]

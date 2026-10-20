@@ -55,6 +55,8 @@ export interface VetAppointmentDetail {
   apt_scheduled_at: string
   apt_reason: string | null
   apt_cancellation_reason: string | null
+  apt_reschedule_request_reason: string | null
+  apt_cancellation_request_reason: string | null
   screening: ScreeningSummary | null
   consultation: VetConsultationInfo | null
   prescription: VetPrescriptionInfo | null
@@ -72,6 +74,7 @@ export interface VetConsultationInfo {
   assessment: string | null
   plan: string | null
   diagnosis: string
+  specific_disease: string | null
   treatment: string | null
   notes: string | null
   created_at: string
@@ -104,6 +107,7 @@ export interface ConsultationFormValues {
   chief_complaint: string
   objective: string
   diagnosis: string
+  specific_disease: string
   notes: string
 }
 

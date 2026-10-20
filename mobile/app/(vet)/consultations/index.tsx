@@ -1,39 +1,51 @@
 import { useMemo, useState } from 'react'
-import { Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
-import { font } from '../../../src/theme/typography'
-import { MOCK_VET_CONSULTATIONS } from '../../../features/vet/data/mock'
-import type { ConsultationStatus } from '../../../features/vet/types'
+import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
+import { formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
+import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'
 
-const TABS: ConsultationStatus[] = ['TODAY', 'UPCOMING', 'COMPLETED']
+const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED']
 
-const STATUS_COLORS: Record<ConsultationStatus, { bg: string; text: string }> = {
-  TODAY: { bg: '#FDEBD0', text: '#E67E22' },
-  UPCOMING: { bg: '#D6EAF8', text: '#2E86C1' },
-  COMPLETED: { bg: '#D5F5E3', text: '#27AE60' },
+const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
+  PENDING: { bg: '#FDEBD0', text: '#E67E22' },
+  CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
+  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
+  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
+  COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
+  CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
+  NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
 }
 
-const TODAY_DATE = 'April 9, 2026'
+const INACTIVE: AppointmentStatus[] = ['CANCELLED', 'NO_SHOW']
 
 export default function VetConsultationListScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const [activeTab, setActiveTab] = useState<ConsultationStatus>('TODAY')
+  const [activeTab, setActiveTab] = useState<ConsultationTab>('TODAY')
+
+  const { data, isLoading, isError } = useVetAppointments({})
+  const appointments = data ?? []
+  const todayStr = localDateStr()
 
   const filtered = useMemo(() => {
     if (activeTab === 'TODAY') {
-      const todayItems = MOCK_VET_CONSULTATIONS.filter((c) => c.status === 'TODAY')
-      const completedToday = MOCK_VET_CONSULTATIONS.filter((c) => c.status === 'COMPLETED' && c.date === TODAY_DATE)
-      return [...todayItems, ...completedToday]
+      return appointments
+        .filter((a) => localDateStr(new Date(a.apt_scheduled_at)) === todayStr && !INACTIVE.includes(a.apt_status))
+        .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
     }
     if (activeTab === 'UPCOMING') {
-      return MOCK_VET_CONSULTATIONS.filter((c) => c.status === 'UPCOMING')
+      return appointments
+        .filter((a) => localDateStr(new Date(a.apt_scheduled_at)) > todayStr && !INACTIVE.includes(a.apt_status))
+        .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
     }
-    return MOCK_VET_CONSULTATIONS.filter((c) => c.status === 'COMPLETED')
-  }, [activeTab])
+    return appointments
+      .filter((a) => a.apt_status === 'COMPLETED')
+      .sort((a, b) => b.apt_scheduled_at.localeCompare(a.apt_scheduled_at))
+  }, [activeTab, appointments, todayStr])
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -55,30 +67,43 @@ export default function VetConsultationListScreen() {
           ))}
         </View>
 
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : isError ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>Unable to load consultations.</Text>
+          </View>
+        ) : filtered.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyText}>No consultations found.</Text>
           </View>
         ) : (
           filtered.map((item) => {
-            const statusStyle = STATUS_COLORS[item.status]
+            const statusStyle = STATUS_COLORS[item.apt_status]
             return (
               <Pressable
-                key={item.id}
-                onPress={() => router.push(`/(vet)/consultations/${item.id}`)}
+                key={item.apt_id}
+                onPress={() => router.push(`/(vet)/consultations/${item.apt_id}`)}
                 style={styles.card}
               >
                 <View style={styles.cardTop}>
                   <View style={styles.cardDateTime}>
-                    <Text style={styles.cardDate}>{item.date} | {item.time}</Text>
+                    <Text style={styles.cardDate}>
+                      {formatShortDate(item.apt_scheduled_at)} | {formatTime(item.apt_scheduled_at)}
+                    </Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.status}</Text>
+                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.apt_status}</Text>
                   </View>
                 </View>
                 <View style={styles.cardInfo}>
-                  <Text style={styles.petName}>{item.pet_name} <Text style={styles.petBreed}>| {item.breed}</Text></Text>
-                  <Text style={styles.ownerName}>Owner: {item.owner_name}</Text>
+                  <Text style={styles.petName}>
+                    {item.pet_name}
+                    {item.pet_breed || item.pet_species ? (
+                      <Text style={styles.petBreed}> | {item.pet_breed ?? item.pet_species}</Text>
+                    ) : null}
+                  </Text>
+                  <Text style={styles.ownerName}>Owner: {item.owner_name ?? '—'}</Text>
                 </View>
               </Pressable>
             )
@@ -100,6 +125,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   tabActive: { backgroundColor: colors.surface },
   tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
+
+  loading: { marginVertical: 40 },
 
   card: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.borderLight },
   cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

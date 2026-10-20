@@ -1,11 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useMemo } from 'react'
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
-import { font } from '../../src/theme/typography'
-import { MOCK_VET_DASHBOARD } from '../../features/vet/data/mock'
+import { useVetDashboard } from '../../features/vet/hooks/useVetDashboard'
+import { formatTime, localDateStr } from '../../features/vet/lib/format'
 import type { AppointmentStatus } from '../../features/vet/types'
 
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
@@ -22,8 +22,19 @@ export default function VetHomeScreen() {
   const { user } = useAuth()
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const data = MOCK_VET_DASHBOARD
+  const { data, isLoading, isError } = useVetDashboard(localDateStr())
   const firstName = user?.first_name || 'Vet'
+
+  const stats = data?.stats
+  const schedule = (data?.today_consultations ?? []).map((apt) => ({
+    id: apt.apt_id,
+    time: formatTime(apt.apt_scheduled_at),
+    pet_name: apt.pet_name,
+    breed: apt.pet_breed ?? apt.pet_species ?? '',
+    owner_name: apt.owner_name ?? '',
+    ai_screening_tag: apt.screening ? apt.screening.disease : null,
+    status: apt.apt_status,
+  }))
 
   const today = new Date()
   const dateStr = today.toLocaleDateString('en-US', {
@@ -48,50 +59,64 @@ export default function VetHomeScreen() {
             <Text style={styles.summaryTitle}>Today&apos;s Summary</Text>
           </View>
           <Text style={styles.summaryDate}>{dateStr}</Text>
-          <View style={styles.statsRow}>
-            <View style={[styles.statBox, { backgroundColor: '#EBF5FB' }]}>
-              <Text style={[styles.statValue, { color: '#2E86C1' }]}>{data.stats.consultations}</Text>
-              <Text style={styles.statLabel}>Consultations</Text>
+          {isLoading ? (
+            <ActivityIndicator color={colors.primary} style={styles.loading} />
+          ) : isError || !stats ? (
+            <Text style={styles.emptyText}>Unable to load today&apos;s summary.</Text>
+          ) : (
+            <View style={styles.statsRow}>
+              <View style={[styles.statBox, { backgroundColor: '#EBF5FB' }]}>
+                <Text style={[styles.statValue, { color: '#2E86C1' }]}>{stats.consultations_this_month}</Text>
+                <Text style={styles.statLabel}>Consultations</Text>
+              </View>
+              <View style={[styles.statBox, { backgroundColor: '#D5F5E3' }]}>
+                <Text style={[styles.statValue, { color: '#27AE60' }]}>{stats.completed}</Text>
+                <Text style={styles.statLabel}>Completed</Text>
+              </View>
+              <View style={[styles.statBox, { backgroundColor: '#FDEBD0' }]}>
+                <Text style={[styles.statValue, { color: '#E67E22' }]}>{stats.pending}</Text>
+                <Text style={styles.statLabel}>Remaining</Text>
+              </View>
             </View>
-            <View style={[styles.statBox, { backgroundColor: '#D5F5E3' }]}>
-              <Text style={[styles.statValue, { color: '#27AE60' }]}>{data.stats.completed}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
-            <View style={[styles.statBox, { backgroundColor: '#FDEBD0' }]}>
-              <Text style={[styles.statValue, { color: '#E67E22' }]}>{data.stats.remaining}</Text>
-              <Text style={styles.statLabel}>Remaining</Text>
-            </View>
-          </View>
+          )}
         </View>
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Today&apos;s Schedule</Text>
         </View>
 
-        {data.todaySchedule.map((item) => {
-          const statusStyle = STATUS_COLORS[item.status]
-          return (
-            <View key={item.id} style={styles.scheduleCard}>
-              <View style={styles.scheduleTimeCol}>
-                <Text style={styles.scheduleTime}>{item.time}</Text>
-              </View>
-              <View style={styles.scheduleDivider} />
-              <View style={styles.scheduleInfoCol}>
-                <View style={styles.schedulePetRow}>
-                  <Text style={styles.schedulePetName} numberOfLines={1}>{item.pet_name}</Text>
-                  <Text style={styles.scheduleBreed} numberOfLines={1}> | {item.breed}</Text>
+        {isLoading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loading} />
+        ) : schedule.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No appointments scheduled for today.</Text>
+          </View>
+        ) : (
+          schedule.map((item) => {
+            const statusStyle = STATUS_COLORS[item.status]
+            return (
+              <View key={item.id} style={styles.scheduleCard}>
+                <View style={styles.scheduleTimeCol}>
+                  <Text style={styles.scheduleTime}>{item.time}</Text>
                 </View>
-                <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
-                {item.ai_screening_tag && (
-                  <Text style={styles.scheduleAiTag}>{item.ai_screening_tag}</Text>
-                )}
+                <View style={styles.scheduleDivider} />
+                <View style={styles.scheduleInfoCol}>
+                  <View style={styles.schedulePetRow}>
+                    <Text style={styles.schedulePetName} numberOfLines={1}>{item.pet_name}</Text>
+                    {!!item.breed && <Text style={styles.scheduleBreed} numberOfLines={1}> | {item.breed}</Text>}
+                  </View>
+                  <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
+                  {item.ai_screening_tag && (
+                    <Text style={styles.scheduleAiTag}>AI: {item.ai_screening_tag}</Text>
+                  )}
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.status}</Text>
+                </View>
               </View>
-              <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.status}</Text>
-              </View>
-            </View>
-          )
-        })}
+            )
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   )
@@ -113,6 +138,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   statValue: { ...font.extrabold, fontSize: 24 },
   statLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 11, marginTop: 4 },
 
+  loading: { marginVertical: 20 },
+
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   sectionTitle: { ...font.bold, color: colors.text, fontSize: 17 },
 
@@ -128,5 +155,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   scheduleAiTag: { ...font.semibold, color: colors.primary, fontSize: 11, marginTop: 4 },
 
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8 },
-  statusBadgeText: { ...font.bold, fontSize: 11 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
 })

@@ -176,6 +176,8 @@
 | APPOINTMENT | APT_CONFIRMED_AT | Confirmation timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_COMPLETED_AT | Completion timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_CANCELLED_AT | Cancellation timestamp | TIMESTAMP | NULL |
+| APPOINTMENT | APT_RESCHEDULE_REQUEST_REASON | Veterinarian reschedule request reason | TEXT | NULL |
+| APPOINTMENT | APT_CANCELLATION_REQUEST_REASON | Veterinarian cancellation request reason | TEXT | NULL |
 | APPOINTMENT | APT_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_DELETED_AT | Soft delete timestamp | TIMESTAMP | NULL |
@@ -195,6 +197,7 @@
 | CONSULTATION | CON_ASSESSMENT | Clinical assessment (SOAP) | TEXT | NULL |
 | CONSULTATION | CON_PLAN | Treatment plan (SOAP) | TEXT | NULL |
 | CONSULTATION | CON_DIAGNOSIS | Diagnosis text | TEXT | NOT NULL |
+| CONSULTATION | CON_SPECIFIC_DISEASE | Optional specific disease/subtype for the diagnosis | TEXT | NULL |
 | CONSULTATION | CON_DIAGNOSIS_STATUS | Diagnosis status (DiagnosisStatus enum) | ENUM | NULL |
 | CONSULTATION | CON_TREATMENT | Treatment description | TEXT | NULL |
 | CONSULTATION | CON_NOTES | Additional notes | TEXT | NULL |
