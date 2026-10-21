@@ -5,7 +5,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from clinics.models import Clinic, ClinicSettings, ClinicStatus
+from clinics.models import (
+    Clinic,
+    ClinicOperatingHours,
+    ClinicSettings,
+    ClinicStatus,
+)
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
@@ -709,6 +714,101 @@ class ClinicSettingsTests(ClinicAPITestCase):
         self.assertIsNotNone(audit)
         self.assertEqual(audit.adl_old_values['cls_timezone'], 'Asia/Manila')
         self.assertEqual(audit.adl_new_values['cls_timezone'], 'Asia/Tokyo')
+
+
+class ClinicOperatingHoursTests(ClinicAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.hours_url = reverse('clinic-operating-hours')
+
+        create_resp = self._create_clinic(
+            'Operating Hours Test', email='hours@test.com',
+        )
+        clinic = Clinic.objects.get(cln_id=create_resp.data['id'])
+
+        StaffProfile.objects.update_or_create(
+            usr_id=self.clinic_admin,
+            defaults={
+                'cln_id': clinic,
+                'stf_position': StaffPosition.CLINIC_ADMIN,
+            },
+        )
+
+    def _payload(self):
+        days = []
+        for day in ('MON', 'TUE', 'WED', 'THU', 'FRI'):
+            days.append({
+                'day_of_week': day,
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'is_closed': False,
+            })
+        for day in ('SAT', 'SUN'):
+            days.append({
+                'day_of_week': day,
+                'opening_time': None,
+                'closing_time': None,
+                'is_closed': True,
+            })
+        return days
+
+    def test_get_operating_hours_returns_defaults(self):
+        response = self.client.get(
+            self.hours_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 7)
+        self.assertEqual(response.data[0]['day_of_week'], 'MON')
+        self.assertEqual(response.data[0]['opening_time'], '09:00:00')
+        self.assertTrue(response.data[5]['is_closed'])
+
+    def test_update_operating_hours(self):
+        payload = self._payload()
+        payload[0]['opening_time'] = '08:00:00'
+        payload[0]['closing_time'] = '16:00:00'
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0]['opening_time'], '08:00:00')
+        self.assertEqual(response.data[0]['closing_time'], '16:00:00')
+
+    def test_update_operating_hours_rejects_all_closed(self):
+        payload = [
+            {
+                'day_of_week': day,
+                'opening_time': None,
+                'closing_time': None,
+                'is_closed': True,
+            }
+            for day in ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN')
+        ]
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('At least one day must be open.', response.data['detail'])
+
+        monday = ClinicOperatingHours.objects.get(
+            cln_id=self.clinic_admin.staffprofile.cln_id,
+            day_of_week='MON',
+        )
+        self.assertEqual(str(monday.opening_time), '09:00:00')
+
+    def test_update_operating_hours_rejects_duplicate_days(self):
+        payload = self._payload()
+        payload[1]['day_of_week'] = 'MON'
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class ClinicLogoTests(ClinicAPITestCase):

@@ -450,6 +450,8 @@ class ClinicProfileService:
             raise ValueError('Duplicate days in payload.')
         if set(incoming_days) != VALID_DAYS:
             raise ValueError('Missing or invalid days in payload.')
+        if all(day.get('is_closed', True) for day in data):
+            raise ValueError('At least one day must be open.')
 
         with transaction.atomic():
             for day_data in data:
