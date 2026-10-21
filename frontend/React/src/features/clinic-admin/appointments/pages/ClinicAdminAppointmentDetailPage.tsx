@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { apiErrorMessage } from '../../../../utils/error'
 import { CLINIC_TIME_ZONE, formatDateTime } from '../../../../utils/format'
+import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { PageHero } from '../../../receptionist/components/PageHero'
 import { useClinicAppointmentDetail } from '../hooks/useAppointments'
@@ -83,8 +84,11 @@ export function ClinicAdminAppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: appointment, isLoading, error, refetch, isFetching } =
     useClinicAppointmentDetail(id ?? '')
+  const settings = useClinicSettings()
+  const displayTimeZone =
+    settings.data?.timezone ?? (settings.isError ? CLINIC_TIME_ZONE : undefined)
 
-  if (isLoading) {
+  if (isLoading || settings.isLoading) {
     return (
       <div className="p-6">
         <div className="mb-6 h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
@@ -169,7 +173,7 @@ export function ClinicAdminAppointmentDetailPage() {
           <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
             <DetailCell
               label="Scheduled"
-              value={formatDateTime(appointment.apt_scheduled_at, CLINIC_TIME_ZONE)}
+              value={formatDateTime(appointment.apt_scheduled_at, displayTimeZone)}
               className={FIRST_CELL_CLASS}
             />
             <DetailCell label="Type" value={labelize(appointment.apt_type)} />
@@ -189,7 +193,7 @@ export function ClinicAdminAppointmentDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <AppointmentStatusBadge status={appointment.apt_status} />
             <span className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {formatDateTime(appointment.apt_scheduled_at, CLINIC_TIME_ZONE)}
+              {formatDateTime(appointment.apt_scheduled_at, displayTimeZone)}
             </span>
           </div>
           {isClosed && (
@@ -216,7 +220,7 @@ export function ClinicAdminAppointmentDetailPage() {
                 </dt>
                 <dd className="mt-0.5 text-sm font-semibold text-stone-900 dark:text-stone-100">
                   {statusChange?.changed_at
-                    ? formatDateTime(statusChange.changed_at, CLINIC_TIME_ZONE)
+                    ? formatDateTime(statusChange.changed_at, displayTimeZone)
                     : '—'}
                 </dd>
               </div>
@@ -265,11 +269,11 @@ export function ClinicAdminAppointmentDetailPage() {
               {sourceLabel(screening.ais_source)} · Model {screening.ais_model_version}
             </p>
             <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-              Analyzed {formatDateTime(screening.ais_created_at, CLINIC_TIME_ZONE)}
+              Analyzed {formatDateTime(screening.ais_created_at, displayTimeZone)}
               {screening.reviewed_at && (
                 <>
                   {' '}
-                  · Reviewed {formatDateTime(screening.reviewed_at, CLINIC_TIME_ZONE)}
+                  · Reviewed {formatDateTime(screening.reviewed_at, displayTimeZone)}
                 </>
               )}
             </p>

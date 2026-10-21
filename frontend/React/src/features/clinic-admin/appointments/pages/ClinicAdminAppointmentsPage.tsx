@@ -3,7 +3,8 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { Button, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
-import { formatDateTime } from '../../../../utils/format'
+import { CLINIC_TIME_ZONE, formatDateTime } from '../../../../utils/format'
+import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { ChartSkeleton } from '../../dashboard/components/Charts/AppointmentsByMonthChart'
 import type { ChartDataPoint } from '../../dashboard/types/dashboard.types'
@@ -58,9 +59,12 @@ export function ClinicAdminAppointmentsPage() {
   const appointments = useClinicAppointments(params)
   const volume = useAppointmentVolume()
   const vets = useVeterinarians()
+  const settings = useClinicSettings()
 
   const { data, isLoading, error, refetch, isFetching } = appointments
   const hasActiveFilters = Boolean(vetId || dateFrom || dateTo || statusFilter)
+  const displayTimeZone =
+    settings.data?.timezone ?? (settings.isError ? CLINIC_TIME_ZONE : undefined)
 
   const volumeData: ChartDataPoint[] = (volume.data ?? []).map((point) => ({
     label: new Date(`${point.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -247,7 +251,7 @@ export function ClinicAdminAppointmentsPage() {
                         {apt.vet_name ?? 'Unassigned'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {formatDateTime(apt.apt_scheduled_at)}
+                        {displayTimeZone ? formatDateTime(apt.apt_scheduled_at, displayTimeZone) : '—'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {labelize(apt.apt_type)}
