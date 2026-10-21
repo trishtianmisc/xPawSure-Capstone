@@ -47,8 +47,6 @@ class ClinicSettings(models.Model):
     cln_id = models.OneToOneField(
         Clinic, on_delete=models.CASCADE, related_name='settings', db_column='CLN_ID',
     )
-    cls_opening_time = models.TimeField(default='09:00', db_column='CLS_OPENING_TIME')
-    cls_closing_time = models.TimeField(default='17:00', db_column='CLS_CLOSING_TIME')
     cls_appointment_duration = models.PositiveIntegerField(
         default=30, db_column='CLS_APPOINTMENT_DURATION',
     )
