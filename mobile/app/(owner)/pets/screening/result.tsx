@@ -18,6 +18,9 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { EXPERIMENTAL_NOTICE } from '../../../../ai/adaptive/config'
+import type { AdaptiveResultPayload } from '../../../../ai/adaptive/types'
+import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { usePet } from '../../../../features/pet/hooks/usePet'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
@@ -95,13 +98,14 @@ export default function ResultScreen() {
     refined?: string
     changed?: string
     imageReports?: string
+    adaptive?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
   const { data: pet } = usePet(
     params.petId && params.petId !== 'unknown' ? params.petId : undefined,
   )
 
-  const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
+  const screeningStateFromParams = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
   const stateMessage = params.stateMessage || ''
 
   const predictions: Prediction[] = useMemo(() => {
@@ -121,6 +125,27 @@ export default function ResultScreen() {
     }
   }, [params.refined])
 
+  const adaptivePayload: AdaptiveResultPayload | null = useMemo(() => {
+    if (!params.adaptive) return null
+    try {
+      const parsed = JSON.parse(params.adaptive) as Partial<AdaptiveResultPayload> | null
+      if (!parsed || parsed.schemaVersion !== 1) return null
+      if (parsed.strategy !== 'information_gain') return null
+      if (parsed.state !== 'DISEASE_DETECTED' && parsed.state !== 'UNCERTAIN') return null
+      if (!Array.isArray(parsed.predictions) || !Array.isArray(parsed.imagePredictions)) {
+        return null
+      }
+      if (!parsed.posterior || typeof parsed.posterior !== 'object') return null
+      if (!Array.isArray(parsed.evidence)) return null
+      return parsed as AdaptiveResultPayload
+    } catch {
+      return null
+    }
+  }, [params.adaptive])
+
+  const adaptiveQuestionnaire =
+    adaptivePayload !== null && adaptivePayload.questionCount > 0
+
   const imageReports: ImageReport[] = useMemo(() => {
     try {
       const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
@@ -131,15 +156,46 @@ export default function ResultScreen() {
   }, [params.imageReports])
 
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
+  const imagePredictions = adaptivePayload?.imagePredictions ?? predictions
+  const imageSorted = useMemo(
+    () => [...imagePredictions].sort((a, b) => b.confidence - a.confidence),
+    [imagePredictions],
+  )
   const top = sorted[0]
-  const finalTop = refinedPredictions ? refinedPredictions[0] : top
-  const isChanged = params.changed === 'true'
+  const imageTop = imageSorted[0]
+  const finalTop = adaptiveQuestionnaire
+    ? adaptivePayload.predictions[0] ?? null
+    : refinedPredictions
+      ? refinedPredictions[0]
+      : top
+  const isChanged = adaptiveQuestionnaire
+    ? imageTop && finalTop
+      ? imageTop.disease !== finalTop.disease
+      : false
+    : params.changed === 'true'
   const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
   const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
-  const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
+  const displayBars = adaptiveQuestionnaire
+    ? adaptivePayload.predictions
+    : refinedPredictions
+      ? refinedPredictions.slice(0, 3)
+      : sorted
 
+  const screeningState = adaptivePayload ? adaptivePayload.state : screeningStateFromParams
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
+
+  const topLabel = adaptiveQuestionnaire
+    ? 'Most Supported Condition'
+    : refinedPredictions
+      ? 'Closest Match'
+      : 'Predicted Condition'
+  const confidenceLabel = adaptiveQuestionnaire ? 'relative evidence score' : 'confidence'
+  const breakdownTitle = adaptiveQuestionnaire
+    ? 'Relative Evidence Scores'
+    : refinedPredictions
+      ? 'Top 3 Suggestions'
+      : 'All Predictions'
 
   const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
 
@@ -225,25 +281,32 @@ export default function ResultScreen() {
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={styles.topLabel}>{topLabel}</Text>
               <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-                <Text style={styles.confidenceLabel}>confidence</Text>
+                <Text style={styles.confidenceLabel}>{confidenceLabel}</Text>
               </View>
-              {refinedPredictions && (
+              {adaptiveQuestionnaire && (
+                <Text style={styles.calibrationText}>
+                  Relative evidence score, not a calibrated probability.
+                </Text>
+              )}
+              {(refinedPredictions || adaptiveQuestionnaire) && (
                 <Text style={styles.comparisonText}>
-                  {isChanged
-                    ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
-                    : 'Consistent with the preliminary AI screen.'}
+                  {adaptiveQuestionnaire
+                    ? isChanged
+                      ? `The follow-up changed the image-only leader from ${imageTop?.label ?? 'the original result'}.`
+                      : 'Consistent with the image-only result.'
+                    : isChanged
+                      ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
+                      : 'Consistent with the preliminary AI screen.'}
                 </Text>
               )}
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>
-                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
-              </Text>
+              <Text style={styles.breakdownTitle}>{breakdownTitle}</Text>
               {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
@@ -256,7 +319,7 @@ export default function ResultScreen() {
                   />
                 )
               })}
-              {refinedPredictions && (
+              {refinedPredictions && !adaptiveQuestionnaire && (
                 <Text style={styles.moreCountText}>
                   2 other conditions were also considered and scored lower.
                 </Text>
@@ -273,6 +336,58 @@ export default function ResultScreen() {
             <Text style={[styles.stateTitle, { color: stateMeta.color }]}>{stateConfig.title}</Text>
             <Text style={styles.stateMessage}>{stateMessage || stateConfig.message}</Text>
           </View>
+        )}
+
+        {adaptiveQuestionnaire && adaptivePayload && (
+          <>
+            {adaptivePayload.evidence.length > 0 && (
+              <View style={styles.breakdownCard}>
+                <Text style={styles.breakdownTitle}>Follow-up Evidence</Text>
+                {adaptivePayload.evidence.map((evidence, index) => {
+                  const questionText =
+                    KNOWLEDGE.questions.find((item) => item.id === evidence.questionId)?.text ??
+                    evidence.questionId
+                  return (
+                    <View key={`${evidence.questionId}-${index}`} style={styles.evidenceRow}>
+                      <Text style={styles.evidenceQuestion}>
+                        {index + 1}. {questionText}
+                      </Text>
+                      <Text style={styles.evidenceAnswer}>
+                        {evidence.optionLabels.join(', ')}
+                      </Text>
+                    </View>
+                  )
+                })}
+              </View>
+            )}
+
+            {imageTop && (
+              <View style={styles.breakdownCard}>
+                <Text style={styles.breakdownTitle}>Preliminary Image Output</Text>
+                {imageSorted.slice(0, 3).map((pred, i) => {
+                  const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
+                  return (
+                    <ConfidenceBar
+                      key={`image-${pred.disease}`}
+                      label={pred.label}
+                      confidence={pred.confidence}
+                      isTop={i === 0}
+                      color={meta.color}
+                    />
+                  )
+                })}
+                <Text style={styles.moreCountText}>
+                  Raw EfficientNetB0 output, not a calibrated probability. It is kept
+                  separate from the follow-up scores above.
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.noticeCard, { backgroundColor: colors.surfaceAlt }]}>
+              <MaterialCommunityIcons color={colors.textMuted} name="flask-outline" size={16} />
+              <Text style={styles.noticeText}>{EXPERIMENTAL_NOTICE}</Text>
+            </View>
+          </>
         )}
 
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
@@ -420,6 +535,33 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 2,
   },
   breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
+
+  calibrationText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  evidenceRow: {
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: 3,
+    paddingVertical: 10,
+  },
+  evidenceQuestion: { ...font.semibold, color: colors.text, fontSize: 12, lineHeight: 17 },
+  evidenceAnswer: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+
+  noticeCard: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  noticeText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 11, lineHeight: 16 },
 
   narrowBtn: {
     alignItems: 'center',

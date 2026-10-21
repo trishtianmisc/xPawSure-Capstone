@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Platform,
@@ -15,11 +15,34 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
+import { DISEASE_LABELS } from '../../../../ai/constants/diseases'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import type { Answers } from '../../../../ai/decisionTree/types'
+import {
+  ADAPTIVE_CONFIG,
+  ADAPTIVE_UNCERTAIN_MESSAGE,
+  EXPERIMENTAL_NOTICE,
+  answerQuestion,
+  buildAdaptiveResultPayload,
+  buildVetVoteLikelihoodProfile,
+  createAdaptiveSession,
+  createSessionKey,
+  isExperimentalSession,
+  resolveStrategy,
+} from '../../../../ai/adaptive'
+import type { AdaptiveSession } from '../../../../ai/adaptive'
+import {
+  clearAdaptiveSession,
+  loadAdaptiveSession,
+  saveAdaptiveSession,
+} from '../../../../ai/adaptive/sessionStorage'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+
+interface HistoryEntry {
+  session: AdaptiveSession
+  selected: string[]
+}
 
 export default function AdjustScreen() {
   const router = useRouter()
@@ -35,9 +58,7 @@ export default function AdjustScreen() {
     imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
-
-  const questions = KNOWLEDGE.questions
-  const total = questions.length
+  const profile = useMemo(() => buildVetVoteLikelihoodProfile(KNOWLEDGE), [])
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -47,86 +68,266 @@ export default function AdjustScreen() {
     }
   }, [params.predictions])
 
-  const [step, setStep] = useState(0)
-  const [answers, setAnswers] = useState<Answers>({})
+  const [session, setSession] = useState<AdaptiveSession | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
+  const [selected, setSelected] = useState<string[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState('')
+  const submittingRef = useRef(false)
 
   const hasResult = predictions.length > 0
-
-  const question = questions[step]
-  const selected = answers[question.id] ?? []
-  const isLast = step === total - 1
+  const question = session?.currentQuestionId
+    ? KNOWLEDGE.questions.find((item) => item.id === session.currentQuestionId) ?? null
+    : null
+  const total =
+    session?.strategy === 'fixed_order'
+      ? KNOWLEDGE.questions.length
+      : ADAPTIVE_CONFIG.maxQuestions
+  const questionNumber = Math.min((session?.questionCount ?? 0) + 1, total)
+  const progressPct =
+    total > 0 ? Math.min(100, Math.round(((session?.questionCount ?? 0) / total) * 100)) : 0
+  const isLastPossible = (session?.questionCount ?? 0) + 1 >= total
   const canProceed = selected.length > 0
 
-  const selectOption = (optionId: string) => {
-    setAnswers((prev) => {
-      const current = prev[question.id] ?? []
-      if (question.multi) {
-        const next = current.includes(optionId)
-          ? current.filter((id) => id !== optionId)
-          : [...current, optionId]
-        return { ...prev, [question.id]: next }
+  useEffect(() => {
+    let cancelled = false
+
+    const initialise = async () => {
+      if (!hasResult) {
+        setIsLoading(false)
+        return
       }
-      return { ...prev, [question.id]: [optionId] }
-    })
-  }
 
-  const finish = async () => {
-    if (isSubmitting) return
-    setIsSubmitting(true)
+      setIsLoading(true)
+      const sessionKey = createSessionKey(
+        params.petId,
+        predictions,
+        params.modelVersion ?? '',
+      )
+      const expectedStrategy = resolveStrategy(ADAPTIVE_CONFIG, profile)
+      const saved = await loadAdaptiveSession(sessionKey)
 
-    const refined = refinePredictions(predictions, answers, KNOWLEDGE)
+      if (cancelled) return
 
-    let alreadySaved = false
-    try {
-      await createScreening.mutateAsync({
-        pet_id: params.petId,
-        source: 'DEVICE',
-        prediction: refined.refinedTop.disease,
-        confidence: Math.round(refined.refinedTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
-        device: Platform.OS,
+      if (
+        saved &&
+        saved.strategy === expectedStrategy &&
+        saved.profileId === profile.id
+      ) {
+        const currentIsValid =
+          saved.currentQuestionId === null ||
+          KNOWLEDGE.questions.some((item) => item.id === saved.currentQuestionId)
+        if (currentIsValid) {
+          setSession(saved)
+          setSelected(
+            saved.currentQuestionId ? saved.answers[saved.currentQuestionId] ?? [] : [],
+          )
+          setIsLoading(false)
+          return
+        }
+        await clearAdaptiveSession()
+      }
+
+      const created = createAdaptiveSession({
+        predictions,
+        knowledge: KNOWLEDGE,
+        profile,
+        config: ADAPTIVE_CONFIG,
+        sessionKey,
       })
-      alreadySaved = true
-    } catch {
-      // Auto-save failed — the result screen's Save&Book will retry.
+      if (cancelled) return
+
+      setSession(created)
+      setSelected([])
+      setIsLoading(false)
+      void saveAdaptiveSession(created)
     }
 
-    router.replace({
-      pathname: '/(owner)/pets/screening/result',
-      params: {
-        imageUri: params.imageUri ?? '',
-        petId: params.petId,
-        petName: params.petName,
-        predictions: params.predictions,
-        modelVersion: params.modelVersion ?? '',
-        inferenceTimeMs: params.inferenceTimeMs ?? '0',
-        state: 'DISEASE_DETECTED',
-        stateMessage: '',
-        refined: JSON.stringify(refined.refined),
-        changed: refined.changed ? 'true' : 'false',
-        alreadySaved: alreadySaved ? 'true' : 'false',
-        imageReports: params.imageReports ?? '',
-      },
+    void initialise()
+
+    return () => {
+      cancelled = true
+    }
+  }, [hasResult, params.modelVersion, params.petId, predictions, profile])
+
+  const finish = async (completed: AdaptiveSession) => {
+    if (submittingRef.current) return
+    submittingRef.current = true
+    setIsSubmitting(true)
+    setError('')
+
+    try {
+      if (completed.strategy === 'information_gain') {
+        const payload = buildAdaptiveResultPayload(completed, DISEASE_LABELS)
+        let alreadySaved = false
+
+        // Only a completed, non-conflicting adaptive outcome is persisted as a
+        // screening. An uncertain outcome is shown to the owner but never
+        // forced into a disease label or auto-saved.
+        if (payload.state === 'DISEASE_DETECTED' && payload.top) {
+          try {
+            await createScreening.mutateAsync({
+              pet_id: params.petId,
+              source: 'DEVICE',
+              prediction: payload.top.disease,
+              // The backend's existing confidence field receives the relative
+              // evidence score. It is not a calibrated probability.
+              confidence: Math.round(payload.top.confidence),
+              model_version: params.modelVersion || 'unknown',
+              inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+              device: Platform.OS,
+            })
+            alreadySaved = true
+          } catch {
+            // Auto-save failed — the result screen's Save & Book can retry.
+          }
+        }
+
+        await clearAdaptiveSession()
+        router.replace({
+          pathname: '/(owner)/pets/screening/result',
+          params: {
+            imageUri: params.imageUri ?? '',
+            petId: params.petId,
+            petName: params.petName,
+            predictions: params.predictions,
+            modelVersion: params.modelVersion ?? '',
+            inferenceTimeMs: params.inferenceTimeMs ?? '0',
+            state: payload.state,
+            stateMessage: payload.state === 'UNCERTAIN' ? ADAPTIVE_UNCERTAIN_MESSAGE : '',
+            alreadySaved: alreadySaved ? 'true' : 'false',
+            imageReports: params.imageReports ?? '',
+            adaptive: JSON.stringify(payload),
+          },
+        })
+        return
+      }
+
+      // Fixed-order fallback: preserve the existing rule-based result.
+      const refined = refinePredictions(predictions, completed.answers, KNOWLEDGE)
+      let alreadySaved = false
+      try {
+        await createScreening.mutateAsync({
+          pet_id: params.petId,
+          source: 'DEVICE',
+          prediction: refined.refinedTop.disease,
+          confidence: Math.round(refined.refinedTop.confidence),
+          model_version: params.modelVersion || 'unknown',
+          inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+          device: Platform.OS,
+        })
+        alreadySaved = true
+      } catch {
+        // Auto-save failed — the result screen's Save & Book can retry.
+      }
+
+      await clearAdaptiveSession()
+      router.replace({
+        pathname: '/(owner)/pets/screening/result',
+        params: {
+          imageUri: params.imageUri ?? '',
+          petId: params.petId,
+          petName: params.petName,
+          predictions: params.predictions,
+          modelVersion: params.modelVersion ?? '',
+          inferenceTimeMs: params.inferenceTimeMs ?? '0',
+          state: 'DISEASE_DETECTED',
+          stateMessage: '',
+          refined: JSON.stringify(refined.refined),
+          changed: refined.changed ? 'true' : 'false',
+          alreadySaved: alreadySaved ? 'true' : 'false',
+          imageReports: params.imageReports ?? '',
+        },
+      })
+    } catch (finishError) {
+      setError(
+        finishError instanceof Error
+          ? finishError.message
+          : 'Could not finish the follow-up. Please try again.',
+      )
+    } finally {
+      submittingRef.current = false
+      setIsSubmitting(false)
+    }
+  }
+
+  const selectOption = (optionId: string) => {
+    if (!question || isSubmitting) return
+    setSelected((previous) => {
+      if (question.multi) {
+        return previous.includes(optionId)
+          ? previous.filter((id) => id !== optionId)
+          : [...previous, optionId]
+      }
+      return [optionId]
     })
   }
 
   const goNext = () => {
-    if (!canProceed || isSubmitting) return
-    if (!isLast) {
-      setStep(step + 1)
-    } else {
-      void finish()
+    if (!session || !question || !canProceed || isSubmitting) return
+    setError('')
+
+    const snapshot: HistoryEntry = {
+      session,
+      selected: [...selected],
+    }
+
+    try {
+      const updated = answerQuestion(session, question.id, selected, {
+        knowledge: KNOWLEDGE,
+        profile,
+        config: ADAPTIVE_CONFIG,
+      })
+      setHistory((previous) => [...previous, snapshot])
+      setSession(updated)
+      void saveAdaptiveSession(updated)
+
+      if (updated.currentQuestionId === null) {
+        void finish(updated)
+      } else {
+        setSelected(updated.answers[updated.currentQuestionId] ?? [])
+      }
+    } catch (answerError) {
+      setError(
+        answerError instanceof Error
+          ? answerError.message
+          : 'Could not save this answer. Please try again.',
+      )
     }
   }
 
   const goBack = () => {
-    if (step > 0) {
-      setStep(step - 1)
-    } else {
-      router.back()
+    if (submittingRef.current) return
+
+    if (history.length > 0) {
+      const previous = history[history.length - 1]
+      setHistory((items) => items.slice(0, -1))
+      setSession(previous.session)
+      setSelected(previous.selected)
+      setError('')
+      void saveAdaptiveSession(previous.session)
+      return
     }
+
+    router.back()
+  }
+
+  const resetSession = async () => {
+    if (!hasResult || submittingRef.current) return
+    await clearAdaptiveSession()
+    const created = createAdaptiveSession({
+      predictions,
+      knowledge: KNOWLEDGE,
+      profile,
+      config: ADAPTIVE_CONFIG,
+      sessionKey: createSessionKey(params.petId, predictions, params.modelVersion ?? ''),
+    })
+    setSession(created)
+    setHistory([])
+    setSelected([])
+    setError('')
+    void saveAdaptiveSession(created)
   }
 
   const header = (
@@ -138,6 +339,14 @@ export default function AdjustScreen() {
       <View style={styles.headerRight} />
     </View>
   )
+
+  const experimentalNotice =
+    session && isExperimentalSession(session) ? (
+      <View style={[styles.noticeCard, { backgroundColor: colors.surfaceAlt }]}>
+        <MaterialCommunityIcons color={colors.textMuted} name="flask-outline" size={16} />
+        <Text style={styles.noticeText}>{EXPERIMENTAL_NOTICE}</Text>
+      </View>
+    ) : null
 
   if (!hasResult) {
     return (
@@ -153,7 +362,83 @@ export default function AdjustScreen() {
     )
   }
 
-  const progressPct = Math.round(((step + 1) / total) * 100)
+  if (isLoading || !session) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+        <View style={styles.emptyCard}>
+          <ActivityIndicator color={colors.primary} size="small" />
+          <Text style={styles.emptyText}>Preparing follow-up questions...</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!session.currentQuestionId) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {experimentalNotice}
+          {error ? (
+            <View style={styles.errorCard}>
+              <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+          <View style={styles.completeCard}>
+            <View style={[styles.completeIcon, { backgroundColor: colors.primaryLight }]}>
+              <MaterialCommunityIcons color={colors.primary} name="check" size={30} />
+            </View>
+            <Text style={styles.completeTitle}>Follow-up complete</Text>
+            <Text style={styles.completeText}>
+              {session.strategy === 'fixed_order'
+                ? 'All follow-up questions have been answered.'
+                : session.questionCount === 0
+                  ? 'No follow-up question was expected to add meaningful evidence for this image.'
+                  : `${session.questionCount} adaptive ${
+                      session.questionCount === 1 ? 'answer was' : 'answers were'
+                    } recorded.`}
+            </Text>
+            <Text style={styles.completeHint}>
+              The result separates the original image output from the follow-up evidence.
+            </Text>
+          </View>
+        </ScrollView>
+        <View style={styles.bottomBar}>
+          <Pressable
+            onPress={() => void finish(session)}
+            disabled={isSubmitting}
+            style={[styles.actionBtn, styles.primaryBtn, isSubmitting && styles.actionBtnDisabled]}
+          >
+            {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
+            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
+              {isSubmitting ? 'Preparing...' : 'See Results'}
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  if (!question) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+        <View style={styles.emptyCard}>
+          <MaterialCommunityIcons color={colors.textMuted} name="alert-circle-outline" size={32} />
+          <Text style={styles.emptyTitle}>Question unavailable</Text>
+          <Text style={styles.emptyText}>This follow-up question is no longer available.</Text>
+          <Pressable onPress={() => void resetSession()} style={[styles.actionBtn, styles.primaryBtn, styles.resetBtn]}>
+            <Text style={[styles.actionBtnText, { color: '#FFF' }]}>Start over</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -162,7 +447,9 @@ export default function AdjustScreen() {
 
       <View style={styles.progressSection}>
         <Text style={styles.progressLabel}>
-          Question {step + 1} of {total}
+          {session.strategy === 'fixed_order'
+            ? `Question ${questionNumber} of ${total}`
+            : `Question ${questionNumber} \u00b7 up to ${total}`}
         </Text>
         <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
           <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
@@ -170,6 +457,14 @@ export default function AdjustScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {experimentalNotice}
+        {error ? (
+          <View style={styles.errorCard}>
+            <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.questionCard}>
           <Text style={styles.questionText}>{question.text}</Text>
           {question.hint ? <Text style={styles.questionHint}>{question.hint}</Text> : null}
@@ -217,7 +512,7 @@ export default function AdjustScreen() {
         >
           {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-            {isSubmitting ? 'Saving...' : isLast ? 'See Suggestions' : 'Next'}
+            {isSubmitting ? 'Saving...' : isLastPossible ? 'See Results' : 'Next'}
           </Text>
         </Pressable>
       </View>
@@ -340,6 +635,54 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
 
+  noticeCard: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  noticeText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 11, lineHeight: 16 },
+
+  errorCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: '#C0392B',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  errorText: { ...font.semibold, color: '#C0392B', flex: 1, fontSize: 12, lineHeight: 17 },
+
+  completeCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 10,
+    marginTop: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+  },
+  completeIcon: {
+    alignItems: 'center',
+    borderRadius: 32,
+    height: 64,
+    justifyContent: 'center',
+    marginBottom: 4,
+    width: 64,
+  },
+  completeTitle: { ...font.extrabold, color: colors.text, fontSize: 20, textAlign: 'center' },
+  completeText: { ...font.regular, color: colors.text, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  completeHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17, textAlign: 'center' },
+
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
   emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
@@ -369,5 +712,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534' },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
+  resetBtn: { flex: 0, marginTop: 8, paddingHorizontal: 24 },
   actionBtnText: { ...font.bold, fontSize: 14 },
 })
