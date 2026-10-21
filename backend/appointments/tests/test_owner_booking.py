@@ -1,12 +1,13 @@
 import json
 import uuid
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetSlot
+from appointments.services import AppointmentService, get_clinic_timezone
 from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings
 from notifications.models import Notification, NotificationType
 from owners.models import OwnerProfile
@@ -445,3 +446,62 @@ class ReceptionistTransitionTests(OwnerBookingBase):
     def test_owner_cannot_use_receptionist_endpoints(self):
         response = self.client.get('/api/appointments/', **self._auth(OWNER_EMAIL))
         self.assertEqual(response.status_code, 403)
+
+class ClinicTimezoneTests(OwnerBookingBase):
+
+    def _use_timezone(self, timezone_name):
+        settings_obj = ClinicSettings.objects.get(cln_id=self.clinic)
+        settings_obj.cls_timezone = timezone_name
+        settings_obj.save(update_fields=['cls_timezone'])
+
+    def test_get_clinic_timezone_uses_saved_setting(self):
+        self._use_timezone('America/New_York')
+
+        tz = get_clinic_timezone(self.clinic.cln_id)
+
+        self.assertEqual(str(tz), 'America/New_York')
+
+    def test_booking_uses_saved_clinic_timezone(self):
+        self._use_timezone('America/New_York')
+        slot = self._get_slots()[0]
+
+        response = self._book(slot_id=slot['vsl_id'])
+        self.assertEqual(response.status_code, 201, response.data)
+
+        appointment = Appointment.objects.get(apt_id=response.data['apt_id'])
+        db_slot = VetSlot.objects.get(vsl_id=slot['vsl_id'])
+        expected = timezone.make_aware(
+            datetime.combine(db_slot.vsl_date, db_slot.vsl_start_time),
+            ZoneInfo('America/New_York'),
+        )
+        self.assertEqual(appointment.apt_scheduled_at, expected)
+
+    def test_list_and_volume_use_saved_clinic_timezone(self):
+        self._use_timezone('America/New_York')
+        Appointment.objects.create(
+            pet_id=self.pet,
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            apt_type='CONSULTATION',
+            apt_status=AppointmentStatus.COMPLETED,
+            apt_scheduled_at=datetime(2026, 6, 2, 2, 0, tzinfo=ZoneInfo('UTC')),
+        )
+
+        ny_day = AppointmentService.list_appointments(
+            self.clinic.cln_id, date=date(2026, 6, 1),
+        )
+        next_day = AppointmentService.list_appointments(
+            self.clinic.cln_id, date=date(2026, 6, 2),
+        )
+        self.assertEqual(ny_day['total'], 1)
+        self.assertEqual(next_day['total'], 0)
+
+        volume = AppointmentService.get_volume(
+            self.clinic.cln_id,
+            date_from=date(2026, 6, 1),
+            date_to=date(2026, 6, 2),
+        )
+        self.assertEqual(volume[0], {'date': '2026-06-01', 'count': 1})
+        self.assertEqual(volume[1], {'date': '2026-06-02', 'count': 0})
+
+
