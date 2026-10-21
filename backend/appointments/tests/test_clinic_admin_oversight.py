@@ -3,8 +3,11 @@ from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.urls import resolve
+from django.utils import timezone
 
+from ai_screenings.models import AiScreening, Disease
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
+from appointments.services import AppointmentService
 from clinics.models import Clinic
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
@@ -97,9 +100,9 @@ class OversightBase(TestCase):
         return user
 
     def _apt(self, scheduled_at, clinic=None, vet=None,
-             status=AppointmentStatus.PENDING):
+             status=AppointmentStatus.PENDING, pet=None):
         return Appointment.objects.create(
-            pet_id=self.pet,
+            pet_id=pet or self.pet,
             cln_id=clinic or self.clinic,
             stf_id=vet,
             apt_type=AppointmentType.CONSULTATION,
@@ -377,3 +380,253 @@ class VeterinariansEndpointTests(OversightBase):
             '/api/veterinarians/', **self._auth(self.receptionist),
         )
         self.assertEqual(response.status_code, 403)
+
+
+class AppointmentDetailTests(OversightBase):
+    """Clinic Admin read-only access to GET /api/appointments/{id}/."""
+
+    ADMIN_SCREENING_KEYS = {
+        'ais_id', 'disease', 'ais_confidence', 'ais_model_version',
+        'ais_status', 'ais_source', 'ais_is_correct', 'ais_created_at',
+        'vet_diagnosis', 'reviewed_at',
+    }
+
+    def _detail(self, apt, user):
+        return self.client.get(
+            f'/api/appointments/{apt.apt_id}/', **self._auth(user),
+        )
+
+    def test_clinic_admin_can_view_detail(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['apt_id'], str(self.apt_oct3.apt_id))
+        self.assertIn('created_by_role', response.data)
+        self.assertIn('status_change', response.data)
+        self.assertIn('screening', response.data)
+
+    def test_admin_detail_excludes_clinical_and_contact_fields(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        for field in (
+            'consultation', 'prescription', 'owner_phone', 'owner_email',
+            'apt_updated_at',
+        ):
+            self.assertNotIn(field, response.data)
+
+    def test_receptionist_detail_contract_unchanged(self):
+        response = self._detail(self.apt_oct3, self.receptionist)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn('consultation', response.data)
+        self.assertIn('prescription', response.data)
+        self.assertIn('owner_phone', response.data)
+        self.assertNotIn('status_change', response.data)
+
+    def test_vet_can_still_view_detail(self):
+        response = self._detail(self.apt_oct3, self.vet_user)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn('consultation', response.data)
+
+    def test_other_clinic_admin_gets_404(self):
+        response = self._detail(self.apt_other_clinic, self.admin)
+        self.assertEqual(response.status_code, 404)
+
+    def test_clinic_admin_cannot_patch(self):
+        response = self.client.patch(
+            f'/api/appointments/{self.apt_oct3.apt_id}/',
+            {'apt_status': 'CONFIRMED'},
+            format='json',
+            **self._auth(self.admin),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_forbidden(self):
+        response = self._detail(self.apt_oct3, self.owner)
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_created_by_role_receptionist(self):
+        self.apt_oct3.apt_created_by = self.receptionist
+        self.apt_oct3.save()
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.data['created_by_role'], 'RECEPTIONIST')
+        self.assertEqual(response.data['created_by_name'], 'Rita Desk')
+
+    def test_created_by_role_owner(self):
+        self.apt_oct3.apt_created_by = self.owner
+        self.apt_oct3.save()
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.data['created_by_role'], 'OWNER')
+
+    def test_created_by_role_null_for_legacy_rows(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertIsNone(response.data['created_by_role'])
+        self.assertIsNone(response.data['created_by_name'])
+
+    def test_status_change_attributed_to_staff(self):
+        apt = self._apt(datetime(2026, 10, 25, 9, 0, tzinfo=MNL))
+        AppointmentService.update_status(
+            apt_id=apt.apt_id,
+            new_status=AppointmentStatus.CONFIRMED,
+            user_id=self.receptionist.usr_id,
+        )
+        response = self._detail(apt, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        change = response.data['status_change']
+        self.assertEqual(change['source'], 'STAFF')
+        self.assertEqual(change['changed_by'], 'Rita Desk')
+        self.assertEqual(change['changed_by_role'], 'RECEPTIONIST')
+        self.assertIsNotNone(change['changed_at'])
+
+    def test_status_change_attributed_to_system_cancel(self):
+        AppointmentService.close_past_due(clinic_id=self.clinic.cln_id)
+        self.apt_oct1.refresh_from_db()
+        self.assertEqual(self.apt_oct1.apt_status, AppointmentStatus.CANCELLED)
+
+        response = self._detail(self.apt_oct1, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        change = response.data['status_change']
+        self.assertEqual(change['source'], 'SYSTEM')
+        self.assertEqual(change['changed_by'], 'System (auto-close)')
+        self.assertIsNone(change['changed_by_role'])
+        self.assertIsNotNone(change['changed_at'])
+        self.assertEqual(
+            response.data['apt_cancellation_reason'],
+            'Not confirmed in time',
+        )
+
+    def test_status_change_attributed_to_system_no_show(self):
+        apt = self._apt(
+            datetime(2026, 10, 19, 9, 0, tzinfo=MNL),
+            status=AppointmentStatus.CONFIRMED,
+        )
+        AppointmentService.close_past_due(clinic_id=self.clinic.cln_id)
+        apt.refresh_from_db()
+        self.assertEqual(apt.apt_status, AppointmentStatus.NO_SHOW)
+
+        response = self._detail(apt, self.admin)
+        change = response.data['status_change']
+        self.assertEqual(change['source'], 'SYSTEM')
+        self.assertEqual(change['changed_by'], 'System (auto-close)')
+        self.assertIsNotNone(change['changed_at'])
+
+    def test_status_change_null_for_pending(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        change = response.data['status_change']
+        self.assertIsNone(change['changed_at'])
+        self.assertIsNone(change['changed_by'])
+        self.assertIsNone(change['changed_by_role'])
+        self.assertIsNone(change['source'])
+
+    def test_screening_none_returns_null(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertIsNone(response.data['screening'])
+
+    def test_screening_summary_exposes_review_outcome_only(self):
+        disease = Disease.objects.create(dis_code='GING', dis_name='Gingivitis')
+        screening = AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=disease,
+            ais_confidence=87.50,
+            ais_model_version='v1.0',
+            ais_is_correct=True,
+            ais_compared_diagnosis='Gingivitis',
+            ais_compared_at=timezone.now(),
+        )
+        self.apt_oct3.apt_screening = screening
+        self.apt_oct3.save()
+
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        payload = response.data['screening']
+        self.assertEqual(set(payload.keys()), self.ADMIN_SCREENING_KEYS)
+        self.assertEqual(payload['disease'], 'Gingivitis')
+        self.assertEqual(payload['vet_diagnosis'], 'Gingivitis')
+        self.assertTrue(payload['ais_is_correct'])
+        self.assertIsNotNone(payload['reviewed_at'])
+        self.assertNotIn('con_id', payload)
+        self.assertNotIn('ais_device', payload)
+
+
+class DashboardStatsTests(OversightBase):
+
+    URL = '/api/dashboard/stats/'
+
+    def _pet(self, name):
+        return Pet.objects.create(
+            own_id=OwnerProfile.objects.get(usr_id=self.owner),
+            pet_name=name,
+            pet_sex=Sex.FEMALE,
+        )
+
+    def _completed(self, pet=None, clinic=None):
+        return self._apt(
+            timezone.now() - timedelta(days=1),
+            clinic=clinic,
+            pet=pet,
+            status=AppointmentStatus.COMPLETED,
+        )
+
+    def _stats(self, user):
+        return self.client.get(self.URL, **self._auth(user))
+
+    def test_clinic_admin_can_read_stats(self):
+        self._completed()
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_pets'], 1)
+        self.assertEqual(response.data['total_owners'], 1)
+
+    def test_cancelled_and_no_show_only_pets_are_excluded(self):
+        self._completed()
+        cancelled_pet = self._pet('Cancelled Pet')
+        no_show_pet = self._pet('No Show Pet')
+        self._apt(
+            timezone.now() - timedelta(days=2),
+            pet=cancelled_pet,
+            status=AppointmentStatus.CANCELLED,
+        )
+        self._apt(
+            timezone.now() - timedelta(days=2),
+            pet=no_show_pet,
+            status=AppointmentStatus.NO_SHOW,
+        )
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_pets'], 1)
+
+    def test_pet_with_cancelled_and_completed_counts_once(self):
+        pet = self._pet('Mixed History')
+        self._apt(
+            timezone.now() - timedelta(days=3),
+            pet=pet,
+            status=AppointmentStatus.CANCELLED,
+        )
+        self._completed(pet=pet)
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_pets'], 1)
+        self.assertEqual(response.data['total_owners'], 1)
+
+    def test_other_clinic_pet_is_not_counted(self):
+        self._completed()
+        other_pet = self._pet('Other Clinic Pet')
+        self._completed(pet=other_pet, clinic=self.other_clinic)
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_pets'], 1)
+
+    def test_receptionist_can_read_stats(self):
+        response = self._stats(self.receptionist)
+
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_owner_and_vet_cannot_read_stats(self):
+        self.assertEqual(self._stats(self.owner).status_code, 403)
+        self.assertEqual(self._stats(self.vet_user).status_code, 403)

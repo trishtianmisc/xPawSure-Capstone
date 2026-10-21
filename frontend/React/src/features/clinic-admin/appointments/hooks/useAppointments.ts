@@ -1,8 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
 
-import { listAppointments } from '../../../receptionist/services/appointment.service'
+import {
+  getAppointmentDetail,
+  listAppointments,
+} from '../../../receptionist/services/appointment.service'
 import type { AppointmentListResponse } from '../../../receptionist/types/receptionist.types'
 import { getAppointmentVolume, listVeterinarians, type VolumeQueryParams } from '../services/appointments.service'
+import type { ClinicAdminAppointmentDetail } from '../types/appointment.types'
 
 export interface ClinicAppointmentQuery {
   date?: string
@@ -21,6 +25,15 @@ export function useClinicAppointments(params: ClinicAppointmentQuery) {
     queryKey: ['clinic-admin', 'appointments', params],
     queryFn: (): Promise<AppointmentListResponse> => listAppointments(params),
     staleTime: 30_000,
+  })
+}
+
+export function useClinicAppointmentDetail(aptId: string) {
+  return useQuery({
+    queryKey: ['clinic-admin', 'appointment', aptId],
+    queryFn: async (): Promise<ClinicAdminAppointmentDetail> =>
+      (await getAppointmentDetail(aptId)) as unknown as ClinicAdminAppointmentDetail,
+    enabled: Boolean(aptId),
   })
 }
 

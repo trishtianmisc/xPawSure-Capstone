@@ -382,11 +382,15 @@ Clinic-scoped patient directory behind the sidebar "Patients" tab.
 Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
 
 - Default: only active pets with at least one non-deleted appointment at the
-  receptionist's own clinic. A pet becomes a clinic patient once an appointment
-  exists there.
+  receptionist's own clinic whose status is not `CANCELLED` or `NO_SHOW`. A pet
+  becomes a clinic patient once it has a non-cancelled, non-no-show appointment
+  there; a pet whose only appointments were cancelled or no-show is not listed.
 - `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
-  Used by the booking form so walk-in owners can be booked; after the booking the
-  pet appears in the clinic's Patients tab.
+  Used by the booking form so walk-in owners can be booked; after a non-cancelled
+  booking the pet appears in the clinic's Patients tab.
+- Detail and history endpoints still require only a non-deleted appointment at
+  the clinic, so a pet removed from the directory by the rule above remains
+  reachable by direct link (read-only access is unchanged).
 - Invalid `page` / `page_size` values fall back to defaults (never a 500).
 
 ## POST /api/receptionist/pets/
@@ -495,15 +499,25 @@ Notes:
 
 ---
 
-## GET /api/appointments/dashboard/stats/
+## GET /api/dashboard/stats/
 
-Requires authentication. Receptionist dashboard summary.
+Requires authentication. Receptionist or Clinic Admin dashboard summary
+(read-only).
 
 Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
 `recent_appointments`, and `needs_attention` — the count of past-due
 appointments still awaiting action. `today.pending` counts only upcoming
 `PENDING` appointments; past-due ones surface through `needs_attention`
 instead of double-counting in Pending/Confirmed.
+
+`total_pets` is the canonical clinic-patient count: distinct active,
+non-deleted pets with at least one non-deleted appointment at the clinic whose
+status is not `CANCELLED` or `NO_SHOW`. `total_owners` is the number of owners
+of those pets. A pet that never booked at the clinic is not counted; repeated
+visits count once; a pet whose only appointments were cancelled or no-show does
+not count. The clinic admin "Total Patients" KPI, the receptionist
+`GET /api/receptionist/pets/` directory, and the future clinic admin Patients
+page must all use this definition.
 
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
@@ -552,21 +566,36 @@ Request (owner):
 
 ## GET /api/appointments/{id}/
 
-Requires authentication.
+Requires authentication. Receptionist, veterinarian (own appointments only), or
+Clinic Admin (read-only). Appointments outside the caller's clinic return `404`.
 
-Owner: own pets' appointments only. Clinic staff: appointments within their own clinic,
-otherwise `404`.
+Clinic Admin receives a narrower, read-only summary for oversight: no
+consultation, prescription, or other clinical records, and no owner contact
+details. Beyond the shared appointment fields it adds:
+
+- `created_by_role`: `RECEPTIONIST` or `OWNER` (null for legacy rows with no
+  recorded creator).
+- `status_change`: who set the current status, and when -
+  `{ changed_at, changed_by, changed_by_role, source }`. `source` is `STAFF`
+  for audited staff transitions, `SYSTEM` for the past-due auto-close (it runs
+  without a user and is attributed by fallback), `UNKNOWN` otherwise; all
+  fields are null when no status has been set yet (e.g. `PENDING`).
+- `screening`: narrower AI summary exposing the final condition only, with
+  `vet_diagnosis` and `reviewed_at` (the veterinarian's recorded outcome).
+  `null` when no screening is linked. No clinical notes are exposed.
 
 ---
 
 ## PATCH /api/appointments/{id}/
 
-Requires authentication. Receptionist or clinic admin.
+Requires authentication. Receptionist.
 
-Update appointment status. Clinic staff can only update appointments within their own
-clinic, otherwise `404`. Veterinarians cannot change status directly: a veterinarian
-`PATCH` returns `403`. Veterinarians submit reschedule or cancellation requests through
-the endpoints in section 5A instead.
+Update appointment status. Clinic Admin cannot write appointments: a Clinic
+Admin `PATCH` returns `403` (their access to this endpoint is read-only).
+Appointments outside the caller's clinic return `404`. Veterinarians cannot
+change status directly: a veterinarian `PATCH` returns `403`. Veterinarians
+submit reschedule or cancellation requests through the endpoints in section
+5A instead.
 
 Time-based rules (Asia/Manila "now"):
 
@@ -1189,8 +1218,16 @@ Business rules:
 Requires authentication (Clinic Admin). Clinic is resolved from the
 authenticated staff profile; other roles get 403.
 
-Screenings are scoped to pets that have an appointment at the clinic
-(non-deleted appointments).
+Screenings are scoped to pets that have a non-deleted appointment at the
+authenticated admin's clinic (any appointment status). A pet treated at multiple
+clinics therefore appears in each clinic's stats.
+
+`screenings_pending_review` is derived, not read from `ais_status`: it counts
+screenings whose `ais_status` is `PENDING_REVIEW` **and** `ais_compared_at` is
+null. The status field is not transitioned after comparison in production, so
+reviewed screenings are identified by `ais_compared_at` (the appointment detail
+page uses the same rule). `screenings_by_disease` counts all screenings,
+reviewed or not.
 
 Response `200`:
 

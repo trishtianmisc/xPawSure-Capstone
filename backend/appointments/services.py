@@ -10,7 +10,7 @@ from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetS
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import ClinicOperatingHours, ClinicSettings
-from users.models import StaffPosition, StaffProfile
+from users.models import StaffPosition, StaffProfile, User
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +28,24 @@ NO_SHOW_GRACE_MINUTES = 60
 def _clinic_day_bounds(day):
     start = timezone.make_aware(datetime.combine(day, time.min), CLINIC_TIMEZONE)
     return start, start + timedelta(days=1)
+
+
+# A pet becomes a clinic patient once it has a non-deleted appointment at the
+# clinic that was not cancelled or marked as a no-show. This is the canonical
+# definition for the clinic admin KPI, the receptionist Patients directory,
+# and the future clinic admin Patients page.
+NON_PATIENT_APPOINTMENT_STATUSES = (
+    AppointmentStatus.CANCELLED,
+    AppointmentStatus.NO_SHOW,
+)
+
+
+def filter_clinic_patients(qs, clinic_id):
+    return qs.filter(
+        models.Q(appointments__cln_id_id=clinic_id)
+        & models.Q(appointments__apt_deleted_at__isnull=True)
+        & ~models.Q(appointments__apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
+    ).distinct()
 
 
 class SlotUnavailableError(Exception):
@@ -769,9 +787,72 @@ class AppointmentService:
             return Appointment.objects.select_related(
                 'pet_id', 'pet_id__own_id', 'pet_id__brd_id',
                 'stf_id__usr_id', 'cln_id', 'apt_created_by',
+                'apt_screening', 'apt_screening__dis_id',
             ).get(apt_id=apt_id)
         except Appointment.DoesNotExist:
             return None
+
+    @staticmethod
+    def get_status_change(appointment):
+        """Who set the appointment's current status, and when.
+
+        Staff transitions write an AuditLog entry; the past-due auto-close
+        runs with ``user_id=None`` and intentionally skips auditing, so those
+        are attributed by fallback: a cancelled PENDING appointment with the
+        auto-close reason, or a NO_SHOW with no audit at all, is the system.
+        """
+        from audit_log.models import AuditLog
+
+        logs = AuditLog.objects.filter(
+            adl_record_id=appointment.apt_id,
+            adl_table_name='APPOINTMENT',
+            adl_module='appointments',
+            adl_action=AuditAction.UPDATE,
+        ).order_by('-adl_created_at')[:20]
+
+        for log in logs:
+            if (log.adl_new_values or {}).get('apt_status') == appointment.apt_status:
+                user = User.objects.filter(usr_id=log.usr_id).values(
+                    'usr_first_name', 'usr_last_name', 'usr_role',
+                ).first()
+                name = None
+                role = None
+                if user:
+                    name = (
+                        f"{user['usr_first_name']} {user['usr_last_name']}".strip()
+                        or None
+                    )
+                    role = user['usr_role']
+                return {
+                    'changed_at': log.adl_created_at,
+                    'changed_by': name or 'Unknown',
+                    'changed_by_role': role,
+                    'source': 'STAFF',
+                }
+
+        auto_closable = (
+            appointment.apt_cancellation_reason == 'Not confirmed in time'
+        )
+        if appointment.apt_status == AppointmentStatus.CANCELLED:
+            return {
+                'changed_at': appointment.apt_cancelled_at or appointment.apt_updated_at,
+                'changed_by': 'System (auto-close)' if auto_closable else 'Unknown',
+                'changed_by_role': None,
+                'source': 'SYSTEM' if auto_closable else 'UNKNOWN',
+            }
+        if appointment.apt_status == AppointmentStatus.NO_SHOW:
+            return {
+                'changed_at': appointment.apt_updated_at,
+                'changed_by': 'System (auto-close)',
+                'changed_by_role': None,
+                'source': 'SYSTEM',
+            }
+        return {
+            'changed_at': None,
+            'changed_by': None,
+            'changed_by_role': None,
+            'source': None,
+        }
 
     @staticmethod
     def get_today_appointments(clinic_id):
@@ -838,16 +919,15 @@ class DashboardService:
         from owners.models import OwnerProfile
         from pets.models import Pet
 
+        patient_pets = filter_clinic_patients(
+            Pet.objects.filter(
+                pet_is_active=True, pet_deleted_at__isnull=True,
+            ),
+            clinic_id,
+        )
+        total_pets = patient_pets.count()
         total_owners = OwnerProfile.objects.filter(
-            pets__appointments__cln_id_id=clinic_id,
-            pets__appointments__apt_deleted_at__isnull=True,
-        ).distinct().count()
-
-        total_pets = Pet.objects.filter(
-            appointments__cln_id_id=clinic_id,
-            appointments__apt_deleted_at__isnull=True,
-            pet_is_active=True,
-            pet_deleted_at__isnull=True,
+            pets__in=patient_pets,
         ).distinct().count()
 
         recent_appointments = Appointment.objects.filter(
@@ -1114,11 +1194,7 @@ class ReceptionistPetService:
 
     @staticmethod
     def _pets_in_clinic(qs, clinic_id):
-        from django.db import models as db_models
-        return qs.filter(
-            db_models.Q(appointments__cln_id_id=clinic_id)
-            & db_models.Q(appointments__apt_deleted_at__isnull=True)
-        ).distinct()
+        return filter_clinic_patients(qs, clinic_id)
 
     @staticmethod
     def _pet_in_clinic(pet, clinic_id):

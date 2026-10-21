@@ -416,3 +416,44 @@ class ScreeningStatsTests(TestCase):
     def test_receptionist_cannot_read_stats(self):
         response = self.client.get('/api/screenings/stats/', **self._auth(RECEPTIONIST_EMAIL))
         self.assertEqual(response.status_code, 403)
+
+    def test_compared_screening_with_stale_pending_status_is_not_counted(self):
+        AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=self.mange,
+            ais_confidence=77,
+            ais_model_version='test-1.0.0',
+            ais_status=ScreeningStatus.PENDING_REVIEW,
+            ais_compared_at=timezone.now(),
+            ais_compared_diagnosis='Mange',
+            ais_is_correct=True,
+        )
+
+        response = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['screenings_pending_review'], 2)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 3, 'Hotspot': 1})
+
+    def test_stats_scoped_to_admins_own_clinic(self):
+        other_admin = User.objects.create(
+            usr_email='statsadmin2@example.com', usr_password_hash='hashed',
+            usr_role=UserRole.CLINIC_ADMIN, usr_first_name='Riva', usr_last_name='Rival',
+        )
+        other_admin.set_password(PASSWORD)
+        other_admin.save()
+        StaffProfile.objects.create(
+            usr_id=other_admin,
+            cln_id=self.other_clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+
+        response = self.client.get(
+            '/api/screenings/stats/', **self._auth('statsadmin2@example.com'),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['screenings_pending_review'], 1)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Hotspot': 1})

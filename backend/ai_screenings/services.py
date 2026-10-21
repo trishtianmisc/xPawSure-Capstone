@@ -102,7 +102,13 @@ class ScreeningService:
             pet_id__appointments__apt_deleted_at__isnull=True,
         ).distinct()
 
-        pending = clinic_screenings.filter(ais_status=ScreeningStatus.PENDING_REVIEW).count()
+        # The status field is never transitioned after comparison; reviewed is
+        # derived from ais_compared_at. Mirror the appointment detail badge:
+        # reviewed = compared_at set OR status != PENDING_REVIEW.
+        pending = clinic_screenings.filter(
+            ais_status=ScreeningStatus.PENDING_REVIEW,
+            ais_compared_at__isnull=True,
+        ).count()
 
         by_disease = list(
             clinic_screenings.values('dis_id__dis_name')

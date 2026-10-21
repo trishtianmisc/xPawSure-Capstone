@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Card } from '../../../components/ui'
+import { formatClockTime } from '../../../utils/format'
 import type { DayOfWeek, OperatingHoursDay } from '../types/clinicProfile.types'
 
 const DAY_LABELS: Record<DayOfWeek, string> = {
@@ -95,7 +96,7 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
                   {day.is_closed ? (
                     <span className="text-stone-400 dark:text-stone-500">Closed</span>
                   ) : (
-                    `${formatTime(day.opening_time)} – ${formatTime(day.closing_time)}`
+                    `${formatClockTime(day.opening_time ?? '')} – ${formatClockTime(day.closing_time ?? '')}`
                   )}
                 </span>
               </div>
@@ -170,13 +171,4 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
       )}
     </Card>
   )
-}
-
-function formatTime(time: string | null): string {
-  if (!time) return ''
-  const [h, m] = time.split(':')
-  const hour = parseInt(h, 10)
-  const ampm = hour >= 12 ? 'PM' : 'AM'
-  const displayHour = hour % 12 || 12
-  return `${displayHour}:${m} ${ampm}`
 }

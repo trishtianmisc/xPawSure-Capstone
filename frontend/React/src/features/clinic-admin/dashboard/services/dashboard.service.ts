@@ -1,22 +1,15 @@
-import type { DashboardCharts, DashboardData, DashboardStats, RecentCategory, RecentItem } from '../types/dashboard.types'
+import type {
+  ClinicDashboardStats,
+  DashboardCharts,
+  DashboardData,
+  RecentCategory,
+  RecentItem,
+  ScreeningStats,
+} from '../types/dashboard.types'
 import http from '../../../../services/http'
 
-const MOCK_STATS: DashboardStats = {
-  total_veterinarians: 6,
-  total_pets: 215,
-  screenings_pending_review: 3,
-}
-
 const MOCK_CHARTS: DashboardCharts = {
-  screenings_by_disease: [
-    { label: 'Mange', value: 35 },
-    { label: 'Hot Spot', value: 22 },
-    { label: 'Ringworm', value: 18 },
-    { label: 'Allergic Dermatitis', value: 15 },
-    { label: 'Other', value: 10 },
-  ],
-  // TODO: source from appointment service — group appointments by vetId, filter
-  // to current month (backend appointments app stubbed on this branch).
+  // TODO: source from an appointment endpoint that groups by vet and month.
   vet_workload: [
     { label: 'Dr. Santos', value: 14 },
     { label: 'Dr. Cruz', value: 12 },
@@ -35,6 +28,16 @@ interface AuditLogRow {
   timestamp: string
 }
 
+export async function getClinicDashboardStats(): Promise<ClinicDashboardStats> {
+  const { data } = await http.get<ClinicDashboardStats>('/dashboard/stats/')
+  return data
+}
+
+export async function getScreeningStats(): Promise<ScreeningStats> {
+  const { data } = await http.get<ScreeningStats>('/screenings/stats/')
+  return data
+}
+
 export const dashboardService = {
   async get(): Promise<DashboardData> {
     let recent: RecentItem[]
@@ -51,11 +54,8 @@ export const dashboardService = {
       recent = []
     }
 
-    // TODO: replace MOCK_STATS / remaining MOCK_CHARTS with real endpoints
-    // (total_pets, screenings, vet workload). Appointment stats and the
-    // appointments-by-month chart are real, via GET /api/appointments/volume/
-    // (see useAppointmentVolume). Screenings stay mock until ai_screenings
-    // has a backend.
-    return { stats: MOCK_STATS, charts: MOCK_CHARTS, recent }
+    // Only vet workload is still mocked; appointments, patients, and
+    // screenings come from their own real endpoints.
+    return { charts: MOCK_CHARTS, recent }
   },
 }

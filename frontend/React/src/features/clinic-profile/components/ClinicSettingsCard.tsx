@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import { Alert, Button, Card, Input } from '../../../components/ui'
+import { formatClockTime } from '../../../utils/format'
 import { settingsSchema, type SettingsFormValues } from '../schemas/clinicProfile.schema'
 import type { ClinicSettings } from '../types/clinicProfile.types'
 
@@ -56,10 +57,10 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
 
       <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
         <div className="py-4 sm:py-5">
-          <InfoRow label="Opening Time" value={settings.opening_time} />
+          <InfoRow label="Opening Time" value={formatClockTime(settings.opening_time) || '—'} />
         </div>
         <div className="py-4 sm:py-5">
-          <InfoRow label="Closing Time" value={settings.closing_time} />
+          <InfoRow label="Closing Time" value={formatClockTime(settings.closing_time) || '—'} />
         </div>
         <div className="py-4 sm:py-5">
           <InfoRow label="Appointment Duration" value={`${settings.appointment_duration} minutes`} />

@@ -144,9 +144,13 @@ Receptionists cannot
 - Manage user accounts
 - Access records outside their own clinic
 
-Patient visibility: receptionists only see pets that have an appointment at their
-own clinic (the sidebar "Patients" tab). The Owners directory stays platform-wide;
-booking is done by first selecting an owner, then one of that owner's pets.
+Patient visibility: a pet is a clinic patient once it has a non-deleted
+appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
+Receptionists only see clinic patients in their own clinic (the sidebar
+"Patients" tab); cancelled-only and no-show-only pets are not listed. This is
+the same definition used by the clinic admin "Total Patients" KPI and the future
+clinic admin Patients page. The Owners directory stays platform-wide; booking is
+done by first selecting an owner, then one of that owner's pets.
 
 ---
 

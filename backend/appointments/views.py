@@ -9,6 +9,7 @@ from appointments.models import AppointmentStatus, SlotStatus
 from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
+    ClinicAdminAppointmentDetailSerializer,
     CreateAppointmentSerializer,
     GenerateSlotsSerializer,
     VetSlotSerializer,
@@ -287,6 +288,21 @@ class AppointmentVolumeView(APIView):
 class AppointmentDetailView(APIView):
     permission_classes = [HasRole(UserRole.RECEPTIONIST, UserRole.VETERINARIAN)]
 
+    def get_permissions(self):
+        """Clinic Admin gets read-only access; writes stay receptionist-level."""
+        if self.request.method == 'GET':
+            return [HasRole(
+                UserRole.RECEPTIONIST,
+                UserRole.VETERINARIAN,
+                UserRole.CLINIC_ADMIN,
+            )()]
+        return [permission() for permission in self.permission_classes]
+
+    def get_serializer_class(self, request):
+        if getattr(request.user, 'usr_role', None) == UserRole.CLINIC_ADMIN:
+            return ClinicAdminAppointmentDetailSerializer
+        return AppointmentDetailSerializer
+
     @staticmethod
     def _vet_guard(request, appointment):
         if getattr(request.user, 'usr_role', None) != UserRole.VETERINARIAN:
@@ -327,7 +343,7 @@ class AppointmentDetailView(APIView):
         if guard is not None:
             return guard
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = self.get_serializer_class(request)(appointment)
         return Response(serializer.data)
 
     def patch(self, request, apt_id):

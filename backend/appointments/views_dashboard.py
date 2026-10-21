@@ -3,12 +3,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from appointments.services import DashboardService
-from core.permissions import IsReceptionist
 from appointments.serializers import AppointmentListSerializer
+from core.permissions import HasRole
+from users.models import UserRole
 
 
 class DashboardStatsView(APIView):
-    permission_classes = [IsReceptionist]
+    permission_classes = [HasRole(UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN)]
 
     def get(self, request):
         from users.models import StaffProfile

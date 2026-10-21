@@ -24,23 +24,50 @@ export function normalizePhoneInput(raw: string): string {
   return digits
 }
 
+// Clinic operations run in Philippine time; pass this to the formatters
+// below when a display must be pinned to the clinic calendar day.
+export const CLINIC_TIME_ZONE = 'Asia/Manila'
+
 function toDate(value: string | Date | null | undefined): Date | null {
   if (value == null || value === '') return null
   const date = value instanceof Date ? value : new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-export function formatDate(value: string | Date | null | undefined): string {
+function isMidnight(date: Date, timeZone?: string): boolean {
+  if (timeZone) {
+    // hourCycle h23 (not hour12) so midnight formats as 00, never 24.
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour: 'numeric',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date)
+    const hour = parts.find((p) => p.type === 'hour')?.value ?? ''
+    const minute = parts.find((p) => p.type === 'minute')?.value ?? ''
+    return Number(hour) === 0 && Number(minute) === 0
+  }
+  return date.getHours() === 0 && date.getMinutes() === 0
+}
+
+export function formatDate(
+  value: string | Date | null | undefined,
+  timeZone?: string,
+): string {
   const date = toDate(value)
   if (!date) return '—'
   return date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
   })
 }
 
-export function formatDateLong(value: string | Date | null | undefined): string {
+export function formatDateLong(
+  value: string | Date | null | undefined,
+  timeZone?: string,
+): string {
   const date = toDate(value)
   if (!date) return '—'
   return date.toLocaleDateString('en-US', {
@@ -48,25 +75,44 @@ export function formatDateLong(value: string | Date | null | undefined): string 
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
   })
 }
 
-export function formatTime(value: string | Date | null | undefined): string {
+export function formatTime(
+  value: string | Date | null | undefined,
+  timeZone?: string,
+): string {
   const date = toDate(value)
   if (!date) return '—'
-  if (date.getHours() === 0 && date.getMinutes() === 0) return ''
+  if (isMidnight(date, timeZone)) return ''
   return date.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    ...(timeZone ? { timeZone } : {}),
   })
 }
 
-export function formatDateTime(value: string | Date | null | undefined): string {
+export function formatClockTime(value: string): string {
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(value.trim())
+  if (!match) return value
+  const hours = Number(match[1])
+  if (hours > 23) return value
+  const minutes = match[2]
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const hours12 = hours % 12 || 12
+  return `${hours12}:${minutes} ${period}`
+}
+
+export function formatDateTime(
+  value: string | Date | null | undefined,
+  timeZone?: string,
+): string {
   const date = toDate(value)
   if (!date) return '—'
-  const time = formatTime(date)
-  return time ? `${formatDate(date)} · ${time}` : formatDate(date)
+  const time = formatTime(date, timeZone)
+  return time ? `${formatDate(date, timeZone)} · ${time}` : formatDate(date, timeZone)
 }
 
 export function formatRelativeTime(iso: string): string {

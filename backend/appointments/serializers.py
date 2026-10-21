@@ -1,7 +1,10 @@
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from ai_screenings.serializers import ScreeningSummarySerializer
+from ai_screenings.serializers import (
+    ClinicAdminScreeningSummarySerializer,
+    ScreeningSummarySerializer,
+)
 from appointments.models import Appointment, AppointmentType, VetSlot
 from clinics.models import Clinic
 from consultations.serializers import ConsultationResponseSerializer
@@ -152,6 +155,45 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             u = obj.apt_created_by
             return f'{u.usr_first_name} {u.usr_last_name}'
         return None
+
+
+class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
+    """Read-only appointment summary for Clinic Admin oversight.
+
+    Narrower than the receptionist detail: no consultation, prescription, or
+    other clinical records, and no owner contact details. Adds who booked the
+    appointment (by role) and who/when the current status was set.
+    """
+
+    created_by_role = serializers.SerializerMethodField()
+    status_change = serializers.SerializerMethodField()
+    screening = ClinicAdminScreeningSummarySerializer(
+        source='apt_screening', read_only=True,
+    )
+
+    class Meta(AppointmentDetailSerializer.Meta):
+        fields = [
+            'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
+            'cln_id', 'clinic_name', 'stf_id', 'vet_name',
+            'owner_name', 'screening',
+            'apt_type', 'apt_status', 'apt_scheduled_at',
+            'apt_reason', 'created_by_name', 'created_by_role',
+            'status_change',
+            'apt_checked_in_at', 'apt_completed_at',
+            'apt_cancelled_at', 'apt_cancellation_reason',
+            'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
+            'apt_created_at',
+        ]
+
+    def get_created_by_role(self, obj):
+        if obj.apt_created_by:
+            return obj.apt_created_by.usr_role
+        return None
+
+    def get_status_change(self, obj):
+        from appointments.services import AppointmentService
+
+        return AppointmentService.get_status_change(obj)
 
 
 class CreateAppointmentSerializer(serializers.Serializer):
