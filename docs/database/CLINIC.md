@@ -148,12 +148,11 @@ Separating settings from the CLINIC table keeps the design normalized and allows
 | Column | Type | Constraints |
 |---------|------|-------------|
 | CLS_ID | UUID | PK |
-| CLN_ID | UUID | FK → CLINIC |
-| CLS_OPENING_TIME | TIME | NOT NULL |
-| CLS_CLOSING_TIME | TIME | NOT NULL |
+| CLN_ID | UUID | FK -> CLINIC |
 | CLS_APPOINTMENT_DURATION | INTEGER | DEFAULT 30 |
 | CLS_MAX_APPOINTMENTS_PER_DAY | INTEGER | DEFAULT 50 |
 | CLS_ALLOW_OWNER_BOOKING | BOOLEAN | DEFAULT TRUE |
+| CLS_TIMEZONE | VARCHAR(50) | DEFAULT 'Asia/Manila' |
 | CLS_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | CLS_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 
@@ -195,6 +194,56 @@ CLINIC_SETTINGS
 
 ---
 
+# Entity
+
+## CLINIC_OPERATING_HOURS
+
+Purpose
+
+Stores the clinic's weekly operating hours, one row per weekday. This table is the single source of truth for slot generation and booking-hour validation.
+
+---
+
+## Attributes
+
+| Column | Type | Constraints |
+|---------|------|-------------|
+| COA_ID | UUID | PK |
+| CLN_ID | UUID | FK -> CLINIC |
+| DAY_OF_WEEK | VARCHAR(3) | MON, TUE, WED, THU, FRI, SAT, SUN |
+| DAY_INDEX | SMALLINT | 0 (Monday) to 6 (Sunday) |
+| OPENING_TIME | TIME | NULL when closed |
+| CLOSING_TIME | TIME | NULL when closed |
+| IS_CLOSED | BOOLEAN | DEFAULT TRUE |
+
+---
+
+# Business Rules
+
+Each clinic has exactly seven rows, one per weekday.
+
+Closed days store `IS_CLOSED = TRUE` with null times.
+
+Open days require both opening and closing times, with closing after opening.
+
+At least one day per clinic must be open.
+
+Times use the clinic's configured `CLS_TIMEZONE` for clinic-local interpretation.
+
+---
+
+# Indexes
+
+UNIQUE (CLN_ID, DAY_OF_WEEK)
+
+---
+
+# Relationships
+
+CLINIC 1 -> many CLINIC_OPERATING_HOURS
+
+---
+
 # Summary
 
 Tables
@@ -202,6 +251,8 @@ Tables
 • CLINIC
 
 • CLINIC_SETTINGS
+
+• CLINIC_OPERATING_HOURS
 
 Dependencies
 

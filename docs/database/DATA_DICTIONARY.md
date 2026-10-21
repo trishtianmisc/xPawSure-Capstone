@@ -77,13 +77,26 @@
 |-------|------------|-------------|-----------|---------------------|
 | CLINIC_SETTINGS | CLS_ID | Settings ID (PK) | UUID | NOT NULL |
 | CLINIC_SETTINGS | CLN_ID | Clinic ID (FK → CLINIC) | UUID | NOT NULL |
-| CLINIC_SETTINGS | CLS_OPENING_TIME | Daily opening time | TIME | NULL |
-| CLINIC_SETTINGS | CLS_CLOSING_TIME | Daily closing time | TIME | NULL |
 | CLINIC_SETTINGS | CLS_APPOINTMENT_DURATION | Duration per appointment (minutes) | INT | NULL |
 | CLINIC_SETTINGS | CLS_MAX_APPOINTMENTS_PER_DAY | Maximum appointments per day | INT | NULL |
 | CLINIC_SETTINGS | CLS_ALLOW_OWNER_BOOKING | Allow owners to self-book | BOOLEAN | NULL |
+| CLINIC_SETTINGS | CLS_TIMEZONE | IANA timezone used for clinic-local days/times | VARCHAR | NOT NULL |
 | CLINIC_SETTINGS | CLS_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | CLINIC_SETTINGS | CLS_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
+
+---
+
+## CLINIC_OPERATING_HOURS
+
+| Table | Field Name | Description | Data type | Null Characteristic |
+|-------|------------|-------------|-----------|---------------------|
+| CLINIC_OPERATING_HOURS | COA_ID | Operating-hours row ID (PK) | UUID | NOT NULL |
+| CLINIC_OPERATING_HOURS | CLN_ID | Clinic ID (FK -> CLINIC) | UUID | NOT NULL |
+| CLINIC_OPERATING_HOURS | DAY_OF_WEEK | Weekday code (MON-SUN) | VARCHAR(3) | NOT NULL |
+| CLINIC_OPERATING_HOURS | DAY_INDEX | Weekday order, 0 (Monday) to 6 (Sunday) | SMALLINT | NOT NULL |
+| CLINIC_OPERATING_HOURS | OPENING_TIME | Opening time, null when closed | TIME | NULL |
+| CLINIC_OPERATING_HOURS | CLOSING_TIME | Closing time, null when closed | TIME | NULL |
+| CLINIC_OPERATING_HOURS | IS_CLOSED | Whether the clinic is closed that weekday | BOOLEAN | NOT NULL |
 
 ---
 

@@ -598,7 +598,15 @@ Bulk block operations skip BOOKED slots and return a count of skipped slots so t
 
 When an appointment is cancelled or marked no-show, the slot automatically returns to AVAILABLE status.
 
-Slot generation uses ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+Slot generation uses per-day ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+
+Closed days generate no slots. Slots on an open day must fall inside that day's opening/closing times, and bookings outside those hours are rejected.
+
+`ClinicSettings.cls_timezone` (default `Asia/Manila`) defines the clinic-local day for slot generation, booking validation, appointment date filters, dashboard counts, and past-due calculations. Times are stored in UTC and converted using the clinic timezone.
+
+Changing the clinic timezone does not shift existing slots or appointments; it only changes how clinic-local days and times are interpreted from then on.
+
+Operating hours are saved per weekday. At least one day must stay open; saving all seven days as closed is rejected.
 
 The mobile app's booking flow queries slots with status = AVAILABLE. Blocked slots are not visible to owners.
 

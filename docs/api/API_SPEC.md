@@ -485,8 +485,8 @@ Clinic staff: Returns clinic appointments (clinic-scoped).
 Query parameters:
 
 - date (single day, `YYYY-MM-DD`), status, vet_id, pet_id, search, page, page_size
-- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local [Asia/Manila]
-  calendar days; used by Clinic Admin date-range filtering). `400` if a value is not
+- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local calendar days
+  in the clinic's configured timezone; used by Clinic Admin date-range filtering). `400` if a value is not
   a valid date or if `date_from` is after `date_to`.
 - overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
   with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
@@ -504,7 +504,7 @@ Notes:
 Requires authentication. Receptionist or Clinic Admin dashboard summary
 (read-only).
 
-Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
+Response: `today` (clinic-local-day status counts), `total_owners`, `total_pets`,
 `recent_appointments`, and `needs_attention` — the count of past-due
 appointments still awaiting action. `today.pending` counts only upcoming
 `PENDING` appointments; past-due ones surface through `needs_attention`
@@ -562,6 +562,11 @@ Request (owner):
   "screening_id": "uuid (required for owner bookings)"
 }
 
+Slot validation: the slot's day must be open in `CLINIC_OPERATING_HOURS`, and the
+slot must fall inside that day's opening/closing times. A closed day returns
+`{ "detail": "The clinic is closed on this day." }`; outside hours returns
+`{ "detail": "This slot is outside the clinic operating hours." }`.
+
 ---
 
 ## GET /api/appointments/{id}/
@@ -597,7 +602,7 @@ change status directly: a veterinarian `PATCH` returns `403`. Veterinarians
 submit reschedule or cancellation requests through the endpoints in section
 5A instead.
 
-Time-based rules (Asia/Manila "now"):
+Time-based rules (clinic timezone "now"):
 
 - Confirming a `PENDING` appointment whose scheduled time has passed returns `400`:
   `{ "detail": "Cannot confirm an appointment that has already passed." }`
@@ -627,14 +632,14 @@ Daily appointment counts for the Clinic Admin oversight trend chart.
 Query parameters:
 
 - date_from, date_to (`YYYY-MM-DD`, optional), vet_id, status
-- Default window: last 30 clinic-local (Asia/Manila) days ending today.
+- Default window: last 30 clinic-local days ending today.
 - Same `400` validation rules as `GET /api/appointments/` for the date params.
 
 Response:
 
 { "results": [ { "date": "2026-10-01", "count": 3 }, { "date": "2026-10-02", "count": 0 } ] }
 
-Days are bucketed on Asia/Manila calendar boundaries and zero-filled across the
+Days are bucketed on clinic timezone calendar boundaries and zero-filled across the
 window so chart timelines have no gaps.
 
 ---
@@ -1274,6 +1279,71 @@ Request (multipart/form-data):
 ## GET /api/screenings/{id}/  (spec only, not implemented)
 
 Requires authentication.
+
+---
+
+# 9A. Clinic Profile Endpoints (Clinic Admin)
+
+Requires authentication. Clinic Admin (own clinic) or Super Admin.
+
+## GET /api/clinic/profile/
+
+Returns the clinic profile: name, address, contact details, and logo URL.
+
+## PUT /api/clinic/profile/
+
+Updates the clinic profile. Accepts the same fields as the response.
+
+## POST /api/clinic/logo/
+
+Multipart upload for the clinic logo (`logo` field). Replaces the existing logo.
+
+## GET /api/clinic/settings/
+
+Returns `appointment_duration`, `max_appointments_per_day`,
+`allow_owner_booking`, and `timezone` (IANA name). `opening_time` and
+`closing_time` are no longer part of this response; per-day hours live in
+`/api/clinic/operating-hours/`.
+
+## PUT /api/clinic/settings/
+
+Updates clinic settings. `timezone` must be a valid IANA timezone (validated
+with `zoneinfo`), for example `Asia/Manila`. Sending the removed
+`opening_time` or `closing_time` fields returns `400` with a message pointing to
+`/api/clinic/operating-hours/`.
+
+Changing `timezone` does not shift existing slots or appointments; it changes
+how clinic-local days/times are interpreted and displayed from then on.
+
+## GET /api/clinic/operating-hours/
+
+Returns the seven weekday rows ordered Monday to Sunday:
+
+```json
+{
+  "results": [
+    {
+      "day_of_week": "MON",
+      "day_index": 0,
+      "is_closed": false,
+      "opening_time": "09:00",
+      "closing_time": "17:00"
+    }
+  ]
+}
+```
+
+## PUT /api/clinic/operating-hours/
+
+Replaces all seven weekday rows. Each row uses the shape above. Times are
+required for open days; closed days may send `null`. At least one day must be
+open, otherwise the API returns `400`
+`{ "detail": "At least one day must be open." }`. For open days, closing time
+must be after opening time.
+
+These per-day rows are the single source of truth for slot generation and
+booking validation. Slots are not generated on closed days, and bookings must
+fall within the selected day's opening/closing times.
 
 ---
 
