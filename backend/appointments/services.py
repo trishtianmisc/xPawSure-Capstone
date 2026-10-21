@@ -132,13 +132,6 @@ class VetSlotService:
     def get_or_generate_slots(clinic_id, vet_id, date):
         day_of_week = DAY_MAP[date.weekday()]
 
-        existing = VetSlot.objects.filter(
-            cln_id=clinic_id, stf_id=vet_id, vsl_date=date,
-        ).order_by('vsl_start_time')
-
-        if existing.exists():
-            return existing
-
         try:
             operating_hours = ClinicOperatingHours.objects.select_for_update().get(
                 cln_id_id=clinic_id, day_of_week=day_of_week,
@@ -146,8 +139,19 @@ class VetSlotService:
         except ClinicOperatingHours.DoesNotExist:
             return VetSlot.objects.none()
 
-        if operating_hours.is_closed:
+        if (
+            operating_hours.is_closed
+            or not operating_hours.opening_time
+            or not operating_hours.closing_time
+        ):
             return VetSlot.objects.none()
+
+        existing = VetSlot.objects.filter(
+            cln_id=clinic_id, stf_id=vet_id, vsl_date=date,
+        ).order_by('vsl_start_time')
+
+        if existing.exists():
+            return existing
 
         try:
             clinic_settings = ClinicSettings.objects.get(cln_id_id=clinic_id)
@@ -453,6 +457,24 @@ class AppointmentService:
             )
         except VetSlot.DoesNotExist:
             raise SlotUnavailableError('This slot is no longer available.')
+
+        day_of_week = DAY_MAP[slot.vsl_date.weekday()]
+        try:
+            operating_hours = ClinicOperatingHours.objects.select_for_update().get(
+                cln_id_id=clinic_id, day_of_week=day_of_week,
+            )
+        except ClinicOperatingHours.DoesNotExist:
+            raise ValueError('The clinic is closed on this day.')
+
+        if operating_hours.is_closed:
+            raise ValueError('The clinic is closed on this day.')
+        if (
+            not operating_hours.opening_time
+            or not operating_hours.closing_time
+            or slot.vsl_start_time < operating_hours.opening_time
+            or slot.vsl_end_time > operating_hours.closing_time
+        ):
+            raise ValueError('This slot is outside the clinic operating hours.')
 
         from pets.models import Pet
         try:

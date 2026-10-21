@@ -7,7 +7,11 @@ from django.test import TestCase
 from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetSlot
-from appointments.services import AppointmentService, get_clinic_timezone
+from appointments.services import (
+    AppointmentService,
+    VetSlotService,
+    get_clinic_timezone,
+)
 from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings
 from notifications.models import Notification, NotificationType
 from owners.models import OwnerProfile
@@ -504,4 +508,43 @@ class ClinicTimezoneTests(OwnerBookingBase):
         self.assertEqual(volume[0], {'date': '2026-06-01', 'count': 1})
         self.assertEqual(volume[1], {'date': '2026-06-02', 'count': 0})
 
+class OperatingHoursEnforcementTests(OwnerBookingBase):
 
+    def _closed_date(self):
+        return self.date + timedelta(days=1)
+
+    def _stale_slot(self, slot_date, start_hour=9):
+        return VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=slot_date,
+            vsl_start_time=time(start_hour, 0),
+            vsl_end_time=time(start_hour, 30),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+    def test_closed_day_hides_existing_slots(self):
+        closed_date = self._closed_date()
+        self._stale_slot(closed_date)
+
+        slots = VetSlotService.get_available_slots(
+            self.clinic.cln_id, self.vet.stf_id, closed_date,
+        )
+
+        self.assertEqual(list(slots), [])
+
+    def test_booking_closed_day_slot_is_rejected(self):
+        slot = self._stale_slot(self._closed_date())
+
+        response = self._book(slot_id=slot.vsl_id)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('closed', response.data['detail'].lower())
+
+    def test_booking_slot_outside_operating_hours_is_rejected(self):
+        slot = self._stale_slot(self.date, start_hour=18)
+
+        response = self._book(slot_id=slot.vsl_id)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('operating hours', response.data['detail'].lower())
