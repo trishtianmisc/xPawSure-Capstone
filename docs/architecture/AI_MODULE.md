@@ -547,3 +547,42 @@ When working on the AI module:
 - Never present predictions as confirmed diagnoses.
 - Ensure the AI module can be upgraded without changing the public API.
 - Maintain compatibility with the mobile application architecture.
+
+---
+
+# 26. Image Validation Gate (Mobile)
+
+Multi-image screening validates every photo before disease prediction.
+
+- Quality gate: brightness must be between `15` and `240`, and variance must be at least `30`.
+- Similarity below `0.10` is classified as `low_similarity`.
+- Similarity from `0.10` to below `0.30` is classified as `not_skin`.
+- Similarity at or above `0.30` is classified as `ok` and is a skin-valid image.
+- At least three skin-valid images are required. If fewer than three pass, the result is `NOT_SKIN_IMAGE` and no disease prediction is shown.
+- If fewer than three images pass the quality gate, the result is `INVALID_IMAGE`.
+- Disease probabilities and mean similarity are computed only from skin-valid images.
+- A green check means the photo was accepted as a dog-skin image. It does not mean a disease was detected.
+
+The `0.30` skin-valid threshold must be calibrated against real canine skin images. Human faces must not be accepted as skin-valid. Regression coverage is available through `npm run test:screening` in `mobile/`.
+
+---
+
+# 27. Provisional Bayesian Questionnaire Refinement (Mobile)
+
+The questionnaire refinement step is an experimental mobile-only layer over the five-class image model.
+
+- The active method is `bayesian-provisional-v1`, configured in `mobile/ai/decisionTree/bayesian.config.ts`.
+- The image model, quality gates, skin-validity gates, and minimum-valid-image rule are unchanged.
+- Questionnaire vote points are converted to provisional option likelihoods using `softmax(vote / 20)`.
+- Related questions are averaged in groups; multi-select locations are averaged across selected locations.
+- Expert log-odds are centered and capped at `2.5` before combining with the normalized image prior.
+- The output is a normalized posterior over the five classes, labeled as screening likelihood rather than confidence.
+- Adaptive ordering is enabled by default. It selects the unanswered question with the highest top-two discrimination.
+- Early stopping is implemented but disabled by default. When enabled it requires `P1 >= 0.85`, margin `>= 0.30`, at least two informative groups, and two consecutive stable informative updates.
+- `unsure` answers and unanswered questions add no evidence. All 12 questions remain the fallback.
+- Setting `REFINEMENT_METHOD` to `additive` forces the original static 12-question order and disables Bayesian early stopping.
+- The refinement is not clinically calibrated and does not provide a diagnosis.
+- Questionnaire answers, refinement method, and stopping metadata are not yet persisted by the backend.
+- Regression coverage is available through `npm run test:bayesian` and `npm run test:adaptive` in `mobile/`.
+
+Detailed assumptions, formula, limitations, rollout, and evaluation requirements are documented in `docs/ai/BAYESIAN_REFINEMENT.md`.

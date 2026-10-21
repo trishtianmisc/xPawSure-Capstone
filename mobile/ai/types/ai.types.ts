@@ -13,7 +13,7 @@ export interface Prediction {
   label: string
 }
 
-export type ImageReportStatus = 'ok' | 'quality_failed' | 'low_similarity'
+export type ImageReportStatus = 'ok' | 'quality_failed' | 'low_similarity' | 'not_skin'
 
 export interface ImageReport {
   uri: string

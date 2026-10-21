@@ -4,9 +4,16 @@ import { Asset } from 'expo-asset'
 import { File } from 'expo-file-system'
 
 import { MODEL_INFO } from '../constants/diseases'
-import type { ImageReport, ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
+import type { ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
 import { SCREENING_THRESHOLDS, SCREENING_STATE_MESSAGES } from '../constants/diseases'
 import { Normalization, Rescaling } from './customLayers'
+import {
+  average,
+  buildImageReports,
+  decideScreeningState,
+  MIN_VALID_IMAGES,
+  selectValidIndices,
+} from './screening.logic'
 
 tf.serialization.registerClass(Normalization)
 tf.serialization.registerClass(Rescaling)
@@ -257,8 +264,6 @@ export async function runScreening(
   }
 }
 
-const MIN_USABLE_IMAGES = 3
-
 export async function runMultiScreening(
   imageUris: string[],
   modelInfo: ModelInfo = MODEL_INFO,
@@ -294,22 +299,12 @@ export async function runMultiScreening(
   }
 
   try {
-    const buildReports = (similarities: number[] | null): ImageReport[] => {
-      let k = 0
-      return imageUris.map((uri, i) => {
-        if (!qualityFlags[i]) {
-          return { uri, status: 'quality_failed' as const, similarity: 0 }
-        }
-        const sim = similarities ? similarities[k] : 0
-        k += 1
-        if (sim < SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN) {
-          return { uri, status: 'low_similarity' as const, similarity: sim }
-        }
-        return { uri, status: 'ok' as const, similarity: sim }
-      })
+    const similarityThresholds = {
+      minSimilarity: SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN,
+      skinSimilarity: SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH,
     }
 
-    if (keptTensors.length < MIN_USABLE_IMAGES) {
+    if (keptTensors.length < MIN_VALID_IMAGES) {
       const message = `Only ${keptTensors.length} of ${imageUris.length} photos were usable (too dark or blurry). Retake the affected area in good light.`
       console.log(`[TF SCREENING] MULTI INVALID_IMAGE: ${keptTensors.length}/${imageUris.length} passed quality gates`)
       for (const tensor of keptTensors) {
@@ -321,7 +316,12 @@ export async function runMultiScreening(
         modelVersion: modelInfo.version,
         state: 'INVALID_IMAGE',
         stateMessage: message,
-        imageReports: buildReports(null),
+        imageReports: buildImageReports(
+          imageUris,
+          qualityFlags,
+          null,
+          similarityThresholds,
+        ),
       }
     }
 
@@ -366,14 +366,18 @@ export async function runMultiScreening(
       }
     }
 
-    const validIndices = similarities
-      .map((sim, i) => ({ sim, i }))
-      .filter(({ sim }) => sim >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN)
-      .map(({ i }) => i)
+    const validIndices = selectValidIndices(
+      similarities,
+      SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH,
+    )
+    const imageReports = buildImageReports(
+      imageUris,
+      qualityFlags,
+      similarities,
+      similarityThresholds,
+    )
 
-    const imageReports = buildReports(similarities)
-
-    console.log(`[TF SCREENING] MULTI: ${numKept}/${imageUris.length} quality-ok, ${validIndices.length} skin-valid, sims=[${similarities.map(s => s.toFixed(3)).join(', ')}]`)
+    console.log(`[TF SCREENING] MULTI: ${numKept}/${imageUris.length} quality-ok, ${validIndices.length} skin-valid (>=${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH}), sims=[${similarities.map(s => s.toFixed(3)).join(', ')}]`)
 
     const buildPredictions = (indices: number[]): Prediction[] => {
       const avg = new Float32Array(numClasses)
@@ -391,15 +395,11 @@ export async function runMultiScreening(
       return preds
     }
 
-    const allKept = Array.from({ length: numKept }, (_, i) => i)
-
-    if (validIndices.length < MIN_USABLE_IMAGES) {
+    if (validIndices.length < MIN_VALID_IMAGES) {
       const message = `Only ${validIndices.length} of ${imageUris.length} photos looked like dog skin. Retake close-up photos of the affected skin area.`
-      console.log(`[TF SCREENING] MULTI NOT_SKIN_IMAGE: ${validIndices.length}/${imageUris.length} skin-valid below minimum ${MIN_USABLE_IMAGES}`)
-      const fallbackPredictions = buildPredictions(allKept)
+      console.log(`[TF SCREENING] MULTI NOT_SKIN_IMAGE: ${validIndices.length}/${imageUris.length} skin-valid below minimum ${MIN_VALID_IMAGES}`)
       return {
-        predictions: fallbackPredictions,
-        topPrediction: fallbackPredictions[0],
+        predictions: [],
         inferenceTimeMs,
         modelVersion: modelInfo.version,
         state: 'NOT_SKIN_IMAGE',
@@ -410,18 +410,15 @@ export async function runMultiScreening(
 
     const predictions = buildPredictions(validIndices)
 
-    const meanSim =
-      validIndices.reduce((sum, i) => sum + similarities[i], 0) / validIndices.length
+    const meanSim = average(validIndices.map((index) => similarities[index]))
 
-    let state: ScreeningResultState
-    let stateMessage: string
-    if (meanSim >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH) {
-      state = 'DISEASE_DETECTED'
-      stateMessage = SCREENING_STATE_MESSAGES.DISEASE_DETECTED.message
-    } else {
-      state = 'UNCERTAIN'
-      stateMessage = SCREENING_STATE_MESSAGES.UNCERTAIN.message
-    }
+    const state = decideScreeningState(
+      numKept,
+      validIndices.length,
+      meanSim,
+      SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH,
+    )
+    const stateMessage = SCREENING_STATE_MESSAGES[state].message
 
     console.log(`[TF SCREENING] MULTI RESULT: state=${state} meanSim=${meanSim.toFixed(3)} top=${predictions[0].label} ${predictions[0].confidence}% inference=${inferenceTimeMs}ms`)
 

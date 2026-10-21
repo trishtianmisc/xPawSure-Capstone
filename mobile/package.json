@@ -48,7 +48,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "compute:reference": "node scripts/compute_training_reference_tfjs.js"
+    "compute:reference": "node scripts/compute_training_reference_tfjs.js",
+    "test:screening": "node scripts/test-screening-logic.js",
+    "test:bayesian": "node scripts/test-bayesian-logic.js",
+    "test:adaptive": "node scripts/test-adaptive-logic.js"
   },
   "private": true
 }

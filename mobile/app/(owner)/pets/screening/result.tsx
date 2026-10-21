@@ -18,6 +18,7 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { countRejectedReports } from '../../../../ai/services/screening.logic'
 import { usePet } from '../../../../features/pet/hooks/usePet'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
@@ -34,6 +35,26 @@ const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> 
   NOT_SKIN_IMAGE: { color: '#E67E22', icon: 'image-off-outline' },
   UNCERTAIN: { color: '#F39C12', icon: 'help-circle-outline' },
   INVALID_IMAGE: { color: '#E74C3C', icon: 'image-off-outline' },
+}
+
+function buildStoppingNotice(
+  reason: string | undefined,
+  answeredCount: number,
+  totalQuestions: number,
+): string | null {
+  if (reason === 'criteria-met') {
+    if (answeredCount >= totalQuestions) {
+      return `All ${totalQuestions} questions were answered and the configured provisional criteria were met. This is not a diagnosis.`
+    }
+    return `Questionnaire stopped early after ${answeredCount} of ${totalQuestions} answers because the configured provisional criteria were met. This is not a diagnosis.`
+  }
+  if (reason === 'all-questions-answered') {
+    return `All ${totalQuestions} questions were answered without meeting the early-stop criteria. Showing the best available preliminary result; uncertainty remains.`
+  }
+  if (reason === 'completed-with-early-stopping-disabled') {
+    return `All ${totalQuestions} questions completed. Showing the best available preliminary result.`
+  }
+  return null
 }
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
@@ -94,6 +115,10 @@ export default function ResultScreen() {
     alreadySaved: string
     refined?: string
     changed?: string
+    refinementMethod?: string
+    stoppingReason?: string
+    answeredCount?: string
+    totalQuestions?: string
     imageReports?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -101,7 +126,7 @@ export default function ResultScreen() {
     params.petId && params.petId !== 'unknown' ? params.petId : undefined,
   )
 
-  const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
+  const screeningState = (params.state as ScreeningResultState) || 'INVALID_IMAGE'
   const stateMessage = params.stateMessage || ''
 
   const predictions: Prediction[] = useMemo(() => {
@@ -130,10 +155,31 @@ export default function ResultScreen() {
     }
   }, [params.imageReports])
 
+  const rejectionMessages = useMemo(() => {
+    const counts = countRejectedReports(imageReports)
+    const messages: string[] = []
+    const notSkin = counts.notSkin + counts.lowSimilarity
+
+    if (screeningState !== 'INVALID_IMAGE' && notSkin > 0) {
+      messages.push(`${notSkin} ${notSkin === 1 ? 'photo' : 'photos'} did not look like dog skin.`)
+    }
+    if (counts.quality > 0) {
+      messages.push(`${counts.quality} ${counts.quality === 1 ? 'photo was' : 'photos were'} too dark or blurry.`)
+    }
+
+    return messages
+  }, [imageReports, screeningState])
+
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
   const finalTop = refinedPredictions ? refinedPredictions[0] : top
   const isChanged = params.changed === 'true'
+  const isBayesian = params.refinementMethod === 'bayesian-provisional-v1'
+  const answeredCount = Number(params.answeredCount) || 0
+  const totalQuestions = Number(params.totalQuestions) || 12
+  const stoppingNotice = isBayesian
+    ? buildStoppingNotice(params.stoppingReason, answeredCount, totalQuestions)
+    : null
   const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
   const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
   const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
@@ -219,17 +265,39 @@ export default function ResultScreen() {
           </View>
         )}
 
+        {rejectionMessages.length > 0 && (
+          <View style={styles.rejectionNote}>
+            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={14} />
+            <Text style={styles.rejectionText}>{rejectionMessages.join(' ')}</Text>
+          </View>
+        )}
+
+        {stoppingNotice && (
+          <View style={[styles.stoppingNote, { backgroundColor: colors.surfaceAlt }]}>
+            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
+            <Text style={styles.stoppingText}>{stoppingNotice}</Text>
+          </View>
+        )}
+
         {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={styles.topLabel}>
+                {isBayesian
+                  ? 'Bayesian Screening Suggestion'
+                  : refinedPredictions
+                    ? 'Closest Match'
+                    : 'Predicted Condition'}
+              </Text>
               <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-                <Text style={styles.confidenceLabel}>confidence</Text>
+                <Text style={styles.confidenceLabel}>
+                  {isBayesian ? 'screening likelihood' : 'confidence'}
+                </Text>
               </View>
               {refinedPredictions && (
                 <Text style={styles.comparisonText}>
@@ -242,7 +310,11 @@ export default function ResultScreen() {
 
             <View style={styles.breakdownCard}>
               <Text style={styles.breakdownTitle}>
-                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
+                {isBayesian
+                  ? 'Top 3 Screening Likelihoods'
+                  : refinedPredictions
+                    ? 'Top 3 Suggestions'
+                    : 'All Predictions'}
               </Text>
               {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
@@ -279,7 +351,10 @@ export default function ResultScreen() {
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
             This is an AI-assisted screening and does not replace professional veterinary diagnosis.
-            Consult a vet for definitive results.
+            {isBayesian
+              ? ' Questionnaire-adjusted likelihoods are experimental and use provisional expert weights.'
+              : ''}
+            {' '}Consult a vet for definitive results.
           </Text>
         </View>
 
@@ -345,6 +420,18 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
   reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
+  rejectionNote: { alignItems: 'flex-start', flexDirection: 'row', gap: 6, marginBottom: 16, marginTop: -10 },
+  rejectionText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  stoppingNote: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  stoppingText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
   reportItem: { position: 'relative' },
   reportThumb: { borderRadius: 12, height: 56, width: 56 },
   reportThumbFailed: { opacity: 0.4 },
