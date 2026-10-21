@@ -1,11 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 
 import { ClinicSettingsCard } from './ClinicSettingsCard'
 import type { ClinicSettings } from '../types/clinicProfile.types'
 
 const settings: ClinicSettings = {
-  opening_time: '09:00:00',
-  closing_time: '17:00:00',
   appointment_duration: 30,
   max_appointments_per_day: 20,
   allow_owner_booking: true,
@@ -15,7 +13,7 @@ const settings: ClinicSettings = {
 }
 
 describe('ClinicSettingsCard', () => {
-  it('renders opening and closing times in 12-hour format', () => {
+  it('renders settings without global opening and closing times', () => {
     render(
       <ClinicSettingsCard
         settings={settings}
@@ -24,9 +22,26 @@ describe('ClinicSettingsCard', () => {
       />,
     )
 
-    expect(screen.getByText('9:00 AM')).toBeInTheDocument()
-    expect(screen.getByText('5:00 PM')).toBeInTheDocument()
-    expect(screen.queryByText('09:00:00')).not.toBeInTheDocument()
-    expect(screen.queryByText('17:00:00')).not.toBeInTheDocument()
+    expect(screen.getByText('30 minutes')).toBeInTheDocument()
+    expect(screen.getByText('Asia/Manila')).toBeInTheDocument()
+    expect(screen.queryByText('Opening Time')).not.toBeInTheDocument()
+    expect(screen.queryByText('Closing Time')).not.toBeInTheDocument()
+  })
+
+  it('shows the timezone warning while editing', () => {
+    render(
+      <ClinicSettingsCard
+        settings={settings}
+        isUpdating={false}
+        onUpdate={() => undefined}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /edit settings/i }))
+
+    expect(screen.getByLabelText('Timezone')).toBeInTheDocument()
+    expect(
+      screen.getByText('Changing the timezone does not shift existing slots or appointments.'),
+    ).toBeInTheDocument()
   })
 })

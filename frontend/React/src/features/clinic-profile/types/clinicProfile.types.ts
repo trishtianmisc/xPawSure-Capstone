@@ -12,8 +12,6 @@ export interface ClinicProfile {
 }
 
 export interface ClinicSettings {
-  opening_time: string
-  closing_time: string
   appointment_duration: number
   max_appointments_per_day: number
   allow_owner_booking: boolean
@@ -30,11 +28,10 @@ export interface UpdateProfilePayload {
 }
 
 export interface UpdateSettingsPayload {
-  opening_time: string
-  closing_time: string
   appointment_duration: number
   max_appointments_per_day: number
   allow_owner_booking: boolean
+  timezone: string
 }
 
 export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'

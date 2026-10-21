@@ -3,7 +3,6 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import { Alert, Button, Card, Input } from '../../../components/ui'
-import { formatClockTime } from '../../../utils/format'
 import { settingsSchema, type SettingsFormValues } from '../schemas/clinicProfile.schema'
 import type { ClinicSettings } from '../types/clinicProfile.types'
 
@@ -13,10 +12,12 @@ interface ClinicSettingsCardProps {
   onUpdate: (data: SettingsFormValues) => void
 }
 
-function toTimeInputValue(timeStr: string): string {
-  if (!timeStr) return ''
-  const parts = timeStr.split(':')
-  return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
+const TIME_ZONE_OPTIONS = Intl.supportedValuesOf('timeZone')
+
+function timeZoneOptions(current: string): string[] {
+  return TIME_ZONE_OPTIONS.includes(current)
+    ? TIME_ZONE_OPTIONS
+    : [current, ...TIME_ZONE_OPTIONS]
 }
 
 export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSettingsCardProps) {
@@ -30,21 +31,19 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
   } = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
-      opening_time: toTimeInputValue(settings.opening_time),
-      closing_time: toTimeInputValue(settings.closing_time),
       appointment_duration: settings.appointment_duration,
       max_appointments_per_day: settings.max_appointments_per_day,
       allow_owner_booking: settings.allow_owner_booking,
+      timezone: settings.timezone,
     },
   })
 
   function openEdit() {
     reset({
-      opening_time: toTimeInputValue(settings.opening_time),
-      closing_time: toTimeInputValue(settings.closing_time),
       appointment_duration: settings.appointment_duration,
       max_appointments_per_day: settings.max_appointments_per_day,
       allow_owner_booking: settings.allow_owner_booking,
+      timezone: settings.timezone,
     })
     setEditing(true)
   }
@@ -56,12 +55,6 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
       </h2>
 
       <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
-        <div className="py-4 sm:py-5">
-          <InfoRow label="Opening Time" value={formatClockTime(settings.opening_time) || '—'} />
-        </div>
-        <div className="py-4 sm:py-5">
-          <InfoRow label="Closing Time" value={formatClockTime(settings.closing_time) || '—'} />
-        </div>
         <div className="py-4 sm:py-5">
           <InfoRow label="Appointment Duration" value={`${settings.appointment_duration} minutes`} />
         </div>
@@ -96,19 +89,32 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
               setEditing(false)
             })}
           >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input
-                {...register('opening_time')}
-                error={errors.opening_time?.message}
-                label="Opening Time"
-                type="time"
-              />
-              <Input
-                {...register('closing_time')}
-                error={errors.closing_time?.message}
-                label="Closing Time"
-                type="time"
-              />
+            <div>
+              <label
+                htmlFor="settings-timezone"
+                className="mb-1.5 block text-sm font-medium text-stone-700 dark:text-stone-300"
+              >
+                Timezone
+              </label>
+              <select
+                id="settings-timezone"
+                {...register('timezone')}
+                className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+              >
+                {timeZoneOptions(settings.timezone).map((timezone) => (
+                  <option key={timezone} value={timezone}>
+                    {timezone}
+                  </option>
+                ))}
+              </select>
+              {errors.timezone?.message && (
+                <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                  {errors.timezone.message}
+                </p>
+              )}
+              <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+                Changing the timezone does not shift existing slots or appointments.
+              </p>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <Input

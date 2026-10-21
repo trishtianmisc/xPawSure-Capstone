@@ -58,11 +58,10 @@ export function ClinicProfilePage() {
   function handleUpdateSettings(data: SettingsFormValues) {
     updateSettings.mutate(
       {
-        opening_time: data.opening_time,
-        closing_time: data.closing_time,
         appointment_duration: data.appointment_duration,
         max_appointments_per_day: data.max_appointments_per_day,
         allow_owner_booking: data.allow_owner_booking,
+        timezone: data.timezone,
       },
       {
         onSuccess: () => showToast('Clinic settings updated.', 'success'),
