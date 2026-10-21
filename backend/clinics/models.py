@@ -59,7 +59,7 @@ class ClinicSettings(models.Model):
         default=True, db_column='CLS_ALLOW_OWNER_BOOKING',
     )
     cls_timezone = models.CharField(
-        max_length=50, default='UTC', db_column='CLS_TIMEZONE',
+        max_length=50, default='Asia/Manila', db_column='CLS_TIMEZONE',
     )
     cls_created_at = models.DateTimeField(auto_now_add=True, db_column='CLS_CREATED_AT')
     cls_updated_at = models.DateTimeField(auto_now=True, db_column='CLS_UPDATED_AT')

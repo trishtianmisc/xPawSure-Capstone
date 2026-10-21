@@ -278,12 +278,10 @@ class ClinicProfileService:
         settings_obj, _ = ClinicSettings.objects.get_or_create(
             cln_id=clinic,
             defaults={
-                'cls_opening_time': '09:00',
-                'cls_closing_time': '17:00',
                 'cls_appointment_duration': 30,
                 'cls_max_appointments_per_day': 50,
                 'cls_allow_owner_booking': True,
-                'cls_timezone': 'UTC',
+                'cls_timezone': 'Asia/Manila',
             },
         )
         return settings_obj
@@ -298,19 +296,17 @@ class ClinicProfileService:
         settings_obj = ClinicProfileService.get_settings(clinic)
 
         old_values = {
-            'cls_opening_time': str(settings_obj.cls_opening_time),
-            'cls_closing_time': str(settings_obj.cls_closing_time),
             'cls_appointment_duration': settings_obj.cls_appointment_duration,
             'cls_max_appointments_per_day': settings_obj.cls_max_appointments_per_day,
             'cls_allow_owner_booking': settings_obj.cls_allow_owner_booking,
+            'cls_timezone': settings_obj.cls_timezone,
         }
 
         field_map = {
-            'cls_opening_time': 'cls_opening_time',
-            'cls_closing_time': 'cls_closing_time',
             'cls_appointment_duration': 'cls_appointment_duration',
             'cls_max_appointments_per_day': 'cls_max_appointments_per_day',
             'cls_allow_owner_booking': 'cls_allow_owner_booking',
+            'cls_timezone': 'cls_timezone',
         }
 
         new_values = {}

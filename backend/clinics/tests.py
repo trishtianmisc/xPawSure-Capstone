@@ -483,12 +483,10 @@ class ClinicSettingsAutoCreationTests(ClinicAPITestCase):
 
         clinic = Clinic.objects.get(cln_name='Settings Test Clinic')
         settings_obj = ClinicSettings.objects.get(cln_id=clinic)
-        self.assertEqual(str(settings_obj.cls_opening_time), '09:00:00')
-        self.assertEqual(str(settings_obj.cls_closing_time), '17:00:00')
         self.assertEqual(settings_obj.cls_appointment_duration, 30)
         self.assertEqual(settings_obj.cls_max_appointments_per_day, 50)
         self.assertTrue(settings_obj.cls_allow_owner_booking)
-        self.assertEqual(settings_obj.cls_timezone, 'UTC')
+        self.assertEqual(settings_obj.cls_timezone, 'Asia/Manila')
 
 
 class ClinicProfileTests(ClinicAPITestCase):
@@ -604,54 +602,72 @@ class ClinicSettingsTests(ClinicAPITestCase):
             self.settings_url, **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('opening_time', response.data)
-        self.assertIn('closing_time', response.data)
+        self.assertNotIn('opening_time', response.data)
+        self.assertNotIn('closing_time', response.data)
         self.assertIn('appointment_duration', response.data)
+        self.assertEqual(response.data['timezone'], 'Asia/Manila')
 
     def test_update_settings(self):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '08:00:00',
-                'closing_time': '18:00:00',
                 'appointment_duration': 45,
                 'max_appointments_per_day': 30,
                 'allow_owner_booking': False,
+                'timezone': 'America/New_York',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['opening_time'], '08:00:00')
-        self.assertEqual(response.data['closing_time'], '18:00:00')
+        self.assertNotIn('opening_time', response.data)
+        self.assertNotIn('closing_time', response.data)
+        self.assertEqual(response.data['timezone'], 'America/New_York')
         self.assertEqual(response.data['appointment_duration'], 45)
         self.assertEqual(response.data['max_appointments_per_day'], 30)
         self.assertFalse(response.data['allow_owner_booking'])
 
-    def test_update_settings_invalid_time_order(self):
-        response = self.client.put(
-            self.settings_url,
-            {
-                'opening_time': '18:00:00',
-                'closing_time': '08:00:00',
-                'appointment_duration': 30,
-                'max_appointments_per_day': 50,
-                'allow_owner_booking': True,
-            },
-            format='json',
-            **self._auth_header(self.clinic_admin),
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_update_settings_invalid_duration(self):
+    def test_update_settings_rejects_removed_global_fields(self):
         response = self.client.put(
             self.settings_url,
             {
                 'opening_time': '09:00:00',
                 'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('opening_time', response.data)
+        self.assertIn('closing_time', response.data)
+
+    def test_update_settings_invalid_timezone(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Mars/Olympus_Mons',
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('timezone', response.data)
+
+    def test_update_settings_invalid_duration(self):
+        response = self.client.put(
+            self.settings_url,
+            {
                 'appointment_duration': 0,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
@@ -662,11 +678,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '09:00:00',
-                'closing_time': '17:00:00',
                 'appointment_duration': 30,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
             },
             format='json',
             **self._auth_header(self.super_admin),
@@ -679,11 +694,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         self.client.put(
             self.settings_url,
             {
-                'opening_time': '07:00:00',
-                'closing_time': '19:00:00',
                 'appointment_duration': 60,
                 'max_appointments_per_day': 100,
                 'allow_owner_booking': False,
+                'timezone': 'Asia/Tokyo',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
@@ -693,6 +707,8 @@ class ClinicSettingsTests(ClinicAPITestCase):
             adl_module='CLINIC_SETTINGS',
         ).last()
         self.assertIsNotNone(audit)
+        self.assertEqual(audit.adl_old_values['cls_timezone'], 'Asia/Manila')
+        self.assertEqual(audit.adl_new_values['cls_timezone'], 'Asia/Tokyo')
 
 
 class ClinicLogoTests(ClinicAPITestCase):
