@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Card } from '../../../components/ui'
+import { Alert, Button, Card } from '../../../components/ui'
 import { formatClockTime } from '../../../utils/format'
 import type { DayOfWeek, OperatingHoursDay } from '../types/clinicProfile.types'
 
@@ -24,6 +24,7 @@ interface OperatingHoursCardProps {
 export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHoursCardProps) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<OperatingHoursDay[]>([])
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   function openEdit() {
     setDraft(hours.map((h) => ({
@@ -31,7 +32,30 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
       opening_time: h.opening_time || null,
       closing_time: h.closing_time || null,
     })))
+    setErrors({})
     setEditing(true)
+  }
+
+  function validateDraft(days: OperatingHoursDay[]): Record<string, string> {
+    const nextErrors: Record<string, string> = {}
+    let openDays = 0
+
+    for (const day of days) {
+      if (day.is_closed) continue
+      openDays += 1
+      if (!day.opening_time) {
+        nextErrors[day.day_of_week] = 'Opening time is required.'
+      } else if (!day.closing_time) {
+        nextErrors[day.day_of_week] = 'Closing time is required.'
+      } else if (day.opening_time >= day.closing_time) {
+        nextErrors[day.day_of_week] = 'Closing time must be after opening time.'
+      }
+    }
+
+    if (openDays === 0) {
+      nextErrors._all = 'At least one day must be open.'
+    }
+    return nextErrors
   }
 
   function updateDraft(dayOfWeek: DayOfWeek, field: keyof OperatingHoursDay, value: string | boolean | null) {
@@ -46,6 +70,12 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
         return updated
       })
     )
+    setErrors((prev) => {
+      const next = { ...prev }
+      delete next[dayOfWeek]
+      delete next._all
+      return next
+    })
   }
 
   function copyToAll(sourceDay: DayOfWeek) {
@@ -59,6 +89,7 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
         is_closed: source.is_closed,
       }))
     )
+    setErrors({})
   }
 
   function copyToWeekdays(sourceDay: DayOfWeek) {
@@ -71,10 +102,22 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
           : d
       )
     )
+    setErrors({})
   }
 
   function handleSave() {
+    const nextErrors = validateDraft(draft)
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors)
+      return
+    }
+    setErrors({})
     onUpdate(draft)
+    setEditing(false)
+  }
+
+  function cancelEdit() {
+    setErrors({})
     setEditing(false)
   }
 
@@ -119,6 +162,12 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
             </Button>
           </div>
 
+          {errors._all && (
+            <div className="mt-4">
+              <Alert variant="error">{errors._all}</Alert>
+            </div>
+          )}
+
           <div className="mt-4 space-y-3">
             {draft.map((day) => (
               <div
@@ -130,6 +179,7 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
                     type="checkbox"
                     checked={!day.is_closed}
                     onChange={(e) => updateDraft(day.day_of_week, 'is_closed', !e.target.checked)}
+                    aria-label={`${DAY_LABELS[day.day_of_week]} open`}
                     className="size-4 rounded border-stone-300 text-amber-600 focus:ring-amber-500"
                   />
                   <span className="text-sm font-medium text-stone-700 dark:text-stone-300 w-24">
@@ -137,20 +187,37 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
                   </span>
                 </div>
                 {!day.is_closed ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="time"
-                      value={day.opening_time ?? ''}
-                      onChange={(e) => updateDraft(day.day_of_week, 'opening_time', e.target.value || null)}
-                      className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm dark:border-stone-600 dark:bg-stone-700 dark:text-stone-100"
-                    />
-                    <span className="text-sm text-stone-400">to</span>
-                    <input
-                      type="time"
-                      value={day.closing_time ?? ''}
-                      onChange={(e) => updateDraft(day.day_of_week, 'closing_time', e.target.value || null)}
-                      className="rounded-lg border border-stone-300 px-3 py-1.5 text-sm dark:border-stone-600 dark:bg-stone-700 dark:text-stone-100"
-                    />
+                  <div className="flex flex-col items-start gap-1 sm:items-end">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={day.opening_time ?? ''}
+                        onChange={(e) => updateDraft(day.day_of_week, 'opening_time', e.target.value || null)}
+                        aria-label={`${DAY_LABELS[day.day_of_week]} opening time`}
+                        className={`rounded-lg border px-3 py-1.5 text-sm dark:bg-stone-700 dark:text-stone-100 ${
+                          errors[day.day_of_week]
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-stone-300 dark:border-stone-600'
+                        }`}
+                      />
+                      <span className="text-sm text-stone-400">to</span>
+                      <input
+                        type="time"
+                        value={day.closing_time ?? ''}
+                        onChange={(e) => updateDraft(day.day_of_week, 'closing_time', e.target.value || null)}
+                        aria-label={`${DAY_LABELS[day.day_of_week]} closing time`}
+                        className={`rounded-lg border px-3 py-1.5 text-sm dark:bg-stone-700 dark:text-stone-100 ${
+                          errors[day.day_of_week]
+                            ? 'border-red-500 dark:border-red-500'
+                            : 'border-stone-300 dark:border-stone-600'
+                        }`}
+                      />
+                    </div>
+                    {errors[day.day_of_week] && (
+                      <p className="text-xs text-red-600 dark:text-red-400">
+                        {errors[day.day_of_week]}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <span className="text-sm text-stone-400 dark:text-stone-500">Closed</span>
@@ -160,7 +227,7 @@ export function OperatingHoursCard({ hours, isUpdating, onUpdate }: OperatingHou
           </div>
 
           <div className="mt-6 flex items-center justify-end gap-3">
-            <Button variant="secondary" onClick={() => setEditing(false)} type="button">
+            <Button variant="secondary" onClick={cancelEdit} type="button">
               Cancel
             </Button>
             <Button loading={isUpdating} onClick={handleSave} type="button">
