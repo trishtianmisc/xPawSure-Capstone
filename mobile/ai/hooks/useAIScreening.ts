@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-import { loadModel, runMultiScreening, runScreening, isReady } from '../services/tensorflow.service'
+import { loadModel, runScreening, isReady } from '../services/tensorflow.service'
 import type { ScreeningResult } from '../types/ai.types'
 
 interface UseAIScreeningReturn {
@@ -11,7 +11,6 @@ interface UseAIScreeningReturn {
   result: ScreeningResult | null
   screeningError: string | null
   screenImage: (imageUri: string) => Promise<ScreeningResult>
-  screenImages: (imageUris: string[]) => Promise<ScreeningResult>
   reset: () => void
 }
 
@@ -21,27 +20,27 @@ export function useAIScreening(): UseAIScreeningReturn {
   const [isScreening, setIsScreening] = useState(false)
   const [result, setResult] = useState<ScreeningResult | null>(null)
   const [screeningError, setScreeningError] = useState<string | null>(null)
-  const loadingRef = useRef(false)
+  const modelLoadPromiseRef = useRef<Promise<void> | null>(null)
 
   const ensureModel = useCallback(async () => {
     if (isReady()) return
-    if (loadingRef.current) return
+    if (!modelLoadPromiseRef.current) {
+      setIsModelLoading(true)
+      setModelError(null)
 
-    loadingRef.current = true
-    setIsModelLoading(true)
-    setModelError(null)
-
-    try {
-      await loadModel()
-    } catch (error) {
-      setModelError(`Failed to load AI model: ${error}`)
-      loadingRef.current = false
-      setIsModelLoading(false)
-      throw error
+      modelLoadPromiseRef.current = loadModel()
+        .then(() => undefined)
+        .catch((error) => {
+          setModelError(`Failed to load AI model: ${error}`)
+          throw error
+        })
+        .finally(() => {
+          setIsModelLoading(false)
+          modelLoadPromiseRef.current = null
+        })
     }
 
-    loadingRef.current = false
-    setIsModelLoading(false)
+    await modelLoadPromiseRef.current
   }, [])
 
   const screenImage = useCallback(async (imageUri: string): Promise<ScreeningResult> => {
@@ -52,25 +51,6 @@ export function useAIScreening(): UseAIScreeningReturn {
     try {
       await ensureModel()
       const screeningResult = await runScreening(imageUri)
-      setResult(screeningResult)
-      return screeningResult
-    } catch (error) {
-      const message = `Screening failed: ${error}`
-      setScreeningError(message)
-      throw new Error(message)
-    } finally {
-      setIsScreening(false)
-    }
-  }, [ensureModel])
-
-  const screenImages = useCallback(async (imageUris: string[]): Promise<ScreeningResult> => {
-    setIsScreening(true)
-    setScreeningError(null)
-    setResult(null)
-
-    try {
-      await ensureModel()
-      const screeningResult = await runMultiScreening(imageUris)
       setResult(screeningResult)
       return screeningResult
     } catch (error) {
@@ -95,7 +75,6 @@ export function useAIScreening(): UseAIScreeningReturn {
     result,
     screeningError,
     screenImage,
-    screenImages,
     reset,
   }
 }

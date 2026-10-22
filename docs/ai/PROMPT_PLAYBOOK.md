@@ -250,9 +250,14 @@ Generate:
 
 If AI is involved:
 
-Use TensorFlow Lite.
+Use TensorFlow.js for on-device classification.
 
-Never perform backend inference.
+Never run the classifier on the backend.
+
+A non-diagnostic Claude image-validation gate must run through Django before the
+on-device classifier. Run the classifier only when the gate returns
+`screening_eligibility = ELIGIBLE`; keep its output separate and never average
+it with the classifier.
 ```
 
 ---

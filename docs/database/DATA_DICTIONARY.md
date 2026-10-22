@@ -303,16 +303,28 @@
 |-------|------------|-------------|-----------|---------------------|
 | AI_SCREENING | AIS_ID | Screening ID (PK) | UUID | NOT NULL |
 | AI_SCREENING | PET_ID | Pet ID (FK → PET) | UUID | NOT NULL |
-| AI_SCREENING | USR_ID | User who initiated screening (FK → USER) | UUID | NOT NULL |
+| AI_SCREENING | DIS_ID | Predicted disease (FK → DISEASE) | UUID | NOT NULL |
+| AI_SCREENING | USR_ID | User who initiated screening (FK → USER) | UUID | NULL |
 | AI_SCREENING | CON_ID | Consultation ID (FK → CONSULTATION) | UUID | NULL |
-| AI_SCREENING | AIS_PRIMARY_DISEASE_ID | Primary predicted disease (FK → DISEASE) | UUID | NOT NULL |
-| AI_SCREENING | AIS_PRIMARY_CONFIDENCE | Confidence score (0-100) | DECIMAL | NULL |
-| AI_SCREENING | AIS_TOP_PREDICTIONS | All prediction results (JSON array) | JSONB | NULL | 
-| AI_SCREENING | AIS_MODEL_VERSION | TFLite model version used | VARCHAR | NULL |
+| AI_SCREENING | AIS_CONFIDENCE | On-device confidence score (0-100) | DECIMAL | NOT NULL |
+| AI_SCREENING | AIS_MODEL_VERSION | On-device model version used | VARCHAR | NOT NULL |
 | AI_SCREENING | AIS_INFERENCE_TIME_MS | Inference time in milliseconds | INT | NULL |
 | AI_SCREENING | AIS_DEVICE | Device used for inference | VARCHAR | NULL |
-| AI_SCREENING | AIS_STATUS | Screening status (AIScreeningStatus enum) | ENUM | NULL |
-| AI_SCREENING | AIS_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_STATUS | Screening status (AIScreeningStatus enum) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_SOURCE | Screening source (`DEVICE`) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_IS_CORRECT | Post-consultation AI-vs-vet verdict | BOOLEAN | NULL |
+| AI_SCREENING | AIS_COMPARED_DIAGNOSIS | Diagnosis used for the verdict | TEXT | NULL |
+| AI_SCREENING | AIS_COMPARED_AT | Verdict timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_CLAUDE_STATUS | Second review status (ClaudeAnalysisStatus enum) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_CLAUDE_MODEL | Anthropic model ID used for the review | VARCHAR | NULL |
+| AI_SCREENING | AIS_CLAUDE_RESULT | Structured non-diagnostic findings | JSONB | NULL |
+| AI_SCREENING | AIS_CLAUDE_ANALYZED_AT | Review completion timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_CLAUDE_LATENCY_MS | Review latency in milliseconds | INT | NULL |
+| AI_SCREENING | AIS_CLAUDE_INPUT_TOKENS | Anthropic input tokens | INT | NULL |
+| AI_SCREENING | AIS_CLAUDE_OUTPUT_TOKENS | Anthropic output tokens | INT | NULL |
+| AI_SCREENING | AIS_CROSS_ANALYSIS_STATUS | Deterministic comparison result | ENUM | NOT NULL |
+| AI_SCREENING | AIS_CROSS_ANALYSIS_SUMMARY | Human-readable comparison summary | TEXT | NULL |
+| AI_SCREENING | AIS_CREATED_AT | Record creation timestamp | TIMESTAMP | NOT NULL |
 
 ---
 
@@ -321,10 +333,13 @@
 | Table | Field Name | Description | Data type | Null Characteristic |
 |-------|------------|-------------|-----------|---------------------|
 | AI_SCREENING_IMAGE | ASI_ID | Image ID (PK) | UUID | NOT NULL |
-| AI_SCREENING_IMAGE | AIS_ID | Screening ID (FK → AI_SCREENING) | UUID | NOT NULL |
-| AI_SCREENING_IMAGE | ASI_IMAGE_URL | Image URL | TEXT | NOT NULL |
-| AI_SCREENING_IMAGE | ASI_IMAGE_TYPE | Image type (AIImageType enum) | ENUM | NULL |
-| AI_SCREENING_IMAGE | ASI_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| AI_SCREENING_IMAGE | AIS_ID | Screening ID (FK → AI_SCREENING, one-to-one) | UUID | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_URL | Image URL | TEXT | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_STORAGE_PATH | Storage object path | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_CONTENT_TYPE | Validated MIME type | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_SIZE_BYTES | Validated file size in bytes | INT | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_SHA256 | SHA-256 bound to the review token | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_CREATED_AT | Record creation timestamp | TIMESTAMP | NOT NULL |
 
 ---
 

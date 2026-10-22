@@ -307,7 +307,11 @@ If the veterinarian changes the diagnosis after reviewing the AI result, the vet
 
 # 15. AI Screening Rules
 
-AI screening is optional.
+AI screening is optional for owners.
+
+When image screening is used, the Claude image-validation gate is mandatory. The
+on-device classifier runs only when the gate returns `SUITABLE` and `ELIGIBLE`.
+A failed or rejected gate must not silently bypass validation.
 
 AI screening can be initiated by:
 
@@ -324,16 +328,24 @@ A consultation may have
 - One screening
 - Multiple screenings
 
-Each screening records
+Each screening uses exactly one image and records
 
-- Prediction
-- Confidence
+- Prediction and confidence
 - Model version
-- Image
+- That single image
+- Optional independent review status, model, structured result, latency, and
+  token usage
+- Deterministic cross-analysis status and summary
 - Timestamp
 
+Both AI outputs remain independent. They are never averaged, fused, or combined
+into one disease probability. `COMPATIBLE` means agreement only, not
+confirmation.
+
 Screenings are created only from on-device AI results (`source: DEVICE`).
-Mock or server-fabricated screenings are rejected.
+Mock or server-fabricated screenings are rejected. If the independent review
+fails, the on-device result may still be saved; the failure state is recorded
+without inventing findings.
 
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
@@ -415,19 +427,23 @@ Owner-reported vaccination records may be deleted by their owner; every create, 
 
 ## Owner-Initiated Screening
 
-Capture Image (Mobile)
+Capture Exactly One Image (Mobile)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Owner
+Run Independent Image Review (Backend, Optional)
 
 ↓
 
-Upload Result to Backend
+Display Both Results Separately
+
+↓
+
+Upload Single Image and Both Outputs to Backend
 
 ↓
 
@@ -435,15 +451,19 @@ Veterinarian Reviews During Next Consultation
 
 ## Veterinarian-Initiated Screening
 
-Capture Image (Mobile or Upload)
+Capture Exactly One Image (Mobile or Upload)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Veterinarian
+Run Independent Image Review (Backend, Optional)
+
+↓
+
+Display Both Results Separately to Veterinarian
 
 ↓
 

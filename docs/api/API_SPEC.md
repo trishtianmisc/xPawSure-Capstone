@@ -1108,6 +1108,17 @@ All screenings are created from **on-device AI results** (`source: "DEVICE"`).
 Server-side mock screenings no longer exist; older `MOCK` rows were deleted
 by migration `ai_screenings.0003`.
 
+A screening uses exactly one image. The mobile app prepares one 512 px JPEG and
+first sends it to the Anthropic image-validation gate. Only when Claude marks
+the image suitable and eligible does the same image run through the on-device
+EfficientNetB0 classifier. The two results are stored separately and are never
+averaged into a combined probability.
+
+Owner write endpoints are rate limited (`VISION_ANALYSIS_THROTTLE_RATE`,
+`SCREENING_CREATE_THROTTLE_RATE`). Image uploads are capped by
+`SCREENING_IMAGE_MAX_BYTES` and validated by MIME type, file signature, and
+pixel count.
+
 ## GET /api/owner/screenings/
 
 Requires authentication (Owner role).
@@ -1134,13 +1145,45 @@ Response:
       "disease": "Fungal",
       "disease_code": "FUNGAL",
       "ais_confidence": "87.40",
-      "ais_model_version": "tflite-skin-1.0.0",
+      "ais_model_version": "2.0.0",
       "ais_inference_time_ms": 412,
       "ais_device": "android",
       "ais_status": "PENDING_REVIEW",
       "ais_source": "DEVICE",
       "ais_is_correct": null,
-      "ais_created_at": "..."
+      "ais_created_at": "...",
+      "image": {
+        "url": "https://.../screening.jpg",
+        "content_type": "image/jpeg",
+        "size_bytes": 48123,
+        "sha256": "hex digest",
+        "created_at": "..."
+      },
+      "claude": {
+        "status": "OK",
+        "model": "claude-sonnet-4-6",
+        "result": {
+          "image_suitability": "SUITABLE",
+          "screening_eligibility": "ELIGIBLE",
+          "screening_message": "The photo is clear enough and shows a pattern that can be assessed by the on-device screening model.",
+          "visible_features": ["Red patches", "Thinning hair around the muzzle"],
+          "image_quality": { "adequate": true, "observations": ["..."] },
+          "condition_assessment": {
+            "closest_match": "FUNGAL",
+            "other_possibilities": ["BACTERIAL"],
+            "unclear": false,
+            "rationale": "..."
+          },
+          "vet_recommendation": "..."
+        },
+        "analyzed_at": "...",
+        "latency_ms": 2400,
+        "usage": { "input_tokens": 1500, "output_tokens": 420 }
+      },
+      "cross_analysis": {
+        "status": "COMPATIBLE",
+        "summary": "Both analyses pointed to Fungal. This agreement does not confirm a diagnosis; a veterinarian should examine the skin."
+      }
     }
   ]
 }
@@ -1149,38 +1192,136 @@ Response:
 the linked appointment; it then becomes `true`/`false` (see verdict rules
 below).
 
+Historical image-less screenings return `image: null`, `claude.status:
+"NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
+
 ---
 
 ## POST /api/owner/screenings/
 
 Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
 
-Uploads an on-device TFLite inference result. `source` must be `DEVICE`
-(any other value returns 400). `prediction` (disease code or name, resolved
-against DISEASE) and `model_version` are required; missing values return 400.
+Creates one screening from an on-device inference result. The current flow uses
+`multipart/form-data`; a legacy JSON request without an image is still accepted
+for backward compatibility.
 
-Request:
+Multipart fields:
 
-{
-  "pet_id": "uuid",
-  "source": "DEVICE",
-  "prediction": "string (required)",
-  "confidence": "number 0-100 (required)",
-  "model_version": "string (required)",
-  "inference_time_ms": "integer (optional)",
-  "device": "string (optional)"
-}
+| Field | Required | Notes |
+|-------|----------|-------|
+| `pet_id` | yes | Must belong to the owner |
+| `source` | yes | `DEVICE` only |
+| `prediction` | yes | Disease code or name, resolved against DISEASE |
+| `confidence` | yes | Number 0-100 |
+| `model_version` | yes | On-device model version |
+| `inference_time_ms` | no | Integer |
+| `device` | no | e.g. `android`, `ios` |
+| `image` | yes for validated screening | Exactly one file under this field |
+| `claude_token` | yes with image | Signed token from the vision-analysis endpoint |
+
+Rules:
+
+- Exactly one file may be uploaded. Multiple files, unexpected field names, or
+  an array under `image` return `400`.
+- The file must be a valid JPEG, PNG, or WebP whose declared MIME type matches
+  its decoded format. Empty, oversized, or invalid files return `400`.
+- An uploaded image requires a signed validation token. The image SHA-256 must
+  match the token. Invalid, expired, or mismatched tokens return `400`.
+- The token must represent a completed `OK` review with
+  `image_suitability: "SUITABLE"` and `screening_eligibility: "ELIGIBLE"`.
+  Failed or non-eligible validations return `400`; no classifier result is
+  saved.
+- The image is stored once, after the screening row is created. If storage
+  fails, the row is rolled back and `502` is returned.
+- Reusing a token with a different image or user is rejected.
+- A legacy JSON request without an image remains accepted for backward
+  compatibility and creates a screening with `claude.status:
+  "NOT_REQUESTED"`.
 
 Response `201` with the screening object (see GET above).
 
 Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
-- AI predictions are immutable after creation.
+- AI predictions and both review outputs are immutable after creation.
 - When a consultation for the linked appointment is saved with a diagnosis,
   the backend compares it (normalized substring match of the disease name in
   the diagnosis) and stores `ais_is_correct`, `ais_compared_diagnosis`,
   `ais_compared_at`, plus the `con_id` link, for ML training/retraining sets.
+
+---
+
+## POST /api/owner/screenings/vision-analysis/
+
+Requires authentication (Owner role). Runs the Anthropic image-validation gate
+before any on-device screening. Nothing is persisted.
+
+Request (`multipart/form-data`):
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `image` | yes | Exactly one JPEG, PNG, or WebP |
+
+Response `200`:
+
+{
+  "status": "OK",
+  "model": "claude-sonnet-4-6",
+  "analyzed_at": "...",
+  "latency_ms": 2400,
+  "usage": { "input_tokens": 1500, "output_tokens": 420 },
+  "result": {
+    "image_suitability": "POOR_QUALITY",
+    "screening_eligibility": "NOT_ELIGIBLE",
+    "screening_message": "The photo is too blurred or poorly lit for screening. Please upload a clearer, well-lit photo.",
+    "visible_features": ["The image is blurred"],
+    "image_quality": { "adequate": false, "observations": ["..."] },
+    "condition_assessment": {
+      "closest_match": "UNCLEAR",
+      "other_possibilities": [],
+      "unclear": true,
+      "rationale": "..."
+    },
+    "vet_recommendation": "..."
+  },
+  "detail": "Image review completed.",
+  "token": "signed-token"
+}
+
+`image_suitability` values:
+
+- `SUITABLE` (clear enough and potentially a supported canine skin disease)
+- `POOR_QUALITY` (blurred or poorly lit)
+- `NOT_DOG_SKIN` (no dog or no canine skin is visible; shown as `Not a Skin Image`)
+- `NO_VISIBLE_LESIONS` (canine skin is visible and appears normal; shown as
+  `Skin Appears Healthy` with a does-not-rule-out-disease caveat)
+- `WOUND_OR_INJURY` (more consistent with a wound or injury; shown as
+  `Possible Wound or Injury`, never as healthy skin)
+- `UNCERTAIN` (cannot be confidently assessed)
+
+Only `SUITABLE` may pair with `screening_eligibility: "ELIGIBLE"`. Every other
+suitability value is `NOT_ELIGIBLE`; the mobile app must not run the classifier
+and the final create endpoint rejects the token.
+
+Status values:
+
+- `OK`
+- `NOT_CONFIGURED` (missing `ANTHROPIC_API_KEY`)
+- `TIMEOUT`
+- `RATE_LIMITED`
+- `QUOTA_EXHAUSTED`
+- `MALFORMED_RESPONSE`
+- `PROVIDER_ERROR`
+
+A failed review still returns a signed token, but the final create endpoint
+rejects it. The mobile app shows a retry/error message and does not run the
+classifier. The token expires after `SCREENING_CLAUDE_TOKEN_MAX_AGE` seconds
+and is bound to the owner and the image SHA-256.
+
+Claude findings are non-diagnostic: no confidence percentages, certainty
+claims, or treatment plans. Claude must not force a disease category for a
+healthy-looking, wounded, unsuitable, or ambiguous image. The endpoint never
+logs the API key or image bytes.
 
 ---
 

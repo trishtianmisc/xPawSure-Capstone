@@ -1,8 +1,8 @@
 # ai_screening.md
 
 > Module: AI Screening
-> Version: 1.0
-> Status: Final
+> Version: 1.2
+> Status: Implemented
 > Depends On:
 >
 > - pet.md
@@ -12,11 +12,13 @@
 
 # Overview
 
-The AI Screening module provides preliminary canine skin disease screening using an on-device TensorFlow Lite model.
+The AI Screening module provides preliminary canine skin disease screening using
+an on-device EfficientNetB0 classifier (TensorFlow.js). The backend first runs an
+image-validation gate through the Anthropic API; only a suitable, eligible image
+proceeds to the classifier.
 
-The AI Screening module assists veterinarians.
-
-It never replaces veterinarian diagnosis.
+Both outputs are decision support only. They never replace veterinarian
+diagnosis, and they are never merged into a combined probability.
 
 Screening may be performed by:
 
@@ -27,13 +29,13 @@ AI Screening records become part of the pet's medical history.
 
 ---
 
-# Implementation Status (v1.1)
+# Implementation Status (v1.2)
 
 Implemented in `backend/ai_screenings/` (Django app `ai_screenings`).
 
-Implemented tables: `DISEASE`, `AI_SCREENING`.
+Implemented tables: `DISEASE`, `AI_SCREENING`, `AI_SCREENING_IMAGE`.
 Seeded diseases: `ALLERGIC_DERMATITIS`, `BACTERIAL`, `FUNGAL`, `HOTSPOT`, `MANGE`
-(codes match `mobile/ai/constants/diseases.ts`).
+(codes match `mobile/ai/constants/classes.ts`).
 
 Implemented links:
 
@@ -41,26 +43,44 @@ Implemented links:
   attached to an appointment, so veterinarians see it and post-consultation
   verification/training datasets can join both records.
 - Owner endpoints: `GET/POST /api/owner/screenings/`.
+- Independent image review: `POST /api/owner/screenings/vision-analysis/`.
 - Booking gate: owner bookings (`POST /api/owner/appointments/`) require a
   `screening_id` belonging to the booked pet, otherwise `403`.
 
-Deviations from this document (deliberate, for this iteration):
+Deviations from the original specification (deliberate):
 
 | Spec | Implemented | Reason |
 |------|-------------|--------|
 | — | `DISEASE.DIS_CODE` (unique) added | Stable machine label for on-device predictions |
-| — | `AI_SCREENING.AIS_SOURCE` (`DEVICE` only) added | Original spec allowed no source flag; `MOCK` was retired in `ai_screenings.0003` (legacy MOCK rows deleted) |
-| — | `AI_SCREENING.AIS_IS_CORRECT`, `AI_COMPARED_DIAGNOSIS`, `AI_COMPARED_AT` added | Post-consultation AI-vs-vet verdict for ML training sets |
+| — | `AI_SCREENING.AIS_SOURCE` (`DEVICE` only) added | Original spec allowed no source flag; `MOCK` was retired in `ai_screenings.0003` |
+| — | `AI_SCREENING.AIS_IS_CORRECT`, `AIS_COMPARED_DIAGNOSIS`, `AIS_COMPARED_AT` added | Post-consultation AI-vs-vet verdict for ML training sets |
+| — | Claude review fields added to `AI_SCREENING` | Store the second independent output, usage metadata, and deterministic comparison separately |
 | `CON_ID` FK → CONSULTATION | Implemented (`ON DELETE SET NULL`) | Set when the linked consultation is saved with a diagnosis |
-| `AI_SCREENING_IMAGE` table | Deferred | Comes with the real on-device image upload |
+| `AI_SCREENING_IMAGE` | One-to-one, exactly one stored image | The screening flow was reduced to one photo for both analyses |
 | `USR_ID` NOT NULL | nullable (`ON DELETE SET NULL`) | Preserve dataset rows if a user row is hard-deleted |
 | — | `APPOINTMENT.APT_SCREENING_ID` added | Booking gate + vet visibility (see above) |
 
-Creation flow: the mobile app uploads real on-device TFLite results via
-`POST /api/owner/screenings/ {"source": "DEVICE"}` with
-`prediction`/`confidence`/`model_version`. The scan result screen offers
-"Book Appointment" only after the upload succeeds. Server-fabricated
-(`MOCK`) screenings no longer exist.
+Creation flow:
+
+1. The mobile app prepares one 512 px JPEG and sends it to the backend
+   image-validation gate.
+2. `POST /api/owner/screenings/vision-analysis/` validates the image, calls
+   Anthropic, and returns a signed result token. Nothing is persisted by this
+   endpoint.
+3. If the gate returns `image_suitability = SUITABLE` and
+   `screening_eligibility = ELIGIBLE`, the mobile app runs the on-device
+   classifier on the same JPEG.
+4. The mobile app posts the on-device result to `POST /api/owner/screenings/`
+   as multipart form data with the same JPEG and the signed token.
+5. The backend validates the image once, stores it once, and records both
+   outputs plus the deterministic cross-analysis.
+
+If the gate rejects the image, the classifier is not run and no prediction is
+shown. If the gate fails, the classifier is not run and the owner gets a retry
+or error message. A failed or non-eligible token cannot be saved. If the
+on-device analysis fails after approval, no prediction is fabricated and the
+screening is not saved. Historical image-less screenings remain readable with
+`AIS_CLAUDE_STATUS = NOT_REQUESTED`.
 
 Verdict flow: when a consultation linked to the appointment is saved with a
 diagnosis, `consultations` signals call `record_comparison()` — a normalized
@@ -164,6 +184,15 @@ If the owner later visits a clinic, the screening may be linked to a Consultatio
 | AIS_IS_CORRECT | BOOLEAN | NULL (verdict, set post-consultation) |
 | AIS_COMPARED_DIAGNOSIS | TEXT | NULL |
 | AIS_COMPARED_AT | TIMESTAMP | NULL |
+| AIS_CLAUDE_STATUS | ENUM | DEFAULT `NOT_REQUESTED` |
+| AIS_CLAUDE_MODEL | VARCHAR(100) | NULL |
+| AIS_CLAUDE_RESULT | JSONB | NULL |
+| AIS_CLAUDE_ANALYZED_AT | TIMESTAMP | NULL |
+| AIS_CLAUDE_LATENCY_MS | INTEGER | NULL |
+| AIS_CLAUDE_INPUT_TOKENS | INTEGER | NULL |
+| AIS_CLAUDE_OUTPUT_TOKENS | INTEGER | NULL |
+| AIS_CROSS_ANALYSIS_STATUS | ENUM | DEFAULT `INSUFFICIENT_EVIDENCE` |
+| AIS_CROSS_ANALYSIS_SUMMARY | TEXT | NULL |
 | AIS_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 
 ---
@@ -180,6 +209,41 @@ DISMISSED
 
 ---
 
+# Claude Review Status
+
+NOT_REQUESTED
+
+OK
+
+NOT_CONFIGURED
+
+TIMEOUT
+
+RATE_LIMITED
+
+QUOTA_EXHAUSTED
+
+MALFORMED_RESPONSE
+
+PROVIDER_ERROR
+
+---
+
+# Cross-Analysis Status
+
+COMPATIBLE
+
+DIFFERENT
+
+INSUFFICIENT_EVIDENCE
+
+`COMPATIBLE` means the two independent outputs pointed to the same category and
+the review considered the image adequate. It does not confirm a diagnosis.
+`DIFFERENT` means the closest categories differed. `INSUFFICIENT_EVIDENCE`
+covers missing, failed, unclear, or inadequate reviews.
+
+---
+
 # Business Rules
 
 Every AI Screening belongs to one Pet.
@@ -192,9 +256,18 @@ Only on-device (`DEVICE`) screenings may be created; mock screenings are rejecte
 
 Veterinarians may review AI results.
 
-AI predictions are immutable.
+AI predictions and both AI outputs are immutable.
 
 Model version must always be recorded.
+
+A new screening has at most one image. The image is validated (MIME, file
+signature, size, pixel count) before it is sent to the review service or stored.
+
+The signed Claude result token is bound to the owner and the image SHA-256; it
+expires after the configured lifetime. A token cannot be reused with a different
+image or user. Only an `OK` token with `image_suitability = SUITABLE` and
+`screening_eligibility = ELIGIBLE` can be saved; failed or rejected tokens return
+`400` and do not create a screening.
 
 The AI-vs-vet verdict (`AIS_IS_CORRECT`) is computed once, when the linked
 consultation's diagnosis is saved.
@@ -259,9 +332,10 @@ AI_SCREENING
 
 Purpose
 
-Stores every image submitted for AI inference.
+Stores the single image submitted for a screening. The same image bytes are used
+by the on-device classifier and by the backend review.
 
-Multiple images may belong to one AI Screening.
+Relationship: one-to-one with `AI_SCREENING`.
 
 ---
 
@@ -270,30 +344,27 @@ Multiple images may belong to one AI Screening.
 | Column | Type | Constraints |
 |---------|------|-------------|
 | ASI_ID | UUID | PK |
-| AIS_ID | UUID | FK → AI_SCREENING |
-| ASI_IMAGE_URL | TEXT | NOT NULL |
-| ASI_IMAGE_TYPE | ENUM | NOT NULL |
-| ASI_UPLOADED_AT | TIMESTAMP | DEFAULT NOW() |
-
----
-
-# Image Type
-
-ORIGINAL
-
-CROPPED
-
-PREPROCESSED
-
-ANNOTATED
+| AIS_ID | UUID | FK → AI_SCREENING, UNIQUE |
+| ASI_URL | TEXT | NOT NULL |
+| ASI_STORAGE_PATH | VARCHAR(500) | NOT NULL |
+| ASI_CONTENT_TYPE | VARCHAR(50) | NOT NULL |
+| ASI_SIZE_BYTES | INTEGER | NOT NULL |
+| ASI_SHA256 | VARCHAR(64) | NOT NULL, INDEXED |
+| ASI_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 
 ---
 
 # Business Rules
 
-Every AI Screening must contain at least one ORIGINAL image.
+A screening created through the current flow must contain exactly one image.
 
-Additional processed images are optional.
+Supabase Storage is used when configured; local Django media storage is the
+development/test fallback.
+
+The image URL and storage path are stored separately so either backend can be
+used.
+
+Images are immutable once stored.
 
 Images cannot be deleted once a Consultation references the AI Screening.
 
@@ -335,15 +406,27 @@ Select Pet
 
 ↓
 
-Capture Image
+Capture One Image
 
 ↓
 
-TensorFlow Lite Inference
+Prepare One 512 px JPEG
 
 ↓
 
-Save AI Screening
+On-device EfficientNetB0 Inference
+
++
+
+Independent Backend Image Review
+
+↓
+
+Display Both Results Separately
+
+↓
+
+Save AI Screening (single image + both outputs)
 
 ↓
 
@@ -382,6 +465,8 @@ Dependencies
 • USER
 
 • CONSULTATION
+
+• Anthropic API (image-validation gate before on-device screening)
 
 Used By
 

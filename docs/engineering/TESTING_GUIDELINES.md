@@ -336,7 +336,7 @@ Verify:
 
 ☐ Image preprocessing
 
-☐ TensorFlow Lite inference
+☐ TensorFlow.js inference
 
 ☐ Output format
 
@@ -345,6 +345,13 @@ Verify:
 ☐ Prediction mapping
 
 ☐ Failure handling
+
+☐ Independent review status mapping (`NOT_CONFIGURED`, `TIMEOUT`,
+  `RATE_LIMITED`, `QUOTA_EXHAUSTED`, `MALFORMED_RESPONSE`, `PROVIDER_ERROR`)
+
+☐ Exactly one image accepted and validated
+
+☐ Classifier and review outputs never averaged or fused
 
 Never modify the production model during testing.
 

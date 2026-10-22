@@ -97,20 +97,36 @@ Owners may view and edit their pets' information after registration.
 
 The core feature of the mobile application.
 
-The owner captures or selects a photo of their dog's skin condition.
+The owner captures or selects exactly one photo of their dog's skin condition.
+The app prepares one 512 px JPEG and sends it first to the backend
+image-validation gate.
 
-The application sends the image to TensorFlow Lite for on-device inference.
+Backend image validation (Anthropic):
 
-The AI model identifies possible skin conditions and returns:
+- Runs before the on-device classifier
+- Returns `image_suitability`, `screening_eligibility`, a screening message,
+  visible features, image-quality observations, condition assessment, and a
+  veterinary recommendation
+- Never returns a confidence percentage or a diagnosis
+- Rejects blurred, non-dog, healthy-looking, wound/injury, and ambiguous images
+  without forcing a disease category
 
-- Predicted condition
-- Confidence score (percentage)
-- Top N predictions
-- Model version
+On-device classifier (TensorFlow.js):
 
-The user may then optionally book a veterinary appointment.
+- Runs only when the gate returns `SUITABLE` and `ELIGIBLE`
+- Returns the predicted condition, confidence score, top N predictions, and
+  model version
 
-The screening result is uploaded to the backend after the user provides consent.
+Both results are displayed separately. The backend still records its
+deterministic cross-analysis for audit and history, but the mobile result screen
+does not display it. Agreement is not confirmation.
+
+If the gate rejects the photo, the UI shows the explanation and an option to
+upload another image; no prediction is shown. If the gate fails, the classifier
+is not run and a retry/error message is shown. If the classifier fails after
+approval, no prediction is fabricated and the Claude findings remain visible.
+The user may then book a veterinary appointment; saving uploads the single image
+and both outputs after consent.
 
 ---
 
@@ -201,7 +217,7 @@ Service layer:
 
 API Client (Axios or Fetch)
 
-TensorFlow Lite Integration
+On-device TensorFlow.js Inference
 
 ---
 
@@ -309,37 +325,52 @@ Root
 
 # 7. AI Integration
 
-TensorFlow Lite is integrated into the mobile application.
+TensorFlow.js runs the bundled EfficientNetB0 classifier on the device.
 
-Inference pipeline:
+Screening pipeline:
 
-User captures image
-
-↓
-
-Image preprocessing (resize, normalize)
+User captures exactly one image
 
 ↓
 
-TensorFlow Lite interpreter
+Prepare one 512 px JPEG
 
 ↓
 
-Post-processing (softmax, threshold)
+Send the same JPEG to `POST /api/owner/screenings/vision-analysis/`
 
 ↓
 
-Display result to user
+Claude image-validation gate
 
 ↓
 
-User consent to upload
+If `SUITABLE` + `ELIGIBLE`:
+
+Image preprocessing (resize to 224 × 224, normalize)
 
 ↓
 
-Upload to backend
+TensorFlow.js Layers model
 
-The model file is bundled with the application and updated through app store releases.
+↓
+
+Post-processing (softmax, thresholds)
+
+↓
+
+Display on-device result
+
+The app displays the review separately. Cross-analysis is not displayed on the
+mobile result screen.
+
+The model file is bundled with the application and updated through app store
+releases. The classifier itself works offline, but image screening now requires
+the backend gate before it runs. The review requires network access and may
+return `NOT_CONFIGURED`, `TIMEOUT`, `RATE_LIMITED`, `QUOTA_EXHAUSTED`,
+`MALFORMED_RESPONSE`, or `PROVIDER_ERROR`. A review failure or non-eligible
+decision stops the classifier and shows a retry/error or gate explanation. No
+score averaging or combined disease probability is performed.
 
 ---
 
@@ -371,9 +402,11 @@ PUT  /api/pets/{id}/               Update pet
 
 DELETE /api/pets/{id}/             Delete pet
 
-GET  /api/screenings/              List screenings
+GET  /api/owner/screenings/        List screenings
 
-POST /api/screenings/              Upload screening result
+POST /api/owner/screenings/        Save screening (multipart image + classifier output + signed eligible review token)
+
+POST /api/owner/screenings/vision-analysis/  Image-validation gate (multipart image; no persistence)
 
 GET  /api/appointments/            List appointments
 

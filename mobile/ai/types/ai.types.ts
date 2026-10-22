@@ -13,14 +13,6 @@ export interface Prediction {
   label: string
 }
 
-export type ImageReportStatus = 'ok' | 'quality_failed' | 'low_similarity'
-
-export interface ImageReport {
-  uri: string
-  status: ImageReportStatus
-  similarity: number
-}
-
 export interface ScreeningResult {
   predictions: Prediction[]
   topPrediction?: Prediction
@@ -28,18 +20,6 @@ export interface ScreeningResult {
   modelVersion: string
   state: ScreeningResultState
   stateMessage: string
-  imageReports?: ImageReport[]
-}
-
-export interface ScreeningUploadPayload {
-  pet_id: string
-  consultation_id?: string
-  prediction: string
-  confidence: number
-  top_predictions: { disease: string; confidence: number; label: string }[]
-  model_version: string
-  inference_time_ms: number
-  image_uri: string
 }
 
 export interface ModelInfo {

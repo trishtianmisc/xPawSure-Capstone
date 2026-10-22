@@ -18,7 +18,7 @@ The system is composed of three primary components:
 
 The web and mobile applications share the same backend and database.
 
-The AI model runs ONLY on the mobile application using TensorFlow Lite. The backend never performs machine learning inference.
+The EfficientNetB0 classifier runs ONLY on the mobile application using TensorFlow.js. The backend never runs the classifier; it first forwards the same image to an independent, non-diagnostic Anthropic validation gate. The classifier runs only for an eligible image, and the two outputs are never combined into one probability.
 
 The purpose of the AI is to assist pet owners and veterinarians by providing a preliminary screening result. The AI never replaces professional veterinary diagnosis.
 
@@ -61,7 +61,7 @@ The mobile application also contains:
 Camera
 ↓
 
-TensorFlow Lite
+TensorFlow.js
 
 ↓
 
@@ -129,7 +129,7 @@ Main features:
 - View vaccination records
 - Receive notifications
 
-Only the mobile application runs TensorFlow Lite.
+Only the mobile application runs the classifier. The backend performs no TensorFlow.js inference.
 
 ---
 
@@ -146,7 +146,7 @@ Responsibilities:
 - Notifications
 - Database Access
 
-The backend never trains or executes machine learning models.
+The backend never trains or executes the classifier. It calls the external Anthropic image-validation gate before on-device classification, but it never combines the review with the on-device prediction.
 
 ---
 
@@ -294,17 +294,35 @@ Owners may access only their own profile and their own pets' records.
 
 # 6. AI Module
 
-The AI module performs image classification.
+The AI module has two independent components:
+
+1. A backend image-validation gate using the Anthropic API.
+2. An on-device EfficientNetB0 classifier using TensorFlow.js.
 
 Current objective:
 
 Detect common canine skin diseases.
 
-The AI runs completely offline using TensorFlow Lite.
+The validation gate runs first and requires network access. The classifier runs
+on-device only when the gate returns a suitable, eligible image. The classifier
+does not require a network connection, and the gate never changes the on-device
+result.
 
-Inference pipeline:
+Screening pipeline:
 
-Capture Image
+Capture Exactly One Image
+
+↓
+
+Prepare One JPEG
+
+↓
+
+Backend Claude Image-Validation Gate
+
+↓
+
+Suitable and Eligible?
 
 ↓
 
@@ -316,7 +334,7 @@ Normalize
 
 ↓
 
-TensorFlow Lite
+TensorFlow.js
 
 ↓
 
@@ -328,9 +346,10 @@ Confidence
 
 ↓
 
-Upload Result
+Upload Image + Result to Backend
 
-The backend only stores results.
+The backend stores the result and the independent structured image review. It
+never runs the classifier and never combines the two outputs.
 
 ---
 
@@ -376,9 +395,13 @@ SMS gateway
 
 Appointment recommendation
 
-Cloud AI inference
+Cloud classifier inference
 
 AI model retraining
+
+> The Anthropic image-validation review is a separate, non-diagnostic external
+> service. It is a gate for image screening, not a cloud classifier, and it does
+> not replace on-device inference.
 
 ---
 
@@ -412,7 +435,7 @@ TypeScript
 
 Expo Camera
 
-TensorFlow Lite
+TensorFlow.js
 
 ---
 
@@ -647,7 +670,7 @@ Every feature should follow this order:
 
 The AI model is trained outside the application.
 
-Only TensorFlow Lite models are deployed.
+Only TensorFlow.js classifier models are deployed.
 
 Never retrain models inside the application.
 
@@ -664,6 +687,10 @@ Top Predictions
 Model Version
 
 Inference Time
+
+Keep the classifier output and the Anthropic review independent. Never average,
+fuse, or convert them into a combined probability. Agreement between the two is
+not confirmation.
 
 ---
 

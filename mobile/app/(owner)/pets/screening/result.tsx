@@ -1,30 +1,33 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ComponentProps } from 'react'
 import {
   ActivityIndicator,
   Image,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
-import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
-import { EXPERIMENTAL_NOTICE } from '../../../../ai/adaptive/config'
-import type { AdaptiveResultPayload } from '../../../../ai/adaptive/types'
-import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
-import { usePet } from '../../../../features/pet/hooks/usePet'
+import { ClaudeReviewCard } from '../../../../features/screening/components/AnalysisCards'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import type {
+  ClaudeAnalysisResponse,
+  ClaudeImageSuitability,
+} from '../../../../features/screening/types'
 
-const DISEASE_META: Record<string, { color: string; icon: string }> = {
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
+
+const DISEASE_META: Record<string, { color: string; icon: IconName }> = {
   ALLERGIC_DERMATITIS: { color: '#E67E22', icon: 'alert-circle-outline' },
   BACTERIAL: { color: '#C0392B', icon: 'bacteria-outline' },
   FUNGAL: { color: '#8E44AD', icon: 'flower-tulip-outline' },
@@ -32,11 +35,62 @@ const DISEASE_META: Record<string, { color: string; icon: string }> = {
   MANGE: { color: '#27AE60', icon: 'bug-outline' },
 }
 
-const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> = {
+const STATE_META: Record<ScreeningResultState, { color: string; icon: IconName }> = {
   DISEASE_DETECTED: { color: '#C0392B', icon: 'medical-bag' },
   NOT_SKIN_IMAGE: { color: '#E67E22', icon: 'image-off-outline' },
   UNCERTAIN: { color: '#F39C12', icon: 'help-circle-outline' },
   INVALID_IMAGE: { color: '#E74C3C', icon: 'image-off-outline' },
+}
+
+const GATE_META: Record<
+  ClaudeImageSuitability,
+  { color: string; icon: IconName; title: string }
+> = {
+  SUITABLE: {
+    color: '#27AE60',
+    icon: 'check-circle-outline',
+    title: 'Image approved for screening',
+  },
+  POOR_QUALITY: {
+    color: '#E67E22',
+    icon: 'image-off-outline',
+    title: 'Photo Not Clear Enough',
+  },
+  NOT_DOG_SKIN: {
+    color: '#E67E22',
+    icon: 'image-off-outline',
+    title: 'Not a Skin Image',
+  },
+  NO_VISIBLE_LESIONS: {
+    color: '#27AE60',
+    icon: 'check-circle-outline',
+    title: 'Skin Appears Healthy',
+  },
+  WOUND_OR_INJURY: {
+    color: '#C0392B',
+    icon: 'medical-bag',
+    title: 'Possible Wound or Injury',
+  },
+  UNCERTAIN: {
+    color: '#F39C12',
+    icon: 'help-circle-outline',
+    title: 'Unable to Assess',
+  },
+}
+
+const RESULT_STATES = Object.keys(SCREENING_STATE_MESSAGES) as ScreeningResultState[]
+
+function parseClaude(value?: string): ClaudeAnalysisResponse | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as Partial<ClaudeAnalysisResponse> | null
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.status !== 'string') {
+      return null
+    }
+    return parsed as ClaudeAnalysisResponse
+  } catch {
+    return null
+  }
 }
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
@@ -86,135 +140,78 @@ export default function ResultScreen() {
   const createScreening = useCreateScreening()
   const [saveError, setSaveError] = useState(false)
   const params = useLocalSearchParams<{
-    imageUri: string
-    petId: string
-    petName: string
-    predictions: string
-    modelVersion: string
-    inferenceTimeMs: string
-    state: ScreeningResultState
-    stateMessage: string
-    alreadySaved: string
-    refined?: string
-    changed?: string
-    imageReports?: string
-    adaptive?: string
+    imageUri?: string
+    petId?: string
+    petName?: string
+    predictions?: string
+    modelVersion?: string
+    inferenceTimeMs?: string
+    state?: string
+    stateMessage?: string
+    deviceFailed?: string
+    classifierSkipped?: string
+    claude?: string
+    claudeRequestFailed?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: pet } = usePet(
-    params.petId && params.petId !== 'unknown' ? params.petId : undefined,
-  )
 
-  const screeningStateFromParams = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
-  const stateMessage = params.stateMessage || ''
+  const deviceFailed = params.deviceFailed === 'true'
+  const classifierSkipped = params.classifierSkipped === 'true'
+  const claudeRequestFailed = params.claudeRequestFailed === 'true'
+
+  const screeningState: ScreeningResultState | null = deviceFailed || classifierSkipped
+    ? null
+    : RESULT_STATES.includes(params.state as ScreeningResultState)
+      ? (params.state as ScreeningResultState)
+      : 'DISEASE_DETECTED'
 
   const predictions: Prediction[] = useMemo(() => {
     try {
-      return JSON.parse(params.predictions || '[]')
+      const parsed = JSON.parse(params.predictions || '[]')
+      return Array.isArray(parsed) ? (parsed as Prediction[]) : []
     } catch {
       return []
     }
   }, [params.predictions])
 
-  const refinedPredictions: Prediction[] | null = useMemo(() => {
-    try {
-      const parsed = params.refined ? JSON.parse(params.refined) : null
-      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
-    } catch {
-      return null
-    }
-  }, [params.refined])
-
-  const adaptivePayload: AdaptiveResultPayload | null = useMemo(() => {
-    if (!params.adaptive) return null
-    try {
-      const parsed = JSON.parse(params.adaptive) as Partial<AdaptiveResultPayload> | null
-      if (!parsed || parsed.schemaVersion !== 1) return null
-      if (parsed.strategy !== 'information_gain') return null
-      if (parsed.state !== 'DISEASE_DETECTED' && parsed.state !== 'UNCERTAIN') return null
-      if (!Array.isArray(parsed.predictions) || !Array.isArray(parsed.imagePredictions)) {
-        return null
-      }
-      if (!parsed.posterior || typeof parsed.posterior !== 'object') return null
-      if (!Array.isArray(parsed.evidence)) return null
-      return parsed as AdaptiveResultPayload
-    } catch {
-      return null
-    }
-  }, [params.adaptive])
-
-  const adaptiveQuestionnaire =
-    adaptivePayload !== null && adaptivePayload.questionCount > 0
-
-  const imageReports: ImageReport[] = useMemo(() => {
-    try {
-      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
-      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
-    } catch {
-      return []
-    }
-  }, [params.imageReports])
-
-  const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
-  const imagePredictions = adaptivePayload?.imagePredictions ?? predictions
-  const imageSorted = useMemo(
-    () => [...imagePredictions].sort((a, b) => b.confidence - a.confidence),
-    [imagePredictions],
+  const claudeResponse = useMemo(() => parseClaude(params.claude), [params.claude])
+  const gateFindings = classifierSkipped ? claudeResponse?.result ?? null : null
+  const gateMeta = gateFindings ? GATE_META[gateFindings.image_suitability] : null
+  const sorted = useMemo(
+    () => [...predictions].sort((a, b) => b.confidence - a.confidence),
+    [predictions],
   )
-  const top = sorted[0]
-  const imageTop = imageSorted[0]
-  const finalTop = adaptiveQuestionnaire
-    ? adaptivePayload.predictions[0] ?? null
-    : refinedPredictions
-      ? refinedPredictions[0]
-      : top
-  const isChanged = adaptiveQuestionnaire
-    ? imageTop && finalTop
-      ? imageTop.disease !== finalTop.disease
-      : false
-    : params.changed === 'true'
-  const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
-  const displayBars = adaptiveQuestionnaire
-    ? adaptivePayload.predictions
-    : refinedPredictions
-      ? refinedPredictions.slice(0, 3)
-      : sorted
+  const top = sorted[0] ?? null
+  const topMeta = top
+    ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' }
+    : null
+  const stateMeta = screeningState ? STATE_META[screeningState] : null
+  const stateConfig = screeningState ? SCREENING_STATE_MESSAGES[screeningState] : null
 
-  const screeningState = adaptivePayload ? adaptivePayload.state : screeningStateFromParams
-  const stateMeta = STATE_META[screeningState]
-  const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
-
-  const topLabel = adaptiveQuestionnaire
-    ? 'Most Supported Condition'
-    : refinedPredictions
-      ? 'Closest Match'
-      : 'Predicted Condition'
-  const confidenceLabel = adaptiveQuestionnaire ? 'relative evidence score' : 'confidence'
-  const breakdownTitle = adaptiveQuestionnaire
-    ? 'Relative Evidence Scores'
-    : refinedPredictions
-      ? 'Top 3 Suggestions'
-      : 'All Predictions'
-
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
+  const hasValidPet = !!params.petId && params.petId !== 'unknown'
+  const canBook =
+    !deviceFailed &&
+    !classifierSkipped &&
+    screeningState === 'DISEASE_DETECTED' &&
+    !!top &&
+    hasValidPet &&
+    !!params.imageUri &&
+    !!claudeResponse?.token
 
   const handleSaveAndBook = () => {
-    if (!canBook || !finalTop || createScreening.isPending) return
-    if (params.alreadySaved === 'true') {
-      router.replace('/(owner)/appointments/book')
-      return
-    }
+    if (!canBook || !top || !params.petId || createScreening.isPending) return
     setSaveError(false)
     createScreening.mutate(
       {
         pet_id: params.petId,
         source: 'DEVICE',
-        prediction: finalTop.disease,
-        confidence: Math.round(finalTop.confidence),
+        prediction: top.disease,
+        confidence: Math.round(top.confidence),
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
+        image_uri: params.imageUri,
+        claude_token: claudeResponse?.token || undefined,
       },
       {
         onSuccess: () => {
@@ -225,6 +222,13 @@ export default function ResultScreen() {
         },
       },
     )
+  }
+
+  const scanAgain = () => {
+    router.replace({
+      pathname: '/(owner)/pets/screening',
+      params: { petId: params.petId, petName: params.petName },
+    })
   }
 
   return (
@@ -241,73 +245,97 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
-          {pet?.profile_picture ? (
-            <Image source={{ uri: pet.profile_picture }} style={styles.thumbnail} />
+          {params.imageUri ? (
+            <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
           ) : (
             <View style={styles.thumbnailPlaceholder}>
               <MaterialCommunityIcons color={colors.primary} name="paw" size={24} />
             </View>
           )}
           <View style={styles.imageInfo}>
-            <Text style={styles.petName}>{params.petName}</Text>
+            <Text style={styles.petName}>{params.petName || 'Your pet'}</Text>
             <Text style={styles.timestamp}>
-              {imageReports.length > 0
-                ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
-                : 'Just now'}
+              {classifierSkipped
+                ? 'One photo · image validation only'
+                : deviceFailed
+                  ? 'One photo · image validation, classifier unavailable'
+                  : 'One photo · image validation and on-device model'}
             </Text>
           </View>
         </View>
 
-        {imageReports.length > 0 && (
-          <View style={styles.reportStrip}>
-            {imageReports.map((report, i) => (
-              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
-                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
-                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
-                  <MaterialCommunityIcons
-                    color="#FFF"
-                    name={report.status === 'ok' ? 'check' : 'close'}
-                    size={10}
-                  />
-                </View>
+        {classifierSkipped && gateFindings && gateMeta && (
+          <>
+            <Text style={styles.sectionLabel}>IMAGE VALIDATION</Text>
+            <View style={[styles.stateCard, { borderColor: gateMeta.color + '40' }]}>
+              <View style={[styles.stateIconCircle, { backgroundColor: gateMeta.color + '18' }]}>
+                <MaterialCommunityIcons color={gateMeta.color} name={gateMeta.icon} size={32} />
               </View>
-            ))}
+              <Text style={[styles.stateTitle, { color: gateMeta.color }]}>{gateMeta.title}</Text>
+              <Text style={styles.stateMessage}>{gateFindings.screening_message}</Text>
+              <Text style={styles.gateNote}>
+                No on-device disease prediction was produced for this photo.
+              </Text>
+            </View>
+          </>
+        )}
+
+        {classifierSkipped && !gateFindings && (
+          <>
+            <Text style={styles.sectionLabel}>IMAGE VALIDATION</Text>
+            <View style={[styles.stateCard, { borderColor: colors.error + '40' }]}>
+              <View style={[styles.stateIconCircle, { backgroundColor: colors.errorBg }]}>
+                <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={32} />
+              </View>
+              <Text style={[styles.stateTitle, { color: colors.error }]}>
+                Image validation unavailable
+              </Text>
+              <Text style={styles.stateMessage}>
+                No on-device disease prediction was produced. Please try another photo.
+              </Text>
+            </View>
+          </>
+        )}
+
+        {!classifierSkipped && <Text style={styles.sectionLabel}>ON-DEVICE RESULT</Text>}
+
+        {!classifierSkipped && deviceFailed && (
+          <View style={[styles.stateCard, { borderColor: colors.error + '40' }]}>
+            <View style={[styles.stateIconCircle, { backgroundColor: colors.errorBg }]}>
+              <MaterialCommunityIcons color={colors.error} name="cellphone-off" size={32} />
+            </View>
+            <Text style={[styles.stateTitle, { color: colors.error }]}>
+              On-device analysis unavailable
+            </Text>
+            <Text style={styles.stateMessage}>
+              No prediction was produced, so none is shown. The image review below is
+              displayed on its own and is not a diagnosis.
+            </Text>
           </View>
         )}
 
-        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
+        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && top && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
-                <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
+                <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon} size={28} />
               </View>
-              <Text style={styles.topLabel}>{topLabel}</Text>
-              <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
+              <Text style={styles.topLabel}>Predicted Condition</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
               <View style={styles.confidenceBadge}>
-                <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-                <Text style={styles.confidenceLabel}>{confidenceLabel}</Text>
+                <Text style={[styles.confidenceText, { color: topMeta.color }]}>
+                  {Math.round(top.confidence)}%
+                </Text>
+                <Text style={styles.confidenceLabel}>model confidence</Text>
               </View>
-              {adaptiveQuestionnaire && (
-                <Text style={styles.calibrationText}>
-                  Relative evidence score, not a calibrated probability.
-                </Text>
-              )}
-              {(refinedPredictions || adaptiveQuestionnaire) && (
-                <Text style={styles.comparisonText}>
-                  {adaptiveQuestionnaire
-                    ? isChanged
-                      ? `The follow-up changed the image-only leader from ${imageTop?.label ?? 'the original result'}.`
-                      : 'Consistent with the image-only result.'
-                    : isChanged
-                      ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
-                      : 'Consistent with the preliminary AI screen.'}
-                </Text>
-              )}
+              <Text style={styles.comparisonText}>
+                Raw output from the on-device model. It is not a diagnosis.
+              </Text>
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>{breakdownTitle}</Text>
-              {displayBars.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>All Predictions</Text>
+              {sorted.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -319,82 +347,31 @@ export default function ResultScreen() {
                   />
                 )
               })}
-              {refinedPredictions && !adaptiveQuestionnaire && (
-                <Text style={styles.moreCountText}>
-                  2 other conditions were also considered and scored lower.
-                </Text>
-              )}
             </View>
           </>
         )}
 
-        {(screeningState === 'NOT_SKIN_IMAGE' || screeningState === 'UNCERTAIN' || screeningState === 'INVALID_IMAGE') && (
+        {!deviceFailed && screeningState !== 'DISEASE_DETECTED' && stateMeta && stateConfig && (
           <View style={[styles.stateCard, { borderColor: stateMeta.color + '30' }]}>
             <View style={[styles.stateIconCircle, { backgroundColor: stateMeta.color + '18' }]}>
-              <MaterialCommunityIcons color={stateMeta.color} name={stateMeta.icon as any} size={32} />
+              <MaterialCommunityIcons color={stateMeta.color} name={stateMeta.icon} size={32} />
             </View>
             <Text style={[styles.stateTitle, { color: stateMeta.color }]}>{stateConfig.title}</Text>
-            <Text style={styles.stateMessage}>{stateMessage || stateConfig.message}</Text>
+            <Text style={styles.stateMessage}>
+              {params.stateMessage || stateConfig.message}
+            </Text>
           </View>
         )}
 
-        {adaptiveQuestionnaire && adaptivePayload && (
-          <>
-            {adaptivePayload.evidence.length > 0 && (
-              <View style={styles.breakdownCard}>
-                <Text style={styles.breakdownTitle}>Follow-up Evidence</Text>
-                {adaptivePayload.evidence.map((evidence, index) => {
-                  const questionText =
-                    KNOWLEDGE.questions.find((item) => item.id === evidence.questionId)?.text ??
-                    evidence.questionId
-                  return (
-                    <View key={`${evidence.questionId}-${index}`} style={styles.evidenceRow}>
-                      <Text style={styles.evidenceQuestion}>
-                        {index + 1}. {questionText}
-                      </Text>
-                      <Text style={styles.evidenceAnswer}>
-                        {evidence.optionLabels.join(', ')}
-                      </Text>
-                    </View>
-                  )
-                })}
-              </View>
-            )}
-
-            {imageTop && (
-              <View style={styles.breakdownCard}>
-                <Text style={styles.breakdownTitle}>Preliminary Image Output</Text>
-                {imageSorted.slice(0, 3).map((pred, i) => {
-                  const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
-                  return (
-                    <ConfidenceBar
-                      key={`image-${pred.disease}`}
-                      label={pred.label}
-                      confidence={pred.confidence}
-                      isTop={i === 0}
-                      color={meta.color}
-                    />
-                  )
-                })}
-                <Text style={styles.moreCountText}>
-                  Raw EfficientNetB0 output, not a calibrated probability. It is kept
-                  separate from the follow-up scores above.
-                </Text>
-              </View>
-            )}
-
-            <View style={[styles.noticeCard, { backgroundColor: colors.surfaceAlt }]}>
-              <MaterialCommunityIcons color={colors.textMuted} name="flask-outline" size={16} />
-              <Text style={styles.noticeText}>{EXPERIMENTAL_NOTICE}</Text>
-            </View>
-          </>
-        )}
+        <Text style={styles.sectionLabel}>INDEPENDENT REVIEW</Text>
+        <ClaudeReviewCard response={claudeResponse} requestFailed={claudeRequestFailed} />
 
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
-            This is an AI-assisted screening and does not replace professional veterinary diagnosis.
-            Consult a vet for definitive results.
+            {classifierSkipped || deviceFailed
+              ? 'The image review was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
+              : 'AI-assisted screening does not replace professional veterinary diagnosis. The two analyses are independent and are never merged into one probability. Consult a vet for definitive results.'}
           </Text>
         </View>
 
@@ -410,31 +387,28 @@ export default function ResultScreen() {
               <MaterialCommunityIcons color="#FFF" name="calendar-plus" size={16} />
             )}
             <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-              {createScreening.isPending ? 'Saving...' : 'Book Appointment'}
+              {createScreening.isPending ? 'Saving...' : 'Save & Book Appointment'}
             </Text>
           </Pressable>
         )}
 
         {saveError && (
           <View style={styles.saveErrorRow}>
-            <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
-            <Text style={styles.saveErrorText}>
-              Couldn&apos;t save the scan. Check your connection and try again.
+            <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
+            <Text style={[styles.saveErrorText, { color: colors.error }]}>
+              Couldn&apos;t save the screening. Check your connection and try again.
             </Text>
           </View>
         )}
 
         <Pressable
-          onPress={() =>
-            router.replace({
-              pathname: '/(owner)/pets/screening',
-              params: { petId: params.petId, petName: params.petName },
-            })
-          }
+          onPress={scanAgain}
           style={[styles.actionBtn, styles.secondaryBtn, styles.scanAgainBtn, { borderColor: colors.border }]}
         >
           <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
-          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Scan Again</Text>
+          <Text style={[styles.actionBtnText, { color: colors.primary }]}>
+            {classifierSkipped ? 'Choose Another Photo' : 'Scan Again'}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -443,38 +417,37 @@ export default function ResultScreen() {
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
-  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: -10 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
   headerBack: {
     alignItems: 'center',
-    height: 50,
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 50,
-    marginTop: 20,
-  }, 
-  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
-  headerRight: { width: 20 },
+    width: 40,
+  },
+  headerTitle: { ...font.extrabold, color: colors.text, flex: 1, fontSize: 20 },
+  headerRight: { width: 40 },
 
+  content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 },
 
-  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 },
+  sectionLabel: {
+    ...font.bold,
+    color: colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
-  reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
-  reportItem: { position: 'relative' },
-  reportThumb: { borderRadius: 12, height: 56, width: 56 },
-  reportThumbFailed: { opacity: 0.4 },
-  reportBadge: {
-    alignItems: 'center',
-    borderRadius: 9,
-    bottom: -4,
-    height: 18,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -4,
-    width: 18,
-  },
-  reportBadgeOk: { backgroundColor: '#27AE60' },
-  reportBadgeFail: { backgroundColor: '#C0392B' },
   thumbnailPlaceholder: {
     alignItems: 'center',
     backgroundColor: colors.surfaceAlt,
@@ -485,7 +458,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   imageInfo: { flex: 1 },
   petName: { ...font.bold, color: colors.text, fontSize: 16 },
-  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 2 },
 
   topCard: {
     alignItems: 'center',
@@ -520,6 +493,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 18,
   },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
   comparisonText: {
     color: colors.textMuted,
     fontSize: 12,
@@ -528,54 +502,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  moreCountText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
-
-  calibrationText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 6,
-    textAlign: 'center',
-  },
-  evidenceRow: {
-    borderTopColor: colors.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 3,
-    paddingVertical: 10,
-  },
-  evidenceQuestion: { ...font.semibold, color: colors.text, fontSize: 12, lineHeight: 17 },
-  evidenceAnswer: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
-
-  noticeCard: {
-    alignItems: 'flex-start',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  noticeText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 11, lineHeight: 16 },
-
-  narrowBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    marginBottom: 16,
-    paddingVertical: 12,
-  },
-  narrowBtnText: { ...font.bold, fontSize: 13 },
 
   stateCard: {
     alignItems: 'center',
@@ -602,6 +528,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     color: colors.textMuted,
     fontSize: 14,
     lineHeight: 20,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  gateNote: {
+    ...font.semibold,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
     marginTop: 10,
     textAlign: 'center',
   },
@@ -634,7 +568,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   saveErrorRow: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderColor: '#C0392B',
+    borderColor: colors.error,
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: 'row',
@@ -643,5 +577,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  saveErrorText: { ...font.semibold, color: '#C0392B', flex: 1, fontSize: 12, lineHeight: 17 },
+  saveErrorText: { ...font.semibold, flex: 1, fontSize: 12, lineHeight: 17 },
 })
