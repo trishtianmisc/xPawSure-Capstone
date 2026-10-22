@@ -51,7 +51,7 @@ export function ClinicAdminAppointmentsPage() {
       date_to: dateTo || undefined,
       status: statusFilter || undefined,
       page,
-      page_size: 20,
+      page_size: 10,
     }),
     [vetId, dateFrom, dateTo, statusFilter, page],
   )
@@ -65,6 +65,9 @@ export function ClinicAdminAppointmentsPage() {
   const hasActiveFilters = Boolean(vetId || dateFrom || dateTo || statusFilter)
   const displayTimeZone =
     settings.data?.timezone ?? (settings.isError ? CLINIC_TIME_ZONE : undefined)
+
+  const startItem = data ? (data.page - 1) * data.page_size + 1 : 0
+  const endItem = data ? Math.min(data.page * data.page_size, data.total) : 0
 
   const volumeData: ChartDataPoint[] = (volume.data ?? []).map((point) => ({
     label: new Date(`${point.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -297,10 +300,10 @@ export function ClinicAdminAppointmentsPage() {
             </div>
           )}
 
-          {data && data.total_pages > 1 && (
-            <div className="flex items-center justify-between border-t border-stone-100 px-5 py-4 dark:border-stone-700">
+          {data && data.results.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-700">
               <span className="text-sm text-stone-500 dark:text-stone-400">
-                Page {data.page} of {data.total_pages} ({data.total} total)
+                Showing {startItem}&ndash;{endItem} of {data.total} appointments
               </span>
               <div className="flex gap-2">
                 <Button
