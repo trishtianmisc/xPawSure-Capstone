@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Image,
@@ -18,14 +18,19 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
+import { getItem, setItem } from '../../../../src/utils/storage'
 import { usePets } from '../../../../features/pet/hooks/usePets'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { prepareImageForInference } from '../../../../ai/services/imagePreprocess'
 import { isReady, loadModel } from '../../../../ai/services/tensorflow.service'
+import ScanGuideModal from '../../../../features/screening/components/ScanGuideModal'
+import { SCAN_GUIDE_STORAGE_KEY } from '../../../../features/screening/constants/scanGuide'
+import { createScreeningThumbnail } from '../../../../features/screening/services/screeningThumbnails'
 
 interface SlotImage {
   original: string
   prepared: string
+  thumbnail: string
 }
 
 export default function CaptureScreen() {
@@ -42,6 +47,8 @@ export default function CaptureScreen() {
   const [activeIndex, setActiveIndex] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [isModelPrepared, setIsModelPrepared] = useState(isReady())
+  const [isGuideVisible, setIsGuideVisible] = useState(false)
+  const guideHandledRef = useRef(false)
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
   const isBusy = isScreening || isModelLoading
@@ -73,10 +80,30 @@ export default function CaptureScreen() {
     }
   }, [])
 
-  const setSlotImage = (original: string, prepared: string) => {
+  useEffect(() => {
+    let mounted = true
+    getItem(SCAN_GUIDE_STORAGE_KEY)
+      .then((seen) => {
+        if (mounted && !guideHandledRef.current && seen !== 'true') setIsGuideVisible(true)
+      })
+      .catch(() => {
+        if (mounted && !guideHandledRef.current) setIsGuideVisible(true)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const handleCloseGuide = () => {
+    guideHandledRef.current = true
+    setIsGuideVisible(false)
+    void setItem(SCAN_GUIDE_STORAGE_KEY, 'true').catch(() => {})
+  }
+
+  const setSlotImage = (original: string, prepared: string, thumbnail: string) => {
     setImageUris((prev) => {
       const next = [...prev]
-      next[activeIndex] = { original, prepared }
+      next[activeIndex] = { original, prepared, thumbnail }
       return next
     })
     const nextEmpty = imageUris.findIndex((existing, i) => existing === null && i !== activeIndex)
@@ -101,7 +128,8 @@ export default function CaptureScreen() {
       if (!result.canceled && result.assets[0]) {
         const original = result.assets[0].uri
         const prepared = await prepareImageForInference(original)
-        setSlotImage(original, prepared)
+        const thumbnail = await createScreeningThumbnail(original)
+        setSlotImage(original, prepared, thumbnail)
       }
     } finally {
       setPickerLoading(false)
@@ -123,7 +151,8 @@ export default function CaptureScreen() {
       if (!result.canceled && result.assets[0]) {
         const original = result.assets[0].uri
         const prepared = await prepareImageForInference(original)
-        setSlotImage(original, prepared)
+        const thumbnail = await createScreeningThumbnail(original)
+        setSlotImage(original, prepared, thumbnail)
       }
     } finally {
       setPickerLoading(false)
@@ -132,15 +161,15 @@ export default function CaptureScreen() {
 
   const handleRunScreening = async () => {
     if (!selectedPet || !allImagesCaptured) return
-    const uris = imageUris
-      .filter((slot): slot is SlotImage => slot !== null)
-      .map((slot) => slot.prepared)
+    const slots = imageUris.filter((slot): slot is SlotImage => slot !== null)
+    const uris = slots.map((slot) => slot.prepared)
 
     try {
       const result = await screenImages(uris)
       const firstOkReport = result.imageReports?.find((r) => r.status === 'ok')
       const coverUri = firstOkReport?.uri ?? uris[0]
       const reportsJson = JSON.stringify(result.imageReports ?? [])
+      const thumbnailUris = JSON.stringify(slots.map((slot) => slot.thumbnail))
 
       if (result.state === 'DISEASE_DETECTED') {
         router.push({
@@ -153,6 +182,7 @@ export default function CaptureScreen() {
             modelVersion: result.modelVersion,
             inferenceTimeMs: String(result.inferenceTimeMs),
             imageReports: reportsJson,
+            thumbnailUris,
           },
         })
         return
@@ -171,6 +201,7 @@ export default function CaptureScreen() {
           stateMessage: result.stateMessage,
           alreadySaved: 'false',
           imageReports: reportsJson,
+          thumbnailUris,
         },
       })
     } catch {
@@ -187,7 +218,16 @@ export default function CaptureScreen() {
           <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
         </Pressable>
         <Text style={styles.headerTitle}>Skin Screening</Text>
-        <View style={styles.headerRight} />
+        <Pressable
+          accessibilityHint="Explains how to take the five screening photos"
+          accessibilityLabel="Open photo guide"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => setIsGuideVisible(true)}
+          style={styles.headerAction}
+        >
+          <MaterialCommunityIcons color={colors.text} name="help-circle-outline" size={22} />
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -392,6 +432,8 @@ export default function CaptureScreen() {
           </View>
         </View>
       </Modal>
+
+      <ScanGuideModal onClose={handleCloseGuide} visible={isGuideVisible} />
     </SafeAreaView>
   )
 }
@@ -413,7 +455,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 40,
   },
   headerTitle: { ...font.extrabold, color: colors.text, flex: 1, fontSize: 20 },
-  headerRight: { width: 40 },
+  headerAction: {
+    alignItems: 'center',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
 
   content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
 

@@ -135,6 +135,22 @@ The active method is passed to the result screen. Older result links without a m
 
 The backend still stores the final prediction and confidence only. Questionnaire answers, the refinement method, the stopping reason, and the answer count are not persisted yet, so this implementation does not provide a production evaluation dataset.
 
+## Result Summary
+
+After the questionnaire completes, `buildScreeningSummary` in `mobile/ai/decisionTree/summary.ts` creates three independently parsed modes:
+
+| Mode | Source |
+| --- | --- |
+| AI only | The original normalized image probabilities |
+| Questionnaire only | `refineQuestionnaireOnly` with a uniform image prior |
+| Combined | `refinePredictionsBayesian` with the image probabilities and questionnaire evidence |
+
+The modes are never substituted for one another. The result screen hides missing or invalid modes, and appointment booking requires a valid combined result. Legacy result links that do not contain a summary continue to use the additive breakdown.
+
+The questionnaire-only mode returns `null` when no informative answer exists, so the UI can hide that card instead of showing a uniform distribution as a result. Answer review always follows the canonical order of all 12 questions in `KNOWLEDGE`, including unanswered and not-asked questions. Q11 remains a multi-select question.
+
+The combined result is also the only result that can reveal the optional mock home-care card, and only when `EXPO_PUBLIC_ENABLE_MOCK_HOME_CARE` is enabled. That content is explicitly marked `DEMO / MOCK CONTENT` and is not a treatment plan.
+
 ## Limitations
 
 - Vote points and the `20` scale are expert-informed assumptions, not calibrated probabilities.
@@ -170,6 +186,8 @@ npx tsc --noEmit
 npm run test:screening
 npm run test:bayesian
 npm run test:adaptive
+npm run test:summary
+npm run test:result-view
 ```
 
 `test:bayesian` covers:
@@ -199,3 +217,21 @@ npm run test:adaptive
 - Adaptive selection favors a more discriminative question and excludes asked questions.
 - No informative question remaining still selects the next unanswered question.
 - Answer editing preserves history, updates the answer, and does not duplicate the question.
+
+`test:summary` covers:
+
+- Canonical answer review for all 12 questions, including unanswered and not-asked rows.
+- Q11 multi-select answers remain valid.
+- Questionnaire-only mode returns `null` without informative answers and uses a uniform prior otherwise.
+- AI-only, questionnaire-only, and combined payloads remain independent.
+- Malformed or missing summary data is rejected defensively.
+- Invalid modes prevent booking.
+
+`test:result-view` covers:
+
+- Summary-mode rendering selects only valid modes.
+- Legacy payloads fall back to the additive breakdown.
+- Missing or invalid combined results disable booking.
+- Mock home care is limited to detected results with a valid combined result and the feature flag.
+- Malformed route predictions, image reports, and states are ignored or normalized without throwing.
+- Mode payloads are parsed and validated independently.

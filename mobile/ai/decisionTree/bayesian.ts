@@ -51,6 +51,16 @@ export function isInformativeOption(option: DecisionOption): boolean {
   return Object.values(option.votes).some((vote) => (vote ?? 0) !== 0)
 }
 
+export function hasInformativeAnswers(answers: Answers, knowledge: Knowledge): boolean {
+  return knowledge.questions.some((question) => {
+    const selected = answers[question.id]
+    if (!selected || selected.length === 0) return false
+    return question.options.some(
+      (option) => selected.includes(option.id) && isInformativeOption(option),
+    )
+  })
+}
+
 export function getQuestionLikelihoods(
   question: DecisionQuestion,
 ): Record<DiseaseType, Record<string, number>> {
@@ -204,4 +214,19 @@ export function refinePredictionsBayesian(
     expertLogOdds,
     posterior,
   }
+}
+
+export function refineQuestionnaireOnly(
+  answers: Answers,
+  knowledge: Knowledge,
+): Prediction[] | null {
+  if (!hasInformativeAnswers(answers, knowledge)) return null
+
+  const posterior = softmax(expertEvidence(answers, knowledge), 1)
+
+  return DISEASES.map((disease) => ({
+    disease,
+    confidence: Math.round(posterior[disease] * 10000) / 100,
+    label: DISEASE_LABELS[disease],
+  })).sort((a, b) => b.confidence - a.confidence)
 }

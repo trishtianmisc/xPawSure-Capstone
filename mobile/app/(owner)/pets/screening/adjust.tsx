@@ -22,7 +22,8 @@ import { ADAPTIVE_CONFIG } from '../../../../ai/decisionTree/adaptive.config'
 import { commitAdaptiveAnswer, evaluateStopping, resolveQuestionnaireMode, selectNextQuestion } from '../../../../ai/decisionTree/adaptive'
 import { refinePredictionsBayesian } from '../../../../ai/decisionTree/bayesian'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import type { Answers, StoppingDecision } from '../../../../ai/decisionTree/types'
+import { buildScreeningSummary } from '../../../../ai/decisionTree/summary'
+import type { Answers, BayesianRefinementResult, StoppingDecision } from '../../../../ai/decisionTree/types'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 export default function AdjustScreen() {
@@ -37,6 +38,7 @@ export default function AdjustScreen() {
     modelVersion?: string
     inferenceTimeMs?: string
     imageReports?: string
+    thumbnailUris?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -108,7 +110,11 @@ export default function AdjustScreen() {
     })
   }
 
-  const finish = async (finalAnswers: Answers, decision: StoppingDecision) => {
+  const finish = async (
+    finalAnswers: Answers,
+    finalAskedIds: readonly string[],
+    decision: StoppingDecision,
+  ) => {
     if (isSubmitting) return
     setIsSubmitting(true)
 
@@ -121,6 +127,18 @@ export default function AdjustScreen() {
       setIsSubmitting(false)
       return
     }
+
+    const summary = REFINEMENT_METHOD === 'bayesian-provisional-v1'
+      ? JSON.stringify(
+        buildScreeningSummary(
+          predictions,
+          finalAnswers,
+          finalAskedIds,
+          refined as BayesianRefinementResult,
+          KNOWLEDGE,
+        ),
+      )
+      : ''
 
     let alreadySaved = false
     try {
@@ -150,6 +168,7 @@ export default function AdjustScreen() {
         state: 'DISEASE_DETECTED',
         stateMessage: '',
         refined: JSON.stringify(refined.refined),
+        summary,
         changed: refined.changed ? 'true' : 'false',
         refinementMethod: REFINEMENT_METHOD,
         stoppingReason: decision.reason ?? '',
@@ -157,6 +176,7 @@ export default function AdjustScreen() {
         totalQuestions: String(decision.totalQuestions),
         alreadySaved: alreadySaved ? 'true' : 'false',
         imageReports: params.imageReports ?? '',
+        thumbnailUris: params.thumbnailUris ?? '',
       },
     })
   }
@@ -179,7 +199,7 @@ export default function AdjustScreen() {
     )
 
     if (decision.shouldStop) {
-      void finish(committed.answers, decision)
+      void finish(committed.answers, committed.askedQuestionIds, decision)
       return
     }
 

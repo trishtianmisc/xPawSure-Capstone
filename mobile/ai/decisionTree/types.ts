@@ -39,6 +39,47 @@ export interface BayesianRefinementResult extends RefinedResult {
   posterior: Record<DiseaseType, number>
 }
 
+export type ScreeningSummaryMode = 'ai-only' | 'questionnaire-only' | 'combined'
+
+export interface ScreeningSummaryPayload {
+  version: 1
+  method: 'bayesian-provisional-v1'
+  aiOnly: Prediction[] | null
+  questionnaireOnly: Prediction[] | null
+  combined: Prediction[] | null
+  answers: Answers
+  askedQuestionIds: string[]
+}
+
+export type AnswerReviewStatus = 'answered' | 'not-answered' | 'not-asked' | 'invalid'
+
+export interface AnswerReviewSelection {
+  id: string
+  label: string
+}
+
+export interface AnswerReviewRow {
+  questionId: string
+  questionNumber: number
+  text: string
+  multi: boolean
+  status: AnswerReviewStatus
+  selected: AnswerReviewSelection[]
+}
+
+export interface ParsedScreeningSummary {
+  aiOnly: Prediction[] | null
+  questionnaireOnly: Prediction[] | null
+  combined: Prediction[] | null
+  answers: Answers
+  askedQuestionIds: string[]
+  answerReview: AnswerReviewRow[]
+  answersValid: boolean
+  hasInformativeAnswers: boolean
+  invalidModes: ScreeningSummaryMode[]
+  invalidAnswerQuestionIds: string[]
+}
+
 export interface AdaptiveConfig {
   adaptiveOrderingEnabled: boolean
   earlyStoppingEnabled: boolean

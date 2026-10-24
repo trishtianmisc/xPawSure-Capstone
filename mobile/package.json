@@ -51,7 +51,9 @@
     "compute:reference": "node scripts/compute_training_reference_tfjs.js",
     "test:screening": "node scripts/test-screening-logic.js",
     "test:bayesian": "node scripts/test-bayesian-logic.js",
-    "test:adaptive": "node scripts/test-adaptive-logic.js"
+    "test:adaptive": "node scripts/test-adaptive-logic.js",
+    "test:summary": "node scripts/test-summary-logic.js",
+    "test:result-view": "node scripts/test-result-view-logic.js"
   },
   "private": true
 }
