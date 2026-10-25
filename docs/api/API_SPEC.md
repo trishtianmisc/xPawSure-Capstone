@@ -472,6 +472,138 @@ Requires authentication. Receptionist.
 
 ---
 
+# 4B. Clinic Admin Patient Endpoints (Web)
+
+Read-only. Requires authentication as Clinic Admin. Other roles receive `403`;
+all unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) receive `403`.
+
+A patient is the canonical clinic patient definition: an active, non-deleted pet
+with a non-deleted appointment at the caller's clinic whose status is not
+`CANCELLED` or `NO_SHOW`. This is the same definition used by the clinic admin
+"Total Patients" KPI and the receptionist Patients directory.
+
+## GET /api/clinic/patients/
+
+Query parameters:
+
+- `search`: pet name, owner first/last name, phone, or email
+- `breed`: breed UUID
+- `vaccination_status`: `up_to_date`, `due_soon`, `overdue`, or `none_recorded`
+- `has_no_shows`: `true`/`1`/`yes`
+- `sort`: `name`, `last_visit`, or `no_shows`
+- `order`: `asc` or `desc`
+- `page`, `page_size` (default `20`, maximum `100`)
+
+Invalid `breed` or `vaccination_status` returns `400`.
+
+Response:
+
+```json
+{
+  "total": 12,
+  "total_patients": 48,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 3,
+  "results": [
+    {
+      "id": "uuid",
+      "name": "Bella",
+      "profile_picture": null,
+      "breed": "Shih Tzu",
+      "sex": "FEMALE",
+      "age": 3,
+      "owner": {
+        "name": "Maria Santos",
+        "phone": "09171234567",
+        "email": "maria@example.com"
+      },
+      "last_visit_date": "2026-10-01",
+      "next_appointment_date": "2026-10-29",
+      "total_appointments": 4,
+      "no_show_count": 1,
+      "cancelled_count": 2,
+      "vaccination_status": "overdue"
+    }
+  ]
+}
+```
+
+Notes:
+
+- `total_patients` is the unfiltered canonical clinic patient count; `total` is
+  the filtered count.
+- `last_visit_date` is the latest past, non-cancelled/non-no-show appointment.
+- `next_appointment_date` is the earliest `PENDING`/`CONFIRMED` appointment at or
+  after the current time.
+- Counts include all non-deleted clinic appointments, including cancelled and
+  no-show appointments.
+- Dates are clinic-local calendar dates; the clinic timezone is used to compute
+  age and "today".
+
+## GET /api/clinic/patients/{id}/
+
+Returns one clinic patient. Pets outside the clinic or pets that are not clinic
+patients return `404`.
+
+Response:
+
+```json
+{
+  "id": "uuid",
+  "name": "Bella",
+  "profile_picture": null,
+  "breed": "Shih Tzu",
+  "sex": "FEMALE",
+  "age": 3,
+  "date_of_birth": "2023-02-01",
+  "weight": "6.50",
+  "color": "Cream",
+  "registered_at": "2024-01-15T02:30:00Z",
+  "owner": {
+    "name": "Maria Santos",
+    "phone": "09171234567",
+    "email": "maria@example.com"
+  },
+  "summary": {
+    "consultations": 3,
+    "vaccinations": 4,
+    "ai_screenings": 5
+  },
+  "vaccination_status": "overdue",
+  "vaccinations": [
+    {
+      "name": "Rabies",
+      "date_given": "2026-01-05",
+      "next_due": "2027-01-05"
+    }
+  ],
+  "appointments": [
+    {
+      "apt_id": "uuid",
+      "apt_scheduled_at": "2026-10-02T01:00:00Z",
+      "apt_type": "CONSULTATION",
+      "apt_status": "COMPLETED",
+      "vet_name": "Dr. Reyes",
+      "apt_cancellation_reason": null
+    }
+  ]
+}
+```
+
+Scoping and privacy:
+
+- Consultation summary and appointment history are clinic-scoped.
+- Vaccinations and AI screening counts are pet-level, including records created
+  outside the clinic.
+- Appointment history is newest first and limited to 50 records.
+- `apt_cancellation_reason` is returned only for `CANCELLED` appointments.
+- The response never exposes QR codes, microchips, diagnoses, prescriptions,
+  consultation notes, treatment details, screening results/images, or
+  appointment reasons.
+
+---
+
 # 5. Appointment Endpoints
 
 ## GET /api/appointments/

@@ -199,7 +199,7 @@ export function StaffListPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
       <PageHero
-        title="Staff Management"
+        title="Staffs"
         subtitle="Manage veterinarians and receptionists."
         actions={
           <div className="flex flex-wrap gap-2">

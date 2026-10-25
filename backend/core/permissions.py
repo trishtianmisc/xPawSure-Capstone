@@ -1,4 +1,4 @@
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import SAFE_METHODS, BasePermission
 
 from users.models import UserRole
 
@@ -11,6 +11,14 @@ class IsSuperAdmin(BasePermission):
 class IsClinicAdmin(BasePermission):
     def has_permission(self, request, view):
         return getattr(request.user, 'usr_role', None) == UserRole.CLINIC_ADMIN
+
+
+class IsClinicAdminReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            getattr(request.user, 'usr_role', None) == UserRole.CLINIC_ADMIN
+            and request.method in SAFE_METHODS
+        )
 
 
 class IsVeterinarian(BasePermission):

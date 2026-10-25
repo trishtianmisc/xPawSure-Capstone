@@ -105,6 +105,7 @@ Clinic Admins can
 - Manage their clinic profile
 - Manage Veterinarian and Receptionist accounts for their own clinic
 - View clinic reports
+- View a read-only patient directory for their own clinic
 
 Clinic Admins cannot
 
@@ -112,6 +113,30 @@ Clinic Admins cannot
 - Manage users outside their own clinic
 - Modify historical medical records
 - Grant Super Admin privileges
+
+---
+
+# 6A. Clinic Admin Patient Directory Rules
+
+The Clinic Admin Patients page is a read-only oversight view.
+
+- It lists only patients of the Clinic Admin's own clinic, using the canonical
+  clinic patient definition: an active, non-deleted pet with a non-deleted
+  appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
+- Cancelled-only and no-show-only pets are excluded. The same definition drives
+  the "Total Patients" dashboard KPI.
+- Clinic Admins cannot create, edit, book, or delete patients or appointments
+  from this page. All write requests are rejected.
+- The overview may show owner contact details, visit/appointment dates,
+  vaccination status, and aggregate counts.
+- Consultation summary and appointment history are clinic-scoped. Vaccination
+  history and AI screening counts are pet-level because medical history follows
+  the pet.
+- The page must not expose QR codes, microchips, diagnoses, prescriptions,
+  consultation notes, treatment details, screening results/images, or
+  appointment reasons.
+- Cancellation reasons are shown only for cancelled appointments.
+- Ages and calendar dates are computed in the clinic's configured timezone.
 
 ---
 
@@ -148,7 +173,7 @@ Patient visibility: a pet is a clinic patient once it has a non-deleted
 appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
 Receptionists only see clinic patients in their own clinic (the sidebar
 "Patients" tab); cancelled-only and no-show-only pets are not listed. This is
-the same definition used by the clinic admin "Total Patients" KPI and the future
+the same definition used by the clinic admin "Total Patients" KPI and the
 clinic admin Patients page. The Owners directory stays platform-wide; booking is
 done by first selecting an owner, then one of that owner's pets.
 
