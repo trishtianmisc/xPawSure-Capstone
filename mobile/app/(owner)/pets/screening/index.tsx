@@ -226,6 +226,25 @@ export default function CaptureScreen() {
         deviceFailed = true
       }
 
+      if (deviceResult?.state === 'DISEASE_DETECTED' && deviceResult.predictions.length > 0) {
+        router.push({
+          pathname: '/(owner)/pets/screening/adjust',
+          params: {
+            imageUri,
+            petId: selectedPet.id,
+            petName: selectedPet.name,
+            predictions: JSON.stringify(deviceResult.predictions),
+            modelVersion: deviceResult.modelVersion,
+            inferenceTimeMs: String(deviceResult.inferenceTimeMs),
+            deviceFailed: 'false',
+            classifierSkipped: 'false',
+            claude: JSON.stringify(claudeResponse),
+            claudeRequestFailed: 'false',
+          },
+        })
+        return
+      }
+
       router.push({
         pathname: '/(owner)/pets/screening/result',
         params: {

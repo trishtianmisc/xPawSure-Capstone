@@ -51,6 +51,9 @@
     "compute:reference": "node scripts/compute_training_reference_tfjs.js",
     "test": "npm run test:screening",
     "test:screening": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/screening/__tests__/comparison.test.ts ai/constants/__tests__/classes.test.ts",
+    "test:bayesian": "node scripts/test-bayesian-logic.js",
+    "test:adaptive": "node scripts/test-adaptive-logic.js",
+    "test:summary": "node scripts/test-summary-logic.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "private": true
