@@ -19,12 +19,26 @@ import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { REFINEMENT_METHOD } from '../../../../ai/decisionTree/bayesian.config'
 import { ADAPTIVE_CONFIG } from '../../../../ai/decisionTree/adaptive.config'
-import { commitAdaptiveAnswer, evaluateStopping, resolveQuestionnaireMode, selectNextQuestion } from '../../../../ai/decisionTree/adaptive'
-import { refinePredictionsBayesian } from '../../../../ai/decisionTree/bayesian'
+import {
+  commitAdaptiveAnswer,
+  evaluateStopping,
+  resolveQuestionnaireMode,
+  selectNextQuestion,
+} from '../../../../ai/decisionTree/adaptive'
+import { refinePredictionsBayesian, refineQuestionnaireOnly } from '../../../../ai/decisionTree/bayesian'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import { buildScreeningSummary } from '../../../../ai/decisionTree/summary'
 import type { Answers, BayesianRefinementResult, StoppingDecision } from '../../../../ai/decisionTree/types'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+
+function parseClaudeToken(value?: string): string {
+  if (!value) return ''
+  try {
+    const parsed = JSON.parse(value) as { token?: unknown } | null
+    return typeof parsed?.token === 'string' ? parsed.token : ''
+  } catch {
+    return ''
+  }
+}
 
 export default function AdjustScreen() {
   const router = useRouter()
@@ -37,10 +51,10 @@ export default function AdjustScreen() {
     imageUri?: string
     modelVersion?: string
     inferenceTimeMs?: string
-    imageReports?: string
-    thumbnailUris?: string
-    validationImageUri?: string
-    validationToken?: string
+    claude?: string
+    claudeRequestFailed?: string
+    deviceFailed?: string
+    classifierSkipped?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -59,6 +73,8 @@ export default function AdjustScreen() {
       return []
     }
   }, [params.predictions])
+
+  const claudeToken = useMemo(() => parseClaudeToken(params.claude), [params.claude])
 
   const [answers, setAnswers] = useState<Answers>({})
   const [askedIds, setAskedIds] = useState<string[]>([])
@@ -130,17 +146,10 @@ export default function AdjustScreen() {
       return
     }
 
-    const summary = REFINEMENT_METHOD === 'bayesian-provisional-v1'
-      ? JSON.stringify(
-        buildScreeningSummary(
-          predictions,
-          finalAnswers,
-          finalAskedIds,
-          refined as BayesianRefinementResult,
-          KNOWLEDGE,
-        ),
-      )
-      : ''
+    // Independent questionnaire-only view: answers alone, no image input.
+    const questionnaireOnly = REFINEMENT_METHOD === 'bayesian-provisional-v1'
+      ? refineQuestionnaireOnly(finalAnswers, KNOWLEDGE)
+      : null
 
     let alreadySaved = false
     try {
@@ -152,16 +161,13 @@ export default function AdjustScreen() {
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
-        ...(params.validationImageUri && params.validationToken
-          ? {
-              image_uri: params.validationImageUri,
-              claude_token: params.validationToken,
-            }
+        ...(params.imageUri && claudeToken
+          ? { image_uri: params.imageUri, claude_token: claudeToken }
           : {}),
       })
       alreadySaved = true
     } catch {
-      // Auto-save failed — the result screen's Save&Book will retry.
+      // Auto-save failed — the result screen's Save & Book will retry.
     }
 
     router.replace({
@@ -175,18 +181,18 @@ export default function AdjustScreen() {
         inferenceTimeMs: params.inferenceTimeMs ?? '0',
         state: 'DISEASE_DETECTED',
         stateMessage: '',
+        deviceFailed: params.deviceFailed ?? 'false',
+        classifierSkipped: params.classifierSkipped ?? 'false',
+        claude: params.claude ?? '',
+        claudeRequestFailed: params.claudeRequestFailed ?? 'false',
         refined: JSON.stringify(refined.refined),
-        summary,
+        questionnaireOnly: questionnaireOnly ? JSON.stringify(questionnaireOnly) : '',
         changed: refined.changed ? 'true' : 'false',
         refinementMethod: REFINEMENT_METHOD,
         stoppingReason: decision.reason ?? '',
         answeredCount: String(decision.answeredCount),
         totalQuestions: String(decision.totalQuestions),
         alreadySaved: alreadySaved ? 'true' : 'false',
-        imageReports: params.imageReports ?? '',
-        thumbnailUris: params.thumbnailUris ?? '',
-        validationImageUri: params.validationImageUri ?? '',
-        validationToken: params.validationToken ?? '',
       },
     })
   }
@@ -292,6 +298,8 @@ export default function AdjustScreen() {
             return (
               <Pressable
                 key={option.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => selectOption(option.id)}
                 style={[styles.option, isSelected && styles.optionActive]}
               >
@@ -328,7 +336,7 @@ export default function AdjustScreen() {
         >
           {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-            {isSubmitting ? 'Saving...' : isLast || willStop ? 'See Suggestions' : 'Next'}
+            {isSubmitting ? 'Saving...' : isLast || willStop ? 'See Results' : 'Next'}
           </Text>
         </Pressable>
       </View>
@@ -399,58 +407,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   optionText: { ...font.medium, color: colors.text, flex: 1, fontSize: 14, lineHeight: 19 },
   optionTextActive: { ...font.bold },
 
-  imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
-  thumbnail: { borderRadius: 14, height: 56, width: 56 },
-  thumbnailPlaceholder: {
-    alignItems: 'center',
-    backgroundColor: colors.iconBg,
-    borderRadius: 14,
-    height: 56,
-    justifyContent: 'center',
-    width: 56,
-  },
-  imageInfo: { flex: 1 },
-  petName: { ...font.bold, color: colors.text, fontSize: 16 },
-  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
-
-  verdictCard: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-    padding: 16,
-  },
-  verdictText: { ...font.regular, color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
-
-  breakdownCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-    padding: 18,
-  },
-  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
-  barRow: { gap: 6, marginBottom: 14 },
-  barLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
-  barPct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
-  barTrack: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
-  barFill: { borderRadius: 4, height: '100%' },
-
-  infoCard: {
-    alignItems: 'flex-start',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
-
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
   emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
@@ -479,6 +435,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534' },
-  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
   actionBtnText: { ...font.bold, fontSize: 14 },
 })

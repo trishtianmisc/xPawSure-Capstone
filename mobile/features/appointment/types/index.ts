@@ -55,6 +55,8 @@ export interface OwnerClinic {
   cln_address: string | null
   cln_phone: string | null
   cln_logo_url: string | null
+  /** Consultation fee in the clinic's currency; 0 means booking is free. */
+  consultation_fee: number
 }
 
 export interface OwnerVet {
@@ -82,4 +84,6 @@ export interface BookAppointmentPayload {
   apt_type: AppointmentType
   reason?: string
   screening_id: string
+  /** Required once the clinic's consultation fee is greater than 0. */
+  pay_id?: string
 }

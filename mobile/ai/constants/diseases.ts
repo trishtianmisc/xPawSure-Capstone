@@ -1,4 +1,5 @@
 import type { DiseaseType, ModelInfo, ScreeningResultState } from '../types/ai.types'
+import { SCREENING_CLASS_ORDER } from './classes'
 
 export const DISEASE_LABELS: Record<DiseaseType, string> = {
   ALLERGIC_DERMATITIS: 'Allergic Dermatitis',
@@ -20,7 +21,7 @@ export const MODEL_INFO: ModelInfo = {
   version: '2.0.0',
   path: require('../../assets/model/model.json'),
   inputSize: 224,
-  labels: Object.keys(DISEASE_LABELS),
+  labels: [...SCREENING_CLASS_ORDER],
 }
 
 export const CONFIDENCE_THRESHOLDS = {

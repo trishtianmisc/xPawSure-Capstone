@@ -6,6 +6,7 @@ import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPage').then(m => ({ default: m.PublicPetPage })))
+const MockCheckoutPage = lazy(() => import('./features/payments/pages/MockCheckoutPage').then(m => ({ default: m.MockCheckoutPage })))
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -23,6 +24,7 @@ const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pag
 const ReceptionistAppointmentsPage = lazy(() => import('./features/receptionist/pages/AppointmentsPage').then(m => ({ default: m.AppointmentsPage })))
 const ReceptionistAppointmentDetailPage = lazy(() => import('./features/receptionist/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const ReceptionistCreateAppointmentPage = lazy(() => import('./features/receptionist/pages/CreateAppointmentPage').then(m => ({ default: m.CreateAppointmentPage })))
+const ReceptionistPaymentsPage = lazy(() => import('./features/receptionist/pages/PaymentsPage').then(m => ({ default: m.PaymentsPage })))
 const ReceptionistOwnersPage = lazy(() => import('./features/receptionist/pages/OwnersPage').then(m => ({ default: m.OwnersPage })))
 const ReceptionistOwnerDetailPage = lazy(() => import('./features/receptionist/pages/OwnerDetailPage').then(m => ({ default: m.OwnerDetailPage })))
 const ReceptionistPetsPage = lazy(() => import('./features/receptionist/pages/PetsPage').then(m => ({ default: m.PetsPage })))
@@ -59,6 +61,7 @@ function App() {
           <Route element={<Navigate replace to="/login" />} path="/" />
           <Route element={<LoginPage />} path="/login" />
           <Route element={<PublicPetPage />} path="/pets/:qrCode/public" />
+          <Route element={<MockCheckoutPage />} path="/payments/mock/:reference" />
           <Route element={<ChangePasswordPage />} path="/change-password" />
           <Route
             element={
@@ -139,6 +142,7 @@ function App() {
             <Route element={<ReceptionistAppointmentsPage />} path="appointments" />
             <Route element={<ReceptionistCreateAppointmentPage />} path="appointments/new" />
             <Route element={<ReceptionistAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<ReceptionistPaymentsPage />} path="payments" />
             <Route element={<ReceptionistOwnersPage />} path="owners" />
             <Route element={<ReceptionistOwnerDetailPage />} path="owners/:id" />
             <Route element={<ReceptionistPetsPage />} path="pets" />

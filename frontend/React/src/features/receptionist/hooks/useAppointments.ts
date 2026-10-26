@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../../../components/ui/ToastContext'
-import { apiErrorMessage } from '../../../utils/error'
+import { apiErrorCode, apiErrorMessage } from '../../../utils/error'
 import {
   listAppointments,
   getAppointmentDetail,
@@ -45,11 +45,21 @@ export function useAppointmentDetail(aptId: string) {
 
 export function useCreateAppointment() {
   const queryClient = useQueryClient()
+  const { showToast } = useToast()
   return useMutation({
     mutationFn: createAppointment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointments'] })
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
+    },
+    onError: (error) => {
+      // The cached fee may be out of date; refresh it so the payment step
+      // appears when the clinic has just started charging for consultations.
+      const code = apiErrorCode(error)
+      if (code === 'PAYMENT_REQUIRED' || code === 'PAYMENT_INVALID') {
+        queryClient.invalidateQueries({ queryKey: ['receptionist', 'clinic-settings'] })
+      }
+      showToast(apiErrorMessage(error), 'error')
     },
   })
 }

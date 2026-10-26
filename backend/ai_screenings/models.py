@@ -38,11 +38,6 @@ class ScreeningSource(models.TextChoices):
 
 
 class ClaudeAnalysisStatus(models.TextChoices):
-    """Statuses of the stateless Claude image-validation gate.
-
-    Choices only: no model field uses them, so no migration is required.
-    Nothing about a validation is persisted on the screening row.
-    """
     NOT_REQUESTED = 'NOT_REQUESTED', 'Not requested'
     OK = 'OK', 'Completed'
     NOT_CONFIGURED = 'NOT_CONFIGURED', 'Not configured'
@@ -51,6 +46,12 @@ class ClaudeAnalysisStatus(models.TextChoices):
     QUOTA_EXHAUSTED = 'QUOTA_EXHAUSTED', 'Quota exhausted'
     MALFORMED_RESPONSE = 'MALFORMED_RESPONSE', 'Malformed response'
     PROVIDER_ERROR = 'PROVIDER_ERROR', 'Provider error'
+
+
+class CrossAnalysisStatus(models.TextChoices):
+    COMPATIBLE = 'COMPATIBLE', 'Compatible'
+    DIFFERENT = 'DIFFERENT', 'Different'
+    INSUFFICIENT_EVIDENCE = 'INSUFFICIENT_EVIDENCE', 'Insufficient evidence'
 
 
 class AiScreening(models.Model):
@@ -71,6 +72,26 @@ class AiScreening(models.Model):
     ais_is_correct = models.BooleanField(null=True, blank=True, db_column='AIS_IS_CORRECT')
     ais_compared_diagnosis = models.TextField(null=True, blank=True, db_column='AIS_COMPARED_DIAGNOSIS')
     ais_compared_at = models.DateTimeField(null=True, blank=True, db_column='AIS_COMPARED_AT')
+
+    # Second, independent image review. These fields are null/not-requested
+    # for historical and legacy screenings, which stay fully readable.
+    ais_claude_status = models.CharField(
+        max_length=30, choices=ClaudeAnalysisStatus.choices,
+        default=ClaudeAnalysisStatus.NOT_REQUESTED, db_column='AIS_CLAUDE_STATUS',
+    )
+    ais_claude_model = models.CharField(max_length=100, null=True, blank=True, db_column='AIS_CLAUDE_MODEL')
+    ais_claude_result = models.JSONField(null=True, blank=True, db_column='AIS_CLAUDE_RESULT')
+    ais_claude_analyzed_at = models.DateTimeField(null=True, blank=True, db_column='AIS_CLAUDE_ANALYZED_AT')
+    ais_claude_latency_ms = models.PositiveIntegerField(null=True, blank=True, db_column='AIS_CLAUDE_LATENCY_MS')
+    ais_claude_input_tokens = models.PositiveIntegerField(null=True, blank=True, db_column='AIS_CLAUDE_INPUT_TOKENS')
+    ais_claude_output_tokens = models.PositiveIntegerField(null=True, blank=True, db_column='AIS_CLAUDE_OUTPUT_TOKENS')
+    ais_cross_analysis_status = models.CharField(
+        max_length=25, choices=CrossAnalysisStatus.choices,
+        default=CrossAnalysisStatus.INSUFFICIENT_EVIDENCE,
+        db_column='AIS_CROSS_ANALYSIS_STATUS',
+    )
+    ais_cross_analysis_summary = models.TextField(null=True, blank=True, db_column='AIS_CROSS_ANALYSIS_SUMMARY')
+
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')
 
     class Meta:
@@ -80,7 +101,34 @@ class AiScreening(models.Model):
         indexes = [
             models.Index(fields=['pet_id', 'ais_created_at'], name='idx_ais_pet_created'),
             models.Index(fields=['ais_status'], name='idx_ais_status'),
+            models.Index(fields=['ais_claude_status'], name='idx_ais_claude_status'),
         ]
 
     def __str__(self):
         return f'{self.dis_id} ({self.ais_confidence}%) - {self.pet_id}'
+
+
+class AiScreeningImage(models.Model):
+    """Exactly one stored image per screening.
+
+    The image URL and storage path are kept separately so the Supabase and
+    local-development storage backends can both be supported.
+    """
+
+    asi_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_column='ASI_ID')
+    ais_id = models.OneToOneField(
+        AiScreening, on_delete=models.CASCADE, related_name='image', db_column='AIS_ID',
+    )
+    asi_url = models.TextField(db_column='ASI_URL')
+    asi_storage_path = models.CharField(max_length=500, db_column='ASI_STORAGE_PATH')
+    asi_content_type = models.CharField(max_length=50, db_column='ASI_CONTENT_TYPE')
+    asi_size_bytes = models.PositiveIntegerField(db_column='ASI_SIZE_BYTES')
+    asi_sha256 = models.CharField(max_length=64, db_index=True, db_column='ASI_SHA256')
+    asi_created_at = models.DateTimeField(auto_now_add=True, db_column='ASI_CREATED_AT')
+
+    class Meta:
+        managed = True
+        db_table = 'AI_SCREENING_IMAGE'
+
+    def __str__(self):
+        return f'Image for screening {self.ais_id}'

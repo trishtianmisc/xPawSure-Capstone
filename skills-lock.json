@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-reach": {
+      "source": "Panniantong/Agent-Reach",
+      "sourceType": "github",
+      "skillPath": "agent_reach/skill/SKILL.md",
+      "computedHash": "78404c8cf8aab6e1e1f77df867f60bdddcbbb730e105a137d7d374ca2d9c9f4e"
+    },
+    "dask": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/dask/SKILL.md",
+      "computedHash": "9b130a671db4713bd9abcc24ea598c31027089926e60ce7a4d03477f12266be0"
+    },
+    "exploratory-data-analysis": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/exploratory-data-analysis/SKILL.md",
+      "computedHash": "9a09aa97fc5db82907e00ba55aad6029649fc451c6acae850ba5c7b5cbf3337a"
+    },
+    "get-available-resources": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/get-available-resources/SKILL.md",
+      "computedHash": "7e7d87052083a19b02d1d6afb11ba7f2395b1ff1e1555e997526e92548034613"
+    },
+    "matplotlib": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/matplotlib/SKILL.md",
+      "computedHash": "fb94ee54a307959f2d5aacff34bef428ad9a573b34f0eb23af7769154b7ce25b"
+    },
+    "plotly": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/plotly/SKILL.md",
+      "computedHash": "d92fb0ce8a38dae55f8fa66ccd77f11b6da8b53e10d01b304a063e8e90a8343f"
+    },
+    "sagemaker-endpoint-deployer": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/sagemaker-endpoint-deployer/SKILL.md",
+      "computedHash": "23b0169164681dcba58cf65cb81bd72791e7f15a1b4fe99b7ad152d5421ff108"
+    },
+    "scientific-visualization": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/scientific-visualization/SKILL.md",
+      "computedHash": "08733e7caf622b853f8994d5dfcf8d2c82daddc0198d4f8f19ae74f7a25cad35"
+    },
+    "scikit-learn": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/scikit-learn/SKILL.md",
+      "computedHash": "5f31e4f35ed934a5f8c36e5c2c594d9e525bc5706e6318feb593a6e8a93a6c96"
+    },
+    "seaborn": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/seaborn/SKILL.md",
+      "computedHash": "58a8e65a2ba910e02dd2582e988fbe8ecb644d179d1c2394c5ba530c0a6197bf"
+    },
+    "shap": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/shap/SKILL.md",
+      "computedHash": "a0ab7bac65f605f31ea73df798f29846d2d88946178a65f9683f44b06972ba2c"
+    },
+    "tensorflow-data-pipelines": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/tensorflow-data-pipelines/SKILL.md",
+      "computedHash": "5d00aa0b4f4958ba0d11378741b43b70faa76bd426546643c0429efc05a9cda8"
+    },
+    "tensorflow-model-deployment": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/tensorflow-model-deployment/SKILL.md",
+      "computedHash": "4d5045d57745f5b55b9eacb1e0c818ca22ab686ba4343c8c28d194b13fd5a6d2"
+    },
+    "tensorflow-neural-networks": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/tensorflow-neural-networks/SKILL.md",
+      "computedHash": "20d56198fe6c0ce66960f555e908663a97b418dd58ab1a5947bf95b484c1f2ef"
+    },
+    "x-research": {
+      "source": "gracefullight/cnn",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/x-research/SKILL.md",
+      "computedHash": "17f621a91ff19675b019e0599c4be3b923240c8ed09e1bd9aabb68b25fef6bfb"
+    }
+  }
+}

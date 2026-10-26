@@ -1,10 +1,10 @@
 # AI_MODULE.md
 
-> Version: 1.0
+> Version: 1.1
 > Project: XPawSure
 > AI Module: Canine Skin Disease Screening
-> Deployment: TensorFlow Lite (Mobile)
-> Last Updated: July 2026
+> Deployment: TensorFlow.js (on-device) + Anthropic API (backend image-validation gate)
+> Last Updated: October 2026
 
 ---
 
@@ -12,7 +12,18 @@
 
 This document defines the architecture, responsibilities, implementation guidelines, deployment strategy, and operational workflow of the XPawSure Artificial Intelligence module.
 
-The AI module provides **preliminary screening** of canine skin conditions using image classification.
+The AI module provides **preliminary screening** of canine skin conditions using
+image classification. It has two independent components:
+
+1. A backend image-validation gate produced by Claude through the Anthropic
+   Messages API.
+2. An on-device EfficientNetB0 classifier served by TensorFlow.js.
+
+The image-validation gate runs first. Only a `SUITABLE` image with
+`screening_eligibility: ELIGIBLE` proceeds to the on-device classifier. The
+components remain independent, and their outputs are displayed side by side
+when both exist. They are never averaged, fused, or converted into a combined
+disease probability. Agreement between them is not confirmation.
 
 The AI module is designed to assist pet owners and veterinarians and **must never replace professional veterinary diagnosis**.
 
@@ -24,9 +35,12 @@ The AI subsystem aims to:
 
 - Detect common canine skin diseases
 - Provide fast preliminary screening
-- Run inference on-device; a server-side image safety review (never
-  inference) checks photo suitability before classification
-- Produce confidence scores
+- Keep the classifier fully on-device
+- Produce on-device confidence scores
+- Validate that a photo is suitable and shows a potentially supported skin
+  disease before running the classifier
+- Offer a separate, non-diagnostic structured image review
+- Keep both outputs independent and auditable
 - Reduce consultation time
 - Improve record consistency
 - Integrate seamlessly with the mobile application
@@ -35,15 +49,26 @@ The AI subsystem aims to:
 
 # 3. AI Responsibilities
 
-The AI module is responsible for:
+On-device classifier responsibilities:
 
 - Image preprocessing
-- Reviewing photo suitability before classification (stateless, server-side; see section 26)
-- Running TensorFlow Lite inference
+- Running TensorFlow.js inference
 - Returning prediction probabilities
 - Returning confidence score
 - Returning top predictions
 - Recording model metadata
+- Applying the existing uncertainty and image-quality thresholds
+
+Backend image-validation responsibilities:
+
+- Validate the single uploaded image
+- Call Anthropic with a structured, non-diagnostic tool schema
+- Decide `image_suitability` and `screening_eligibility`
+- Return an owner-facing screening message, visible features, image-quality
+  observations, condition assessment, and a veterinary recommendation
+- Record provider status, latency, token usage, and model ID
+- Reject malformed or inconsistent gate responses without inventing findings
+- Produce a deterministic cross-analysis status only after both outputs exist
 
 The AI module is NOT responsible for:
 
@@ -53,77 +78,71 @@ The AI module is NOT responsible for:
 - Veterinary decision making
 - Cloud training
 - Dataset management
-- Server-side disease inference
+- Combining the two outputs into one score
 
 ---
 
 # 4. Supported Diseases
 
-Current Version
+Current Version (fixed output index order)
 
-- Mange
-- Fungal Infection
-- Bacterial Infection
-- Hot Spot
+1. Allergic Dermatitis (`ALLERGIC_DERMATITIS`)
+2. Bacterial (`BACTERIAL`)
+3. Fungal (`FUNGAL`)
+4. Hotspot (`HOTSPOT`)
+5. Mange (`MANGE`)
 
-Future versions may include:
+The order is defined once in `mobile/ai/constants/classes.ts` and must match the
+trained model. Changing it silently changes the meaning of every prediction.
 
-- Ringworm
-- Tick Bite Dermatitis
-- Allergic Dermatitis
-- Flea Allergy Dermatitis
-- Seborrhea
-- Yeast Infection
-
-The disease list is configurable through model updates.
+Future versions may include additional classes, but the current five-class
+output contract must remain stable until a new model is trained and validated.
 
 ---
 
 # 5. AI System Architecture
 
 ```
-Camera
+Camera / Gallery
 
 ↓
 
-Capture Image
+Capture Exactly One Image
 
 ↓
 
-Image Validation
+Prepare One 512 px JPEG
 
 ↓
 
-Image Preprocessing
+Claude Vision image-validation gate
+(MIME + signature + size check, structured tool call)
 
 ↓
 
-TensorFlow Lite Model
-
-↓
-
-Softmax Probabilities
-
-↓
-
-Prediction
-
-↓
-
-Confidence Score
-
-↓
-
-Top Predictions
-
-↓
-
-Review Screen
-
-↓
-
-Upload Result
+Suitable and eligible?
+        │
+   ┌────┴────┐
+   │ No      │ Yes
+   ↓         ↓
+Show gate   EfficientNetB0 (TensorFlow.js)
+result      Preprocessing → softmax → confidence + top predictions
+   │         │
+   └────┬────┘
+        ↓
+Display validated result, classifier output when it exists, and
+Claude's independent findings
+        ↓
+Save single image + both outputs (if booking)
+        ↓
+Backend records deterministic cross-analysis for audit
 ```
+
+If the gate rejects the image, the classifier is not run and no prediction is
+shown. If the gate fails, the classifier is not run and the owner gets a retry
+or error message. If the classifier fails after approval, no prediction is
+fabricated and the Claude findings remain visible. No findings are fabricated
+for a failed review.
 
 ---
 
@@ -167,7 +186,7 @@ Typical preprocessing:
 2. Convert RGB
 3. Normalize pixel values
 4. Convert to tensor
-5. Feed into TensorFlow Lite
+5. Feed into the on-device TensorFlow.js model
 
 Example input size:
 
@@ -183,17 +202,20 @@ Current Production Model
 
 Base Architecture
 
-- MobileNetV2
-
-Transfer Learning
-
-- ImageNet pretrained weights
+- EfficientNetB0
 
 Deployment Format
 
-- TensorFlow Lite (.tflite)
+- TensorFlow.js Layers model (bundled `model.json` + `weights.bin`)
 
-Future model upgrades may replace MobileNetV2 provided the input/output interface remains compatible.
+Runtime
+
+- Mobile only (`mobile/ai/services/tensorflow.service.ts`)
+- No TensorFlow.js classifier inference runs in Django
+
+Future model upgrades may replace EfficientNetB0 provided the input shape,
+five-class output order, preprocessing, and uncertainty thresholds remain
+compatible.
 
 ---
 
@@ -277,39 +299,38 @@ Confidence thresholds may be adjusted after clinical evaluation.
 # 13. Inference Workflow
 
 ```
-Capture Image
+Capture One Image
 
 ↓
 
-Preprocess
+Prepare One 512 px JPEG
 
 ↓
 
-TensorFlow Lite
+POST /api/owner/screenings/vision-analysis/
+(Claude gate; nothing persisted)
 
 ↓
 
-Prediction
-
-↓
-
-Confidence
-
-↓
-
-Display Result
-
-↓
-
-Upload Result
+Eligible?
+   │
+   ├─ No → show gate explanation, no classifier
+   │
+   └─ Yes → run TensorFlow.js EfficientNetB0 on the same JPEG
+                    ↓
+             Prediction + confidence
+                    ↓
+        Display review and classifier result separately
+                    ↓
+        Save image + both outputs (if booking)
+                    ↓
+        Backend records deterministic cross-analysis
 ```
 
-Inference occurs entirely on the mobile device.
-
-Before TensorFlow Lite runs, every quality-passing photo of the screening
-session (three slots, at most three photos) goes through the stateless image
-safety review described in section 26.
-Photos that are not approved by the review never reach the model.
+Classifier inference occurs entirely on the mobile device. The backend
+image-validation review uses the same JPEG bytes but is an independent external
+analysis, not a second run of the classifier. The backend never runs the
+classifier.
 
 ---
 
@@ -317,17 +338,51 @@ Photos that are not approved by the review never reach the model.
 
 The backend receives:
 
-- Prediction
-- Confidence
-- Model Version
-- Inference Time
-- Consultation ID
-- The reviewed photo together with its signed validation token (multipart
-  create path only)
+- On-device prediction
+- On-device confidence
+- On-device model version
+- Inference time
+- Exactly one captured image
+- Signed summary of the image-validation gate (only eligible results are saved)
+- Consultation ID (when later linked)
 
-The backend stores these values without modification. The uploaded photo is
-used solely to recompute its SHA-256 for validation-token verification and is
-not stored; no image-review data is persisted.
+Before the final create request, the mobile app must call
+`POST /api/owner/screenings/vision-analysis/`. That endpoint:
+
+- accepts exactly one image;
+- validates its MIME type, decoded format, size, and pixel count;
+- calls Anthropic with a structured tool schema;
+- returns `image_suitability` and `screening_eligibility`;
+- returns a signed token bound to the owner and image SHA-256;
+- persists nothing.
+
+The gate distinguishes these owner-facing outcomes:
+
+- `NOT_DOG_SKIN` → `Not a Skin Image`
+- `NO_VISIBLE_LESIONS` → `Skin Appears Healthy` (with a caveat that this does
+  not rule out disease)
+- `WOUND_OR_INJURY` → `Possible Wound or Injury` (never described as healthy)
+- `POOR_QUALITY` → `Photo Not Clear Enough`
+- `UNCERTAIN` → `Unable to Assess`
+
+None of these outcomes runs the classifier or displays a disease prediction.
+
+The mobile app runs the on-device classifier only when the review returns
+`screening_eligibility: ELIGIBLE`. The final `POST /api/owner/screenings/`
+request is multipart, validates the image once, stores it once, and records both
+AI outputs. The backend stores the on-device values without modification. It
+never runs the EfficientNetB0 model.
+
+Anthropic configuration is environment-only:
+
+- `ANTHROPIC_API_KEY`
+- `ANTHROPIC_MODEL`
+- `ANTHROPIC_TIMEOUT_SECONDS`
+- `ANTHROPIC_MAX_TOKENS`
+
+The API key and image bytes are never logged. If the key is absent, the review
+status is `NOT_CONFIGURED`; the classifier is not run and the owner sees a
+retry/error message. A failed or non-eligible review token cannot be saved.
 
 ---
 
@@ -335,16 +390,18 @@ not stored; no image-review data is persisted.
 
 Each screening record stores:
 
-- Prediction
-- Confidence
-- Model Version
+- On-device prediction and confidence
+- On-device model version and inference time
+- One image reference (Supabase Storage, with a local fallback in development)
+- Image content type, size, and SHA-256
+- Claude review status, model, structured result, timestamp, latency, and usage
+- Deterministic cross-analysis status and summary
 - Timestamp
 - Veterinarian
 - Consultation
 
-No image is stored with the screening record.
-
-Historical predictions are preserved permanently.
+Historical predictions are preserved permanently. Legacy image-less screenings
+remain readable.
 
 ---
 
@@ -360,7 +417,7 @@ Dataset Version
 
 Framework Version
 
-TensorFlow Version
+TensorFlow.js Version
 
 Accuracy Metrics
 
@@ -369,19 +426,19 @@ Example
 ```
 Model
 
-1.0.0
+2.0.0
 
 Dataset
 
 2026.07
 
-TensorFlow
+TensorFlow.js
 
-2.21
+4.22
 
 Architecture
 
-MobileNetV2
+EfficientNetB0
 ```
 
 ---
@@ -467,7 +524,7 @@ Evaluation
 
 ↓
 
-TensorFlow Lite Conversion
+TensorFlow.js Layers Conversion
 
 ↓
 
@@ -482,7 +539,7 @@ No training code exists inside the mobile application.
 
 Deployment format
 
-TensorFlow Lite
+TensorFlow.js Layers model (`model.json` + `weights.bin`)
 
 Conversion occurs after model validation.
 
@@ -500,6 +557,17 @@ The AI may produce incorrect predictions when:
 - Diseases are outside the training dataset
 - Multiple diseases are present simultaneously
 
+The image-validation review has additional limitations:
+
+- It sees only one photograph and cannot examine the whole animal.
+- It may describe features without identifying a category.
+- It can reject a photo because of blur, poor lighting, a missing dog, a wound,
+  or an ambiguous appearance.
+- It can fail because of provider timeouts, rate limits, quotas, or malformed
+  responses; the classifier is then not run.
+- It never provides confidence percentages or a diagnosis.
+- Its agreement with the classifier does not prove either result is correct.
+
 Users must always rely on veterinary judgment.
 
 ---
@@ -512,14 +580,17 @@ The AI:
 - Does not diagnose
 - Does not prescribe medication
 - Does not replace clinical expertise
+- Does not claim that agreement between two AI outputs confirms a diagnosis
+- Does not merge the two outputs into one score
 
-The application must clearly communicate these limitations.
+The application must clearly communicate these limitations, including on the
+result screen and in screening history.
 
 ---
 
 # 23. Security
 
-The deployed TensorFlow Lite model is read-only.
+The deployed TensorFlow.js model is read-only.
 
 Users cannot modify:
 
@@ -538,11 +609,14 @@ Possible future enhancements:
 - Multi-label classification
 - Lesion segmentation
 - Explainable AI (Grad-CAM)
-- Automatic image quality assessment
-- Cloud-assisted inference
+- On-device image quality assessment
 - Continuous learning pipeline
 - Additional disease classes
 - Model update mechanism
+- Calibrated comparison against veterinary-confirmed outcomes
+
+Any future second analysis must remain independent. It must not be presented as
+a combined probability or as confirmation of the on-device result.
 
 ---
 
@@ -550,89 +624,17 @@ Possible future enhancements:
 
 When working on the AI module:
 
-- Keep inference entirely on-device.
-- Never perform inference on the backend.
-- Never classify a photo that the image safety review did not approve.
-- Never spend more than three review requests per screening session
-  (retries included).
-- Match preprocessing to the training pipeline.
+- Keep EfficientNetB0 inference entirely on-device.
+- Never run TensorFlow inference in Django.
+- Match preprocessing and the 224 × 224 input to the training pipeline.
+- Preserve the class label order in `mobile/ai/constants/classes.ts`.
+- Preserve confidence outputs and uncertainty thresholds exactly.
 - Do not hardcode disease names outside configuration files.
 - Preserve model version information.
 - Store prediction metadata with every screening.
-- Never present predictions as confirmed diagnoses.
+- Keep the two AI outputs independent; never average or fuse their scores.
+- Never present predictions or review findings as confirmed diagnoses.
+- Treat `COMPATIBLE` as agreement only, not confirmation.
+- Keep the Anthropic key backend-only and never log it or image bytes.
 - Ensure the AI module can be upgraded without changing the public API.
 - Maintain compatibility with the mobile application architecture.
-
----
-
-# 26. Image Validation Gate (Mobile)
-
-Multi-image screening validates every photo before disease prediction.
-
-Quality and similarity gate (on-device):
-
-- Quality gate: brightness must be between `15` and `240`, and variance must be at least `30`.
-- Similarity below `0.10` is classified as `low_similarity`.
-- Similarity from `0.10` to below `0.30` is classified as `not_skin`.
-- Similarity at or above `0.30` is classified as `ok` and is a skin-valid image.
-- At least three skin-valid images are required. If fewer than three pass, the result is `NOT_SKIN_IMAGE` and no disease prediction is shown.
-- If fewer than three images pass the quality gate, the result is `INVALID_IMAGE`.
-- Disease probabilities and mean similarity are computed only from skin-valid images.
-- A green check means the photo was accepted as a dog-skin image. It does not mean a disease was detected.
-
-Claude image safety review (stateless, runs after the quality gate and before inference; logic in `mobile/ai/services/claudeValidation.ts`):
-
-- Every quality-passing photo of a screening session is reviewed through
-  `POST /api/owner/screenings/vision-analysis/`. The capture screen has three
-  slots, so a session reviews at most three photos.
-- A session is one visit to the capture screen. It may spend at most **three
-  requests including retries**. All first attempts run before any retry; a
-  transient failure (`TIMEOUT`, `PROVIDER_ERROR`, transport errors) is retried
-  at most once and only while budget remains. `RATE_LIMITED`,
-  `QUOTA_EXHAUSTED`, `NOT_CONFIGURED`, `MALFORMED_RESPONSE` and
-  `NOT_VALIDATED` are never retried.
-- Only photos answered `OK` + `SUITABLE` + `ELIGIBLE` are approved. Screening
-  continues only when all three photos are approved:
-  - If any photo fails the quality gate, fewer than three photos reach the
-    review, and screening is blocked with a message asking the owner to retake
-    the photos that are blurry, too dark, or unclear.
-  - If any reviewed photo is rejected, screening is blocked with a message
-    asking the owner to replace the rejected photo(s) and then start a new
-    screening. A rejection run always spends the whole session budget.
-- Replacing a photo inside the session keeps the session
-  budget; an exhausted budget reports the replacement as `not_validated` and
-  a new screening (new session) is required.
-- Approved photos are then classified as before. A photo rejected as
-  `POOR_QUALITY` is reported as `quality_failed`, other rejections as
-  `not_skin`, and failed reviews as `validation_error`.
-- The approval travels as a signed token bound to the owner and the image
-  SHA-256 (expiry `SCREENING_CLAUDE_TOKEN_MAX_AGE`, default 3600 seconds).
-  The backend re-verifies it on screening create and persists nothing about
-  the review.
-- The review never diagnoses: it only triages photo suitability, and its
-  wording must never state a disease.
-- Regression coverage is available through `npm run test:claude` in `mobile/`.
-
-The `0.30` skin-valid threshold must be calibrated against real canine skin images. Human faces must not be accepted as skin-valid. Regression coverage is available through `npm run test:screening` in `mobile/`.
-
----
-
-# 27. Provisional Bayesian Questionnaire Refinement (Mobile)
-
-The questionnaire refinement step is an experimental mobile-only layer over the five-class image model.
-
-- The active method is `bayesian-provisional-v1`, configured in `mobile/ai/decisionTree/bayesian.config.ts`.
-- The image model, quality gates, skin-validity gates, and minimum-valid-image rule are unchanged.
-- Questionnaire vote points are converted to provisional option likelihoods using `softmax(vote / 20)`.
-- Related questions are averaged in groups; multi-select locations are averaged across selected locations.
-- Expert log-odds are centered and capped at `2.5` before combining with the normalized image prior.
-- The output is a normalized posterior over the five classes, labeled as screening likelihood rather than confidence.
-- Adaptive ordering is enabled by default. It selects the unanswered question with the highest top-two discrimination.
-- Early stopping is implemented but disabled by default. When enabled it requires `P1 >= 0.85`, margin `>= 0.30`, at least two informative groups, and two consecutive stable informative updates.
-- `unsure` answers and unanswered questions add no evidence. All 12 questions remain the fallback.
-- Setting `REFINEMENT_METHOD` to `additive` forces the original static 12-question order and disables Bayesian early stopping.
-- The refinement is not clinically calibrated and does not provide a diagnosis.
-- Questionnaire answers, refinement method, and stopping metadata are not yet persisted by the backend.
-- Regression coverage is available through `npm run test:bayesian` and `npm run test:adaptive` in `mobile/`.
-
-Detailed assumptions, formula, limitations, rollout, and evaluation requirements are documented in `docs/ai/BAYESIAN_REFINEMENT.md`.

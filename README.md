@@ -13,11 +13,11 @@ The platform consists of:
 - 🖥 Veterinary Clinic Web Application (React)
 - 📱 Pet Owner Mobile Application (React Native + Expo)
 - ⚙ Backend API (Django REST Framework)
-- 🧠 TensorFlow Lite AI Model
+- 🧠 TensorFlow.js On-Device AI Model + Independent Anthropic Image Review
 - 🗄 Supabase PostgreSQL Database
 - 📦 Supabase Storage
 
-The AI module provides preliminary predictions only and does not replace a licensed veterinarian's diagnosis.
+The Claude image-validation gate runs before the on-device classifier, and the on-device model runs only for a suitable, eligible image. Both outputs provide preliminary information only, are never combined into a single probability, and do not replace a licensed veterinarian's diagnosis.
 
 ---
 

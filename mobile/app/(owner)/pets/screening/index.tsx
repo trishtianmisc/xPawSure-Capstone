@@ -14,27 +14,35 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
-import { randomUUID } from 'expo-crypto'
 
 import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
-import { getItem, setItem } from '../../../../src/utils/storage'
 import { usePets } from '../../../../features/pet/hooks/usePets'
+import type { ScreeningResult } from '../../../../ai/types/ai.types'
+import { analyzeScreeningImage } from '../../../../src/services/screening'
+import { isClaudeValidationApproved } from '../../../../features/screening/comparison'
+import type { ClaudeAnalysisResponse } from '../../../../features/screening/types'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { prepareImageForInference } from '../../../../ai/services/imagePreprocess'
 import { isReady, loadModel } from '../../../../ai/services/tensorflow.service'
-import ScanGuideModal from '../../../../features/screening/components/ScanGuideModal'
-import { SCAN_GUIDE_STORAGE_KEY } from '../../../../features/screening/constants/scanGuide'
-import { createScreeningThumbnail } from '../../../../features/screening/services/screeningThumbnails'
 
-interface SlotImage {
-  original: string
-  prepared: string
-  thumbnail: string
+type AnalysisPhase = 'idle' | 'validating' | 'classifying'
+
+const IMAGE_SUITABILITY_VALUES = new Set<string>([
+  'SUITABLE',
+  'POOR_QUALITY',
+  'NOT_DOG_SKIN',
+  'NO_VISIBLE_LESIONS',
+  'WOUND_OR_INJURY',
+  'UNCERTAIN',
+])
+const SCREENING_ELIGIBILITY_VALUES = new Set<string>(['ELIGIBLE', 'NOT_ELIGIBLE'])
+
+function requestErrorDetail(error: unknown): string | null {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  return typeof detail === 'string' && detail.trim() ? detail : null
 }
-
-const PHOTO_SLOT_LABELS = ['Main area', 'Wider view', 'Additional area']
 
 export default function CaptureScreen() {
   const router = useRouter()
@@ -42,25 +50,23 @@ export default function CaptureScreen() {
   const { user } = useAuth()
   const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
-  const { screenImages, isScreening, isModelLoading, modelError, screeningError } = useAIScreening()
+  const { screenImage, isScreening } = useAIScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
-  const [sessionId] = useState(() => randomUUID())
-  const [imageUris, setImageUris] = useState<(SlotImage | null)[]>([null, null, null])
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [imageUri, setImageUri] = useState<string | null>(null)
   const [pickerLoading, setPickerLoading] = useState(false)
+  const [analysisPhase, setAnalysisPhase] = useState<AnalysisPhase>('idle')
+  const screeningRunRef = useRef(false)
   const [isModelPrepared, setIsModelPrepared] = useState(isReady())
-  const [isGuideVisible, setIsGuideVisible] = useState(false)
-  const guideHandledRef = useRef(false)
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null)
+  const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   const selectedPet = pets?.find((p) => p.id === selectedPetId)
-  const isBusy = isScreening || isModelLoading
   const petsLoaded = pets !== undefined
   const hasPets = (pets?.length ?? 0) > 0
-  const filledCount = imageUris.filter((uri) => uri !== null).length
-  const allImagesCaptured = filledCount === imageUris.length
-  const canRun = allImagesCaptured && !!selectedPet && !isBusy && isModelPrepared
+  const isBusy = analysisPhase !== 'idle' || pickerLoading || isScreening
+  const canRun = !!imageUri && !!selectedPet && !isBusy
 
   useEffect(() => {
     if (!pets || selectedPetId) return
@@ -75,7 +81,13 @@ export default function CaptureScreen() {
     if (isReady()) return
     let mounted = true
     loadModel()
-      .catch(() => {})
+      .catch(() => {
+        if (mounted) {
+          setModelLoadError(
+            'The on-device model could not be loaded. Photo validation can still run, but no prediction will be created if the photo is approved.',
+          )
+        }
+      })
       .finally(() => {
         if (mounted) setIsModelPrepared(true)
       })
@@ -84,35 +96,16 @@ export default function CaptureScreen() {
     }
   }, [])
 
-  useEffect(() => {
-    let mounted = true
-    getItem(SCAN_GUIDE_STORAGE_KEY)
-      .then((seen) => {
-        if (mounted && !guideHandledRef.current && seen !== 'true') setIsGuideVisible(true)
-      })
-      .catch(() => {
-        if (mounted && !guideHandledRef.current) setIsGuideVisible(true)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
-
-  const handleCloseGuide = () => {
-    guideHandledRef.current = true
-    setIsGuideVisible(false)
-    void setItem(SCAN_GUIDE_STORAGE_KEY, 'true').catch(() => {})
-  }
-
-  const setSlotImage = (original: string, prepared: string, thumbnail: string) => {
-    setImageUris((prev) => {
-      const next = [...prev]
-      next[activeIndex] = { original, prepared, thumbnail }
-      return next
-    })
-    const nextEmpty = imageUris.findIndex((existing, i) => existing === null && i !== activeIndex)
-    if (nextEmpty !== -1) {
-      setActiveIndex(nextEmpty)
+  const prepareSelectedImage = async (sourceUri: string) => {
+    setAnalysisError(null)
+    try {
+      const prepared = await prepareImageForInference(sourceUri)
+      setImageUri(prepared)
+      setAnalysisError(null)
+    } catch {
+      setAnalysisError(
+        'This photo could not be prepared for analysis. Please choose another image.',
+      )
     }
   }
 
@@ -124,16 +117,13 @@ export default function CaptureScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
+        allowsEditing: false,
+        allowsMultipleSelection: false,
+        quality: 1,
         exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        const original = result.assets[0].uri
-        const prepared = await prepareImageForInference(original)
-        const thumbnail = await createScreeningThumbnail(original)
-        setSlotImage(original, prepared, thumbnail)
+        await prepareSelectedImage(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -147,16 +137,12 @@ export default function CaptureScreen() {
     setPickerLoading(true)
     try {
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.7,
+        allowsEditing: false,
+        quality: 1,
         exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        const original = result.assets[0].uri
-        const prepared = await prepareImageForInference(original)
-        const thumbnail = await createScreeningThumbnail(original)
-        setSlotImage(original, prepared, thumbnail)
+        await prepareSelectedImage(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -164,33 +150,96 @@ export default function CaptureScreen() {
   }
 
   const handleRunScreening = async () => {
-    if (!selectedPet || !allImagesCaptured) return
-    const slots = imageUris.filter((slot): slot is SlotImage => slot !== null)
-    const uris = slots.map((slot) => slot.prepared)
+    if (!selectedPet || !imageUri || isBusy || screeningRunRef.current) return
+
+    screeningRunRef.current = true
+    setAnalysisPhase('validating')
+    setAnalysisError(null)
 
     try {
-      const result = await screenImages(uris, sessionId)
-      const firstOkReport = result.imageReports?.find((r) => r.status === 'ok')
-      const coverUri = firstOkReport?.uri ?? uris[0]
-      const reportsJson = JSON.stringify(result.imageReports ?? [])
-      const thumbnailUris = JSON.stringify(slots.map((slot) => slot.thumbnail))
-      const validationImageUri = result.validation?.imageUri ?? ''
-      const validationToken = result.validation?.token ?? ''
+      let claudeResponse: ClaudeAnalysisResponse
+      try {
+        claudeResponse = await analyzeScreeningImage(imageUri)
+      } catch (error) {
+        const detail = requestErrorDetail(error)
+        setAnalysisError(
+          `${detail || 'Photo validation could not be completed.'} ` +
+            'The on-device screening was not run. Check your connection and try again.',
+        )
+        return
+      }
 
-      if (result.state === 'DISEASE_DETECTED') {
+      if (claudeResponse.status !== 'OK' || !claudeResponse.result) {
+        setAnalysisError(
+          claudeResponse.detail ||
+            'The photo could not be validated, so the on-device screening was not run. Please try again.',
+        )
+        return
+      }
+
+      const gate = claudeResponse.result
+      if (
+        !IMAGE_SUITABILITY_VALUES.has(gate.image_suitability) ||
+        !SCREENING_ELIGIBILITY_VALUES.has(gate.screening_eligibility) ||
+        typeof gate.screening_message !== 'string' ||
+        !gate.screening_message.trim() ||
+        !Array.isArray(gate.visible_features) ||
+        !gate.image_quality ||
+        typeof gate.image_quality.adequate !== 'boolean' ||
+        !Array.isArray(gate.image_quality.observations) ||
+        !gate.condition_assessment
+      ) {
+        setAnalysisError(
+          'The photo validation response was incomplete, so the on-device screening ' +
+            'was not run. Please try again.',
+        )
+        return
+      }
+
+      if (!isClaudeValidationApproved(claudeResponse)) {
+        router.push({
+          pathname: '/(owner)/pets/screening/result',
+          params: {
+            imageUri,
+            petId: selectedPet.id,
+            petName: selectedPet.name,
+            predictions: '[]',
+            modelVersion: '',
+            inferenceTimeMs: '0',
+            state: 'INVALID_IMAGE',
+            stateMessage: gate.screening_message,
+            deviceFailed: 'false',
+            classifierSkipped: 'true',
+            claude: JSON.stringify(claudeResponse),
+            claudeRequestFailed: 'false',
+          },
+        })
+        return
+      }
+
+      setAnalysisPhase('classifying')
+      let deviceResult: ScreeningResult | null = null
+      let deviceFailed = false
+      try {
+        deviceResult = await screenImage(imageUri)
+      } catch {
+        deviceFailed = true
+      }
+
+      if (deviceResult?.state === 'DISEASE_DETECTED' && deviceResult.predictions.length > 0) {
         router.push({
           pathname: '/(owner)/pets/screening/adjust',
           params: {
-            imageUri: coverUri,
+            imageUri,
             petId: selectedPet.id,
             petName: selectedPet.name,
-            predictions: JSON.stringify(result.predictions),
-            modelVersion: result.modelVersion,
-            inferenceTimeMs: String(result.inferenceTimeMs),
-            imageReports: reportsJson,
-            thumbnailUris,
-            validationImageUri,
-            validationToken,
+            predictions: JSON.stringify(deviceResult.predictions),
+            modelVersion: deviceResult.modelVersion,
+            inferenceTimeMs: String(deviceResult.inferenceTimeMs),
+            deviceFailed: 'false',
+            classifierSkipped: 'false',
+            claude: JSON.stringify(claudeResponse),
+            claudeRequestFailed: 'false',
           },
         })
         return
@@ -199,23 +248,23 @@ export default function CaptureScreen() {
       router.push({
         pathname: '/(owner)/pets/screening/result',
         params: {
-          imageUri: coverUri,
+          imageUri,
           petId: selectedPet.id,
           petName: selectedPet.name,
-          predictions: JSON.stringify(result.predictions),
-          modelVersion: result.modelVersion,
-          inferenceTimeMs: String(result.inferenceTimeMs),
-          state: result.state,
-          stateMessage: result.stateMessage,
-          alreadySaved: 'false',
-          imageReports: reportsJson,
-          thumbnailUris,
-          validationImageUri,
-          validationToken,
+          predictions: JSON.stringify(deviceResult?.predictions ?? []),
+          modelVersion: deviceResult?.modelVersion ?? '',
+          inferenceTimeMs: String(deviceResult?.inferenceTimeMs ?? 0),
+          state: deviceResult?.state ?? 'INVALID_IMAGE',
+          stateMessage: deviceResult?.stateMessage ?? '',
+          deviceFailed: deviceFailed ? 'true' : 'false',
+          classifierSkipped: 'false',
+          claude: JSON.stringify(claudeResponse),
+          claudeRequestFailed: 'false',
         },
       })
-    } catch {
-      // error surfaced via hook state
+    } finally {
+      screeningRunRef.current = false
+      setAnalysisPhase('idle')
     }
   }
 
@@ -228,34 +277,25 @@ export default function CaptureScreen() {
           <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
         </Pressable>
         <Text style={styles.headerTitle}>Skin Screening</Text>
-        <Pressable
-          accessibilityHint="Explains how to take the three screening photos"
-          accessibilityLabel="Open photo guide"
-          accessibilityRole="button"
-          hitSlop={8}
-          onPress={() => setIsGuideVisible(true)}
-          style={styles.headerAction}
-        >
-          <MaterialCommunityIcons color={colors.text} name="help-circle-outline" size={22} />
-        </Pressable>
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {modelError && (
-          <View style={[styles.statusBanner, styles.statusBannerError]}>
-            <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
-            <Text style={[styles.statusText, { color: colors.error }]}>{modelError}</Text>
+        {modelLoadError && (
+          <View style={styles.statusBanner}>
+            <MaterialCommunityIcons color={colors.primary} name="alert-circle-outline" size={16} />
+            <Text style={styles.statusText}>{modelLoadError}</Text>
           </View>
         )}
 
-        {screeningError && (
+        {analysisError && (
           <View style={[styles.statusBanner, styles.statusBannerError]}>
             <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
-            <Text style={[styles.statusText, { color: colors.error }]}>{screeningError}</Text>
+            <Text style={[styles.statusText, { color: colors.error }]}>{analysisError}</Text>
           </View>
         )}
 
-        {!isModelPrepared && !modelError && (
+        {!isModelPrepared && !modelLoadError && analysisPhase === 'idle' && !isScreening && (
           <View style={styles.statusBanner}>
             <ActivityIndicator color={colors.primary} size="small" />
             <Text style={styles.statusText}>Preparing AI model...</Text>
@@ -327,39 +367,29 @@ export default function CaptureScreen() {
         )}
 
         <View style={styles.imageSection}>
-          <Text style={styles.slotHint}>
-            Take 3 photos — the main affected area, a wider view, and one more angle
-          </Text>
-          <View style={styles.slotRow}>
-            {imageUris.map((slot, i) => (
-              <View key={i} style={styles.slotCell}>
-                <Pressable
-                  onPress={() => setActiveIndex(i)}
-                  style={[
-                    styles.slot,
-                    activeIndex === i && styles.slotActive,
-                    slot && styles.slotFilled,
-                  ]}
-                >
-                  {slot ? (
-                    <Image source={{ uri: slot.original }} style={styles.slotImage} />
-                  ) : (
-                    <MaterialCommunityIcons
-                      color={activeIndex === i ? colors.primary : colors.textMuted}
-                      name="camera-outline"
-                      size={20}
-                    />
-                  )}
-                  <View style={[styles.slotBadge, slot && styles.slotBadgeFilled]}>
-                    <Text style={[styles.slotBadgeText, slot && styles.slotBadgeTextFilled]}>{i + 1}</Text>
-                  </View>
-                </Pressable>
-                <Text style={styles.slotCaption}>{PHOTO_SLOT_LABELS[i]}</Text>
+          <Text style={styles.sectionLabel}>PHOTO</Text>
+          <View style={styles.previewCard}>
+            {imageUri ? (
+              <>
+                <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                <View style={styles.previewBadge}>
+                  <MaterialCommunityIcons color="#FFFFFF" name="check" size={12} />
+                  <Text style={styles.previewBadgeText}>1 photo selected</Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.previewPlaceholder}>
+                <MaterialCommunityIcons color={colors.textMuted} name="camera-outline" size={34} />
+                <Text style={styles.previewPlaceholderTitle}>Add one clear photo</Text>
+                <Text style={styles.previewPlaceholderText}>
+                  Show the affected skin area in good light.
+                </Text>
               </View>
-            ))}
+            )}
           </View>
-          <Text style={styles.slotProgress}>
-            Photo {activeIndex + 1} of {imageUris.length} · {filledCount} captured
+          <Text style={styles.slotHint}>
+            One photo is checked first for screening suitability, then analyzed on-device
+            only if it is eligible.
           </Text>
         </View>
 
@@ -370,7 +400,9 @@ export default function CaptureScreen() {
             style={[styles.sourceBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
             <MaterialCommunityIcons color={colors.primary} name="camera" size={20} />
-            <Text style={[styles.sourceBtnText, { color: colors.text }]}>Take Photo</Text>
+            <Text style={[styles.sourceBtnText, { color: colors.text }]}>
+              {imageUri ? 'Retake Photo' : 'Take Photo'}
+            </Text>
           </Pressable>
           <Pressable
             onPress={handlePickGallery}
@@ -378,14 +410,16 @@ export default function CaptureScreen() {
             style={[styles.sourceBtn, { backgroundColor: colors.surface, borderColor: colors.border }]}
           >
             <MaterialCommunityIcons color={colors.primary} name="image-multiple" size={20} />
-            <Text style={[styles.sourceBtnText, { color: colors.text }]}>Gallery</Text>
+            <Text style={[styles.sourceBtnText, { color: colors.text }]}>
+              {imageUri ? 'Choose Another' : 'Gallery'}
+            </Text>
           </Pressable>
         </View>
 
         {pickerLoading && (
           <View style={styles.loadingRow}>
             <ActivityIndicator color={colors.primary} size="small" />
-            <Text style={styles.loadingText}>Optimizing photo...</Text>
+            <Text style={styles.loadingText}>Preparing photo...</Text>
           </View>
         )}
 
@@ -396,15 +430,15 @@ export default function CaptureScreen() {
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Use good, even lighting on the affected area</Text>
+            <Text style={styles.tipsText}>Ensure good lighting on the affected area</Text>
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Keep the camera steady and the affected skin in focus</Text>
+            <Text style={styles.tipsText}>Take a close-up photo of the skin condition</Text>
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Do not filter or edit the photos</Text>
+            <Text style={styles.tipsText}>Blurred or poorly lit photos cannot be screened</Text>
           </View>
         </View>
 
@@ -417,19 +451,18 @@ export default function CaptureScreen() {
             <>
               <ActivityIndicator color="#FFF" size="small" />
               <Text style={styles.screenBtnText}>
-                {isModelLoading ? 'Preparing AI model...' : 'Analyzing 3 photos...'}
+                {pickerLoading
+                  ? 'Preparing photo...'
+                  : analysisPhase === 'validating'
+                    ? 'Checking photo...'
+                    : 'Running screening...'}
               </Text>
-            </>
-          ) : !isModelPrepared ? (
-            <>
-              <ActivityIndicator color="#FFF" size="small" />
-              <Text style={styles.screenBtnText}>Preparing AI model...</Text>
             </>
           ) : (
             <>
               <MaterialCommunityIcons color="#FFF" name="magnify" size={18} />
               <Text style={styles.screenBtnText}>
-                {allImagesCaptured ? 'Run Screening' : `Capture ${filledCount}/${imageUris.length} Photos`}
+                {imageUri ? 'Run Screening' : 'Add a photo to continue'}
               </Text>
             </>
           )}
@@ -441,18 +474,22 @@ export default function CaptureScreen() {
           <View style={styles.overlayCard}>
             <ActivityIndicator color={colors.primary} size="large" />
             <Text style={styles.overlayTitle}>
-              {isModelLoading ? 'Preparing AI model...' : 'Analyzing 3 photos...'}
+              {pickerLoading
+                ? 'Preparing photo...'
+                : analysisPhase === 'validating'
+                  ? 'Checking photo...'
+                  : 'Running screening...'}
             </Text>
             <Text style={styles.overlayHint}>
-              {isModelLoading
-                ? 'First-time loading may take up to a minute'
-                : 'Quality checks, AI safety review, and analysis — usually under a minute'}
+              {pickerLoading
+                ? 'Converting the photo to a single analysis copy'
+                : analysisPhase === 'validating'
+                  ? 'Claude Vision is checking whether this photo is suitable for screening'
+                  : 'Validation passed. The on-device model is analyzing the same photo'}
             </Text>
           </View>
         </View>
       </Modal>
-
-      <ScanGuideModal onClose={handleCloseGuide} visible={isGuideVisible} />
     </SafeAreaView>
   )
 }
@@ -474,13 +511,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 40,
   },
   headerTitle: { ...font.extrabold, color: colors.text, flex: 1, fontSize: 20 },
-  headerAction: {
-    alignItems: 'center',
-    borderRadius: 20,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
+  headerRight: { width: 40 },
 
   content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 24 },
 
@@ -535,43 +566,42 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   petPillName: { ...font.semibold, color: colors.text, fontSize: 13, maxWidth: 100 },
   petPillNameActive: { color: '#FFFFFF' },
 
-  imageSection: { marginBottom: 20 },
-  slotHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: 12 },
-  slotRow: { flexDirection: 'row', gap: 8 },
-  slotCell: { alignItems: 'center', flex: 1, gap: 6 },
-  slot: {
-    alignItems: 'center',
-    aspectRatio: 1,
+  imageSection: { marginBottom: 16 },
+  previewCard: {
+    aspectRatio: 1.25,
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.borderLight,
-    borderRadius: 14,
+    borderRadius: 20,
     borderStyle: 'dashed',
     borderWidth: 1.5,
-    justifyContent: 'center',
-    overflow: 'visible',
-    width: '100%',
+    marginBottom: 12,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  slotActive: { borderColor: colors.primary, borderStyle: 'solid' },
-  slotFilled: { borderStyle: 'solid', padding: 0 },
-  slotImage: { borderRadius: 12, height: '100%', width: '100%' },
-  slotBadge: {
+  previewImage: { height: '100%', width: '100%' },
+  previewPlaceholder: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.borderLight,
-    borderRadius: 9,
-    borderWidth: 1,
-    height: 18,
+    flex: 1,
+    gap: 6,
     justifyContent: 'center',
-    position: 'absolute',
-    right: -5,
-    top: -5,
-    width: 18,
+    paddingHorizontal: 24,
   },
-  slotBadgeFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotBadgeText: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
-  slotBadgeTextFilled: { color: '#FFFFFF' },
-  slotCaption: { color: colors.textMuted, fontSize: 11, fontWeight: '600', textAlign: 'center' },
-  slotProgress: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: 14 },
+  previewPlaceholderTitle: { ...font.bold, color: colors.text, fontSize: 15 },
+  previewPlaceholderText: { ...font.regular, color: colors.textMuted, fontSize: 12, textAlign: 'center' },
+  previewBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    borderRadius: 10,
+    bottom: 10,
+    flexDirection: 'row',
+    gap: 4,
+    left: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    position: 'absolute',
+  },
+  previewBadgeText: { ...font.semibold, color: '#FFFFFF', fontSize: 11 },
+  slotHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
 
   sourceButtons: { flexDirection: 'row', gap: 12 },
   sourceBtn: {
@@ -602,7 +632,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingVertical: 12,
   },
   statusBannerError: { backgroundColor: colors.errorBg },
-  statusText: { ...font.semibold, color: colors.primary, fontSize: 13 },
+  statusText: { ...font.semibold, color: colors.primary, flex: 1, fontSize: 13, lineHeight: 18 },
 
   tipsCard: {
     backgroundColor: colors.surfaceAlt,

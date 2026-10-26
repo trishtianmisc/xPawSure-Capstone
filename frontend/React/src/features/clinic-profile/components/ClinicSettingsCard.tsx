@@ -18,6 +18,10 @@ function toTimeInputValue(timeStr: string): string {
   return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`
 }
 
+function formatFee(value: number): string {
+  return value > 0 ? `₱${value.toFixed(2)} per consultation` : 'No fee — booking is free'
+}
+
 export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSettingsCardProps) {
   const [editing, setEditing] = useState(false)
 
@@ -34,6 +38,7 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
       appointment_duration: settings.appointment_duration,
       max_appointments_per_day: settings.max_appointments_per_day,
       allow_owner_booking: settings.allow_owner_booking,
+      consultation_fee: Number(settings.consultation_fee ?? 0),
     },
   })
 
@@ -44,6 +49,7 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
       appointment_duration: settings.appointment_duration,
       max_appointments_per_day: settings.max_appointments_per_day,
       allow_owner_booking: settings.allow_owner_booking,
+      consultation_fee: Number(settings.consultation_fee ?? 0),
     })
     setEditing(true)
   }
@@ -71,6 +77,12 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
           <InfoRow
             label="Owner Booking"
             value={settings.allow_owner_booking ? 'Enabled' : 'Disabled'}
+          />
+        </div>
+        <div className="py-4 sm:py-5">
+          <InfoRow
+            label="Consultation Fee"
+            value={formatFee(Number(settings.consultation_fee ?? 0))}
           />
         </div>
         <div className="py-4 sm:py-5">
@@ -138,6 +150,15 @@ export function ClinicSettingsCard({ settings, isUpdating, onUpdate }: ClinicSet
                 Allow Owner Booking
               </label>
             </div>
+            <Input
+              {...register('consultation_fee', { valueAsNumber: true })}
+              error={errors.consultation_fee?.message}
+              hint="Clients must pay this amount before an appointment is booked. Set 0 to allow free booking."
+              label="Consultation Fee (₱)"
+              type="number"
+              min={0}
+              step={0.01}
+            />
             {errors.root?.message && (
               <Alert variant="error">{errors.root.message}</Alert>
             )}

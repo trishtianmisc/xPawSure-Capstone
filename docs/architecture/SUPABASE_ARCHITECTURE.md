@@ -51,7 +51,7 @@ Django validates upload requests, applies authorization and business rules, and 
 
 Clients must not bypass Django for application data or file-upload workflows.
 
-TensorFlow Lite inference remains entirely on the mobile application. Django stores screening results and image references only.
+TensorFlow.js inference remains entirely on the mobile application. Django stores screening results and image references only.
 
 ---
 

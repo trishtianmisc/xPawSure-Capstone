@@ -68,7 +68,7 @@ Mobile
 
 - React Native
 - Expo
-- TensorFlow Lite
+- TensorFlow.js
 
 Database
 
@@ -77,9 +77,10 @@ Database
 
 AI
 
-- TensorFlow Lite
-- Mobile only
-- No server-side inference
+- TensorFlow.js on-device classifier
+- Anthropic API independent image review through Django
+- No classifier inference in Django
+- Never average or fuse the two outputs
 
 ---
 
@@ -285,8 +286,9 @@ Frontend
 Mobile
 
 - Expo Router
-- TensorFlow Lite
-- On-device inference only
+- TensorFlow.js
+- On-device classifier inference only
+- Independent review requested through Django
 
 ---
 
@@ -382,19 +384,21 @@ Never expose:
 
 # AI Rules
 
-TensorFlow Lite runs ONLY on mobile.
+The TensorFlow.js classifier runs ONLY on mobile.
 
 Never
 
 - Retrain models
-- Perform inference in Django
+- Run the classifier in Django
 - Modify model weights
+- Average or fuse classifier and review outputs
 
 Always
 
-- Validate images
+- Validate exactly one image per screening
 - Record model version
-- Store prediction history
+- Store prediction and review history independently
+- Treat agreement between outputs as non-confirmation
 - Upload prediction metadata
 
 ---

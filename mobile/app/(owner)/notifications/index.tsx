@@ -22,6 +22,8 @@ const TYPE_ICONS: Record<string, IconName> = {
   VACCINATION_REMINDER: 'needle',
   AI_SCREENING_COMPLETED: 'image-filter-center-focus',
   AI_SCREENING_REVIEWED: 'clipboard-check-outline',
+  PAYMENT_COMPLETED: 'cash',
+  PAYMENT_EXPIRED: 'clock-outline',
   SYSTEM: 'information-outline',
 }
 
@@ -88,6 +90,9 @@ export default function NotificationsScreen() {
       notification.ntf_reference_id
     ) {
       router.push(`/(owner)/appointments/${notification.ntf_reference_id}`)
+    } else if (notification.ntf_reference_table === 'PAYMENT') {
+      // Payment ids are not appointment ids: open the receipts list instead.
+      router.push('/(owner)/payments')
     }
   }
 

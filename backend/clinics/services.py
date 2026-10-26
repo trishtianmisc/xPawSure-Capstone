@@ -303,6 +303,7 @@ class ClinicProfileService:
             'cls_appointment_duration': settings_obj.cls_appointment_duration,
             'cls_max_appointments_per_day': settings_obj.cls_max_appointments_per_day,
             'cls_allow_owner_booking': settings_obj.cls_allow_owner_booking,
+            'cls_consultation_fee': str(settings_obj.cls_consultation_fee),
         }
 
         field_map = {
@@ -311,6 +312,7 @@ class ClinicProfileService:
             'cls_appointment_duration': 'cls_appointment_duration',
             'cls_max_appointments_per_day': 'cls_max_appointments_per_day',
             'cls_allow_owner_booking': 'cls_allow_owner_booking',
+            'cls_consultation_fee': 'cls_consultation_fee',
         }
 
         new_values = {}

@@ -1,8 +1,8 @@
 # MOBILE_ARCHITECTURE.md
 
-> Version: 2.1
+> Version: 2.0
 > Project: XPawSure
-> Last Updated: October 2026
+> Last Updated: July 2026
 
 ---
 
@@ -97,26 +97,36 @@ Owners may view and edit their pets' information after registration.
 
 The core feature of the mobile application.
 
-The owner captures or selects three photos of their dog's skin condition from different angles: the main affected area, a wider view, and an additional angle. Camera capture and gallery selection are both supported.
+The owner captures or selects exactly one photo of their dog's skin condition.
+The app prepares one 512 px JPEG and sends it first to the backend
+image-validation gate.
 
-The application runs inference on the device. Images are not sent to the server for inference.
+Backend image validation (Anthropic):
 
-Each photo passes quality and dog-skin checks. Screening requires three photos, and all three must be valid and approved by the AI safety review. Rejected photos must be retaken or replaced before screening can run.
+- Runs before the on-device classifier
+- Returns `image_suitability`, `screening_eligibility`, a screening message,
+  visible features, image-quality observations, condition assessment, and a
+  veterinary recommendation
+- Never returns a confidence percentage or a diagnosis
+- Rejects blurred, non-dog, healthy-looking, wound/injury, and ambiguous images
+  without forcing a disease category
 
-A photo guide explains the three-slot flow, camera/gallery options, quality checks, and the all-photos-must-pass rule. It opens automatically on first use, can be reopened from the help icon, and records dismissal in `xpawsure_screening_guide_seen_v2`. A storage failure does not block screening.
+On-device classifier (TensorFlow.js):
 
-The AI model identifies possible skin conditions and returns:
+- Runs only when the gate returns `SUITABLE` and `ELIGIBLE`
+- Returns the predicted condition, confidence score, top N predictions, and
+  model version
 
-- Predicted condition
-- Confidence score (percentage)
-- Top N predictions
-- Model version
+Both results are displayed separately. The backend still records its
+deterministic cross-analysis for audit and history, but the mobile result screen
+does not display it. Agreement is not confirmation.
 
-After screening, the owner may answer the adaptive 12-question veterinary-informed questionnaire. The result screen presents independent AI-only, questionnaire-only, and combined screening suggestions. These are screening likelihoods, not diagnoses. The combined result is required before booking an appointment.
-
-The questionnaire-only result uses a uniform prior and is unavailable when no informative answer exists. Answer review follows the canonical 12-question order, with Q11 remaining multi-select. The optional home-care card is mock content, is gated by `EXPO_PUBLIC_ENABLE_MOCK_HOME_CARE`, and is not a treatment plan.
-
-The screening result is uploaded to the backend after the user provides consent. The backend stores the final prediction and confidence only; questionnaire answers and mode-specific results remain on the device.
+If the gate rejects the photo, the UI shows the explanation and an option to
+upload another image; no prediction is shown. If the gate fails, the classifier
+is not run and a retry/error message is shown. If the classifier fails after
+approval, no prediction is fabricated and the Claude findings remain visible.
+The user may then book a veterinary appointment; saving uploads the single image
+and both outputs after consent.
 
 ---
 
@@ -129,12 +139,60 @@ Appointment booking requires:
 - Clinic selection
 - Preferred date and time
 - Reason for visit
+- Consultation fee paid first, when the clinic charges one
 
-The backend checks availability and confirms.
+The booking wizard shows the clinic's `consultation_fee` (from
+`GET /api/owner/clinics/`). When it is greater than `0` the final step is
+payment:
+
+1. The owner picks GCash or Card and taps **Pay & Book**.
+2. `POST /api/payments/checkout/` returns the payment with a `checkout_url`.
+3. The app opens `checkout_url` with `Linking.openURL` (external browser — no
+   extra dependency) and polls `GET /api/payments/{pay_id}/` every 2 seconds
+   while it is `PENDING`.
+4. Once it is `PAID`, the app posts `POST /api/owner/appointments/` with the
+   same `pay_id`.
+
+A fee of `0` means no payment step exists at all, and the booking posts
+exactly as before.
+
+The backend decides payment rules; the app branches on the error `code`, never
+on the message text:
+
+| Code | Meaning | App behaviour |
+|------|---------|---------------|
+| `PAYMENT_NOT_REQUIRED` | Clinic fee is `0` | Book without `pay_id` |
+| `PAYMENT_REQUIRED` | No (or unpaid) `pay_id` | Show the payment step |
+| `PAYMENT_EXPIRED` | Checkout window closed | Offer "Pay again" (new checkout) |
+| `SLOT_UNAVAILABLE` | Slot taken while paying | Re-pick the slot and book **with the same `pay_id`** — a paid payment funds the next slot |
+| `METHOD_NOT_ALLOWED` | e.g. cash chosen by an owner | Offer GCash / Card only |
+| `PROVIDER_ERROR` | Gateway unreachable | Retry; nothing was stored |
+| `SCREENING_REQUIRED` | Missing `screening_id` | Send the pet's screening id |
+
+The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
+`PAYMENT_EXPIRED`) when a payment settles or lapses.
 
 Owners may view upcoming appointments.
 
 Owners may cancel appointments.
+
+---
+
+## Payments (Receipts)
+
+`GET /api/owner/payments/` lists the owner's own payments with the same
+envelope as the staff list: `{ total, page, page_size, total_pages, results }`.
+
+Filters: `status`, `method`, `reference`, `appointment`, `date_from`,
+`date_to`, `page`, `page_size`.
+
+`?status=PENDING` is how an abandoned checkout is found again and resumed.
+
+Screen: `app/(owner)/payments/` — reached from the Appointments header
+(receipt icon) or from a `PAYMENT_*` notification; it is registered as a hidden
+tab (`href: null`).
+
+Refunds and cancellations of settled payments are out of scope until phase 3.
 
 ---
 
@@ -207,15 +265,15 @@ Service layer:
 
 API Client (Axios or Fetch)
 
-TensorFlow Lite Integration
+On-device TensorFlow.js Inference
 
 ---
 
 Storage:
 
-Shared storage helper using SecureStore on native and localStorage on web
+AsyncStorage for tokens
 
-JWT access and refresh tokens, cached profile, and local UI flags such as the photo-guide seen key
+SecureStore for sensitive data
 
 ---
 
@@ -251,8 +309,6 @@ Root
     │   └── PetScreening (Stack)
 
     │       ├── CaptureImage
-
-    │       ├── AdjustQuestionnaire
 
     │       ├── ScreeningResult
 
@@ -317,37 +373,52 @@ Root
 
 # 7. AI Integration
 
-TensorFlow Lite is integrated into the mobile application.
+TensorFlow.js runs the bundled EfficientNetB0 classifier on the device.
 
-Inference pipeline:
+Screening pipeline:
 
-User captures image
-
-↓
-
-Image preprocessing (resize, normalize)
+User captures exactly one image
 
 ↓
 
-TensorFlow Lite interpreter
+Prepare one 512 px JPEG
 
 ↓
 
-Post-processing (softmax, threshold)
+Send the same JPEG to `POST /api/owner/screenings/vision-analysis/`
 
 ↓
 
-Display result to user
+Claude image-validation gate
 
 ↓
 
-User consent to upload
+If `SUITABLE` + `ELIGIBLE`:
+
+Image preprocessing (resize to 224 × 224, normalize)
 
 ↓
 
-Upload to backend
+TensorFlow.js Layers model
 
-The model file is bundled with the application and updated through app store releases.
+↓
+
+Post-processing (softmax, thresholds)
+
+↓
+
+Display on-device result
+
+The app displays the review separately. Cross-analysis is not displayed on the
+mobile result screen.
+
+The model file is bundled with the application and updated through app store
+releases. The classifier itself works offline, but image screening now requires
+the backend gate before it runs. The review requires network access and may
+return `NOT_CONFIGURED`, `TIMEOUT`, `RATE_LIMITED`, `QUOTA_EXHAUSTED`,
+`MALFORMED_RESPONSE`, or `PROVIDER_ERROR`. A review failure or non-eligible
+decision stops the classifier and shows a retry/error or gate explanation. No
+score averaging or combined disease probability is performed.
 
 ---
 
@@ -379,9 +450,11 @@ PUT  /api/pets/{id}/               Update pet
 
 DELETE /api/pets/{id}/             Delete pet
 
-GET  /api/screenings/              List screenings
+GET  /api/owner/screenings/        List screenings
 
-POST /api/screenings/              Upload screening result
+POST /api/owner/screenings/        Save screening (multipart image + classifier output + signed eligible review token)
+
+POST /api/owner/screenings/vision-analysis/  Image-validation gate (multipart image; no persistence)
 
 GET  /api/appointments/            List appointments
 
@@ -430,20 +503,13 @@ The mobile application handles errors gracefully:
 
 # 11. Testing
 
-The mobile application currently uses dependency-free Node test scripts for screening and questionnaire logic:
+The mobile application is tested with:
 
-```powershell
-npx tsc --noEmit
-npm run test:screening
-npm run test:bayesian
-npm run test:adaptive
-npm run test:summary
-npm run test:result-view
-```
+- Unit tests for hooks and utilities
+- Component tests for screens
+- Integration tests for critical flows (registration, login, screening)
 
-These scripts transpile the relevant TypeScript modules with the installed TypeScript compiler and assert the screening thresholds, Bayesian refinement, adaptive ordering, summary construction, and result-view gating.
-
-Jest and React Native Testing Library are not configured in the current repository. Screen and device-level behavior, including the photo guide and photo-quality flow, requires manual verification on an Expo development build or device.
+Testing framework: Jest + React Native Testing Library
 
 ---
 

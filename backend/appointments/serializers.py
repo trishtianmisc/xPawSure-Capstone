@@ -9,10 +9,23 @@ from prescriptions.serializers import PrescriptionResponseSerializer
 
 
 class OwnerClinicSerializer(serializers.ModelSerializer):
+    # Shown in the booking wizard so an owner sees what they must pay before
+    # they reach the payment step; 0 means booking is free.
+    consultation_fee = serializers.SerializerMethodField()
+
     class Meta:
         model = Clinic
-        fields = ['cln_id', 'cln_name', 'cln_address', 'cln_phone', 'cln_logo_url']
+        fields = [
+            'cln_id', 'cln_name', 'cln_address', 'cln_phone', 'cln_logo_url',
+            'consultation_fee',
+        ]
         read_only_fields = fields
+
+    def get_consultation_fee(self, obj):
+        settings_obj = getattr(obj, 'settings', None)
+        if settings_obj is None:
+            return 0
+        return float(settings_obj.cls_consultation_fee)
 
 
 class VetSlotSerializer(serializers.ModelSerializer):
@@ -160,6 +173,9 @@ class CreateAppointmentSerializer(serializers.Serializer):
     apt_type = serializers.ChoiceField(choices=AppointmentType.choices)
     reason = serializers.CharField(required=False, allow_blank=True, default='')
     screening_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    # Optional: ignored when the clinic charges no fee, required by the
+    # payments service when it does.
+    pay_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class ScheduleAppointmentSerializer(serializers.Serializer):

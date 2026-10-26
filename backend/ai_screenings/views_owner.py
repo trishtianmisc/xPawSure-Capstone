@@ -16,6 +16,7 @@ from ai_screenings.models import AiScreening, ClaudeAnalysisStatus
 from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
 from ai_screenings.services import ScreeningService
 from core.permissions import IsOwner
+from core.storage_service import SupabaseStorageError
 from owners.models import OwnerProfile
 from pets.models import Pet
 
@@ -35,7 +36,7 @@ def _get_owner_profile(user):
 
 
 def _single_uploaded_image(request, required=False):
-    """Enforce at most one file, uploaded under the 'image' field."""
+    """Enforce exactly one file, uploaded under the 'image' field."""
     if len(request.FILES) == 0:
         if required:
             raise InvalidScreeningImage('An image file is required.')
@@ -52,6 +53,14 @@ def _single_uploaded_image(request, required=False):
 
 class OwnerScreeningListCreateView(APIView):
     permission_classes = [IsOwner]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'screening-create'
+
+    def get_throttles(self):
+        # Reads should not consume the more restrictive upload allowance.
+        if self.request.method != 'POST':
+            return []
+        return super().get_throttles()
 
     def get(self, request):
         owner_profile = _get_owner_profile(request.user)
@@ -89,7 +98,9 @@ class OwnerScreeningListCreateView(APIView):
         start = (page - 1) * page_size
         results = qs[start:start + page_size]
 
-        serializer = ScreeningSerializer(results, many=True)
+        serializer = ScreeningSerializer(
+            results, many=True, context={'request': request},
+        )
         return Response({
             'total': total,
             'page': page,
@@ -147,8 +158,9 @@ class OwnerScreeningListCreateView(APIView):
             image_data = (
                 read_screening_image(upload) if upload is not None else None
             )
-            token = validated.get('claude_token', '')
 
+            claude_payload = None
+            token = validated.get('claude_token', '')
             if image_data is not None and not token:
                 return Response(
                     {
@@ -159,16 +171,12 @@ class OwnerScreeningListCreateView(APIView):
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            if token and image_data is None:
-                return Response(
-                    {'detail': 'An image is required when a Claude analysis token is supplied.'},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
             if token:
-                # Stateless verification: the signed token carries the gate
-                # decision; the recomputed SHA-256 binds it to these exact
-                # bytes. Nothing about the validation is persisted.
+                if image_data is None:
+                    return Response(
+                        {'detail': 'An image is required when a Claude analysis token is supplied.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 try:
                     claude_payload = read_claude_token(
                         token,
@@ -198,7 +206,7 @@ class OwnerScreeningListCreateView(APIView):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            screening = ScreeningService.create_device_screening(
+            screening = ScreeningService.create_screening(
                 pet=pet,
                 user=request.user,
                 prediction=prediction,
@@ -206,19 +214,26 @@ class OwnerScreeningListCreateView(APIView):
                 model_version=model_version,
                 inference_time_ms=validated.get('inference_time_ms'),
                 device=validated.get('device'),
+                claude_payload=claude_payload,
+                image=image_data,
             )
         except InvalidScreeningImage as exc:
             return Response(
                 {'detail': str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        except ValueError as e:
+        except ValueError as exc:
             return Response(
-                {'detail': str(e)},
+                {'detail': str(exc)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        except SupabaseStorageError:
+            return Response(
+                {'detail': 'The screening image could not be stored.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
 
-        result = ScreeningSerializer(screening)
+        result = ScreeningSerializer(screening, context={'request': request})
         return Response(result.data, status=status.HTTP_201_CREATED)
 
 
@@ -226,7 +241,7 @@ class OwnerVisionAnalysisView(APIView):
     """Run the Claude image-validation gate before any on-device screening.
 
     Nothing is persisted here. The signed token carries the gate decision to
-    the final create call, which only accepts an approved result.
+    the final create call, which only accepts an eligible result.
     """
 
     permission_classes = [IsOwner]

@@ -381,16 +381,24 @@ Maintain separation of concerns.
 Never:
 
 - Retrain models inside the app
-- Perform inference on the backend
-- Modify TensorFlow Lite models
+- Run the classifier on the backend
+- Modify TensorFlow.js models
+- Average or fuse classifier output with an independent review
 
 Always:
 
-- Validate images
+- Validate exactly one image per screening
 - Preprocess correctly
 - Run on-device inference
 - Store model version
-- Upload prediction results
+- Keep the classifier and review outputs independent
+- Upload the single image and both outputs
+- Treat `COMPATIBLE` as agreement only, not confirmation
+
+Image screening must request the non-diagnostic Claude validation gate through
+Django first. The on-device classifier runs only when the gate returns
+`screening_eligibility = ELIGIBLE`; a failed or rejected gate must not silently
+bypass validation.
 
 The AI assists veterinarians only.
 

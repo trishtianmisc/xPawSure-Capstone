@@ -18,11 +18,14 @@ from ai_screenings.claude_service import (
     _normalize_result,
 )
 from ai_screenings.claude_token import ClaudeTokenError, issue_claude_token, read_claude_token
+from ai_screenings.comparison import compare_analyses
 from ai_screenings.image_service import (
     InvalidScreeningImage,
     read_screening_image,
 )
-from ai_screenings.models import AiScreening, ClaudeAnalysisStatus
+from ai_screenings.models import (
+    AiScreening, AiScreeningImage, ClaudeAnalysisStatus, CrossAnalysisStatus,
+)
 from ai_screenings.tests import (
     OWNER_EMAIL, RECEPTIONIST_EMAIL, OwnerScreeningBase,
 )
@@ -367,6 +370,91 @@ class ClaudeTokenTests(OwnerScreeningBase):
         self.assertIsNone(payload['result'])
 
 
+class ComparisonTests(OwnerScreeningBase):
+
+    def test_matching_category_is_compatible_but_not_confirmation(self):
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(tool_input()),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.COMPATIBLE)
+        self.assertIn('does not confirm a diagnosis', summary)
+
+    def test_different_category_is_different(self):
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(tool_input(comparison_label='FUNGAL')),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.DIFFERENT)
+        self.assertIn('neither result', summary)
+
+    def test_non_eligible_image_is_insufficient(self):
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(tool_input(
+                image_suitability='NO_VISIBLE_LESIONS',
+                screening_eligibility='NOT_ELIGIBLE',
+                comparison_label='UNCLEAR',
+                unclear=True,
+            )),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn('did not approve', summary)
+
+    def test_unclear_or_inadequate_image_is_insufficient(self):
+        status, _ = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(tool_input(
+                image_suitability='UNCERTAIN',
+                screening_eligibility='NOT_ELIGIBLE',
+                comparison_label='UNCLEAR',
+                unclear=True,
+            )),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.INSUFFICIENT_EVIDENCE)
+
+        blurred = tool_input(
+            image_suitability='POOR_QUALITY',
+            screening_eligibility='NOT_ELIGIBLE',
+            image_quality={
+                'adequate': False,
+                'observations': ['The photograph is blurry'],
+            },
+            comparison_label='UNCLEAR',
+            unclear=True,
+        )
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(blurred),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn('did not approve', summary)
+
+    def test_failed_or_missing_analysis_is_insufficient(self):
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.TIMEOUT, None,
+        )
+        self.assertEqual(status, CrossAnalysisStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn('timed out', summary)
+
+        status, summary = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.NOT_REQUESTED, None,
+        )
+        self.assertEqual(status, CrossAnalysisStatus.INSUFFICIENT_EVIDENCE)
+        self.assertIn('No image review', summary)
+
+    def test_device_label_in_other_possibilities_still_counts_as_different(self):
+        data = tool_input(
+            comparison_label='FUNGAL',
+            other_possibilities=['MANGE', 'BACTERIAL'],
+        )
+        status, _ = compare_analyses(
+            'MANGE', 'Mange', ClaudeAnalysisStatus.OK,
+            _normalize_result(data),
+        )
+        self.assertEqual(status, CrossAnalysisStatus.DIFFERENT)
+
+
 class ScreeningImageValidationTests(OwnerScreeningBase):
 
     def test_valid_jpeg_and_png_are_accepted(self):
@@ -398,11 +486,6 @@ class ScreeningImageValidationTests(OwnerScreeningBase):
 
 
 class OwnerVisionAnalysisEndpointTests(OwnerScreeningBase):
-
-    def setUp(self):
-        super().setUp()
-        cache.clear()
-        self.addCleanup(cache.clear)
 
     def _post_image(self, image=None, data=None):
         return self.client.post(
@@ -485,6 +568,7 @@ class OwnerVisionAnalysisEndpointTests(OwnerScreeningBase):
         anonymous = self.client.post(
             '/api/owner/screenings/vision-analysis/',
             data={'image': image_upload()},
+            format='multipart',
         )
         self.assertEqual(anonymous.status_code, status.HTTP_401_UNAUTHORIZED)
 
@@ -536,15 +620,10 @@ class OwnerVisionAnalysisEndpointTests(OwnerScreeningBase):
         self.assertEqual(second.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
 
-class CreateScreeningWithTokenTests(OwnerScreeningBase):
-    """Server-side token verification at create time.
+class CreateScreeningWithImageTests(OwnerScreeningBase):
 
-    The gate stays stateless: a valid, approved, SHA-bound token lets the
-    screening row be created, but no image and no validation result is stored.
-    """
-
-    def _token_for(self, image_content, outcome_value=None):
-        sha256 = hashlib.sha256(image_content).hexdigest()
+    def _token_for(self, image, outcome_value=None):
+        sha256 = hashlib.sha256(image).hexdigest()
         return issue_claude_token(
             user_id=self.owner_user.usr_id,
             image_sha256=sha256,
@@ -575,15 +654,76 @@ class CreateScreeningWithTokenTests(OwnerScreeningBase):
             **self._auth(OWNER_EMAIL),
         )
 
-    def test_create_with_image_and_valid_token_succeeds_statelessly(self):
+    @override_settings(
+        SUPABASE_URL='https://test.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY='test-service-key',
+    )
+    @patch('ai_screenings.image_service.SupabaseStorageService.upload')
+    def test_create_with_image_and_claude_token_persists_both_outputs(self, mock_upload):
+        mock_upload.return_value = (
+            'https://test.supabase.co/storage/v1/object/public/'
+            'screening-images/screenings/abc.jpg'
+        )
+        image_content = image_bytes()
+        image = upload_from_bytes(image_content)
+        token = self._token_for(image_content)
+
+        response = self.client.post(
+            '/api/owner/screenings/',
+            data={
+                'pet_id': str(self.pet.pet_id),
+                'source': 'DEVICE',
+                'prediction': 'MANGE',
+                'confidence': '85.0',
+                'model_version': 'test-1.0.0',
+                'claude_token': token,
+                'image': image,
+            },
+            format='multipart',
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['claude']['status'], ClaudeAnalysisStatus.OK)
+        self.assertEqual(
+            response.data['cross_analysis']['status'],
+            CrossAnalysisStatus.COMPATIBLE,
+        )
+        self.assertIn('does not confirm a diagnosis', response.data['cross_analysis']['summary'])
+        self.assertEqual(response.data['image']['content_type'], 'image/jpeg')
+        self.assertEqual(response.data['image']['sha256'], hashlib.sha256(image_content).hexdigest())
+
+        screening = AiScreening.objects.get(ais_id=response.data['ais_id'])
+        self.assertEqual(screening.ais_claude_status, ClaudeAnalysisStatus.OK)
+        self.assertEqual(
+            screening.ais_claude_result['condition_assessment']['closest_match'],
+            'MANGE',
+        )
+        self.assertEqual(screening.ais_claude_model, 'test-claude-model')
+        stored = AiScreeningImage.objects.get(ais_id=screening)
+        self.assertEqual(stored.asi_content_type, 'image/jpeg')
+        mock_upload.assert_called_once()
+        self.assertEqual(
+            mock_upload.call_args.kwargs['bucket'],
+            'screening-images',
+        )
+
+    @override_settings(SUPABASE_URL='', SUPABASE_SERVICE_ROLE_KEY='')
+    @patch('ai_screenings.image_service.default_storage')
+    def test_local_storage_fallback_with_validated_image(self, mock_storage):
+        mock_storage.save.return_value = 'screenings/local.jpg'
+        mock_storage.url.return_value = '/media/screenings/local.jpg'
+
         response = self._create()
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        # Nothing about the validation or the image is persisted or returned.
-        self.assertNotIn('image', response.data)
-        self.assertNotIn('claude', response.data)
-        self.assertNotIn('cross_analysis', response.data)
-        self.assertEqual(AiScreening.objects.count(), 1)
+        self.assertEqual(response.data['claude']['status'], ClaudeAnalysisStatus.OK)
+        self.assertEqual(
+            response.data['cross_analysis']['status'],
+            CrossAnalysisStatus.COMPATIBLE,
+        )
+        self.assertTrue(response.data['image']['url'].startswith('http://testserver/media/'))
+        mock_storage.save.assert_called_once()
 
     def test_failed_claude_validation_cannot_be_saved(self):
         image_content = image_bytes()
@@ -781,6 +921,25 @@ class CreateScreeningWithTokenTests(OwnerScreeningBase):
             **self._auth(OWNER_EMAIL),
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
-        self.assertNotIn('image', response.data)
-        self.assertNotIn('claude', response.data)
-        self.assertEqual(AiScreening.objects.count(), 1)
+        self.assertIsNone(response.data['image'])
+        self.assertEqual(response.data['claude']['status'], ClaudeAnalysisStatus.NOT_REQUESTED)
+        self.assertEqual(
+            response.data['cross_analysis']['status'],
+            CrossAnalysisStatus.INSUFFICIENT_EVIDENCE,
+        )
+
+    @override_settings(
+        SUPABASE_URL='https://test.supabase.co',
+        SUPABASE_SERVICE_ROLE_KEY='test-service-key',
+    )
+    @patch('ai_screenings.image_service.SupabaseStorageService.upload')
+    def test_list_exposes_both_outputs_and_image_reference(self, mock_upload):
+        mock_upload.return_value = 'https://test.supabase.co/image.jpg'
+        self._create()
+
+        response = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        row = response.data['results'][0]
+        self.assertEqual(row['claude']['status'], ClaudeAnalysisStatus.OK)
+        self.assertEqual(row['cross_analysis']['status'], CrossAnalysisStatus.COMPATIBLE)
+        self.assertTrue(row['image']['url'].startswith('https://test.supabase.co/'))

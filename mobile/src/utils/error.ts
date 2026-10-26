@@ -1,3 +1,17 @@
+export function apiErrorCode(error: unknown): string | null {
+  const data = (error as { response?: { data?: unknown } })?.response?.data
+  if (data && typeof data === 'object') {
+    const code = (data as Record<string, unknown>).code
+    if (typeof code === 'string') return code
+  }
+  return null
+}
+
+export function apiErrorStatus(error: unknown): number | null {
+  const status = (error as { response?: { status?: unknown } })?.response?.status
+  return typeof status === 'number' ? status : null
+}
+
 export function apiErrorMessage(error: unknown): string {
   const data = (error as { response?: { data?: unknown } })?.response?.data
   if (data && typeof data === 'object') {

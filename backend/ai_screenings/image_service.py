@@ -1,9 +1,17 @@
 import hashlib
 import io
+import logging
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from PIL import Image, UnidentifiedImageError
+
+from ai_screenings.models import AiScreeningImage
+from core.storage_service import SupabaseStorageError, SupabaseStorageService
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_FORMATS = {
     'JPEG': ('image/jpeg', 'jpg'),
@@ -34,7 +42,7 @@ def read_screening_image(uploaded_file) -> ScreeningImageData:
 
     Validation deliberately checks the declared MIME type against the format
     actually decoded by Pillow, so a renamed executable or a mismatched
-    extension can never reach Claude.
+    extension cannot reach Claude or storage.
     """
     if uploaded_file is None:
         raise InvalidScreeningImage('An image file is required.')
@@ -84,3 +92,54 @@ def read_screening_image(uploaded_file) -> ScreeningImageData:
         sha256=hashlib.sha256(content).hexdigest(),
         size_bytes=len(content),
     )
+
+
+def _supabase_configured() -> bool:
+    return bool(settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY)
+
+
+def store_screening_image(screening, image: ScreeningImageData) -> AiScreeningImage:
+    """Store one image and attach it to the screening.
+
+    Supabase Storage is used when configured; local Django media storage keeps
+    development and tests working without cloud credentials.
+    """
+    object_path = SupabaseStorageService.build_object_path(
+        f'screenings/{screening.ais_id}', image.extension,
+    )
+    bucket = settings.SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES
+    stored_name = ''
+    used_supabase = _supabase_configured()
+
+    if used_supabase:
+        image_url = SupabaseStorageService.upload(
+            bucket=bucket,
+            file_bytes=image.content,
+            content_type=image.content_type,
+            object_path=object_path,
+        )
+    else:
+        stored_name = default_storage.save(
+            object_path, ContentFile(image.content),
+        )
+        image_url = default_storage.url(stored_name)
+
+    try:
+        return AiScreeningImage.objects.create(
+            ais_id=screening,
+            asi_url=image_url,
+            asi_storage_path=object_path if used_supabase else stored_name,
+            asi_content_type=image.content_type,
+            asi_size_bytes=image.size_bytes,
+            asi_sha256=image.sha256,
+        )
+    except Exception:
+        # Do not leave a stored object behind if the database insert fails.
+        try:
+            if used_supabase:
+                SupabaseStorageService.delete(bucket, object_path)
+            elif stored_name:
+                default_storage.delete(stored_name)
+        except Exception as cleanup_error:  # pragma: no cover - defensive
+            logger.warning('Screening image cleanup failed: %s', cleanup_error)
+        raise

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0] — 2026-10-26
+
+### Added
+- Payments backend app (`backend/payments/`) with `PAYMENT` and `PAYMENT_EVENT` models, migrations, and admin
+- `CLINIC_SETTINGS.CLS_CONSULTATION_FEE` (default `0.00`) set from Clinic Settings; a fee of `0` leaves booking unchanged
+- Provider adapter (`PAYMENT_MODE=mock` | `paymongo`) with a signed mock checkout page and a PayMongo hosted-checkout + webhook adapter (HMAC `Paymongo-Signature` verification)
+- Endpoints: `POST /api/payments/checkout/`, `GET /api/payments/`, `GET/POST cancel`, signed `GET/POST /api/payments/mock/{reference}/[confirm/]`, `POST /api/payments/webhooks/paymongo/`
+- Payment gate on both booking paths (`POST /api/appointments/`, `POST /api/owner/appointments/`): payment is created, paid, and attached in one transaction, single-use per appointment
+- Frontend `payments` feature: mock checkout page (`/payments/mock/:reference`), payment service/hooks, status badge, receptionist Payments list page
+- Receptionist booking flow step 5 (payment method + checkout panel with polling), real payment status on Appointment Detail, `consultation_fee` field in Clinic Settings
+- `apiErrorCode()` helper + tests; payment service, error, and clinic settings tests
+- Backend payment test suite covering checkout, the booking gate, mock checkout, webhook verification, and access control
+- `GET /api/owner/payments/` — owner-scoped receipt list (`status`, `appointment`, date and pagination filters), sharing the staff list envelope
+- `consultation_fee` on `GET /api/owner/clinics/` so the booking wizard shows the amount before checkout
+- Owner notifications `PAYMENT_COMPLETED` and `PAYMENT_EXPIRED`, fired once per transition (mock confirm, webhook, lazy expiry) with `NTF_REFERENCE_TABLE = PAYMENT`
+- Mobile `payment` feature: types, service (`checkout`, detail, owner list, cancel), `usePayment`/`useCreateCheckout`/`useMyPayments`/`useCancelPayment` hooks
+- Mobile booking wizard **Payment** step (step 8, only when the clinic charges a fee): GCash/Card choice, checkout opened with `Linking.openURL`, 2-second polling, `pay_id` reused when the slot is taken
+- Mobile Payments receipts screen (`/(owner)/payments`) with status filters and resume-checkout for pending payments, linked from the Appointments header
+- Mobile `apiErrorCode()` / `apiErrorStatus()` helpers branching on the documented error contract
+
+### Changed
+- `POST /api/appointments/` and `POST /api/owner/appointments/` accept an optional `pay_id` and return `{detail, code, amount, currency}` when payment is required
+
 ## [0.3.0] — 2026-07-22
 
 ### Added

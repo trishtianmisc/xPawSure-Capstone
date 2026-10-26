@@ -131,6 +131,7 @@ Receptionists can
 - Register pets
 - Schedule appointments
 - Check patients in
+- Collect the consultation fee (GCash, card) and record cash payments
 
 Receptionists may perform these actions only for their own clinic.
 
@@ -143,6 +144,7 @@ Receptionists cannot
 - Run AI screening
 - Manage user accounts
 - Access records outside their own clinic
+- Refund or void a payment that has already been paid
 
 Patient visibility: receptionists only see pets that have an appointment at their
 own clinic (the sidebar "Patients" tab). The Owners directory stays platform-wide;
@@ -196,6 +198,7 @@ Owners may:
 - View vaccination history
 - Add, edit, and delete their own self-reported vaccination records
 - View AI screening history
+- Pay the clinic's consultation fee and then book an appointment
 
 Owners cannot:
 
@@ -205,6 +208,8 @@ Owners cannot:
 - Modify veterinarian-issued vaccination records
 - Access other owners' data
 - Register a clinic
+- Record cash payments (cash is settled at the clinic counter)
+- Book an appointment without paying when the clinic charges a consultation fee
 
 ---
 
@@ -270,6 +275,28 @@ Completed appointments cannot be edited except by a Super Admin.
 
 ---
 
+# Payment Rules
+
+Payment comes before the appointment when the clinic charges a consultation fee.
+
+- The fee is set by the Clinic Admin in Clinic Settings
+  (`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`).
+- A fee of `0` means no payment is required and booking works unchanged.
+- When the fee is greater than `0`, an appointment cannot exist without a `PAID`
+  payment attached to it. This applies to receptionist bookings and owner bookings.
+- A payment covers exactly one appointment and belongs to exactly one clinic and
+  one owner.
+- Amount, currency, and method are fixed when the checkout is created; clients
+  never send an amount.
+- Owners pay online (`GCASH` or `CARD`). Cash is recorded by clinic staff at the
+  counter and is never available to owners.
+- Unpaid checkouts can be cancelled (`VOID`). Settled payments are never edited
+  or deleted; refunds are a separate, audited operation.
+- Payment history is visible to the clinic's Receptionists and Clinic Admin, and
+  to the owner who paid.
+
+---
+
 # 13. Consultation Rules
 
 A consultation requires:
@@ -307,7 +334,11 @@ If the veterinarian changes the diagnosis after reviewing the AI result, the vet
 
 # 15. AI Screening Rules
 
-AI screening is optional.
+AI screening is optional for owners.
+
+When image screening is used, the Claude image-validation gate is mandatory. The
+on-device classifier runs only when the gate returns `SUITABLE` and `ELIGIBLE`.
+A failed or rejected gate must not silently bypass validation.
 
 AI screening can be initiated by:
 
@@ -324,16 +355,24 @@ A consultation may have
 - One screening
 - Multiple screenings
 
-Each screening records
+Each screening uses exactly one image and records
 
-- Prediction
-- Confidence
+- Prediction and confidence
 - Model version
-- Image
+- That single image
+- Optional independent review status, model, structured result, latency, and
+  token usage
+- Deterministic cross-analysis status and summary
 - Timestamp
 
+Both AI outputs remain independent. They are never averaged, fused, or combined
+into one disease probability. `COMPATIBLE` means agreement only, not
+confirmation.
+
 Screenings are created only from on-device AI results (`source: DEVICE`).
-Mock or server-fabricated screenings are rejected.
+Mock or server-fabricated screenings are rejected. If the independent review
+fails, the on-device result may still be saved; the failure state is recorded
+without inventing findings.
 
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
@@ -415,19 +454,23 @@ Owner-reported vaccination records may be deleted by their owner; every create, 
 
 ## Owner-Initiated Screening
 
-Capture Image (Mobile)
+Capture Exactly One Image (Mobile)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Owner
+Run Independent Image Review (Backend, Optional)
 
 ↓
 
-Upload Result to Backend
+Display Both Results Separately
+
+↓
+
+Upload Single Image and Both Outputs to Backend
 
 ↓
 
@@ -435,15 +478,19 @@ Veterinarian Reviews During Next Consultation
 
 ## Veterinarian-Initiated Screening
 
-Capture Image (Mobile or Upload)
+Capture Exactly One Image (Mobile or Upload)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Veterinarian
+Run Independent Image Review (Backend, Optional)
+
+↓
+
+Display Both Results Separately to Veterinarian
 
 ↓
 

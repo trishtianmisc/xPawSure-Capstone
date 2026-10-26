@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'vaccinations',
     'notifications',
     'audit_log',
+    'payments',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -144,6 +145,28 @@ BREVO_API_URL = env('BREVO_API_URL', default='https://api.brevo.com/v3/smtp/emai
 
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
+# Payment gateway.
+#   mock     – built-in signed checkout page in the web app; needs no keys.
+#   paymongo – PayMongo hosted checkout (test or live keys).
+PAYMENT_MODE = env('PAYMENT_MODE', default='mock').lower()
+PAYMENT_CURRENCY = env('PAYMENT_CURRENCY', default='PHP')
+# How long a created checkout stays payable before it expires.
+PAYMENT_CHECKOUT_TTL_MINUTES = env.int('PAYMENT_CHECKOUT_TTL_MINUTES', default=30)
+PAYMONGO_SECRET_KEY = env('PAYMONGO_SECRET_KEY', default='')
+PAYMONGO_WEBHOOK_SECRET = env('PAYMONGO_WEBHOOK_SECRET', default='')
+PAYMONGO_API_URL = env('PAYMONGO_API_URL', default='https://api.paymongo.com')
+
+if PAYMENT_MODE not in ('mock', 'paymongo'):
+    raise ImproperlyConfigured(
+        'PAYMENT_MODE must be "mock" or "paymongo", not '
+        f'{PAYMENT_MODE!r}.',
+    )
+if not DEBUG and PAYMENT_MODE == 'paymongo' and not PAYMONGO_WEBHOOK_SECRET:
+    raise ImproperlyConfigured(
+        'PAYMONGO_WEBHOOK_SECRET is required when PAYMENT_MODE=paymongo in '
+        'production; without it webhook payloads cannot be authenticated.',
+    )
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -182,11 +205,13 @@ SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', d
 SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
 SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
 SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES = env('SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES', default='clinic-images')
+SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES = env(
+    'SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES', default='screening-images',
+)
 
-# Claude Vision image validation. Only the Django backend calls Anthropic;
-# the on-device EfficientNet classifier stays independent and never sends its
-# predictions to Claude. The key lives in the environment only — never in
-# code, .env.example, logs, or commits.
+# Claude Vision image review. Only the Django backend calls Anthropic; the
+# on-device EfficientNet classifier remains independent and never sends
+# predictions to Claude. Keep the API key in the environment and never log it.
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
 ANTHROPIC_API_URL = env('ANTHROPIC_API_URL', default='https://api.anthropic.com/v1/messages')
 ANTHROPIC_API_VERSION = env('ANTHROPIC_API_VERSION', default='2023-06-01')
@@ -194,13 +219,14 @@ ANTHROPIC_MODEL = env('ANTHROPIC_MODEL', default='claude-sonnet-4-6')
 ANTHROPIC_MAX_TOKENS = env.int('ANTHROPIC_MAX_TOKENS', default=1500)
 ANTHROPIC_TIMEOUT_SECONDS = env.int('ANTHROPIC_TIMEOUT_SECONDS', default=30)
 
-# The vision-analysis endpoint reads one uploaded image, computes its
-# SHA-256, and signs it into a short-lived token. Nothing is stored: the
-# token itself carries the decision to the screening-creation call.
+# A screening uses exactly one image. The limit protects request bodies and
+# matches Anthropic's per-image limit; the mobile app sends a small JPEG.
 SCREENING_IMAGE_MAX_BYTES = env.int(
     'SCREENING_IMAGE_MAX_BYTES', default=5 * 1024 * 1024,
 )
 SCREENING_IMAGE_ALLOWED_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+# The signed token carries the Claude result from /vision-analysis/ to the
+# final screening creation. It is bound to the owner and image SHA-256.
 SCREENING_CLAUDE_TOKEN_MAX_AGE = env.int(
     'SCREENING_CLAUDE_TOKEN_MAX_AGE', default=3600,
 )
@@ -282,7 +308,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'login': '30/min',
         'public_pet': '60/min',
-        'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='30/hour'),
+        'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='10/hour'),
+        'screening-create': env('SCREENING_CREATE_THROTTLE_RATE', default='30/hour'),
     },
 }
 
