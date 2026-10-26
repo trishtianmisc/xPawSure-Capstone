@@ -1,3 +1,10 @@
+/**
+ * Zod schema for the backend create-screening payload.
+ *
+ * Source must be DEVICE; prediction/confidence/model_version are required.
+ * image_uri + claude_token are optional as a pair — when both are present the
+ * API client sends multipart (image + signed token) instead of legacy JSON.
+ */
 import { z } from 'zod'
 
 export const createScreeningSchema = z.object({

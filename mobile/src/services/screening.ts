@@ -1,3 +1,15 @@
+/**
+ * Screening HTTP client (axios via src/services/http).
+ *
+ *  - hashScreeningImage: SHA-256 of the prepared image bytes (expo-crypto) —
+ *    bound into the Claude token and re-verified by the backend.
+ *  - validateScreeningImage: multipart POST to /owner/screenings/vision-analysis/;
+ *    network failures map to a failureStatus consumed by the gate's retry policy.
+ *  - createScreening: when image_uri AND claude_token are both present it
+ *    sends multipart (fields + image + token); otherwise falls back to legacy
+ *    JSON (kept for backward compatibility — the backend rejects a token-less
+ *    image).
+ */
 import { isAxiosError } from 'axios'
 import * as Crypto from 'expo-crypto'
 import { File } from 'expo-file-system'
@@ -64,6 +76,8 @@ export async function getScreenings(petId?: string): Promise<ScreeningListRespon
 export async function createScreening(payload: CreateScreeningPayload): Promise<Screening> {
   const { image_uri: imageUri, claude_token: claudeToken, ...fields } = payload
 
+  // Multipart path: image + signed token must travel together. The backend
+  // rejects a token-less image, so missing either falls through to legacy JSON.
   if (imageUri && claudeToken) {
     const form = new FormData()
     for (const [key, value] of Object.entries(fields)) {

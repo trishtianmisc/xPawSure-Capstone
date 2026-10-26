@@ -1,3 +1,17 @@
+/**
+ * Owner capture screen — entry point of the three-photo screening flow.
+ *
+ * Responsibilities:
+ *  - Shows exactly three captioned slots (Main area / Wider view / Additional
+ *    area); Run Screening requires all three filled.
+ *  - Generates a fresh randomUUID sessionId per screen mount: it scopes the
+ *    Claude 3-call budget and cache; leaving the screen resets the budget.
+ *  - Calls useAIScreening.screenImages() and routes the result:
+ *    DISEASE_DETECTED -> adjust (questionnaire), everything else -> result.
+ *  - Forwards predictions, per-photo reports, thumbnails, and the validation
+ *    token (validationImageUri + validationToken) to the next screen.
+ *  - Renders the first-visit photo guide (ScanGuideModal, storage key v2).
+ */
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -46,6 +60,7 @@ export default function CaptureScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
+  // One sessionId per mount = one Claude 3-call budget for this screening run.
   const [sessionId] = useState(() => randomUUID())
   const [imageUris, setImageUris] = useState<(SlotImage | null)[]>([null, null, null])
   const [activeIndex, setActiveIndex] = useState(0)

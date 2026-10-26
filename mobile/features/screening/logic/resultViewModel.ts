@@ -1,3 +1,15 @@
+/**
+ * Result-screen view model.
+ *
+ * Parses route params (predictions, summary JSON) defensively — malformed
+ * deep links never crash — and decides how the result screen renders:
+ *  - summary mode: AI-only / questionnaire-only / combined cards
+ *  - legacy mode: single top prediction
+ * Also computes canBook (booking requires DISEASE_DETECTED + a combined
+ * result + a valid pet) and the optional mock home-care card flag.
+ *
+ * Unit-tested in scripts/test-result-view-logic.js.
+ */
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
 import { parsePredictionMode, parseScreeningSummary } from '../../../ai/decisionTree/summary'
 import type { Knowledge, ParsedScreeningSummary } from '../../../ai/decisionTree/types'

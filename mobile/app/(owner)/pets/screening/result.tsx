@@ -1,3 +1,13 @@
+/**
+ * Owner screening result screen.
+ *
+ * Renders AI-only / questionnaire-only / combined summary cards (via
+ * resultViewModel), per-photo thumbnail badges (green check / red X / gray
+ * dash for not-validated), and rejection message lines built from imageReports.
+ * Save & Book sends a multipart create (image + claude_token) whenever both
+ * validation params are present; booking requires state=DISEASE_DETECTED plus
+ * a combined result (see resultViewModel.canBook).
+ */
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
@@ -200,6 +210,7 @@ export default function ResultScreen() {
         model_version: firstRouteParam(params.modelVersion) || 'unknown',
         inference_time_ms: Number(firstRouteParam(params.inferenceTimeMs)) || undefined,
         device: Platform.OS,
+        // Multipart create only when BOTH validation params exist (services/screening.ts).
         ...(firstRouteParam(params.validationImageUri) && firstRouteParam(params.validationToken)
           ? {
               image_uri: firstRouteParam(params.validationImageUri) ?? '',

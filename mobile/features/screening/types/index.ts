@@ -1,3 +1,11 @@
+/**
+ * Screening feature API-layer types.
+ *
+ * ClaudeAnalysisResponse mirrors the backend POST
+ * /owner/screenings/vision-analysis/ JSON; CreateScreeningPayload is the
+ * create body (with optional image_uri + claude_token for the multipart
+ * path); Screening/ScreeningListResponse model the saved-screening API.
+ */
 export type ScreeningStatus = 'PENDING_REVIEW' | 'REVIEWED' | 'CONFIRMED' | 'DISMISSED'
 
 export type ScreeningSource = 'DEVICE'

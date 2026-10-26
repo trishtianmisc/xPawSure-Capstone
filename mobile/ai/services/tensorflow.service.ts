@@ -1,3 +1,22 @@
+/**
+ * TFLite screening pipeline orchestrator.
+ *
+ * Loads EfficientNet-B0 (combined classification + feature model) and exposes
+ * the only gated screening entry point: runMultiScreening(imageUris, sessionId, io).
+ *
+ * Gate order inside runMultiScreening (no path may skip a gate):
+ *  1. On-device quality check (brightness + variance) — fewer than 3 passing
+ *     photos block with the quality message before any Claude call or inference.
+ *  2. Claude Vision safety review (claudeValidation.ts) — a blocked eligibility
+ *     blocks with the AI-review / budget / transport message.
+ *  3. EfficientNet-B0 inference — runs only on tensors that passed gates 1+2.
+ *  4. Feature-similarity skin check — fewer than 3 skin-valid photos yield
+ *     NOT_SKIN_IMAGE (this gate necessarily runs after inference because it
+ *     consumes model feature vectors).
+ *
+ * Validation sessions live in an in-memory LRU map (max 8) keyed by the
+ * per-mount sessionId generated on the capture screen.
+ */
 import * as tf from '@tensorflow/tfjs'
 import { decodeJpeg } from '@tensorflow/tfjs-react-native'
 import { Asset } from 'expo-asset'
@@ -214,6 +233,8 @@ export async function runMultiScreening(
       skinSimilarity: SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH,
     }
 
+    // Gate 1: on-device quality. Blocks BEFORE any Claude call or inference
+    // so a bad photo never spends the session's API budget.
     if (keptTensors.length < MIN_VALID_IMAGES) {
       const message = `All ${MIN_VALID_IMAGES} photos must pass the image quality checks before screening can continue. Please retake the photo(s) that are blurry, too dark, or unclear.`
       console.log(`[TF SCREENING] MULTI INVALID_IMAGE: ${keptTensors.length}/${imageUris.length} passed quality gates`)
@@ -256,6 +277,8 @@ export async function runMultiScreening(
     console.log(
       `[TF SCREENING] GATE: reviewing ${targetSlots.length} of ${imageUris.length} photos (session=${sessionId})`,
     )
+    // Gate 2: Claude safety review. Only quality-passing photos are sent;
+    // budget/cache/retry semantics live in claudeValidation.validateTargetImages.
     const validationSession = getValidationSession(sessionId)
     const decisions = await validateTargetImages({
       sessionId,
@@ -307,6 +330,7 @@ export async function runMultiScreening(
       }
     })
 
+    // Gate 3: EfficientNet-B0 inference — only tensors that cleared gates 1+2.
     const batch = tf.concat(eligibleTensors, 0)
     const numEligible = eligibleTensors.length
     for (const tensor of eligibleTensors) {
@@ -405,6 +429,8 @@ export async function runMultiScreening(
 
     console.log(`[TF SCREENING] MULTI RESULT: state=${state} meanSim=${meanSim.toFixed(3)} top=${predictions[0].label} ${predictions[0].confidence}% inference=${inferenceTimeMs}ms`)
 
+    // Signed review token: first approved photo that carries one; forwarded to
+    // the backend on create so it can re-verify HMAC + image SHA-256.
     let validation: { imageUri: string; token: string } | undefined
     for (const slot of eligibility.approved) {
       const token = decisions[slot]?.token

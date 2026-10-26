@@ -1,3 +1,12 @@
+/**
+ * First-visit photo-guide modal.
+ *
+ * Renders SCAN_GUIDE_STEPS + SCAN_GUIDE_QUALITY_TIPS from
+ * features/screening/constants/scanGuide.ts. Auto-opens on the capture screen
+ * until dismissed (flag persisted under SCAN_GUIDE_STORAGE_KEY, v2); the
+ * header help icon reopens it on demand. Storage failures never block
+ * screening.
+ */
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useMemo } from 'react'
 import {

@@ -1,3 +1,13 @@
+/**
+ * Result view logic test suite (pure, mocked).
+ *
+ * Covers features/screening/logic/resultViewModel.ts: safe route-param
+ * parsing (predictions, image reports, summary JSON), malformed-input
+ * tolerance, Claude report field validation, and result-view rendering
+ * decisions (legacy vs summary mode, canBook).
+ *
+ * Run: npm run test:result-view
+ */
 const assert = require('assert')
 const fs = require('fs')
 const os = require('os')

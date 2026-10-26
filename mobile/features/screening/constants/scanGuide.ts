@@ -1,3 +1,11 @@
+/**
+ * Photo-guide content for the three-photo screening flow.
+ *
+ * SCAN_GUIDE_STORAGE_KEY (v2): once the owner dismisses the guide this flag
+ * is stored so it does not auto-open again; the bump from v1 re-shows the
+ * guide to everyone after the 5-photo -> 3-photo migration. Rendered by
+ * ScanGuideModal.
+ */
 import type { MaterialCommunityIcons } from '@expo/vector-icons'
 import type { ComponentProps } from 'react'
 

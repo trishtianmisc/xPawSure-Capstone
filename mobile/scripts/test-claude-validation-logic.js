@@ -1,3 +1,15 @@
+/**
+ * Claude gate logic test suite (pure, mocked — no network, no React).
+ *
+ * Covers ai/services/claudeValidation.ts: constants and target selection,
+ * retry policy, session budget (first attempts before retries, cache hits
+ * freeing budget, exhaustion, fresh-session reset), cache semantics (settled
+ * outcomes cached, transient failures not), resolveEligibility message
+ * branches (quality shortfall, review rejection, budget, transport), and
+ * image-report mapping.
+ *
+ * Run: npm run test:claude
+ */
 const assert = require('assert')
 const fs = require('fs')
 const os = require('os')

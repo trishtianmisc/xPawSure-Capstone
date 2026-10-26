@@ -1,3 +1,11 @@
+/**
+ * Shared AI screening type contracts.
+ *
+ * The vocabulary used across the pipeline: screening result states, disease
+ * predictions, Claude API/validation statuses, per-photo image reports, and
+ * the ScreeningResult envelope returned by runMultiScreening (predictions +
+ * reports + the signed validation token forwarded to the backend on save).
+ */
 export type DiseaseType =
   | 'ALLERGIC_DERMATITIS'
   | 'BACTERIAL'

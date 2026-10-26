@@ -1,3 +1,19 @@
+/**
+ * Pure post-inference screening rules (no React, no network, no TensorFlow).
+ *
+ * Pipeline role: consumed by tensorflow.service.runMultiScreening and the
+ * result screens.
+ *
+ *  - MIN_VALID_IMAGES = 3: quality, Claude approval, and skin-validity gates
+ *    all require all three photos to pass (zero tolerance for a failing photo).
+ *  - buildImageReports(): per-photo status for result-screen badges, merging
+ *    the on-device quality flag, the Claude validation decision, and the
+ *    feature-similarity score.
+ *  - decideScreeningState(): final state from counts of quality-passed,
+ *    skin-valid photos and the mean skin similarity.
+ *
+ * Unit-tested in scripts/test-screening-logic.js.
+ */
 import type {
   ClaudeValidationDecision,
   ImageReport,

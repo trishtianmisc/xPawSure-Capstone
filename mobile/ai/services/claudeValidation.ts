@@ -1,3 +1,23 @@
+/**
+ * Claude Vision image-validation gate — pure logic (no React, no network I/O).
+ *
+ * Pipeline role: runs AFTER the on-device quality checks and BEFORE
+ * EfficientNet-B0 inference (invoked from tensorflow.service.runMultiScreening).
+ *
+ * What it does:
+ *  - Enforces a hard budget of 3 Claude calls per screening session
+ *    (CLAUDE_SESSION_CALL_LIMIT), retries included.
+ *  - All first attempts run before any retry; transient failures (TIMEOUT /
+ *    PROVIDER_ERROR / VALIDATION_ERROR) are retried at most once and only while
+ *    budget remains. Settled outcomes are cached per `${sessionId}:${sha256}`,
+ *    so duplicate photos and reruns in the same session cost nothing.
+ *  - resolveEligibility() decides whether screening may proceed and produces
+ *    the block message: quality shortfall, AI-safety-review rejection, budget
+ *    exhausted, or transport error.
+ *
+ * Network I/O is injected via ClaudeValidationIO; the whole file is unit-tested
+ * in scripts/test-claude-validation-logic.js.
+ */
 import type {
   ClaudeApiStatus,
   ClaudeValidationDecision,
@@ -195,6 +215,8 @@ export async function validateTargetImages(params: {
   const attempts: Record<number, number> = {}
   const shas: Record<number, string> = {}
 
+  // Pass 1: first attempt for every target (cached hits and budget blocks
+  // short-circuit without spending a call).
   for (const target of targets) {
     let sha: string | null = null
     try {
@@ -237,6 +259,8 @@ export async function validateTargetImages(params: {
     }
   }
 
+  // Pass 2: retry transient failures (at most once each) while budget remains.
+  // Settled outcomes from pass 1 are cached above; transient ones are not.
   for (const target of targets) {
     const mapped = decisions[target.index]
     if (!mapped) continue

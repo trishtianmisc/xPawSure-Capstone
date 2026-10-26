@@ -1,3 +1,13 @@
+/**
+ * Screening logic test suite (pure, mocked).
+ *
+ * Covers ai/services/screening.logic.ts with three-photo fixtures: image
+ * report statuses, selectValidIndices, and decideScreeningState boundaries
+ * (2 quality-pass -> INVALID_IMAGE, 2 skin-valid -> NOT_SKIN_IMAGE,
+ * 0.299 -> UNCERTAIN, 0.30 -> DISEASE_DETECTED).
+ *
+ * Run: npm run test:screening
+ */
 const assert = require('assert')
 const fs = require('fs')
 const os = require('os')

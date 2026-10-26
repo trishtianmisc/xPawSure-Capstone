@@ -1,3 +1,12 @@
+/**
+ * Owner questionnaire screen (post-screening refinement).
+ *
+ * Runs the adaptive/Bayesian 12-question refinement over the predictions that
+ * were ALREADY computed on the capture screen — it never re-runs the CNN or
+ * the Claude gate. On finish it auto-saves the screening to the backend,
+ * forwarding the same image + claude_token pair received via route params
+ * (the backend re-verifies the token against the uploaded image's SHA-256).
+ */
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
@@ -152,6 +161,7 @@ export default function AdjustScreen() {
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
+        // Forward the signed review token; backend re-verifies HMAC + image SHA-256.
         ...(params.validationImageUri && params.validationToken
           ? {
               image_uri: params.validationImageUri,

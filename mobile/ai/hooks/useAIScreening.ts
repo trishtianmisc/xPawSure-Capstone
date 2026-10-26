@@ -1,3 +1,14 @@
+/**
+ * React hook bridging the UI screens to the screening pipeline.
+ *
+ * Exposes screenImages(imageUris, sessionId): loads the TFLite model if needed,
+ * then runs tensorflow.service.runMultiScreening with real network I/O wired in
+ * (vision-analysis API call + SHA-256 hashing via src/services/screening.ts).
+ * Surfaces isScreening / screeningError state for the capture screen.
+ *
+ * Note: the legacy single-photo screenImage path (which bypassed the Claude
+ * gate) was intentionally removed — three-photo screening is the only entry.
+ */
 import { useCallback, useRef, useState } from 'react'
 
 import { hashScreeningImage, validateScreeningImage } from '../../src/services/screening'
