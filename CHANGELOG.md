@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] — 2026-10-26
+
+### Added
+- Payments backend app (`backend/payments/`) with `PAYMENT` and `PAYMENT_EVENT` models, migrations, and admin
+- `CLINIC_SETTINGS.CLS_CONSULTATION_FEE` (default `0.00`) set from Clinic Settings; a fee of `0` leaves booking unchanged
+- Provider adapter (`PAYMENT_MODE=mock` | `paymongo`) with a signed mock checkout page and a PayMongo hosted-checkout + webhook adapter (HMAC `Paymongo-Signature` verification)
+- Endpoints: `POST /api/payments/checkout/`, `GET /api/payments/`, `GET/POST cancel`, signed `GET/POST /api/payments/mock/{reference}/[confirm/]`, `POST /api/payments/webhooks/paymongo/`
+- Payment gate on both booking paths (`POST /api/appointments/`, `POST /api/owner/appointments/`): payment is created, paid, and attached in one transaction, single-use per appointment
+- Frontend `payments` feature: mock checkout page (`/payments/mock/:reference`), payment service/hooks, status badge, receptionist Payments list page
+- Receptionist booking flow step 5 (payment method + checkout panel with polling), real payment status on Appointment Detail, `consultation_fee` field in Clinic Settings
+- `apiErrorCode()` helper + tests; payment service, error, and clinic settings tests
+- Backend payment test suite covering checkout, the booking gate, mock checkout, webhook verification, and access control
+
+### Changed
+- `POST /api/appointments/` and `POST /api/owner/appointments/` accept an optional `pay_id` and return `{detail, code, amount, currency}` when payment is required
+
 ## [0.3.0] — 2026-07-22
 
 ### Added

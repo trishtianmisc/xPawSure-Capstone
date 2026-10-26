@@ -63,6 +63,7 @@ export function ClinicProfilePage() {
         appointment_duration: data.appointment_duration,
         max_appointments_per_day: data.max_appointments_per_day,
         allow_owner_booking: data.allow_owner_booking,
+        consultation_fee: data.consultation_fee,
       },
       {
         onSuccess: () => showToast('Clinic settings updated.', 'success'),

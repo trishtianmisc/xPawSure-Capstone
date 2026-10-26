@@ -534,6 +534,22 @@ the API responds `403` with:
 
 Receptionist bookings are not gated by screenings.
 
+Payment rule: when `CLINIC_SETTINGS.CLS_CONSULTATION_FEE` is greater than `0`, a
+paid payment is required before the appointment exists (`pay_id` below). With a fee
+of `0` the field is ignored and booking behaves exactly as before. See section 5B.
+
+When payment is required but `pay_id` is missing, not `PAID`, already used, or does
+not belong to this clinic/owner, the API responds `400` with:
+
+{
+  "detail": "This clinic requires payment before an appointment can be booked.",
+  "code": "PAYMENT_REQUIRED",
+  "amount": 500.0,
+  "currency": "PHP"
+}
+
+`code` is `PAYMENT_INVALID` instead when a `pay_id` was supplied but cannot be used.
+
 Initial status: owner bookings start as `PENDING` (awaiting clinic confirmation; owner
 notified with `APPOINTMENT_CREATED`). Receptionist desk bookings start as `CONFIRMED`
 (owner notified with `APPOINTMENT_CONFIRMED`).
@@ -545,8 +561,11 @@ Request (owner):
   "slot_id": "uuid",
   "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
   "reason": "string (optional)",
-  "screening_id": "uuid (required for owner bookings)"
+  "screening_id": "uuid (required for owner bookings)",
+  "pay_id": "uuid (required when the clinic charges a fee)"
 }
+
+Request (receptionist) is the same payload minus `screening_id`.
 
 ---
 
@@ -683,6 +702,164 @@ Responses:
 - 403: appointment belongs to another veterinarian, or caller is not a veterinarian
 - 404: unknown appointment
 - 409: appointment is not `CONFIRMED`
+
+---
+
+# 5B. Payment Endpoints
+
+Payments gate booking: the consultation fee is configured per clinic
+(`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`, default `0.00`). A fee of `0` disables
+the gate entirely.
+
+Providers: `PAYMENT_MODE=mock` (default, signed checkout page in the web app) or
+`PAYMENT_MODE=paymongo` (hosted checkout + webhook). See `docs/database/PAYMENT.md`.
+
+Payment object:
+
+{
+  "pay_id": "uuid",
+  "reference_no": "XPS-20261026-A1B2C3",
+  "clinic_id": "uuid",
+  "owner_id": "uuid",
+  "owner_name": "Olivia Owner",
+  "appointment_id": null,
+  "pet_name": "Rex",
+  "amount": 500.0,
+  "currency": "PHP",
+  "method": "GCASH | CARD | CASH",
+  "status": "PENDING | PAID | FAILED | EXPIRED | REFUNDED | VOID",
+  "provider": "MOCK | PAYMONGO | CASH",
+  "checkout_url": "https://…/payments/mock/XPS-…?token=…",
+  "expires_at": "2026-10-26T12:34:56Z",
+  "paid_at": null,
+  "failure_reason": null,
+  "created_at": "…",
+  "updated_at": "…"
+}
+
+---
+
+## POST /api/payments/checkout/
+
+Requires authentication. Receptionist, clinic admin, or owner.
+
+Creates the payment for a booking. The slot must still be `AVAILABLE`; owners
+pay only for their own pets and must pass the `screening_id` their booking will
+use. Amount always comes from the clinic's consultation fee.
+
+Allowed methods: staff `GCASH | CARD | CASH`, owners `GCASH | CARD` only.
+`CASH` is stored as `PAID` immediately (recorded at the counter); the other
+methods return a `checkout_url`.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "slot_id": "uuid",
+  "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
+  "method": "GCASH | CARD | CASH",
+  "reason": "string (optional)",
+  "screening_id": "uuid (owner bookings only)"
+}
+
+Responses:
+
+- 201: payment object
+- 400 `PAYMENT_NOT_REQUIRED`: the clinic fee is `0`
+- 400 `METHOD_NOT_ALLOWED`: method not available for this role
+- 400 `SCREENING_REQUIRED`: owner checkout without a screening
+- 403 `BOOKING_NOT_ALLOWED`: clinic has disabled owner booking
+- 404 `PET_NOT_FOUND` / `SLOT_NOT_FOUND`
+- 409 `SLOT_UNAVAILABLE`: slot was taken between lookup and write
+- 502 `PROVIDER_ERROR`: gateway unreachable (nothing is stored)
+
+---
+
+## GET /api/payments/
+
+Requires authentication. Receptionist or clinic admin. Scoped to the caller's
+clinic; owners get `403`.
+
+Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
+`date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
+
+Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+
+---
+
+## GET /api/payments/{id}/
+
+Requires authentication. Owners read their own payments, clinic staff read their
+clinic's payments, otherwise `404`.
+
+---
+
+## POST /api/payments/{id}/cancel/
+
+Requires authentication. Same access rule as the detail endpoint.
+
+Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
+`409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
+
+---
+
+## GET /api/payments/mock/{reference}/?token=…
+
+No authentication: the signed `token` from `checkout_url` is the credential.
+
+Returns the payment so a checkout page can poll until it is `PAID`, `FAILED`, or
+`EXPIRED`. An invalid or stale token returns
+`403 { "code": "INVALID_TOKEN" }`.
+
+---
+
+## POST /api/payments/mock/{reference}/confirm/
+
+No authentication (signed token only). Drives the mock checkout:
+
+{ "token": "…", "outcome": "success | decline | expire" }
+
+Responses: `200` payment object · `400 PAYMENT_EXPIRED` · `409 PAYMENT_PROCESSED`
+(already confirmed) · `403 INVALID_TOKEN`.
+
+---
+
+## POST /api/payments/webhooks/paymongo/
+
+PayMongo callback (no session auth). Requires `PAYMONGO_WEBHOOK_SECRET`; verifies
+`Paymongo-Signature` (`t`, `te`, `li` parts; `HMAC-SHA256(secret, "{t}.{raw_body}")`,
+constant-time compare) before touching data.
+
+Handles `checkout_session.payment.paid`, `checkout_session.payment.failed`, and
+`checkout_session.expired`, matched on `reference_number`. Replays are no-ops.
+
+Responses: `200 { "received": true }` · `403 INVALID_SIGNATURE` ·
+`400 INVALID_PAYLOAD` · `503 WEBHOOK_NOT_CONFIGURED`.
+
+---
+
+## GET /api/clinic/settings/
+
+Requires authentication. Clinic admin or receptionist (read-only for
+receptionists — only clinic admins may `PUT`).
+
+`consultation_fee` is the amount the payment module charges. A value of `0`
+means no payment is required and `pay_id` is ignored by the booking endpoints.
+
+Response (200):
+
+{
+  "opening_time": "09:00:00",
+  "closing_time": "17:00:00",
+  "appointment_duration": 30,
+  "max_appointments_per_day": 50,
+  "allow_owner_booking": true,
+  "consultation_fee": 500,
+  "timezone": "Asia/Manila"
+}
+
+`PUT` accepts the same fields; `consultation_fee` is optional (omitting it keeps
+the stored value) and must be between 0 and 1000000 with at most 2 decimals.
 
 ---
 
