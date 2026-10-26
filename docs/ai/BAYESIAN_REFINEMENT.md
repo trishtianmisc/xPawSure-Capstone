@@ -6,7 +6,7 @@ Status: experimental mobile-only screening refinement. Not a diagnosis and not a
 
 The image model produces five class probabilities. After a screening, the owner answers the 12-question veterinary-informed questionnaire. The refinement engine combines the image probabilities with those answers and returns five screening likelihoods.
 
-The questionnaire is adaptively ordered by default. Early stopping is implemented but disabled by default. This replaces the previous additive score as the active method, but the additive engine remains available as a rollback. The image pipeline, TensorFlow.js model, five-photo flow, quality gates, skin-validity gates, minimum-valid-image rule, and rejection states are unchanged.
+The questionnaire is adaptively ordered by default. Early stopping is implemented but disabled by default. This replaces the previous additive score as the active method, but the additive engine remains available as a rollback. The image pipeline, TensorFlow.js model, three-photo flow, quality gates, skin-validity gates, minimum-valid-image rule, and rejection states are unchanged.
 
 ## Why this is Bayesian-style rather than a fully calibrated Bayesian model
 

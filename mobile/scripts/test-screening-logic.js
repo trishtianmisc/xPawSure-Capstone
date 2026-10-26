@@ -27,73 +27,76 @@ try {
   } = require(tempPath)
 
   const thresholds = { minSimilarity: 0.10, skinSimilarity: 0.30 }
-  const uris = ['face-1', 'face-2', 'face-3', 'bacterial-1', 'bacterial-2']
-  const qualityOk = [true, true, true, true, true]
+  const uris = ['face-1', 'face-2', 'bacterial-1']
+  const qualityOk = [true, true, true]
 
-  const testA = [0.192, 0.237, 0.181, 0.696, 0.696]
+  const testA = [0.192, 0.237, 0.696]
   const reportsA = buildImageReports(uris, qualityOk, testA, thresholds)
   assert.deepStrictEqual(
     reportsA.map((report) => report.status),
-    ['not_skin', 'not_skin', 'not_skin', 'ok', 'ok'],
+    ['not_skin', 'not_skin', 'ok'],
   )
-  assert.deepStrictEqual(selectValidIndices(testA, thresholds.skinSimilarity), [3, 4])
+  assert.deepStrictEqual(selectValidIndices(testA, thresholds.skinSimilarity), [2])
   assert.strictEqual(
-    decideScreeningState(5, 2, average([testA[3], testA[4]]), thresholds.skinSimilarity),
+    decideScreeningState(3, 1, average([testA[2]]), thresholds.skinSimilarity),
     'NOT_SKIN_IMAGE',
   )
   assert.deepStrictEqual(countRejectedReports(reportsA), {
     quality: 0,
-    notSkin: 3,
+    notSkin: 2,
     lowSimilarity: 0,
+    notValidated: 0,
+    validationError: 0,
   })
 
-  const testB = [0.192, 0.237, 0.181, 0.250, 0.216]
+  const testB = [0.192, 0.237, 0.250]
   const reportsB = buildImageReports(uris, qualityOk, testB, thresholds)
   assert.deepStrictEqual(
     reportsB.map((report) => report.status),
-    ['not_skin', 'not_skin', 'not_skin', 'not_skin', 'not_skin'],
+    ['not_skin', 'not_skin', 'not_skin'],
   )
   assert.deepStrictEqual(selectValidIndices(testB, thresholds.skinSimilarity), [])
   assert.strictEqual(
-    decideScreeningState(5, 0, average([]), thresholds.skinSimilarity),
+    decideScreeningState(3, 0, average([]), thresholds.skinSimilarity),
     'NOT_SKIN_IMAGE',
   )
 
-  const dogSkin = [0.696, 0.696, 0.65, 0.62, 0.60]
-  assert.deepStrictEqual(selectValidIndices(dogSkin, thresholds.skinSimilarity), [0, 1, 2, 3, 4])
+  const dogSkin = [0.696, 0.696, 0.65]
+  assert.deepStrictEqual(selectValidIndices(dogSkin, thresholds.skinSimilarity), [0, 1, 2])
   assert.strictEqual(
-    decideScreeningState(5, 5, average(dogSkin), thresholds.skinSimilarity),
+    decideScreeningState(3, 3, average(dogSkin), thresholds.skinSimilarity),
     'DISEASE_DETECTED',
   )
 
-  const mixedDogAndFaces = [0.696, 0.696, 0.65, 0.237, 0.192]
+  // All 3 photos must pass: one non-skin photo blocks the whole screening.
+  const mixedDogAndFaces = [0.696, 0.237, 0.696]
   assert.deepStrictEqual(
     selectValidIndices(mixedDogAndFaces, thresholds.skinSimilarity),
-    [0, 1, 2],
+    [0, 2],
   )
   assert.strictEqual(
     decideScreeningState(
-      5,
       3,
-      average([mixedDogAndFaces[0], mixedDogAndFaces[1], mixedDogAndFaces[2]]),
+      2,
+      average([mixedDogAndFaces[0], mixedDogAndFaces[2]]),
       thresholds.skinSimilarity,
     ),
-    'DISEASE_DETECTED',
+    'NOT_SKIN_IMAGE',
   )
 
-  const dogSkinWithLowOutlier = [0.696, 0.696, 0.65, 0.227, 0.192]
+  const dogSkinWithLowOutlier = [0.696, 0.696, 0.227]
   assert.deepStrictEqual(
     selectValidIndices(dogSkinWithLowOutlier, thresholds.skinSimilarity),
-    [0, 1, 2],
+    [0, 1],
   )
   assert.strictEqual(
     decideScreeningState(
-      5,
       3,
-      average([dogSkinWithLowOutlier[0], dogSkinWithLowOutlier[1], dogSkinWithLowOutlier[2]]),
+      2,
+      average([dogSkinWithLowOutlier[0], dogSkinWithLowOutlier[1]]),
       thresholds.skinSimilarity,
     ),
-    'DISEASE_DETECTED',
+    'NOT_SKIN_IMAGE',
   )
 
   assert.strictEqual(
@@ -118,7 +121,7 @@ try {
   const qualityReports = buildImageReports(
     ['bad', 'face', 'bacterial'],
     [false, true, true],
-    [0.237, 0.696],
+    [null, 0.237, 0.696],
     thresholds,
   )
   assert.deepStrictEqual(
@@ -127,12 +130,14 @@ try {
   )
   assert.deepStrictEqual(
     qualityReports.map((report) => report.similarity),
-    [0, 0.237, 0.696],
+    [null, 0.237, 0.696],
   )
   assert.deepStrictEqual(countRejectedReports(qualityReports), {
     quality: 1,
     notSkin: 1,
     lowSimilarity: 0,
+    notValidated: 0,
+    validationError: 0,
   })
 
   assert.strictEqual(average([]), 0)

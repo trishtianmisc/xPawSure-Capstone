@@ -53,9 +53,10 @@ export default function ScanGuideModal({ visible, onClose }: ScanGuideModalProps
             showsVerticalScrollIndicator={false}
             style={styles.body}
           >
-            <Text style={styles.title}>Five photos, better screening</Text>
+            <Text style={styles.title}>Three photos, better screening</Text>
             <Text style={styles.subtitle}>
-              The AI compares five views of the affected area, so clear and varied photos give it the best chance to help.
+              The AI reviews three views of the affected area — the main area, a wider view, and one
+              more — so clear, well-lit photos give it the best chance to help.
             </Text>
 
             <View style={styles.steps}>
@@ -75,7 +76,7 @@ export default function ScanGuideModal({ visible, onClose }: ScanGuideModalProps
             </View>
 
             <View style={styles.tipsCard}>
-              <Text style={styles.tipsTitle}>What makes a good photo</Text>
+              <Text style={styles.tipsTitle}>Photo-taking instructions</Text>
               {SCAN_GUIDE_QUALITY_TIPS.map((tip) => (
                 <View key={tip} style={styles.tipRow}>
                   <MaterialCommunityIcons color={colors.primary} name="check-circle-outline" size={15} />
@@ -87,7 +88,8 @@ export default function ScanGuideModal({ visible, onClose }: ScanGuideModalProps
             <View style={styles.notice}>
               <MaterialCommunityIcons color={colors.textMuted} name="shield-check-outline" size={17} />
               <Text style={styles.noticeText}>
-                Photos are checked on your device before analysis. The result is a screening suggestion, not a diagnosis.
+                Photos pass on-device quality checks and an AI safety review before analysis. The
+                result is a screening suggestion, not a diagnosis.
               </Text>
             </View>
           </ScrollView>

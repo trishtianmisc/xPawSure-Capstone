@@ -37,6 +37,22 @@ class ScreeningSource(models.TextChoices):
     DEVICE = 'DEVICE', 'On-device AI'
 
 
+class ClaudeAnalysisStatus(models.TextChoices):
+    """Statuses of the stateless Claude image-validation gate.
+
+    Choices only: no model field uses them, so no migration is required.
+    Nothing about a validation is persisted on the screening row.
+    """
+    NOT_REQUESTED = 'NOT_REQUESTED', 'Not requested'
+    OK = 'OK', 'Completed'
+    NOT_CONFIGURED = 'NOT_CONFIGURED', 'Not configured'
+    TIMEOUT = 'TIMEOUT', 'Timed out'
+    RATE_LIMITED = 'RATE_LIMITED', 'Rate limited'
+    QUOTA_EXHAUSTED = 'QUOTA_EXHAUSTED', 'Quota exhausted'
+    MALFORMED_RESPONSE = 'MALFORMED_RESPONSE', 'Malformed response'
+    PROVIDER_ERROR = 'PROVIDER_ERROR', 'Provider error'
+
+
 class AiScreening(models.Model):
     ais_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_column='AIS_ID')
     pet_id = models.ForeignKey('pets.Pet', on_delete=models.CASCADE, related_name='screenings', db_column='PET_ID')

@@ -97,13 +97,13 @@ Owners may view and edit their pets' information after registration.
 
 The core feature of the mobile application.
 
-The owner captures or selects five photos of their dog's skin condition from different angles. Camera capture and gallery selection are both supported.
+The owner captures or selects three photos of their dog's skin condition from different angles: the main affected area, a wider view, and an additional angle. Camera capture and gallery selection are both supported.
 
 The application runs inference on the device. Images are not sent to the server for inference.
 
-Each photo passes quality and dog-skin checks. Screening requires five photos, and at least three must be valid. Rejected photos must be retaken or replaced before screening can run.
+Each photo passes quality and dog-skin checks. Screening requires three photos, and all three must be valid and approved by the AI safety review. Rejected photos must be retaken or replaced before screening can run.
 
-A photo guide explains the five-slot flow, camera/gallery options, quality checks, and the three-valid-photo minimum. It opens automatically on first use, can be reopened from the help icon, and records dismissal in `xpawsure_screening_guide_seen_v1`. A storage failure does not block screening.
+A photo guide explains the three-slot flow, camera/gallery options, quality checks, and the all-photos-must-pass rule. It opens automatically on first use, can be reopened from the help icon, and records dismissal in `xpawsure_screening_guide_seen_v2`. A storage failure does not block screening.
 
 The AI model identifies possible skin conditions and returns:
 

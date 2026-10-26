@@ -90,6 +90,8 @@ export default function ResultScreen() {
     totalQuestions?: string
     imageReports?: string
     thumbnailUris?: string
+    validationImageUri?: string
+    validationToken?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
   const petId = firstRouteParam(params.petId)
@@ -135,6 +137,16 @@ export default function ResultScreen() {
     }
     if (counts.quality > 0) {
       messages.push(`${counts.quality} ${counts.quality === 1 ? 'photo was' : 'photos were'} too dark or blurry.`)
+    }
+    if (counts.validationError > 0) {
+      messages.push(
+        `${counts.validationError} ${counts.validationError === 1 ? 'photo could' : 'photos could'} not complete the AI safety review.`,
+      )
+    }
+    if (counts.notValidated > 0) {
+      messages.push(
+        `${counts.notValidated} ${counts.notValidated === 1 ? 'photo was' : 'photos were'} not AI-validated in this screening session.`,
+      )
     }
 
     return messages
@@ -188,6 +200,12 @@ export default function ResultScreen() {
         model_version: firstRouteParam(params.modelVersion) || 'unknown',
         inference_time_ms: Number(firstRouteParam(params.inferenceTimeMs)) || undefined,
         device: Platform.OS,
+        ...(firstRouteParam(params.validationImageUri) && firstRouteParam(params.validationToken)
+          ? {
+              image_uri: firstRouteParam(params.validationImageUri) ?? '',
+              claude_token: firstRouteParam(params.validationToken) ?? '',
+            }
+          : {}),
       },
       {
         onSuccess: () => {
@@ -236,6 +254,14 @@ export default function ResultScreen() {
             {imageReports.map((report, i) => {
               const displayUri = thumbnailUris[i] ?? report.uri
               const showFallback = failedThumbnails[i] === true || !displayUri
+              const isSkipped = report.status === 'not_validated'
+              const badgeStyle =
+                report.status === 'ok'
+                  ? styles.reportBadgeOk
+                  : isSkipped
+                    ? styles.reportBadgeSkipped
+                    : styles.reportBadgeFail
+              const badgeIcon = report.status === 'ok' ? 'check' : isSkipped ? 'minus' : 'close'
 
               return (
                 <View key={`${report.uri}-${i}`} style={styles.reportItem}>
@@ -261,12 +287,8 @@ export default function ResultScreen() {
                       style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]}
                     />
                   )}
-                  <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
-                    <MaterialCommunityIcons
-                      color="#FFF"
-                      name={report.status === 'ok' ? 'check' : 'close'}
-                      size={10}
-                    />
+                  <View style={[styles.reportBadge, badgeStyle]}>
+                    <MaterialCommunityIcons color="#FFF" name={badgeIcon} size={10} />
                   </View>
                 </View>
               )
@@ -311,7 +333,7 @@ export default function ResultScreen() {
                 icon="camera-outline"
                 accentColor={colors.primary}
                 confidenceLabel="photo-only score"
-                subtitle="Based only on the five photos. It does not use your questionnaire answers."
+                subtitle="Based only on the three photos. It does not use your questionnaire answers."
                 predictions={summary.aiOnly}
               />
             ) : null}
@@ -588,6 +610,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 18,
   },
   reportBadgeOk: { backgroundColor: '#27AE60' },
+  reportBadgeSkipped: { backgroundColor: '#95A5A6' },
   reportBadgeFail: { backgroundColor: '#C0392B' },
   thumbnailPlaceholder: {
     alignItems: 'center',

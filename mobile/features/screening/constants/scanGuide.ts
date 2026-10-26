@@ -1,7 +1,7 @@
 import type { MaterialCommunityIcons } from '@expo/vector-icons'
 import type { ComponentProps } from 'react'
 
-export const SCAN_GUIDE_STORAGE_KEY = 'xpawsure_screening_guide_seen_v1'
+export const SCAN_GUIDE_STORAGE_KEY = 'xpawsure_screening_guide_seen_v2'
 
 export interface ScanGuideStep {
   icon: ComponentProps<typeof MaterialCommunityIcons>['name']
@@ -12,9 +12,21 @@ export interface ScanGuideStep {
 export const SCAN_GUIDE_STEPS: ScanGuideStep[] = [
   {
     icon: 'camera-plus-outline',
-    title: 'Capture or upload 5 photos',
+    title: 'Photo 1 — Main affected area',
     description:
-      'Use Take Photo or Gallery to fill all five slots. Each photo should show the affected skin area from a different angle.',
+      'Take a clear, close-up photo of the primary affected skin area. Make sure the skin condition is visible and in focus.',
+  },
+  {
+    icon: 'panorama-outline',
+    title: 'Photo 2 — Wider view',
+    description:
+      'Take a slightly wider photo showing the affected area and the surrounding skin. Include enough context to show where the affected area is located on the dog.',
+  },
+  {
+    icon: 'image-multiple-outline',
+    title: 'Photo 3 — Additional affected area',
+    description:
+      'If another area is affected, photograph it clearly. If only one area is affected, take another useful angle of the same area.',
   },
   {
     icon: 'image-check-outline',
@@ -24,16 +36,18 @@ export const SCAN_GUIDE_STEPS: ScanGuideStep[] = [
   },
   {
     icon: 'check-decagram-outline',
-    title: 'Keep at least 3 valid photos',
+    title: 'All 3 photos must pass',
     description:
-      'Screening needs five photos, and at least three must pass. If a photo is rejected, retake it and replace that slot before running the screening.',
+      'Screening needs all 3 photos to pass the quality checks and the AI safety review (up to three reviews per screening). If a photo is rejected, retake it and replace that slot, then run again. If the review budget is used up, start a new screening.',
   },
 ]
 
 export const SCAN_GUIDE_QUALITY_TIPS = [
-  'Photograph only the affected skin area, close up.',
-  'Use bright, even lighting and avoid glare or deep shadows.',
-  'Hold the camera steady so the photo is sharp and in focus.',
-  'Take each photo from a slightly different angle.',
-  'Do not include faces, backgrounds, or other animals.',
+  'Use good, even lighting.',
+  'Keep the camera steady and the affected skin in focus.',
+  'Move fur aside gently when possible so the affected skin is visible.',
+  'Avoid blurry, dark, overexposed, or excessively distant photos.',
+  'Do not apply filters or edit the images to change the appearance of the skin.',
+  'Do not upload unrelated images, screenshots, or images that do not show the dog’s skin condition.',
+  'Do not force the dog into an uncomfortable position to take a photo.',
 ]

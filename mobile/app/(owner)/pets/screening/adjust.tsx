@@ -39,6 +39,8 @@ export default function AdjustScreen() {
     inferenceTimeMs?: string
     imageReports?: string
     thumbnailUris?: string
+    validationImageUri?: string
+    validationToken?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -150,6 +152,12 @@ export default function AdjustScreen() {
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
+        ...(params.validationImageUri && params.validationToken
+          ? {
+              image_uri: params.validationImageUri,
+              claude_token: params.validationToken,
+            }
+          : {}),
       })
       alreadySaved = true
     } catch {
@@ -177,6 +185,8 @@ export default function AdjustScreen() {
         alreadySaved: alreadySaved ? 'true' : 'false',
         imageReports: params.imageReports ?? '',
         thumbnailUris: params.thumbnailUris ?? '',
+        validationImageUri: params.validationImageUri ?? '',
+        validationToken: params.validationToken ?? '',
       },
     })
   }

@@ -125,12 +125,45 @@ try {
       validReport,
       null,
       { uri: 'file://photo-2', status: 'unknown', similarity: 0.8 },
-      { uri: 'file://photo-3', status: 'quality_failed', similarity: Number.NaN },
+      { uri: 'file://photo-3', status: 'quality_failed', similarity: 'not-a-number' },
       { uri: 4, status: 'ok', similarity: 0.7 },
     ]),
   )
   assert.strictEqual(parsedReports.length, 1)
   assert.deepStrictEqual(parsedReports[0], validReport)
+
+  const claudeReport = {
+    uri: 'file://photo-4',
+    status: 'not_validated',
+    similarity: null,
+    claudeStatus: 'NOT_VALIDATED',
+    claudeMessage: 'AI review was not run for this photo.',
+  }
+  const claudeErrorReport = {
+    uri: 'file://photo-5',
+    status: 'validation_error',
+    similarity: null,
+    claudeStatus: 'TIMEOUT',
+  }
+  const claudeRejectedReport = {
+    uri: 'file://photo-6',
+    status: 'quality_failed',
+    similarity: null,
+    claudeStatus: 'OK',
+  }
+  const parsedClaudeReports = parseRouteImageReports(
+    JSON.stringify([
+      claudeReport,
+      claudeErrorReport,
+      claudeRejectedReport,
+      { uri: 'file://photo-7', status: 'not_validated', similarity: null, claudeStatus: 'BOGUS_STATUS' },
+      { uri: 'file://photo-8', status: 'not_validated', similarity: 'high' },
+    ]),
+  )
+  assert.strictEqual(parsedClaudeReports.length, 3)
+  assert.deepStrictEqual(parsedClaudeReports[0], claudeReport)
+  assert.deepStrictEqual(parsedClaudeReports[1], claudeErrorReport)
+  assert.deepStrictEqual(parsedClaudeReports[2], claudeRejectedReport)
   assert.deepStrictEqual(parseRouteImageReports('{}'), [])
   assert.deepStrictEqual(parseRouteImageReports('not-json'), [])
 

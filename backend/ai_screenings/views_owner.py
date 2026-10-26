@@ -2,9 +2,17 @@ from uuid import UUID
 
 from rest_framework import status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
-from ai_screenings.models import AiScreening
+from ai_screenings.claude_service import (
+    IMAGE_SUITABILITY_SUITABLE,
+    SCREENING_ELIGIBILITY_ELIGIBLE,
+    ClaudeVisionService,
+)
+from ai_screenings.claude_token import ClaudeTokenError, issue_claude_token, read_claude_token
+from ai_screenings.image_service import InvalidScreeningImage, read_screening_image
+from ai_screenings.models import AiScreening, ClaudeAnalysisStatus
 from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
 from ai_screenings.services import ScreeningService
 from core.permissions import IsOwner
@@ -24,6 +32,22 @@ def _get_owner_profile(user):
         return OwnerProfile.objects.get(usr_id=user)
     except OwnerProfile.DoesNotExist:
         return None
+
+
+def _single_uploaded_image(request, required=False):
+    """Enforce at most one file, uploaded under the 'image' field."""
+    if len(request.FILES) == 0:
+        if required:
+            raise InvalidScreeningImage('An image file is required.')
+        return None
+    if set(request.FILES.keys()) != {'image'}:
+        raise InvalidScreeningImage(
+            'Exactly one image must be uploaded using the "image" field.',
+        )
+    uploads = request.FILES.getlist('image')
+    if len(uploads) != 1:
+        raise InvalidScreeningImage('Exactly one image may be uploaded per screening.')
+    return uploads[0]
 
 
 class OwnerScreeningListCreateView(APIView):
@@ -82,6 +106,14 @@ class OwnerScreeningListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        try:
+            upload = _single_uploaded_image(request)
+        except InvalidScreeningImage as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         serializer = CreateScreeningSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated = serializer.validated_data
@@ -111,6 +143,61 @@ class OwnerScreeningListCreateView(APIView):
                     {'detail': 'model_version is required for DEVICE screenings.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            image_data = (
+                read_screening_image(upload) if upload is not None else None
+            )
+            token = validated.get('claude_token', '')
+
+            if image_data is not None and not token:
+                return Response(
+                    {
+                        'detail': (
+                            'Image validation is required before on-device screening. '
+                            'Upload the photo for review first.'
+                        ),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if token and image_data is None:
+                return Response(
+                    {'detail': 'An image is required when a Claude analysis token is supplied.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if token:
+                # Stateless verification: the signed token carries the gate
+                # decision; the recomputed SHA-256 binds it to these exact
+                # bytes. Nothing about the validation is persisted.
+                try:
+                    claude_payload = read_claude_token(
+                        token,
+                        user_id=request.user.usr_id,
+                        image_sha256=image_data.sha256,
+                    )
+                except ClaudeTokenError:
+                    return Response(
+                        {'detail': 'The Claude analysis token is invalid, expired, or does not match this image.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                result = claude_payload.get('result')
+                if (
+                    claude_payload.get('status') != ClaudeAnalysisStatus.OK
+                    or not isinstance(result, dict)
+                    or result.get('image_suitability') != IMAGE_SUITABILITY_SUITABLE
+                    or result.get('screening_eligibility') != SCREENING_ELIGIBILITY_ELIGIBLE
+                ):
+                    return Response(
+                        {
+                            'detail': (
+                                'This photo was not approved for on-device screening. '
+                                'No classifier result can be saved.'
+                            ),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
             screening = ScreeningService.create_device_screening(
                 pet=pet,
                 user=request.user,
@@ -120,6 +207,11 @@ class OwnerScreeningListCreateView(APIView):
                 inference_time_ms=validated.get('inference_time_ms'),
                 device=validated.get('device'),
             )
+        except InvalidScreeningImage as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ValueError as e:
             return Response(
                 {'detail': str(e)},
@@ -128,3 +220,35 @@ class OwnerScreeningListCreateView(APIView):
 
         result = ScreeningSerializer(screening)
         return Response(result.data, status=status.HTTP_201_CREATED)
+
+
+class OwnerVisionAnalysisView(APIView):
+    """Run the Claude image-validation gate before any on-device screening.
+
+    Nothing is persisted here. The signed token carries the gate decision to
+    the final create call, which only accepts an approved result.
+    """
+
+    permission_classes = [IsOwner]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'vision-analysis'
+
+    def post(self, request):
+        try:
+            upload = _single_uploaded_image(request, required=True)
+            image = read_screening_image(upload)
+        except InvalidScreeningImage as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        outcome = ClaudeVisionService.analyze(image)
+        token = issue_claude_token(
+            user_id=request.user.usr_id,
+            image_sha256=image.sha256,
+            outcome=outcome,
+        )
+        body = outcome.as_response()
+        body['token'] = token
+        return Response(body, status=status.HTTP_200_OK)

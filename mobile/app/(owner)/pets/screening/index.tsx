@@ -14,6 +14,7 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
+import { randomUUID } from 'expo-crypto'
 
 import { useAuth } from '../../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
@@ -33,17 +34,20 @@ interface SlotImage {
   thumbnail: string
 }
 
+const PHOTO_SLOT_LABELS = ['Main area', 'Wider view', 'Additional area']
+
 export default function CaptureScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
   const { user } = useAuth()
   const { petId: petIdParam } = useLocalSearchParams<{ petId?: string }>()
   const { data: pets, isLoading: petsLoading } = usePets(user?.id)
-  const { screenImages, isScreening, isModelLoading, modelError } = useAIScreening()
+  const { screenImages, isScreening, isModelLoading, modelError, screeningError } = useAIScreening()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
-  const [imageUris, setImageUris] = useState<(SlotImage | null)[]>([null, null, null, null, null])
+  const [sessionId] = useState(() => randomUUID())
+  const [imageUris, setImageUris] = useState<(SlotImage | null)[]>([null, null, null])
   const [activeIndex, setActiveIndex] = useState(0)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [isModelPrepared, setIsModelPrepared] = useState(isReady())
@@ -165,11 +169,13 @@ export default function CaptureScreen() {
     const uris = slots.map((slot) => slot.prepared)
 
     try {
-      const result = await screenImages(uris)
+      const result = await screenImages(uris, sessionId)
       const firstOkReport = result.imageReports?.find((r) => r.status === 'ok')
       const coverUri = firstOkReport?.uri ?? uris[0]
       const reportsJson = JSON.stringify(result.imageReports ?? [])
       const thumbnailUris = JSON.stringify(slots.map((slot) => slot.thumbnail))
+      const validationImageUri = result.validation?.imageUri ?? ''
+      const validationToken = result.validation?.token ?? ''
 
       if (result.state === 'DISEASE_DETECTED') {
         router.push({
@@ -183,6 +189,8 @@ export default function CaptureScreen() {
             inferenceTimeMs: String(result.inferenceTimeMs),
             imageReports: reportsJson,
             thumbnailUris,
+            validationImageUri,
+            validationToken,
           },
         })
         return
@@ -202,6 +210,8 @@ export default function CaptureScreen() {
           alreadySaved: 'false',
           imageReports: reportsJson,
           thumbnailUris,
+          validationImageUri,
+          validationToken,
         },
       })
     } catch {
@@ -219,7 +229,7 @@ export default function CaptureScreen() {
         </Pressable>
         <Text style={styles.headerTitle}>Skin Screening</Text>
         <Pressable
-          accessibilityHint="Explains how to take the five screening photos"
+          accessibilityHint="Explains how to take the three screening photos"
           accessibilityLabel="Open photo guide"
           accessibilityRole="button"
           hitSlop={8}
@@ -235,6 +245,13 @@ export default function CaptureScreen() {
           <View style={[styles.statusBanner, styles.statusBannerError]}>
             <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
             <Text style={[styles.statusText, { color: colors.error }]}>{modelError}</Text>
+          </View>
+        )}
+
+        {screeningError && (
+          <View style={[styles.statusBanner, styles.statusBannerError]}>
+            <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
+            <Text style={[styles.statusText, { color: colors.error }]}>{screeningError}</Text>
           </View>
         )}
 
@@ -311,32 +328,34 @@ export default function CaptureScreen() {
 
         <View style={styles.imageSection}>
           <Text style={styles.slotHint}>
-            Take 5 photos of the affected area from different angles
+            Take 3 photos — the main affected area, a wider view, and one more angle
           </Text>
           <View style={styles.slotRow}>
             {imageUris.map((slot, i) => (
-              <Pressable
-                key={i}
-                onPress={() => setActiveIndex(i)}
-                style={[
-                  styles.slot,
-                  activeIndex === i && styles.slotActive,
-                  slot && styles.slotFilled,
-                ]}
-              >
-                {slot ? (
-                  <Image source={{ uri: slot.original }} style={styles.slotImage} />
-                ) : (
-                  <MaterialCommunityIcons
-                    color={activeIndex === i ? colors.primary : colors.textMuted}
-                    name="camera-outline"
-                    size={20}
-                  />
-                )}
-                <View style={[styles.slotBadge, slot && styles.slotBadgeFilled]}>
-                  <Text style={[styles.slotBadgeText, slot && styles.slotBadgeTextFilled]}>{i + 1}</Text>
-                </View>
-              </Pressable>
+              <View key={i} style={styles.slotCell}>
+                <Pressable
+                  onPress={() => setActiveIndex(i)}
+                  style={[
+                    styles.slot,
+                    activeIndex === i && styles.slotActive,
+                    slot && styles.slotFilled,
+                  ]}
+                >
+                  {slot ? (
+                    <Image source={{ uri: slot.original }} style={styles.slotImage} />
+                  ) : (
+                    <MaterialCommunityIcons
+                      color={activeIndex === i ? colors.primary : colors.textMuted}
+                      name="camera-outline"
+                      size={20}
+                    />
+                  )}
+                  <View style={[styles.slotBadge, slot && styles.slotBadgeFilled]}>
+                    <Text style={[styles.slotBadgeText, slot && styles.slotBadgeTextFilled]}>{i + 1}</Text>
+                  </View>
+                </Pressable>
+                <Text style={styles.slotCaption}>{PHOTO_SLOT_LABELS[i]}</Text>
+              </View>
             ))}
           </View>
           <Text style={styles.slotProgress}>
@@ -377,15 +396,15 @@ export default function CaptureScreen() {
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Ensure good lighting on the affected area</Text>
+            <Text style={styles.tipsText}>Use good, even lighting on the affected area</Text>
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Take a close-up photo of the skin condition</Text>
+            <Text style={styles.tipsText}>Keep the camera steady and the affected skin in focus</Text>
           </View>
           <View style={styles.tipsBullet}>
             <Text style={styles.tipsDot}>•</Text>
-            <Text style={styles.tipsText}>Avoid blurry images for better analysis</Text>
+            <Text style={styles.tipsText}>Do not filter or edit the photos</Text>
           </View>
         </View>
 
@@ -398,7 +417,7 @@ export default function CaptureScreen() {
             <>
               <ActivityIndicator color="#FFF" size="small" />
               <Text style={styles.screenBtnText}>
-                {isModelLoading ? 'Preparing AI model...' : 'Analyzing 5 photos...'}
+                {isModelLoading ? 'Preparing AI model...' : 'Analyzing 3 photos...'}
               </Text>
             </>
           ) : !isModelPrepared ? (
@@ -410,7 +429,7 @@ export default function CaptureScreen() {
             <>
               <MaterialCommunityIcons color="#FFF" name="magnify" size={18} />
               <Text style={styles.screenBtnText}>
-                {allImagesCaptured ? 'Run Screening' : `Capture ${filledCount}/5 Photos`}
+                {allImagesCaptured ? 'Run Screening' : `Capture ${filledCount}/${imageUris.length} Photos`}
               </Text>
             </>
           )}
@@ -422,12 +441,12 @@ export default function CaptureScreen() {
           <View style={styles.overlayCard}>
             <ActivityIndicator color={colors.primary} size="large" />
             <Text style={styles.overlayTitle}>
-              {isModelLoading ? 'Preparing AI model...' : 'Analyzing 5 photos...'}
+              {isModelLoading ? 'Preparing AI model...' : 'Analyzing 3 photos...'}
             </Text>
             <Text style={styles.overlayHint}>
               {isModelLoading
                 ? 'First-time loading may take up to a minute'
-                : 'Quality checks and AI analysis — usually a few seconds'}
+                : 'Quality checks, AI safety review, and analysis — usually under a minute'}
             </Text>
           </View>
         </View>
@@ -519,6 +538,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   imageSection: { marginBottom: 20 },
   slotHint: { color: colors.textMuted, fontSize: 13, lineHeight: 18, marginBottom: 12 },
   slotRow: { flexDirection: 'row', gap: 8 },
+  slotCell: { alignItems: 'center', flex: 1, gap: 6 },
   slot: {
     alignItems: 'center',
     aspectRatio: 1,
@@ -527,9 +547,9 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     borderRadius: 14,
     borderStyle: 'dashed',
     borderWidth: 1.5,
-    flex: 1,
     justifyContent: 'center',
     overflow: 'visible',
+    width: '100%',
   },
   slotActive: { borderColor: colors.primary, borderStyle: 'solid' },
   slotFilled: { borderStyle: 'solid', padding: 0 },
@@ -550,6 +570,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   slotBadgeFilled: { backgroundColor: colors.primary, borderColor: colors.primary },
   slotBadgeText: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
   slotBadgeTextFilled: { color: '#FFFFFF' },
+  slotCaption: { color: colors.textMuted, fontSize: 11, fontWeight: '600', textAlign: 'center' },
   slotProgress: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginTop: 14 },
 
   sourceButtons: { flexDirection: 'row', gap: 12 },

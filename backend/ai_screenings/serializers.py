@@ -46,3 +46,4 @@ class CreateScreeningSerializer(serializers.Serializer):
     model_version = serializers.CharField(required=False, allow_blank=True, default='')
     inference_time_ms = serializers.IntegerField(required=False, min_value=0, allow_null=True, default=None)
     device = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+    claude_token = serializers.CharField(required=False, allow_blank=True, default='', trim_whitespace=False)

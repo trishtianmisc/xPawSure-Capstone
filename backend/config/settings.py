@@ -183,6 +183,28 @@ SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', defau
 SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
 SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES = env('SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES', default='clinic-images')
 
+# Claude Vision image validation. Only the Django backend calls Anthropic;
+# the on-device EfficientNet classifier stays independent and never sends its
+# predictions to Claude. The key lives in the environment only — never in
+# code, .env.example, logs, or commits.
+ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
+ANTHROPIC_API_URL = env('ANTHROPIC_API_URL', default='https://api.anthropic.com/v1/messages')
+ANTHROPIC_API_VERSION = env('ANTHROPIC_API_VERSION', default='2023-06-01')
+ANTHROPIC_MODEL = env('ANTHROPIC_MODEL', default='claude-sonnet-4-6')
+ANTHROPIC_MAX_TOKENS = env.int('ANTHROPIC_MAX_TOKENS', default=1500)
+ANTHROPIC_TIMEOUT_SECONDS = env.int('ANTHROPIC_TIMEOUT_SECONDS', default=30)
+
+# The vision-analysis endpoint reads one uploaded image, computes its
+# SHA-256, and signs it into a short-lived token. Nothing is stored: the
+# token itself carries the decision to the screening-creation call.
+SCREENING_IMAGE_MAX_BYTES = env.int(
+    'SCREENING_IMAGE_MAX_BYTES', default=5 * 1024 * 1024,
+)
+SCREENING_IMAGE_ALLOWED_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+SCREENING_CLAUDE_TOKEN_MAX_AGE = env.int(
+    'SCREENING_CLAUDE_TOKEN_MAX_AGE', default=3600,
+)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
@@ -260,6 +282,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'login': '30/min',
         'public_pet': '60/min',
+        'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='30/hour'),
     },
 }
 

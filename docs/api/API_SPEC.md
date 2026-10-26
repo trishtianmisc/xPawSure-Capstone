@@ -1151,6 +1151,53 @@ below).
 
 ---
 
+## POST /api/owner/screenings/vision-analysis/
+
+Requires authentication (Owner role). Throttled to **30 requests/hour per
+user** (`vision-analysis` scope).
+
+Stateless Claude vision review that runs **before** on-device classification.
+Exactly one image must be uploaded under the `image` field (multipart form
+data). Nothing is persisted: the response carries a signed `token` that binds
+the review outcome to this owner and this image's SHA-256.
+
+Request: `multipart/form-data` with a single `image` file.
+
+Response `200`:
+
+{
+  "status": "OK",
+  "model": "claude-...",
+  "analyzed_at": "...",
+  "latency_ms": 1234,
+  "usage": { "input_tokens": 0, "output_tokens": 0 },
+  "result": {
+    "image_suitability": "SUITABLE",
+    "screening_eligibility": "ELIGIBLE",
+    "screening_message": "..."
+  },
+  "detail": "Image review completed.",
+  "token": "signed-token"
+}
+
+`status` is one of `OK`, `NOT_REQUESTED`, `NOT_CONFIGURED`, `TIMEOUT`,
+`RATE_LIMITED`, `QUOTA_EXHAUSTED`, `MALFORMED_RESPONSE`, `PROVIDER_ERROR`.
+A photo may proceed to on-device classification only when `status` is `OK`
+**and** `result.image_suitability` is `SUITABLE` **and**
+`result.screening_eligibility` is `ELIGIBLE`. `token` is returned for every
+status but only an approved token is accepted at create time.
+
+Business rules:
+
+- The review never diagnoses; it only triages photo suitability.
+- The mobile client has three photo slots and reviews every quality-passing
+  photo per screening session (at most three requests including retries), so
+  this endpoint is a pre-classification gate, not a per-photo batch.
+- 400 when the image is missing, unreadable, too large, or not a supported
+  image format.
+
+---
+
 ## POST /api/owner/screenings/
 
 Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
@@ -1158,6 +1205,13 @@ Requires authentication (Owner role). Pet must belong to the owner and be active
 Uploads an on-device TFLite inference result. `source` must be `DEVICE`
 (any other value returns 400). `prediction` (disease code or name, resolved
 against DISEASE) and `model_version` are required; missing values return 400.
+
+Accepts JSON (legacy) or `multipart/form-data`. When the request includes an
+`image` file, it must also include `claude_token` (and vice versa); the
+backend recomputes the image SHA-256 and verifies the signed token
+(owner + hash + expiry). The token must carry an approved review
+(`OK` + `SUITABLE` + `ELIGIBLE`), otherwise 400. Nothing about the review is
+stored on the screening row.
 
 Request:
 
@@ -1168,7 +1222,9 @@ Request:
   "confidence": "number 0-100 (required)",
   "model_version": "string (required)",
   "inference_time_ms": "integer (optional)",
-  "device": "string (optional)"
+  "device": "string (optional)",
+  "image": "file (multipart; optional, requires claude_token)",
+  "claude_token": "string (multipart; optional, requires image)"
 }
 
 Response `201` with the screening object (see GET above).
@@ -1177,6 +1233,8 @@ Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
 - AI predictions are immutable after creation.
+- The image review is verified server-side at create time; no review data is
+  persisted beyond the request.
 - When a consultation for the linked appointment is saved with a diagnosis,
   the backend compares it (normalized substring match of the disease name in
   the diagnosis) and stores `ais_is_correct`, `ais_compared_diagnosis`,

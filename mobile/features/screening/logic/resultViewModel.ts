@@ -2,6 +2,7 @@ import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
 import { parsePredictionMode, parseScreeningSummary } from '../../../ai/decisionTree/summary'
 import type { Knowledge, ParsedScreeningSummary } from '../../../ai/decisionTree/types'
 import type {
+  ClaudeValidationStatus,
   ImageReport,
   ImageReportStatus,
   Prediction,
@@ -22,6 +23,21 @@ const IMAGE_REPORT_STATUSES = new Set<ImageReportStatus>([
   'quality_failed',
   'low_similarity',
   'not_skin',
+  'not_validated',
+  'validation_error',
+])
+
+const CLAUDE_VALIDATION_STATUSES = new Set<ClaudeValidationStatus>([
+  'OK',
+  'NOT_REQUESTED',
+  'NOT_CONFIGURED',
+  'TIMEOUT',
+  'RATE_LIMITED',
+  'QUOTA_EXHAUSTED',
+  'MALFORMED_RESPONSE',
+  'PROVIDER_ERROR',
+  'NOT_VALIDATED',
+  'VALIDATION_ERROR',
 ])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -72,14 +88,36 @@ export function parseRoutePredictions(
 }
 
 function isImageReport(value: unknown): value is ImageReport {
-  return (
-    isRecord(value) &&
-    typeof value.uri === 'string' &&
-    typeof value.similarity === 'number' &&
-    Number.isFinite(value.similarity) &&
-    typeof value.status === 'string' &&
-    IMAGE_REPORT_STATUSES.has(value.status as ImageReportStatus)
-  )
+  if (
+    !isRecord(value) ||
+    typeof value.uri !== 'string' ||
+    typeof value.status !== 'string' ||
+    !IMAGE_REPORT_STATUSES.has(value.status as ImageReportStatus)
+  ) {
+    return false
+  }
+
+  const similarity = value.similarity
+  if (
+    similarity !== null &&
+    (typeof similarity !== 'number' || !Number.isFinite(similarity))
+  ) {
+    return false
+  }
+
+  if (
+    value.claudeStatus !== undefined &&
+    (typeof value.claudeStatus !== 'string' ||
+      !CLAUDE_VALIDATION_STATUSES.has(value.claudeStatus as ClaudeValidationStatus))
+  ) {
+    return false
+  }
+
+  if (value.claudeMessage !== undefined && typeof value.claudeMessage !== 'string') {
+    return false
+  }
+
+  return true
 }
 
 export function parseRouteImageReports(
