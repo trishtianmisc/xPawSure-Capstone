@@ -15,6 +15,7 @@ from owners.models import OwnerProfile
 from pets.models import Pet
 from payments.models import Payment
 from payments.providers.paymongo import PayMongoProvider
+from payments.providers.xendit import XenditProvider
 from payments.serializers import (
     CreateCheckoutSerializer,
     MockConfirmSerializer,
@@ -317,6 +318,77 @@ class PaymentMockConfirmView(APIView):
         return Response(PaymentSerializer(payment).data)
 
 
+class XenditWebhookView(APIView):
+    """Xendit callback; the shared ``x-callback-token`` is its only credential."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    @staticmethod
+    def _session(document):
+        """Return the payment-session object from the event envelope.
+
+        Xendit sends ``{event, data: {...session...}}``. A nested ``data.data``
+        is tolerated so an envelope change cannot silently drop references.
+        """
+        data = document.get('data') or {}
+        inner = data.get('data')
+        return inner if isinstance(inner, dict) else data
+
+    def post(self, request):
+        secret = settings.XENDIT_CALLBACK_TOKEN
+        if not secret:
+            return Response(
+                {
+                    'detail': 'Webhook token is not configured.',
+                    'code': 'WEBHOOK_NOT_CONFIGURED',
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        token = request.META.get('HTTP_X_CALLBACK_TOKEN', '')
+        if not XenditProvider().verify_webhook_signature(request.body, token, secret):
+            return Response(
+                {'detail': 'Invalid callback token.', 'code': 'INVALID_SIGNATURE'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            document = json.loads(request.body)
+        except (ValueError, UnicodeDecodeError):
+            return Response(
+                {'detail': 'Invalid payload.', 'code': 'INVALID_PAYLOAD'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        event_type = document.get('event') or document.get('type')
+        session = self._session(document)
+        reference = session.get('reference_id') or document.get('reference_id')
+
+        if not reference or event_type not in PaymentService.PROVIDER_EVENTS:
+            # Acknowledge unknown events so Xendit stops retrying, but leave a
+            # trace for anyone debugging the endpoint.
+            logger.info('Xendit webhook ignored (event=%s)', event_type)
+            return Response({'received': True})
+
+        try:
+            PaymentService.apply_provider_event(
+                reference=reference,
+                event_type=event_type,
+                payload={'event_id': session.get('id')},
+            )
+        except PaymentError as exc:
+            logger.warning(
+                'Xendit webhook could not be applied: %s (%s)',
+                exc.detail, exc.code,
+            )
+            if exc.status_code == status.HTTP_404_NOT_FOUND:
+                return Response({'received': True})
+            return _error(exc)
+
+        return Response({'received': True})
+
+
 class PayMongoWebhookView(APIView):
     """PayMongo callback; the signature is the only credential it presents."""
 
@@ -325,12 +397,23 @@ class PayMongoWebhookView(APIView):
 
     @staticmethod
     def _reference(payload):
+        """Read ``reference_number`` whichever way the webhook nests it.
+
+        ``/v2/checkout_sessions`` (the API the adapter calls) delivers
+        ``{type, resource, data: {id, attributes: {reference_number}}}``, so the
+        session sits one level below the event. Older envelopes wrap the
+        session under ``attributes`` instead; both are accepted.
+        """
         attributes = payload.get('attributes') or {}
-        nested = attributes.get('data') or {}
-        nested_attributes = nested.get('attributes') or {}
+        session = payload.get('data') or {}
+        session_attributes = session.get('attributes') or {}
+        legacy = attributes.get('data') or {}
+        legacy_attributes = legacy.get('attributes') or {}
         return (
-            nested_attributes.get('reference_number')
-            or nested.get('reference_number')
+            session_attributes.get('reference_number')
+            or legacy_attributes.get('reference_number')
+            or legacy.get('reference_number')
+            or session.get('reference_number')
             or attributes.get('reference_number')
         )
 

@@ -7,6 +7,7 @@ import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPage').then(m => ({ default: m.PublicPetPage })))
 const MockCheckoutPage = lazy(() => import('./features/payments/pages/MockCheckoutPage').then(m => ({ default: m.MockCheckoutPage })))
+const PaymentResultPage = lazy(() => import('./features/payments/pages/PaymentResultPage').then(m => ({ default: m.PaymentResultPage })))
 const ChangePasswordPage = lazy(() => import('./features/auth/change-password/pages/ChangePasswordPage').then(m => ({ default: m.ChangePasswordPage })))
 const DashboardPage = lazy(() => import('./features/super-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dashboard/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -62,6 +63,8 @@ function App() {
           <Route element={<LoginPage />} path="/login" />
           <Route element={<PublicPetPage />} path="/pets/:qrCode/public" />
           <Route element={<MockCheckoutPage />} path="/payments/mock/:reference" />
+          <Route element={<PaymentResultPage result="success" />} path="/payments/success/:reference" />
+          <Route element={<PaymentResultPage result="cancelled" />} path="/payments/cancelled/:reference" />
           <Route element={<ChangePasswordPage />} path="/change-password" />
           <Route
             element={

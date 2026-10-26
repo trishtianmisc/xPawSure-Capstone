@@ -62,7 +62,7 @@ class PayMongoProvider(BasePaymentProvider):
                     ),
                     'cancel_url': (
                         f'{settings.FRONTEND_URL.rstrip("/")}'
-                        f'/payments/mock/{payment.pay_reference}'
+                        f'/payments/cancelled/{payment.pay_reference}'
                     ),
                     'reference_number': payment.pay_reference,
                 },

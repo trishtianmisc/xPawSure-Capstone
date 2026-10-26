@@ -4,6 +4,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.utils import timezone
 
@@ -19,7 +20,11 @@ from payments.models import (
     PaymentProvider,
     PaymentStatus,
 )
-from payments.providers import PaymentProviderError, get_provider
+from payments.providers import (
+    PaymentProviderError,
+    PaymentProviderMisconfigured,
+    get_provider,
+)
 from payments.providers.mock import MockProvider
 
 logger = logging.getLogger(__name__)
@@ -54,11 +59,14 @@ class PaymentService:
     STAFF_METHODS = (PaymentMethod.GCASH, PaymentMethod.CARD, PaymentMethod.CASH)
     OWNER_METHODS = (PaymentMethod.GCASH, PaymentMethod.CARD)
 
-    # PayMongo webhook event types we act on, mapped to the state they cause.
+    # Gateway webhook event types we act on, mapped to the state they cause.
+    # PayMongo uses checkout_session.*; Xendit uses payment_session.*.
     PROVIDER_EVENTS = {
         'checkout_session.payment.paid': PaymentStatus.PAID,
         'checkout_session.payment.failed': PaymentStatus.FAILED,
         'checkout_session.expired': PaymentStatus.EXPIRED,
+        'payment_session.completed': PaymentStatus.PAID,
+        'payment_session.expired': PaymentStatus.EXPIRED,
     }
 
     # ------------------------------------------------------------------
@@ -189,8 +197,20 @@ class PaymentService:
 
         is_cash = method == PaymentMethod.CASH
         # Resolve the adapter first so a misconfigured gateway fails before a
-        # payment row exists.
-        provider = None if is_cash else get_provider()
+        # payment row exists. An unset key is a deployment problem, not a
+        # client error, so it carries a 503 instead of surfacing as a 500.
+        provider = None
+        if not is_cash:
+            try:
+                provider = get_provider()
+            except ImproperlyConfigured:
+                logger.warning('PAYMENT_MODE=paymongo without PAYMONGO_SECRET_KEY')
+                raise PaymentError(
+                    'Online payments are not configured for this deployment. '
+                    'Ask the clinic to record cash instead.',
+                    code='PROVIDER_NOT_CONFIGURED',
+                    status_code=503,
+                )
 
         payment = Payment.objects.create(
             pay_reference=cls._new_reference(),
@@ -221,6 +241,16 @@ class PaymentService:
         if not is_cash:
             try:
                 session = provider.create_checkout(payment)
+            except PaymentProviderMisconfigured as exc:
+                # Our own settings, not the gateway: say so instead of a 502.
+                payment.delete()
+                logger.warning('Payment gateway misconfigured: %s', exc)
+                raise PaymentError(
+                    'Online payments are misconfigured for this deployment. '
+                    'Ask the clinic to record cash instead.',
+                    code='PROVIDER_MISCONFIGURED',
+                    status_code=503,
+                )
             except PaymentProviderError:
                 payment.delete()
                 raise PaymentError(

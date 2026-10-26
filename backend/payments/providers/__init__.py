@@ -5,6 +5,7 @@ from payments.providers.base import (  # noqa: F401  (re-exported for callers)
     BasePaymentProvider,
     CheckoutSession,
     PaymentProviderError,
+    PaymentProviderMisconfigured,
 )
 
 
@@ -18,6 +19,15 @@ def get_provider() -> BasePaymentProvider:
             )
         from payments.providers.paymongo import PayMongoProvider
         return PayMongoProvider()
+
+    if settings.PAYMENT_MODE == 'xendit':
+        if not settings.XENDIT_SECRET_KEY:
+            raise ImproperlyConfigured(
+                'PAYMENT_MODE=xendit requires XENDIT_SECRET_KEY; set the key '
+                'or switch PAYMENT_MODE back to mock.',
+            )
+        from payments.providers.xendit import XenditProvider
+        return XenditProvider()
 
     from payments.providers.mock import MockProvider
     return MockProvider()

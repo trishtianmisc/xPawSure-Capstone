@@ -13,6 +13,14 @@ class PaymentProviderError(Exception):
     """The provider could not create a checkout session."""
 
 
+class PaymentProviderMisconfigured(PaymentProviderError):
+    """The adapter is missing configuration, not failing at the gateway.
+
+    Kept separate so the service layer can answer with a deployment error
+    instead of blaming the gateway for a local setting.
+    """
+
+
 class BasePaymentProvider:
     """Adapter contract every payment provider implements.
 

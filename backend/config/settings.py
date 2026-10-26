@@ -148,6 +148,7 @@ FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 # Payment gateway.
 #   mock     – built-in signed checkout page in the web app; needs no keys.
 #   paymongo – PayMongo hosted checkout (test or live keys).
+#   xendit   – Xendit hosted Payment Session (test or live keys).
 PAYMENT_MODE = env('PAYMENT_MODE', default='mock').lower()
 PAYMENT_CURRENCY = env('PAYMENT_CURRENCY', default='PHP')
 # How long a created checkout stays payable before it expires.
@@ -155,16 +156,30 @@ PAYMENT_CHECKOUT_TTL_MINUTES = env.int('PAYMENT_CHECKOUT_TTL_MINUTES', default=3
 PAYMONGO_SECRET_KEY = env('PAYMONGO_SECRET_KEY', default='')
 PAYMONGO_WEBHOOK_SECRET = env('PAYMONGO_WEBHOOK_SECRET', default='')
 PAYMONGO_API_URL = env('PAYMONGO_API_URL', default='https://api.paymongo.com')
+# Xendit: test keys are prefixed xnd_development_, live keys xnd_production_.
+# The callback token is the shared secret from Settings → Webhooks.
+XENDIT_SECRET_KEY = env('XENDIT_SECRET_KEY', default='')
+XENDIT_CALLBACK_TOKEN = env('XENDIT_CALLBACK_TOKEN', default='')
+XENDIT_API_URL = env('XENDIT_API_URL', default='https://api.xendit.co')
+XENDIT_COUNTRY = env('XENDIT_COUNTRY', default='PH')
+# Xendit rejects non-HTTPS return URLs, so the checkout redirects can need a
+# public base even when FRONTEND_URL is still http://localhost in development.
+XENDIT_RETURN_BASE_URL = env('XENDIT_RETURN_BASE_URL', default='') or FRONTEND_URL
 
-if PAYMENT_MODE not in ('mock', 'paymongo'):
+if PAYMENT_MODE not in ('mock', 'paymongo', 'xendit'):
     raise ImproperlyConfigured(
-        'PAYMENT_MODE must be "mock" or "paymongo", not '
+        'PAYMENT_MODE must be "mock", "paymongo" or "xendit", not '
         f'{PAYMENT_MODE!r}.',
     )
 if not DEBUG and PAYMENT_MODE == 'paymongo' and not PAYMONGO_WEBHOOK_SECRET:
     raise ImproperlyConfigured(
         'PAYMONGO_WEBHOOK_SECRET is required when PAYMENT_MODE=paymongo in '
         'production; without it webhook payloads cannot be authenticated.',
+    )
+if not DEBUG and PAYMENT_MODE == 'xendit' and not XENDIT_CALLBACK_TOKEN:
+    raise ImproperlyConfigured(
+        'XENDIT_CALLBACK_TOKEN is required when PAYMENT_MODE=xendit in '
+        'production; without it webhook callbacks cannot be authenticated.',
     )
 
 

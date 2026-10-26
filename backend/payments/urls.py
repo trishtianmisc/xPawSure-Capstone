@@ -3,6 +3,7 @@ from django.urls import path
 from payments.views import (
     OwnerPaymentListView,
     PayMongoWebhookView,
+    XenditWebhookView,
     PaymentCancelView,
     PaymentCheckoutView,
     PaymentDetailView,
@@ -31,6 +32,11 @@ urlpatterns = [
         'payments/webhooks/paymongo/',
         PayMongoWebhookView.as_view(),
         name='payment-paymongo-webhook',
+    ),
+    path(
+        'payments/webhooks/xendit/',
+        XenditWebhookView.as_view(),
+        name='payment-xendit-webhook',
     ),
     path('payments/<uuid:pay_id>/', PaymentDetailView.as_view(), name='payment-detail'),
     path(

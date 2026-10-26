@@ -21,6 +21,7 @@ class PaymentMethod(models.TextChoices):
 class PaymentProvider(models.TextChoices):
     MOCK = 'MOCK', 'Mock'
     PAYMONGO = 'PAYMONGO', 'PayMongo'
+    XENDIT = 'XENDIT', 'Xendit'
     CASH = 'CASH', 'Cash'
 
 

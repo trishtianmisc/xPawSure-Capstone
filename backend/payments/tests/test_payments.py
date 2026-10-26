@@ -28,8 +28,14 @@ FEE = Decimal('500.00')
 WEBHOOK_SECRET = 'whsec_test_secret'
 
 
+@override_settings(PAYMENT_MODE='mock')
 class PaymentTestBase(OwnerBookingBase):
-    """Owner booking fixtures plus a clinic that actually charges a fee."""
+    """Owner booking fixtures plus a clinic that actually charges a fee.
+
+    ``PAYMENT_MODE`` is pinned so a developer's ``.env`` (which may point at a
+    real gateway) cannot change what these tests exercise. Gateway-specific
+    suites override it again on their own classes.
+    """
 
     def setUp(self):
         super().setUp()
@@ -126,6 +132,26 @@ class CheckoutTests(PaymentTestBase):
         self.assertEqual(payment.cln_id_id, self.clinic.cln_id)
         self.assertEqual(payment.own_id_id, self.owner.own_id)
         self.assertEqual(payment.pay_metadata['pet_id'], str(self.pet.pet_id))
+
+    @override_settings(PAYMENT_MODE='paymongo', PAYMONGO_SECRET_KEY='')
+    def test_unconfigured_gateway_returns_503_without_creating_a_payment(self):
+        before = Payment.objects.count()
+
+        response = self._checkout()
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['code'], 'PROVIDER_NOT_CONFIGURED')
+        self.assertEqual(Payment.objects.count(), before)
+
+    @override_settings(PAYMENT_MODE='xendit', XENDIT_SECRET_KEY='')
+    def test_unconfigured_xendit_returns_503_without_creating_a_payment(self):
+        before = Payment.objects.count()
+
+        response = self._checkout()
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['code'], 'PROVIDER_NOT_CONFIGURED')
+        self.assertEqual(Payment.objects.count(), before)
 
     def test_owner_clinic_list_exposes_the_fee(self):
         # The booking wizard shows what the owner must pay before checkout.
@@ -683,6 +709,30 @@ class PayMongoWebhookTests(PaymentTestBase):
             },
         }
 
+    def _v2_body(self, reference, event_type='checkout_session.payment.paid'):
+        """Payload as /v2/checkout_sessions actually sends it.
+
+        The session sits under ``data.data``, unlike the legacy envelope the
+        ``_body`` helper above builds.
+        """
+        return {
+            'data': {
+                'id': 'evt_test',
+                'type': event_type,
+                'resource': 'checkout_session',
+                'data': {
+                    'id': 'cs_test',
+                    'type': 'checkout_session',
+                    'attributes': {
+                        'reference_number': reference,
+                        'payments': [
+                            {'id': 'pay_test', 'attributes': {'status': 'paid'}},
+                        ],
+                    },
+                },
+            },
+        }
+
     def _post(self, body, header):
         raw = json.dumps(body).encode('utf-8')
         return self.client.post(
@@ -744,6 +794,33 @@ class PayMongoWebhookTests(PaymentTestBase):
             payment.events.filter(evt_type='PAID').count(), 1,
         )
 
+    def test_v2_payload_marks_payment_paid(self):
+        checkout = self._checkout()
+        payment = Payment.objects.get(pay_id=checkout.data['pay_id'])
+        body = self._v2_body(payment.pay_reference)
+        raw = json.dumps(body).encode('utf-8')
+
+        response = self._post(body, self._signed_header(raw))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PAID)
+        self.assertIsNotNone(payment.pay_paid_at)
+
+    def test_v2_expired_event_expires_payment(self):
+        checkout = self._checkout()
+        payment = Payment.objects.get(pay_id=checkout.data['pay_id'])
+        body = self._v2_body(
+            payment.pay_reference, event_type='checkout_session.expired',
+        )
+        raw = json.dumps(body).encode('utf-8')
+
+        response = self._post(body, self._signed_header(raw))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.EXPIRED)
+
     def test_unknown_reference_is_acknowledged(self):
         body = self._body('XPS-00000000-000000')
         raw = json.dumps(body).encode('utf-8')
@@ -757,5 +834,224 @@ class PayMongoWebhookTests(PaymentTestBase):
             body = self._body('XPS-00000000-000000')
             raw = json.dumps(body).encode('utf-8')
             response = self._post(body, self._signed_header(raw))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
+XENDIT_KEY = 'xnd_development_test_key'
+XENDIT_TOKEN = 'xendit_callback_token'
+XENDIT_SESSION_URL = 'https://checkout.xendit.co/web/ps-test-123'
+
+
+class FakeXenditResponse:
+    def __init__(self, status_code=200, body=None, text=''):
+        self.status_code = status_code
+        self._body = body or {}
+        self.text = text
+
+    def json(self):
+        return self._body
+
+
+XENDIT_RETURN_BASE = 'https://app.xpawsure.test'
+
+
+@override_settings(
+    PAYMENT_MODE='xendit',
+    XENDIT_SECRET_KEY=XENDIT_KEY,
+    XENDIT_CALLBACK_TOKEN=XENDIT_TOKEN,
+    XENDIT_RETURN_BASE_URL=XENDIT_RETURN_BASE,
+)
+class XenditCheckoutTests(PaymentTestBase):
+
+    def _session(self, **overrides):
+        body = {
+            'payment_session_id': 'ps-test-123',
+            'status': 'ACTIVE',
+            'payment_link_url': XENDIT_SESSION_URL,
+        }
+        body.update(overrides)
+        return FakeXenditResponse(body=body)
+
+    @patch('payments.providers.xendit.requests.post')
+    def test_checkout_creates_session_and_returns_hosted_url(self, post):
+        post.return_value = self._session()
+
+        response = self._checkout()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['provider'], 'XENDIT')
+        self.assertEqual(response.data['checkout_url'], XENDIT_SESSION_URL)
+
+        payment = Payment.objects.get(pay_id=response.data['pay_id'])
+        self.assertEqual(payment.pay_provider, 'XENDIT')
+        self.assertEqual(payment.pay_provider_ref, 'ps-test-123')
+
+    @patch('payments.providers.xendit.requests.post')
+    def test_session_payload_matches_xendit_contract(self, post):
+        post.return_value = self._session()
+
+        checkout = self._checkout()
+
+        url = post.call_args.args[0]
+        payload = post.call_args.kwargs['json']
+
+        self.assertTrue(url.endswith('/sessions'), url)
+        self.assertEqual(post.call_args.kwargs['auth'], (XENDIT_KEY, ''))
+        self.assertEqual(payload['reference_id'], checkout.data['reference_no'])
+        self.assertEqual(payload['session_type'], 'PAY')
+        self.assertEqual(payload['mode'], 'PAYMENT_LINK')
+        # Centavos, not pesos.
+        self.assertEqual(payload['amount'], 50000)
+        self.assertEqual(payload['currency'], 'PHP')
+        self.assertEqual(payload['country'], 'PH')
+        self.assertEqual(payload['allowed_payment_channels'], ['GCASH'])
+        self.assertIn(
+            f"/payments/success/{checkout.data['reference_no']}",
+            payload['success_return_url'],
+        )
+        self.assertIn(
+            f"/payments/cancelled/{checkout.data['reference_no']}",
+            payload['cancel_return_url'],
+        )
+        self.assertEqual(payload['customer']['email'], self.owner.usr_id.usr_email)
+
+    @override_settings(XENDIT_RETURN_BASE_URL='https://tunnel.example/')
+    @patch('payments.providers.xendit.requests.post')
+    def test_return_urls_use_the_https_return_base(self, post):
+        post.return_value = self._session()
+
+        checkout = self._checkout()
+
+        payload = post.call_args.kwargs['json']
+        reference = checkout.data['reference_no']
+        self.assertEqual(
+            payload['success_return_url'],
+            f'https://tunnel.example/payments/success/{reference}',
+        )
+        self.assertEqual(
+            payload['cancel_return_url'],
+            f'https://tunnel.example/payments/cancelled/{reference}',
+        )
+
+    @override_settings(XENDIT_RETURN_BASE_URL='http://localhost:5173')
+    @patch('payments.providers.xendit.requests.post')
+    def test_http_return_base_fails_before_calling_xendit(self, post):
+        before = Payment.objects.count()
+
+        response = self._checkout()
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['code'], 'PROVIDER_MISCONFIGURED')
+        post.assert_not_called()
+        self.assertEqual(Payment.objects.count(), before)
+
+    @patch('payments.providers.xendit.requests.post')
+    def test_card_checkout_requests_the_cards_channel(self, post):
+        post.return_value = self._session()
+
+        self._checkout(self._checkout_payload(method='CARD'))
+
+        self.assertEqual(
+            post.call_args.kwargs['json']['allowed_payment_channels'], ['CARDS'],
+        )
+
+    @patch('payments.providers.xendit.requests.post')
+    def test_gateway_error_leaves_no_payment_row(self, post):
+        post.return_value = FakeXenditResponse(status_code=500, text='boom')
+        before = Payment.objects.count()
+
+        response = self._checkout()
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(response.data['code'], 'PROVIDER_ERROR')
+        self.assertEqual(Payment.objects.count(), before)
+
+
+@override_settings(
+    PAYMENT_MODE='xendit',
+    XENDIT_SECRET_KEY=XENDIT_KEY,
+    XENDIT_CALLBACK_TOKEN=XENDIT_TOKEN,
+    XENDIT_RETURN_BASE_URL=XENDIT_RETURN_BASE,
+)
+class XenditWebhookTests(PaymentTestBase):
+
+    def _pending_payment(self):
+        with patch('payments.providers.xendit.requests.post') as post:
+            post.return_value = FakeXenditResponse(body={
+                'payment_session_id': 'ps-test-123',
+                'payment_link_url': XENDIT_SESSION_URL,
+            })
+            checkout = self._checkout()
+        self.assertEqual(checkout.status_code, status.HTTP_201_CREATED, checkout.data)
+        return Payment.objects.get(pay_id=checkout.data['pay_id'])
+
+    def _body(self, reference, event='payment_session.completed'):
+        return {
+            'event': event,
+            'business_id': 'biz_test',
+            'created': '2026-10-26T12:00:00.000Z',
+            'data': {
+                'id': 'ps-test-123',
+                'payment_session_id': 'ps-test-123',
+                'reference_id': reference,
+                'status': 'COMPLETED',
+                'amount': 50000,
+                'currency': 'PHP',
+            },
+        }
+
+    def _post(self, body, token=XENDIT_TOKEN):
+        return self.client.post(
+            '/api/payments/webhooks/xendit/',
+            data=json.dumps(body).encode('utf-8'),
+            content_type='application/json',
+            HTTP_X_CALLBACK_TOKEN=token,
+        )
+
+    def test_completed_event_marks_payment_paid(self):
+        payment = self._pending_payment()
+
+        response = self._post(self._body(payment.pay_reference))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PAID)
+        self.assertIsNotNone(payment.pay_paid_at)
+
+    def test_expired_event_expires_payment(self):
+        payment = self._pending_payment()
+
+        response = self._post(
+            self._body(payment.pay_reference, event='payment_session.expired'),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.EXPIRED)
+
+    def test_wrong_callback_token_is_rejected(self):
+        payment = self._pending_payment()
+
+        response = self._post(self._body(payment.pay_reference), token='not-the-token')
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PENDING)
+
+    def test_unknown_event_is_acknowledged(self):
+        payment = self._pending_payment()
+
+        response = self._post(
+            self._body(payment.pay_reference, event='payment.capture'),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PENDING)
+
+    def test_unconfigured_token_returns_503(self):
+        with override_settings(XENDIT_CALLBACK_TOKEN=''):
+            response = self._post(self._body('XPS-00000000-000000'))
 
         self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)

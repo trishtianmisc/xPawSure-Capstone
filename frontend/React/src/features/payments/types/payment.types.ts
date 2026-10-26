@@ -2,7 +2,7 @@ export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'REFUNDE
 
 export type PaymentMethod = 'GCASH' | 'CARD' | 'CASH'
 
-export type PaymentProvider = 'MOCK' | 'PAYMONGO' | 'CASH'
+export type PaymentProvider = 'MOCK' | 'PAYMONGO' | 'XENDIT' | 'CASH'
 
 export type MockCheckoutOutcome = 'success' | 'decline' | 'expire'
 

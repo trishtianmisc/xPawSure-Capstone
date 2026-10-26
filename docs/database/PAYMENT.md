@@ -209,9 +209,98 @@ checkout, so only holders of the link can read or confirm the payment.
 
 - `POST /v2/checkout_sessions` with HTTP basic auth (`sk_...` as username)
 - redirects the payer to `data.attributes.checkout_url`
+- returns them to `{FRONTEND_URL}/payments/success/{PAY_REFERENCE}` or
+  `{FRONTEND_URL}/payments/cancelled/{PAY_REFERENCE}` (informational pages only;
+  the webhook is what settles the payment)
 - confirmation arrives on `POST /api/payments/webhooks/paymongo/`, authenticated
   with `Paymongo-Signature: t=...,te=...,li=...`
   (`HMAC-SHA256(secret, "{t}.{raw_body}")`, constant-time compared)
+- v2 nests the session under `data.data.attributes`, so `reference_number`
+  lives one level below the event, not under `data.attributes`
+
+### Switching from mock
+
+1. `PAYMENT_MODE=paymongo` in the backend environment.
+2. `PAYMONGO_SECRET_KEY=sk_test_...` from Dashboard → Developers → API Keys.
+3. `PAYMONGO_WEBHOOK_SECRET=whsec_...` — mandatory when `DEBUG=False`; the app
+   refuses to boot without it.
+4. Register the webhook in the dashboard against
+   `https://<api-host>/api/payments/webhooks/paymongo/` for
+   `checkout_session.payment.paid`, `checkout_session.payment.failed` and
+   `checkout_session.expired`.
+5. `FRONTEND_URL` must be the public web app URL, because the success/cancel
+   redirects are built from it.
+
+Mock remains a supported fallback: set `PAYMENT_MODE=mock` to switch back. The
+provider is recorded per payment row, so links already issued as mock still
+settle after a switch, and vice versa.
+
+### Test mode
+
+`sk_test_`/`pk_test_` keys are available immediately after signup and move no
+real money. Cards: `4343434343434345` (success), `4111111111111111` (decline),
+`4200000000000018` (expired) with any future expiry and CVC. E-wallets need no
+real GCash account — the test page offers Authorize/Fail. Webhooks also fire in
+test mode, so the endpoint needs a public HTTPS URL: deploy, or tunnel locally
+(e.g. `ngrok http 8000`) and register the tunnel URL in the dashboard.
+
+If `PAYMENT_MODE=paymongo` is set without a key, GCASH/CARD checkout answers
+`503 PROVIDER_NOT_CONFIGURED` and no payment row is written; cash recorded at
+the counter keeps working.
+
+## Xendit (`PAYMENT_MODE=xendit`)
+
+- `POST /sessions` with HTTP basic auth (`xnd_...` as username), `session_type`
+  `PAY`, `mode` `PAYMENT_LINK`, amount in centavos, `country` `XENDIT_COUNTRY`
+- redirects the payer to `payment_link_url` from the response, and stores the
+  session id as `PAY_PROVIDER_REF`
+- `allowed_payment_channels` follows the payment method: `GCASH` for GCash and
+  `CARDS` for card, so the hosted page only offers what the owner picked
+- returns them to `{FRONTEND_URL}/payments/success/{PAY_REFERENCE}` or
+  `{FRONTEND_URL}/payments/cancelled/{PAY_REFERENCE}` through
+  `success_return_url` / `cancel_return_url`
+- confirmation arrives on `POST /api/payments/webhooks/xendit/`, authenticated
+  by the shared `x-callback-token` header compared in constant time (the token
+  is not derived from the body, unlike PayMongo's HMAC signature)
+- events: `payment_session.completed` → `PAID`, `payment_session.expired` →
+  `EXPIRED`. Anything else is acknowledged and ignored.
+
+### Switching from mock
+
+1. `PAYMENT_MODE=xendit` in the backend environment.
+2. `XENDIT_SECRET_KEY=xnd_development_...` from Settings → Developers → API Keys.
+3. `XENDIT_CALLBACK_TOKEN=...` from Settings → Webhooks — mandatory when
+   `DEBUG=False`; the app refuses to boot without it.
+4. Register `https://<api-host>/api/payments/webhooks/xendit/` for the Payment
+   Session completed/expired topics, then use *Test & Save* in the dashboard to
+   verify the endpoint receives the payload.
+5. `XENDIT_RETURN_BASE_URL` must be a public **https** base for the return
+   redirects; leave it blank to reuse `FRONTEND_URL`. Xendit answers
+   `400 INVALID_URL` for `http://` URLs, so a localhost `FRONTEND_URL` needs
+   this pointed at a tunnel instead; when it is not https the API answers
+   `503 PROVIDER_MISCONFIGURED` before calling Xendit at all.
+
+Xendit runs test mode with every channel enabled by default and no real money
+moving, which makes it usable for a capstone demo, but their docs warn some
+channels can still be blocked by partner KYC rules — confirm the GCash page
+renders in test mode before relying on it. Switching back is one env var:
+`PAYMENT_MODE=mock`; the provider is recorded per payment row.
+
+### Local development needs two tunnels
+
+The return redirects point at the **web app** and the callbacks at the **API**,
+and both must be publicly reachable:
+
+1. `ngrok http 5173` for the frontend, then set
+   `XENDIT_RETURN_BASE_URL=https://<frontend-tunnel>` while `FRONTEND_URL`
+   stays `http://localhost:5173`.
+2. `ngrok http 8000` for the API, and register
+   `https://<api-tunnel>/api/payments/webhooks/xendit/` in the dashboard.
+3. Allow the tunnel host in Vite (`server.allowedHosts`), otherwise the
+   redirected browser gets Vite's "Blocked request" page instead of the
+   success/cancelled screen.
+
+Tunnel URLs change on restart, which invalidates sessions created before it.
 
 ---
 
