@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import * as Linking from 'expo-linking'
-import { useRouter } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
@@ -15,31 +15,35 @@ import {
 
 import { useBookAppointment } from '../../../features/appointment/hooks/useBookAppointment'
 import { useClinics } from '../../../features/appointment/hooks/useClinics'
+import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppointments'
 import { useSlots } from '../../../features/appointment/hooks/useSlots'
 import { useVets } from '../../../features/appointment/hooks/useVets'
-import type { AppointmentType, OwnerSlot } from '../../../features/appointment/types'
-import { usePets } from '../../../features/pet/hooks/usePets'
-import type { Pet } from '../../../features/pet/types'
+import { findConflictingAppointment } from '../../../features/appointment/lib/findConflictingAppointment'
+import type { OwnerSlot } from '../../../features/appointment/types'
 import { useCancelPayment } from '../../../features/payment/hooks/useCancelPayment'
 import { useCreateCheckout } from '../../../features/payment/hooks/useCreateCheckout'
 import { usePayment } from '../../../features/payment/hooks/usePayment'
 import { formatMoney } from '../../../features/payment/lib/format'
 import type { Payment, PaymentMethod } from '../../../features/payment/types'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
-import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorCode, apiErrorMessage, apiErrorStatus } from '../../../src/utils/error'
 
-const TOTAL_STEPS = 8
+/**
+ * Owner booking wizard. Entry is scan-only: the fresh scan result screen is
+ * the sole place the Book Appointment action lives, so this screen is opened
+ * with `petId` + `screeningId` and never collects them itself.
+ *
+ * Steps: clinic → veterinarian → schedule → appointment details → payment
+ * (payment only when the clinic charges a consultation fee).
+ */
+const TOTAL_STEPS = 5
 
 const STEP_TITLES = [
   'Choose a clinic',
-  'Choose your pet',
-  'Skin scan result',
-  'Pick a date',
-  'Choose a veterinarian',
-  'Pick a time slot',
+  'Choose your veterinarian',
+  'Select a schedule',
   'Appointment details',
   'Payment',
 ]
@@ -49,18 +53,13 @@ const FREE_STEPS = STEP_TITLES.length - 1
 
 const PAYMENT_STEP = FREE_STEPS + 1
 
+/** Owners only ever book consultations; the type picker is gone. */
+const APT_TYPE = 'CONSULTATION' as const
+
 /** Owners can never record cash, so it is never offered here. */
 const OWNER_METHODS: Array<{ value: PaymentMethod; label: string }> = [
   { value: 'GCASH', label: 'GCash' },
   { value: 'CARD', label: 'Card' },
-]
-
-const APT_TYPES: Array<{ value: AppointmentType; label: string }> = [
-  { value: 'CONSULTATION', label: 'Consultation' },
-  { value: 'FOLLOW_UP', label: 'Follow-up' },
-  { value: 'VACCINATION', label: 'Vaccination' },
-  { value: 'AI_REVIEW', label: 'AI Review' },
-  { value: 'EMERGENCY', label: 'Emergency' },
 ]
 
 interface DayChip {
@@ -98,17 +97,21 @@ export default function BookAppointmentScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { user } = useAuth()
+
+  const params = useLocalSearchParams<{ petId?: string; screeningId?: string }>()
+  const petId = params.petId ?? ''
+  const screeningId = params.screeningId ?? ''
+  // The wizard only opens from a scan result, which passes both ids.
+  const hasBookingContext = !!petId && !!screeningId
 
   const [step, setStep] = useState(1)
   const [clinicId, setClinicId] = useState<string | null>(null)
   const [clinicName, setClinicName] = useState<string | null>(null)
-  const [pet, setPet] = useState<Pet | null>(null)
-  const [date, setDate] = useState<string | null>(null)
+  const days = useMemo(() => buildDays(14), [])
+  const [date, setDate] = useState<string>(days[0].iso)
   const [vetId, setVetId] = useState<string | null>(null)
   const [vetName, setVetName] = useState<string | null>(null)
   const [slot, setSlot] = useState<OwnerSlot | null>(null)
-  const [aptType, setAptType] = useState<AppointmentType>('CONSULTATION')
   const [reason, setReason] = useState('')
   // Payment state. The server owns the amount; the app only owns the flow.
   const [method, setMethod] = useState<PaymentMethod>('GCASH')
@@ -118,29 +121,38 @@ export default function BookAppointmentScreen() {
   const [feeRequired, setFeeRequired] = useState(false)
   const bookingInFlight = useRef(false)
 
-  const days = useMemo(() => buildDays(14), [])
-
   const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError } = useClinics()
-  const { data: pets = [], isLoading: petsLoading, isError: petsError } = usePets(user?.id)
+  // No date here: the veterinarian is picked before the schedule, so the
+  // backend lists every active vet at the clinic (available_count is null).
   const { data: vets = [], isLoading: vetsLoading, isError: vetsError } = useVets(
     clinicId ?? undefined,
-    step >= 5 ? (date ?? undefined) : undefined,
   )
+  // Used for the soft same-clinic duplicate warning when a clinic is picked.
+  const { data: myAppointmentsData } = useMyAppointments()
   const { data: slots = [], isLoading: slotsLoading, isError: slotsError } = useSlots(
     vetId ?? undefined,
-    step >= 6 ? (date ?? undefined) : undefined,
+    step >= 3 ? date : undefined,
   )
   const {
     data: screenings,
     isLoading: screeningsLoading,
-    isError: screeningsError,
-  } = useScreenings(step >= 3 && pet ? pet.id : undefined, step >= 3)
+  } = useScreenings(hasBookingContext ? petId : undefined)
   const bookAppointment = useBookAppointment()
   const createCheckout = useCreateCheckout()
   const cancelPayment = useCancelPayment()
 
-  const latestScreening = screenings?.results[0] ?? null
-  const screeningId = latestScreening?.ais_id ?? null
+  // Display data for the attached scan; the server re-validates it anyway.
+  const screening = useMemo(
+    () =>
+      screeningId && screenings
+        ? screenings.results.find((current) => current.ais_id === screeningId) ?? null
+        : null,
+    [screenings, screeningId],
+  )
+  // The attached scan vanished (or never belonged to this pet): no booking
+  // can be recorded without a scan, so send the owner back to the scanner.
+  const screeningMissing =
+    hasBookingContext && !screeningsLoading && !!screenings && !screening
 
   const selectedClinic = clinics.find((current) => current.cln_id === clinicId) ?? null
   const consultationFee = Number(selectedClinic?.consultation_fee ?? 0)
@@ -182,6 +194,12 @@ export default function BookAppointmentScreen() {
     }
   }
 
+  function handleGoScan() {
+    router.replace(
+      petId ? `/(owner)/pets/screening?petId=${petId}` : '/(owner)/pets/screening',
+    )
+  }
+
   function selectClinic(clinic: { cln_id: string; cln_name: string }) {
     if (clinic.cln_id !== clinicId) {
       setClinicId(clinic.cln_id)
@@ -195,22 +213,32 @@ export default function BookAppointmentScreen() {
       setPaymentError(null)
       setFeeRequired(false)
     }
-    setStep(2)
-  }
 
-  function selectPet(selected: Pet) {
-    setPet(selected)
-    setStep(3)
-  }
-
-  function selectDate(iso: string) {
-    if (iso !== date) {
-      setDate(iso)
-      setVetId(null)
-      setVetName(null)
-      setSlot(null)
+    // Soft guard: the pet may already have a live appointment at this clinic.
+    // The owner can override — the booking API itself stays permissive.
+    const conflict = findConflictingAppointment(
+      myAppointmentsData?.results ?? [],
+      petId,
+      clinic.cln_id,
+    )
+    if (conflict) {
+      const when = new Date(conflict.apt_scheduled_at).toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+      Alert.alert(
+        'Pet already booked',
+        `${screening?.pet_name ?? 'Your pet'} already has an upcoming appointment at ${clinic.cln_name} on ${when}${conflict.vet_name ? ` with ${conflict.vet_name}` : ''}. Book another consultation anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Book anyway', onPress: () => setStep(2) },
+        ],
+      )
+      return
     }
-    setStep(5)
+    setStep(2)
   }
 
   function selectVet(vet: { stf_id: string; full_name: string }) {
@@ -219,16 +247,19 @@ export default function BookAppointmentScreen() {
       setVetName(vet.full_name)
       setSlot(null)
     }
-    setStep(6)
+    setStep(3)
+  }
+
+  function selectDate(iso: string) {
+    if (iso !== date) {
+      setDate(iso)
+      setSlot(null)
+    }
   }
 
   function selectSlot(selected: OwnerSlot) {
     setSlot(selected)
-    setStep(7)
-  }
-
-  function handleGoScan() {
-    router.push(pet ? `/(owner)/pets/screening?petId=${pet.id}` : '/(owner)/pets/screening')
+    setStep(4)
   }
 
   function handleBookingError(error: unknown) {
@@ -244,7 +275,7 @@ export default function BookAppointmentScreen() {
         'Time slot taken',
         'Someone else booked that time. Pick another slot — your payment still counts.',
       )
-      setStep(6)
+      setStep(3)
       return
     }
 
@@ -259,27 +290,43 @@ export default function BookAppointmentScreen() {
         setPaymentError(null)
         setStep(PAYMENT_STEP)
         return
-      case 'SCREENING_REQUIRED':
+      case 'SCREENING_REQUIRED': {
+        // The scan is gone or invalid: booking only exists downstream of a
+        // scan, so return the owner to the scanner instead of a dead step.
         Alert.alert('Skin scan needed', detail)
-        setStep(3)
+        handleGoScan()
         return
+      }
       default:
         Alert.alert('Booking failed', detail)
     }
   }
 
-  function handleBook(explicitPayId?: string) {
-    if (!pet || !slot || !screeningId || bookingInFlight.current) return
+  function handleBook(explicitPayId?: string, options?: { feeWaived?: boolean }) {
+    if (!petId || !slot || !screeningId || bookingInFlight.current) return
 
     // A payment that already settled funds whichever slot is picked next.
     const payId = explicitPayId ?? (payment?.status === 'PAID' ? payment.pay_id : undefined)
+
+    // Never call the booking API without a settled payment when the clinic
+    // charges a fee — the server would refuse it anyway (PAYMENT_REQUIRED),
+    // so return to the payment step instead of recording a failed attempt.
+    // `feeWaived` is set only when the server itself just reported that this
+    // clinic no longer requires payment.
+    if (requiresPayment && !payId && !options?.feeWaived) {
+      setFeeRequired(true)
+      setPaymentError(null)
+      setStep(PAYMENT_STEP)
+      return
+    }
+
     bookingInFlight.current = true
 
     bookAppointment.mutate(
       {
-        pet_id: pet.id,
+        pet_id: petId,
         slot_id: slot.vsl_id,
-        apt_type: aptType,
+        apt_type: APT_TYPE,
         reason: reason.trim() || undefined,
         screening_id: screeningId,
         ...(payId ? { pay_id: payId } : {}),
@@ -306,14 +353,14 @@ export default function BookAppointmentScreen() {
   }
 
   function handlePay() {
-    if (!pet || !slot) return
+    if (!petId || !slot) return
     setPaymentError(null)
 
     createCheckout.mutate(
       {
-        pet_id: pet.id,
+        pet_id: petId,
         slot_id: slot.vsl_id,
-        apt_type: aptType,
+        apt_type: APT_TYPE,
         method,
         reason: reason.trim() || undefined,
         screening_id: screeningId ?? undefined,
@@ -329,12 +376,12 @@ export default function BookAppointmentScreen() {
             // The clinic stopped charging: book straight away, no payment.
             setFeeRequired(false)
             setCheckout(null)
-            handleBook()
+            handleBook(undefined, { feeWaived: true })
             return
           }
           if (code === 'SLOT_UNAVAILABLE' || (code === null && apiErrorStatus(error) === 409)) {
             Alert.alert('Time slot taken', 'Pick another slot and try again.')
-            setStep(6)
+            setStep(3)
             return
           }
           setPaymentError(apiErrorMessage(error))
@@ -355,12 +402,48 @@ export default function BookAppointmentScreen() {
 
   const canContinue =
     (step === 1 && !!clinicId) ||
-    (step === 2 && !!pet) ||
-    (step === 3 && !!screeningId) ||
-    (step === 4 && !!date) ||
-    (step === 5 && !!vetId) ||
-    (step === 6 && !!slot) ||
-    (step === 7 && !!slot)
+    (step === 2 && !!vetId) ||
+    (step === 3 && !!slot) ||
+    (step === 4 && !!slot)
+
+  // No scan context (stale link, or the scan disappeared): booking cannot
+  // exist without one, so offer the scanner instead of an empty wizard.
+  if (!hasBookingContext || screeningMissing) {
+    return (
+      <View style={styles.screen}>
+        <View style={styles.header}>
+          <Pressable
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={handleHeaderBack}
+            style={styles.headerBack}
+          >
+            <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
+          </Pressable>
+          <Text style={styles.headerTitle}>Book Appointment</Text>
+          <View style={styles.headerRight} />
+        </View>
+
+        <View style={styles.guardWrap}>
+          <View style={styles.blockCard}>
+            <MaterialCommunityIcons color={colors.primary} name="camera" size={34} />
+            <Text style={styles.blockTitle}>Skin scan required</Text>
+            <Text style={styles.blockText}>
+              Booking starts from a skin screening result. Run a scan for your pet to continue.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleGoScan}
+              style={styles.scanButton}
+            >
+              <Text style={styles.scanButtonText}>Start a skin screening</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    )
+  }
 
   return (
     <View style={styles.screen}>
@@ -428,31 +511,37 @@ export default function BookAppointmentScreen() {
 
         {step === 2 && (
           <View style={styles.list}>
-            {petsLoading ? (
+            {vetsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : petsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load your pets. Please try again.</Text>
-            ) : pets.length > 0 ? (
-              pets.map((currentPet) => (
+            ) : vetsError ? (
+              <Text style={styles.statusText}>We couldn&apos;t load veterinarians. Please try again.</Text>
+            ) : vets.length > 0 ? (
+              vets.map((vet) => (
                 <Pressable
-                  key={currentPet.id}
+                  key={vet.stf_id}
                   accessibilityRole="button"
-                  onPress={() => selectPet(currentPet)}
-                  style={[styles.optionCard, pet?.id === currentPet.id && styles.optionCardSelected]}
+                  onPress={() => selectVet(vet)}
+                  style={[styles.optionCard, vetId === vet.stf_id && styles.optionCardSelected]}
                 >
                   <View style={styles.optionIcon}>
-                    <MaterialCommunityIcons color={colors.primary} name="paw" size={22} />
+                    <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={22} />
                   </View>
                   <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{currentPet.name}</Text>
-                    <Text style={styles.optionSubtitle}>{currentPet.breed_name || 'Breed not specified'}</Text>
+                    <Text style={styles.optionTitle}>{vet.full_name}</Text>
+                    {vet.available_count !== null ? (
+                      <Text style={styles.optionSubtitle}>
+                        {vet.available_count} slot{vet.available_count === 1 ? '' : 's'} available
+                      </Text>
+                    ) : null}
                   </View>
                   <Ionicons color={colors.textMuted} name="chevron-forward" size={18} />
                 </Pressable>
               ))
             ) : (
               <View style={styles.stateBox}>
-                <Text style={styles.statusText}>You need to add a pet before booking.</Text>
+                <Text style={styles.statusText}>
+                  No veterinarians are listed at this clinic right now. Try another clinic.
+                </Text>
               </View>
             )}
           </View>
@@ -460,51 +549,11 @@ export default function BookAppointmentScreen() {
 
         {step === 3 && (
           <View style={styles.list}>
-            {screeningsLoading ? (
-              <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : screeningsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load scan results. Please try again.</Text>
-            ) : latestScreening ? (
-              <View style={styles.scanCard}>
-                <View style={styles.scanHeader}>
-                  <MaterialCommunityIcons color={colors.primary} name="brain" size={22} />
-                  <Text style={styles.scanTitle}>Skin scan result</Text>
-                  <View style={[styles.scanBadge, styles.scanBadgeReal]}>
-                    <Text style={[styles.scanBadgeText, styles.scanBadgeTextReal]}>
-                      On-device AI
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.scanDisease}>{latestScreening.disease}</Text>
-                <Text style={styles.scanMeta}>
-                  Confidence {Math.round(Number(latestScreening.ais_confidence))}% · Model {latestScreening.ais_model_version}
-                </Text>
-                <Text style={styles.scanNote}>
-                  This result will be shared with your veterinarian during the appointment.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.blockCard}>
-                <MaterialCommunityIcons color={colors.primary} name="camera" size={34} />
-                <Text style={styles.blockTitle}>Skin scan required</Text>
-                <Text style={styles.blockText}>
-                  Booking needs a scan result for {pet?.name ?? 'your pet'}. Run a scan to continue.
-                </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={handleGoScan}
-                  style={styles.scanButton}
-                >
-                  <Text style={styles.scanButtonText}>Scan {pet?.name ?? 'pet'}</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-
-        {step === 4 && (
-          <View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dayRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.dayRow}
+            >
               {days.map((day) => (
                 <Pressable
                   key={day.iso}
@@ -524,45 +573,7 @@ export default function BookAppointmentScreen() {
                 </Pressable>
               ))}
             </ScrollView>
-          </View>
-        )}
 
-        {step === 5 && (
-          <View style={styles.list}>
-            {vetsLoading ? (
-              <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
-            ) : vetsError ? (
-              <Text style={styles.statusText}>We couldn&apos;t load veterinarians. Please try again.</Text>
-            ) : vets.length > 0 ? (
-              vets.map((vet) => (
-                <Pressable
-                  key={vet.stf_id}
-                  accessibilityRole="button"
-                  onPress={() => selectVet(vet)}
-                  style={[styles.optionCard, vetId === vet.stf_id && styles.optionCardSelected]}
-                >
-                  <View style={styles.optionIcon}>
-                    <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={22} />
-                  </View>
-                  <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{vet.full_name}</Text>
-                    <Text style={styles.optionSubtitle}>
-                      {vet.available_count} slot{vet.available_count === 1 ? '' : 's'} available
-                    </Text>
-                  </View>
-                  <Ionicons color={colors.textMuted} name="chevron-forward" size={18} />
-                </Pressable>
-              ))
-            ) : (
-              <View style={styles.stateBox}>
-                <Text style={styles.statusText}>No veterinarians with free slots on this date. Try another day.</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {step === 6 && (
-          <View style={styles.list}>
             {slotsLoading ? (
               <View style={styles.stateBox}><ActivityIndicator color={colors.primary} /></View>
             ) : slotsError ? (
@@ -589,47 +600,32 @@ export default function BookAppointmentScreen() {
               </View>
             ) : (
               <View style={styles.stateBox}>
-                <Text style={styles.statusText}>No free slots left with this veterinarian on this date.</Text>
+                <Text style={styles.statusText}>
+                  No free slots with this veterinarian on this date. Try another day or go back to
+                  pick a different veterinarian.
+                </Text>
               </View>
             )}
           </View>
         )}
 
-        {step === 7 && (
+        {step === 4 && (
           <View style={styles.list}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Booking summary</Text>
               <Text style={styles.summaryLine}>Clinic: {clinicName}</Text>
-              <Text style={styles.summaryLine}>Pet: {pet?.name}</Text>
+              <Text style={styles.summaryLine}>Pet: {screening?.pet_name ?? 'Your pet'}</Text>
               <Text style={styles.summaryLine}>Date: {date}</Text>
               <Text style={styles.summaryLine}>Veterinarian: {vetName}</Text>
               <Text style={styles.summaryLine}>
                 Time: {slot ? formatTime(slot.vsl_start_time) : ''}
               </Text>
-              <Text style={styles.summaryLine}>Skin scan: {latestScreening?.disease ?? ''}</Text>
+              <Text style={styles.summaryLine}>Skin scan: {screening?.disease ?? ''}</Text>
               {requiresPayment ? (
                 <Text style={styles.summaryFee}>
                   Consultation fee: {formatMoney(consultationFee, payment?.currency ?? 'PHP')}
                 </Text>
               ) : null}
-            </View>
-
-            <Text style={styles.fieldLabel}>Appointment type</Text>
-            <View style={styles.typeRow}>
-              {APT_TYPES.map((type) => (
-                <Pressable
-                  key={type.value}
-                  accessibilityRole="button"
-                  onPress={() => setAptType(type.value)}
-                  style={[styles.typeChip, aptType === type.value && styles.typeChipSelected]}
-                >
-                  <Text
-                    style={[styles.typeText, aptType === type.value && styles.typeTextSelected]}
-                  >
-                    {type.label}
-                  </Text>
-                </Pressable>
-              ))}
             </View>
 
             <Text style={styles.fieldLabel}>Reason (optional)</Text>
@@ -656,7 +652,7 @@ export default function BookAppointmentScreen() {
                 {formatMoney(payment?.amount ?? consultationFee, payment?.currency ?? 'PHP')}
               </Text>
               <Text style={styles.summaryLine}>Clinic: {clinicName}</Text>
-              <Text style={styles.summaryLine}>Pet: {pet?.name}</Text>
+              <Text style={styles.summaryLine}>Pet: {screening?.pet_name ?? 'Your pet'}</Text>
               <Text style={styles.summaryLine}>
                 Date: {date} · {slot ? formatTime(slot.vsl_start_time) : ''}
               </Text>
@@ -827,6 +823,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
   headerRight: { width: 20 },
   content: { gap: 16, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 20 },
+  guardWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   progressHeader: { gap: 8 },
   progressTrack: { backgroundColor: colors.surfaceAlt, borderRadius: 999, height: 6, overflow: 'hidden' },
   progressFill: { backgroundColor: colors.primary, borderRadius: 999, height: '100%' },
@@ -869,16 +866,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   typeText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   typeTextSelected: { ...font.bold, color: colors.primaryDark },
   reasonInput: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, fontSize: 14, minHeight: 96, padding: 14, textAlignVertical: 'top' },
-  scanCard: { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 8, padding: 16 },
-  scanHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  scanTitle: { ...font.extrabold, color: colors.text, fontSize: 15 },
-  scanBadge: { borderRadius: 999, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3 },
-  scanBadgeReal: { backgroundColor: colors.primaryLight },
-  scanBadgeText: { ...font.bold, fontSize: 11 },
-  scanBadgeTextReal: { color: colors.primaryDark },
-  scanDisease: { ...font.extrabold, color: colors.text, fontSize: 20 },
-  scanMeta: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
-  scanNote: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
   blockCard: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center', minHeight: 220, paddingHorizontal: 24, paddingVertical: 24 },
   blockTitle: { ...font.extrabold, color: colors.text, fontSize: 16 },
   blockText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },

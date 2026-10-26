@@ -93,13 +93,6 @@ export default function AppointmentsScreen() {
             >
               <MaterialCommunityIcons color={colors.primary} name="receipt" size={18} />
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => router.push('/(owner)/appointments/book')}
-              style={styles.addButton}
-            >
-              <Text style={styles.addButtonText}>+ Book</Text>
-            </Pressable>
           </View>
         </View>
 
@@ -136,7 +129,7 @@ export default function AppointmentsScreen() {
               <MaterialCommunityIcons color={colors.textMuted} name="calendar-blank-outline" size={26} />
               <Text style={styles.statusText}>
                 {tab === 'upcoming'
-                  ? 'No upcoming appointments. Book one to get started.'
+                  ? 'No upcoming appointments yet. Run a skin screening to book one.'
                   : 'No past appointments yet.'}
               </Text>
              
@@ -155,8 +148,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   titleActions: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   receiptButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 10, borderWidth: 1, height: 35, justifyContent: 'center', width: 38 },
   title: { ...font.extrabold, color: colors.text, fontSize: 22 },
-  addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 35, paddingHorizontal: 20, justifyContent: 'center' },
-  addButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
   tabs: { backgroundColor: colors.surfaceAlt, borderRadius: 12, flexDirection: 'row', gap: 4, marginTop: 20, padding: 4 },
   tab: { alignItems: 'center', borderRadius: 9, flex: 1, minHeight: 36, justifyContent: 'center' },
   tabActive: { backgroundColor: colors.surface },

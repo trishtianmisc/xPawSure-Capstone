@@ -110,6 +110,8 @@ export interface Screening {
   image: ScreeningImage | null
   claude: ScreeningClaude
   cross_analysis: CrossAnalysis
+  /** True while a non-cancelled appointment was booked from this scan. */
+  is_booked: boolean
 }
 
 export interface ScreeningSummary {

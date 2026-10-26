@@ -2,8 +2,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import {
-  ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -28,22 +26,10 @@ import {
 import { refinePredictionsBayesian, refineQuestionnaireOnly } from '../../../../ai/decisionTree/bayesian'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
 import type { Answers, BayesianRefinementResult, StoppingDecision } from '../../../../ai/decisionTree/types'
-import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
-
-function parseClaudeToken(value?: string): string {
-  if (!value) return ''
-  try {
-    const parsed = JSON.parse(value) as { token?: unknown } | null
-    return typeof parsed?.token === 'string' ? parsed.token : ''
-  } catch {
-    return ''
-  }
-}
 
 export default function AdjustScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
-  const createScreening = useCreateScreening()
   const params = useLocalSearchParams<{
     predictions: string
     petId: string
@@ -74,13 +60,10 @@ export default function AdjustScreen() {
     }
   }, [params.predictions])
 
-  const claudeToken = useMemo(() => parseClaudeToken(params.claude), [params.claude])
-
   const [answers, setAnswers] = useState<Answers>({})
   const [askedIds, setAskedIds] = useState<string[]>([])
   const [cursor, setCursor] = useState(0)
   const [drafts, setDrafts] = useState<Answers>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const hasResult = predictions.length > 0
 
@@ -128,21 +111,17 @@ export default function AdjustScreen() {
     })
   }
 
-  const finish = async (
+  const finish = (
     finalAnswers: Answers,
     finalAskedIds: readonly string[],
     decision: StoppingDecision,
   ) => {
-    if (isSubmitting) return
-    setIsSubmitting(true)
-
     let refined
     try {
       refined = REFINEMENT_METHOD === 'bayesian-provisional-v1'
         ? refinePredictionsBayesian(predictions, finalAnswers, KNOWLEDGE)
         : refinePredictions(predictions, finalAnswers, KNOWLEDGE)
     } catch {
-      setIsSubmitting(false)
       return
     }
 
@@ -151,25 +130,8 @@ export default function AdjustScreen() {
       ? refineQuestionnaireOnly(finalAnswers, KNOWLEDGE)
       : null
 
-    let alreadySaved = false
-    try {
-      await createScreening.mutateAsync({
-        pet_id: params.petId,
-        source: 'DEVICE',
-        prediction: refined.refinedTop.disease,
-        confidence: Math.round(refined.refinedTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
-        device: Platform.OS,
-        ...(params.imageUri && claudeToken
-          ? { image_uri: params.imageUri, claude_token: claudeToken }
-          : {}),
-      })
-      alreadySaved = true
-    } catch {
-      // Auto-save failed — the result screen's Save & Book will retry.
-    }
-
+    // Nothing is uploaded here. The result screen lets the owner choose
+    // "Save Result" or "Book an Appointment"; both persist on demand.
     router.replace({
       pathname: '/(owner)/pets/screening/result',
       params: {
@@ -192,13 +154,13 @@ export default function AdjustScreen() {
         stoppingReason: decision.reason ?? '',
         answeredCount: String(decision.answeredCount),
         totalQuestions: String(decision.totalQuestions),
-        alreadySaved: alreadySaved ? 'true' : 'false',
+        alreadySaved: 'false',
       },
     })
   }
 
   const goNext = () => {
-    if (!question || !canProceed || isSubmitting) return
+    if (!question || !canProceed) return
 
     const committed = commitAdaptiveAnswer(
       { answers, askedQuestionIds: askedIds },
@@ -215,7 +177,7 @@ export default function AdjustScreen() {
     )
 
     if (decision.shouldStop) {
-      void finish(committed.answers, committed.askedQuestionIds, decision)
+      finish(committed.answers, committed.askedQuestionIds, decision)
       return
     }
 
@@ -327,16 +289,11 @@ export default function AdjustScreen() {
       <View style={styles.bottomBar}>
         <Pressable
           onPress={goNext}
-          disabled={!canProceed || isSubmitting}
-          style={[
-            styles.actionBtn,
-            styles.primaryBtn,
-            (!canProceed || isSubmitting) && styles.actionBtnDisabled,
-          ]}
+          disabled={!canProceed}
+          style={[styles.actionBtn, styles.primaryBtn, !canProceed && styles.actionBtnDisabled]}
         >
-          {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-            {isSubmitting ? 'Saving...' : isLast || willStop ? 'See Results' : 'Next'}
+            {isLast || willStop ? 'See Results' : 'Next'}
           </Text>
         </Pressable>
       </View>

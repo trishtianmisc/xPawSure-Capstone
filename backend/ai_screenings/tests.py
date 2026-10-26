@@ -169,6 +169,55 @@ class ScreeningListTests(OwnerScreeningBase):
         self.assertEqual(response.status_code, 403)
 
 
+class ScreeningBookingFlagTests(OwnerScreeningBase):
+    """`is_booked` reflects whether a live appointment used the screening."""
+
+    def _make_screening(self):
+        return AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=Disease.objects.get(dis_code='MANGE'),
+            ais_confidence=85,
+            ais_model_version='test-1.0.0',
+        )
+
+    def _book(self, screening, apt_status=AppointmentStatus.PENDING):
+        clinic = Clinic.objects.create(cln_name='Happy Paws')
+        return Appointment.objects.create(
+            cln_id=clinic,
+            pet_id=self.pet,
+            apt_type='CONSULTATION',
+            apt_status=apt_status,
+            apt_scheduled_at=timezone.now(),
+            apt_screening=screening,
+        )
+
+    def _list_first(self):
+        response = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data['results'][0]
+
+    def test_is_booked_false_until_an_appointment_uses_the_screening(self):
+        screening = self._make_screening()
+
+        first = self._list_first()
+        self.assertEqual(first['ais_id'], str(screening.ais_id))
+        self.assertIs(first['is_booked'], False)
+
+    def test_is_booked_true_once_an_appointment_is_booked(self):
+        screening = self._make_screening()
+        self._book(screening)
+
+        first = self._list_first()
+        self.assertIs(first['is_booked'], True)
+
+    def test_is_booked_false_when_only_appointment_is_cancelled(self):
+        screening = self._make_screening()
+        self._book(screening, apt_status=AppointmentStatus.CANCELLED)
+
+        first = self._list_first()
+        self.assertIs(first['is_booked'], False)
+
+
 class ScreeningModelTests(OwnerScreeningBase):
 
     def test_screening_defaults(self):

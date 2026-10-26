@@ -133,7 +133,7 @@ result      Preprocessing → softmax → confidence + top predictions
 Display validated result, classifier output when it exists, and
 Claude's independent findings
         ↓
-Save single image + both outputs (if booking)
+Save single image + both outputs (on Save, or before booking)
         ↓
 Backend records deterministic cross-analysis for audit
 ```
@@ -322,7 +322,7 @@ Eligible?
                     ↓
         Display review and classifier result separately
                     ↓
-        Save image + both outputs (if booking)
+        Save image + both outputs (on Save, or before booking)
                     ↓
         Backend records deterministic cross-analysis
 ```

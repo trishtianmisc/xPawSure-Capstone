@@ -468,6 +468,55 @@ class OwnerBookingGateTests(PaymentTestBase):
         payment.refresh_from_db()
         self.assertIsNotNone(payment.apt_id)
 
+    def test_owner_booking_with_pending_payment_is_rejected(self):
+        # An abandoned checkout must never record an appointment.
+        payment = self._owner_checkout()
+        before = Appointment.objects.count()
+
+        response = self._book_as_owner(pay_id=payment.pay_id)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['code'], 'PAYMENT_REQUIRED')
+        self.assertEqual(Appointment.objects.count(), before)
+        payment.refresh_from_db()
+        self.assertIsNone(payment.apt_id)
+
+    def test_owner_booking_with_failed_payment_is_rejected(self):
+        payment = self._owner_checkout()
+        self._confirm(
+            payment.pay_reference, self._token_from(payment.pay_checkout_url),
+            outcome='decline',
+        )
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.FAILED)
+        before = Appointment.objects.count()
+
+        response = self._book_as_owner(pay_id=payment.pay_id)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['code'], 'PAYMENT_REQUIRED')
+        self.assertEqual(Appointment.objects.count(), before)
+        payment.refresh_from_db()
+        self.assertIsNone(payment.apt_id)
+
+    def test_owner_booking_with_void_payment_is_rejected(self):
+        payment = self._owner_checkout()
+        cancelled = self.client.post(
+            f'/api/payments/{payment.pay_id}/cancel/', **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(cancelled.status_code, status.HTTP_200_OK, cancelled.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.VOID)
+        before = Appointment.objects.count()
+
+        response = self._book_as_owner(pay_id=payment.pay_id)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['code'], 'PAYMENT_REQUIRED')
+        self.assertEqual(Appointment.objects.count(), before)
+        payment.refresh_from_db()
+        self.assertIsNone(payment.apt_id)
+
 
 class PaymentReadTests(PaymentTestBase):
 

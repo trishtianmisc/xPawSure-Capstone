@@ -162,6 +162,21 @@ class VetSlotService:
         ).select_related('usr_id').distinct()
 
     @staticmethod
+    def get_clinic_vets(clinic_id):
+        """Every active veterinarian at the clinic, undated.
+
+        Used by the owner booking wizard when the veterinarian is chosen
+        before the schedule: without a date there is no operating-hours
+        filter and no per-day slot count, so availability is decided per
+        date on the schedule step instead.
+        """
+        return StaffProfile.objects.filter(
+            cln_id_id=clinic_id,
+            stf_position=StaffPosition.VETERINARIAN,
+            usr_id__usr_is_active=True,
+        ).select_related('usr_id')
+
+    @staticmethod
     def get_all_slots_for_date_range(clinic_id, start_date, end_date, vet_id=None):
         from datetime import timedelta
 

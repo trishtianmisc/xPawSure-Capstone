@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from django.db.models import Exists, OuterRef
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -15,6 +16,7 @@ from ai_screenings.image_service import InvalidScreeningImage, read_screening_im
 from ai_screenings.models import AiScreening, ClaudeAnalysisStatus
 from ai_screenings.serializers import CreateScreeningSerializer, ScreeningSerializer
 from ai_screenings.services import ScreeningService
+from appointments.models import Appointment, AppointmentStatus
 from core.permissions import IsOwner
 from core.storage_service import SupabaseStorageError
 from owners.models import OwnerProfile
@@ -70,9 +72,17 @@ class OwnerScreeningListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # `is_booked` is annotated as one EXISTS query so the list never
+        # fans out into per-screening appointment lookups.
         qs = AiScreening.objects.filter(
             pet_id__own_id=owner_profile,
-        ).select_related('dis_id', 'pet_id')
+        ).select_related('dis_id', 'pet_id').annotate(
+            is_booked=Exists(
+                Appointment.objects.filter(
+                    apt_screening=OuterRef('ais_id'),
+                ).exclude(apt_status=AppointmentStatus.CANCELLED),
+            ),
+        )
 
         pet_id = _parse_uuid(request.query_params.get('pet_id'))
         if request.query_params.get('pet_id'):

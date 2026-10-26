@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from ai_screenings.comparison import default_cross_summary
 from ai_screenings.models import AiScreening, AiScreeningImage, Disease, ScreeningSource
+from appointments.models import AppointmentStatus
 
 
 def _absolute_url(request, url):
@@ -24,6 +25,7 @@ class ScreeningSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     claude = serializers.SerializerMethodField()
     cross_analysis = serializers.SerializerMethodField()
+    is_booked = serializers.SerializerMethodField()
 
     class Meta:
         model = AiScreening
@@ -31,9 +33,23 @@ class ScreeningSerializer(serializers.ModelSerializer):
             'ais_id', 'pet_id', 'pet_name', 'disease', 'disease_code',
             'ais_confidence', 'ais_model_version', 'ais_inference_time_ms',
             'ais_device', 'ais_status', 'ais_source', 'ais_is_correct',
-            'ais_created_at', 'image', 'claude', 'cross_analysis',
+            'ais_created_at', 'image', 'claude', 'cross_analysis', 'is_booked',
         ]
         read_only_fields = fields
+
+    def get_is_booked(self, obj):
+        """True while a non-cancelled appointment was booked from this scan.
+
+        The owner list annotates this as a single EXISTS query; other callers
+        fall back to one existence check per record. A cancelled appointment
+        no longer counts as booked.
+        """
+        annotated = getattr(obj, 'is_booked', None)
+        if annotated is not None:
+            return bool(annotated)
+        return obj.appointments.exclude(
+            apt_status=AppointmentStatus.CANCELLED,
+        ).exists()
 
     def get_image(self, obj):
         try:

@@ -73,18 +73,23 @@ class OwnerVetListView(APIView):
         clinic_id = _parse_uuid(request.query_params.get('clinic_id'))
         date_str = request.query_params.get('date')
 
-        if not clinic_id or not date_str:
+        if not clinic_id:
             return Response(
-                {'detail': 'clinic_id and date are required.'},
+                {'detail': 'clinic_id is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        date = _parse_date(date_str)
-        if not date:
-            return Response(
-                {'detail': 'Invalid date format. Use YYYY-MM-DD.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # The date is optional: the owner booking wizard picks the
+        # veterinarian before the schedule, so the undated list returns
+        # every active vet and availability is resolved per date later.
+        date = None
+        if date_str:
+            date = _parse_date(date_str)
+            if not date:
+                return Response(
+                    {'detail': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         clinic = Clinic.objects.filter(
             cln_id=clinic_id,
@@ -103,6 +108,17 @@ class OwnerVetListView(APIView):
                 {'detail': 'This clinic does not accept online bookings.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        if date is None:
+            return Response([
+                {
+                    'stf_id': str(vet.stf_id),
+                    'full_name': f'{vet.usr_id.usr_first_name} {vet.usr_id.usr_last_name}',
+                    'email': vet.usr_id.usr_email,
+                    'available_count': None,
+                }
+                for vet in VetSlotService.get_clinic_vets(clinic_id=clinic_id)
+            ])
 
         vets = VetSlotService.get_vets_for_date(clinic_id=clinic_id, date=date)
 

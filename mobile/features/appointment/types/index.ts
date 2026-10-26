@@ -63,7 +63,8 @@ export interface OwnerVet {
   stf_id: string
   full_name: string
   email: string | null
-  available_count: number
+  /** Null when the list was requested without a date (no per-day count). */
+  available_count: number | null
 }
 
 export interface OwnerSlot {

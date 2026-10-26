@@ -11,7 +11,7 @@ import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import type { AppointmentListItem } from '../../features/appointment/types'
 import { usePets } from '../../features/pet/hooks/usePets'
-import { STATUS_STYLES } from '../../features/screening/constants'
+import { BOOKED_PILL } from '../../features/screening/constants'
 import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 type Shortcut = {
@@ -145,13 +145,12 @@ export default function HomeScreen() {
             <StatusPill status={nextAppointment.apt_status} />
           </Pressable>
         ) : (
-          <Pressable
-            onPress={() => router.push('/(owner)/appointments/book')}
+          <View
             style={[styles.appointmentCard, styles.appointmentEmpty, { borderColor: colors.borderLight }]}
           >
             <MaterialCommunityIcons color={colors.textMuted} name="calendar-blank-outline" size={15} />
-            <Text style={styles.emptyPetsText}>No upcoming appointment. Book one now.</Text>
-          </Pressable>
+            <Text style={styles.emptyPetsText}>No upcoming appointments yet.</Text>
+          </View>
         )}
 
         <View style={styles.sectionHeader}>
@@ -205,7 +204,6 @@ export default function HomeScreen() {
         ) : recentScreenings.length > 0 ? (
           <View style={styles.screeningList}>
             {recentScreenings.map((screening) => {
-              const status = STATUS_STYLES[screening.ais_status]
               return (
                 <Pressable
                   key={screening.ais_id}
@@ -221,9 +219,13 @@ export default function HomeScreen() {
                       {screening.pet_name} · {formatScreeningDate(screening.ais_created_at)}
                     </Text>
                   </View>
-                  <View style={[styles.previewStatus, { backgroundColor: status.bg }]}>
-                    <Text style={[styles.previewStatusText, { color: status.fg }]}>{status.label}</Text>
-                  </View>
+                  {screening.is_booked ? (
+                    <View style={[styles.previewStatus, { backgroundColor: BOOKED_PILL.bg }]}>
+                      <Text style={[styles.previewStatusText, { color: BOOKED_PILL.fg }]}>
+                        {BOOKED_PILL.label}
+                      </Text>
+                    </View>
+                  ) : null}
                   <MaterialCommunityIcons color={colors.textSecondary} name="chevron-right" size={18} />
                 </Pressable>
               )

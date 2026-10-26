@@ -1348,6 +1348,7 @@ Response:
       "ais_source": "DEVICE",
       "ais_is_correct": null,
       "ais_created_at": "...",
+      "is_booked": false,
       "image": {
         "url": "https://.../screening.jpg",
         "content_type": "image/jpeg",
@@ -1387,6 +1388,9 @@ Response:
 `ais_is_correct` is `null` until a consultation with a diagnosis is saved for
 the linked appointment; it then becomes `true`/`false` (see verdict rules
 below).
+
+`is_booked` is `true` while a non-cancelled appointment was booked from the
+screening; cancelling that appointment returns it to `false`.
 
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.

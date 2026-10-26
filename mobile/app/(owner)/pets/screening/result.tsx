@@ -223,6 +223,11 @@ export default function ResultScreen() {
   const answeredCount = Number(params.answeredCount) || 0
   const totalQuestions = Number(params.totalQuestions) || 0
   const alreadySaved = params.alreadySaved === 'true'
+  // Tracks whether this result is already on the server, whether it arrived
+  // pre-saved from the questionnaire step or was saved from this screen.
+  const [saved, setSaved] = useState(alreadySaved)
+  // Id of the screening created from this screen; the booking wizard needs it.
+  const [savedId, setSavedId] = useState<string | null>(null)
 
   const claudeResponse = useMemo(() => parseClaude(params.claude), [params.claude])
   const gateFindings = classifierSkipped ? claudeResponse?.result ?? null : null
@@ -248,10 +253,15 @@ export default function ResultScreen() {
     !!params.imageUri &&
     !!claudeResponse?.token
 
-  const handleSaveAndBook = () => {
+  /**
+   * Persist this screening. `onSaved` runs only after the server confirms and
+   * receives the created screening id, so callers can chain navigation without
+   * ever saving silently twice.
+   */
+  const saveScreening = (onSaved: (savedSid: string) => void) => {
     if (!canBook || !params.petId || createScreening.isPending) return
-    if (alreadySaved) {
-      router.replace('/(owner)/appointments/book')
+    if (saved) {
+      if (savedId) onSaved(savedId)
       return
     }
     const bookingTop = refinedTop ?? top
@@ -270,14 +280,31 @@ export default function ResultScreen() {
         claude_token: claudeResponse?.token || undefined,
       },
       {
-        onSuccess: () => {
-          router.replace('/(owner)/appointments/book')
+        onSuccess: (created) => {
+          setSaved(true)
+          setSavedId(created.ais_id)
+          onSaved(created.ais_id)
         },
         onError: () => {
           setSaveError(true)
         },
       },
     )
+  }
+
+  /** Save only: the owner keeps the result on screen with a saved confirmation. */
+  const handleSave = () => {
+    saveScreening(() => {})
+  }
+
+  /** Save when needed, then open the booking wizard with the scan attached. */
+  const handleBookAppointment = () => {
+    saveScreening((savedSid) => {
+      router.replace({
+        pathname: '/(owner)/appointments/book',
+        params: { petId: params.petId, screeningId: savedSid },
+      })
+    })
   }
 
   const scanAgain = () => {
@@ -529,21 +556,55 @@ export default function ResultScreen() {
 
         {canBook && (
           <Pressable
-            disabled={createScreening.isPending}
-            onPress={handleSaveAndBook}
-            style={[styles.actionBtn, styles.primaryBtn, createScreening.isPending && styles.actionBtnDisabled]}
+            accessibilityLabel="Save this screening result"
+            disabled={saved || createScreening.isPending}
+            onPress={handleSave}
+            style={[
+              styles.actionBtn,
+              styles.primaryBtn,
+              (saved || createScreening.isPending) && styles.actionBtnDisabled,
+            ]}
           >
             {createScreening.isPending ? (
               <ActivityIndicator color="#FFF" size="small" />
             ) : (
-              <MaterialCommunityIcons color="#FFF" name="calendar-plus" size={16} />
+              <MaterialCommunityIcons
+                color="#FFF"
+                name={saved ? 'check-circle-outline' : 'content-save-outline'}
+                size={16}
+              />
             )}
             <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-              {createScreening.isPending
-                ? 'Saving...'
-                : alreadySaved
-                  ? 'Book Appointment'
-                  : 'Save & Book Appointment'}
+              {createScreening.isPending ? 'Saving...' : saved ? 'Saved' : 'Save Result'}
+            </Text>
+          </Pressable>
+        )}
+
+        {canBook && saved && (
+          <View style={styles.savedRow}>
+            <MaterialCommunityIcons color="#27AE60" name="check-circle" size={16} />
+            <Text style={styles.savedText}>
+              Saved to your pet&apos;s records. You can book now or later.
+            </Text>
+          </View>
+        )}
+
+        {canBook && (
+          <Pressable
+            accessibilityLabel="Book an appointment"
+            disabled={createScreening.isPending}
+            onPress={handleBookAppointment}
+            style={[
+              styles.actionBtn,
+              styles.secondaryBtn,
+              styles.bookBtn,
+              { borderColor: colors.border },
+              createScreening.isPending && styles.actionBtnDisabled,
+            ]}
+          >
+            <MaterialCommunityIcons color={colors.primary} name="calendar-plus" size={16} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>
+              Book an Appointment
             </Text>
           </Pressable>
         )}
@@ -718,8 +779,23 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534', marginTop: 16 },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
+  bookBtn: { marginTop: 12 },
   scanAgainBtn: { marginTop: 12 },
   actionBtnText: { ...font.bold, fontSize: 14 },
+
+  savedRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: '#27AE60',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  savedText: { ...font.semibold, color: colors.textSecondary, flex: 1, fontSize: 12, lineHeight: 17 },
 
   saveErrorRow: {
     alignItems: 'center',

@@ -4,10 +4,21 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
-import type { ClaudeAnalysisResponse, ClaudeFindings } from '../types'
+import type { ClaudeAnalysisStatus, ClaudeFindings } from '../types'
+
+/**
+ * The subset of a Claude review the card renders. Stored screenings expose
+ * the same shape minus `detail`, so both live responses and history records
+ * are accepted.
+ */
+interface ClaudeReviewData {
+  status: ClaudeAnalysisStatus
+  result: ClaudeFindings | null
+  detail?: string
+}
 
 interface ClaudeReviewCardProps {
-  response: ClaudeAnalysisResponse | null
+  response: ClaudeReviewData | null
   requestFailed: boolean
 }
 

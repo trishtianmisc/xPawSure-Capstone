@@ -118,8 +118,9 @@ On-device classifier (TensorFlow.js):
   model version
 
 Both results are displayed separately. The backend still records its
-deterministic cross-analysis for audit and history, but the mobile result screen
-does not display it. Agreement is not confirmation.
+deterministic cross-analysis for audit and history — the fresh result screen
+does not display it, while a stored screening's read-only details screen shows
+the recorded summary. Agreement is not confirmation.
 
 If the gate rejects the photo, the UI shows the explanation and an option to
 upload another image; no prediction is shown. If the gate fails, the classifier
@@ -132,14 +133,28 @@ and both outputs after consent.
 
 ## Appointment Booking
 
-Owners may book appointments at a veterinary clinic.
+Owners may book consultations at a veterinary clinic. Booking is **scan-only**:
+the Book Appointment action exists solely on the fresh scan result screen, so a
+saved skin screening is always attached (`pet_id` + `screening_id`). Past
+screenings are read-only logs — their details screen never starts a booking,
+and no other screen offers a booking button.
 
-Appointment booking requires:
+The wizard runs five steps (the payment step is skipped when the clinic
+charges no fee):
 
-- Clinic selection
-- Preferred date and time
-- Reason for visit
-- Consultation fee paid first, when the clinic charges one
+1. Choose a clinic
+2. Choose a veterinarian (every active vet at the clinic; availability is
+   resolved per date later)
+3. Select a schedule (date strip plus the chosen veterinarian's free slots)
+4. Appointment details (summary plus optional reason; owner appointments are
+   always `CONSULTATION` — there is no type picker)
+5. Payment (only when the clinic charges a consultation fee)
+
+If the chosen clinic already has a live appointment (pending, confirmed,
+checked in, or in progress) for the same pet, the wizard shows a confirm
+dialog the owner can override. Other clinics and terminal statuses
+(completed, cancelled, no-show) never warn. This guardrail is client-side
+only — the booking API itself stays permissive.
 
 The booking wizard shows the clinic's `consultation_fee` (from
 `GET /api/owner/clinics/`). When it is greater than `0` the final step is
@@ -167,7 +182,7 @@ on the message text:
 | `SLOT_UNAVAILABLE` | Slot taken while paying | Re-pick the slot and book **with the same `pay_id`** — a paid payment funds the next slot |
 | `METHOD_NOT_ALLOWED` | e.g. cash chosen by an owner | Offer GCash / Card only |
 | `PROVIDER_ERROR` | Gateway unreachable | Retry; nothing was stored |
-| `SCREENING_REQUIRED` | Missing `screening_id` | Send the pet's screening id |
+| `SCREENING_REQUIRED` | Missing (or invalid) `screening_id` | Send the owner back to the skin scanner — booking only exists downstream of a scan |
 
 The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
 `PAYMENT_EXPIRED`) when a payment settles or lapses.
@@ -310,13 +325,19 @@ Root
 
     │       ├── CaptureImage
 
-    │       ├── ScreeningResult
+    │       └── ScreeningResult
 
-    │       └── BookAppointment
+    ├── Screenings (Stack)
+
+    │   ├── ScreeningHistory
+
+    │   └── ScreeningDetails
 
     ├── Appointments (Stack)
 
     │   ├── AppointmentList
+
+    │   ├── BookAppointment
 
     │   └── AppointmentDetail
 
