@@ -102,6 +102,8 @@ Each table uses a unique prefix.
 | AUDIT_LOG | ADL |
 | VET_SLOT | VSL |
 | CLINIC_OPERATING_HOURS | COH |
+| PAYMENT | PAY |
+| PAYMENT_EVENT | EVT |
 
 ---
 
@@ -145,6 +147,13 @@ The database is divided into the following modules.
 
 ---
 
+## Payment Management
+
+- Payment
+- Payment Event
+
+---
+
 ## Medical Records
 
 - Consultation
@@ -183,6 +192,7 @@ The database is divided into the following modules.
 - Veterinarian-issued medical records are immutable.
 - Only Veterinarians may create Consultations, Prescriptions, and veterinarian-issued Vaccination Records.
 - Owners may view medical records and may add, edit, and delete their own reported vaccination records.
+- When the clinic charges a consultation fee, an Appointment may only be created from a PAID Payment, and one Payment funds exactly one Appointment.
 - Super Admin has cross-clinic access.
 
 ---
@@ -202,6 +212,7 @@ The following documents contain the detailed schema for each module.
 - ai_screening.md
 - notification.md
 - audit_log.md
+- payment.md
 
 ---
 

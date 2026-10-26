@@ -74,6 +74,8 @@ export interface CreateAppointmentPayload {
   slot_id: string
   apt_type: AppointmentType
   reason?: string
+  /** Set once the clinic's consultation fee has been paid. */
+  pay_id?: string
 }
 
 export interface Owner {

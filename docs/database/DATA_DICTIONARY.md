@@ -82,6 +82,7 @@
 | CLINIC_SETTINGS | CLS_APPOINTMENT_DURATION | Duration per appointment (minutes) | INT | NULL |
 | CLINIC_SETTINGS | CLS_MAX_APPOINTMENTS_PER_DAY | Maximum appointments per day | INT | NULL |
 | CLINIC_SETTINGS | CLS_ALLOW_OWNER_BOOKING | Allow owners to self-book | BOOLEAN | NULL |
+| CLINIC_SETTINGS | CLS_CONSULTATION_FEE | Consultation fee charged before booking (0 = free) | DECIMAL | NOT NULL |
 | CLINIC_SETTINGS | CLS_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | CLINIC_SETTINGS | CLS_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 
@@ -361,3 +362,43 @@
 | AUDIT_LOG | ADL_IP_ADDRESS | Client IP address | VARCHAR | NULL |
 | AUDIT_LOG | ADL_DEVICE | Client device info | VARCHAR | NULL |
 | AUDIT_LOG | ADL_CREATED_AT | Action timestamp | TIMESTAMP | NULL |
+
+---
+
+## PAYMENT
+
+| Table | Field Name | Description | Data type | Null Characteristic |
+|-------|------------|-------------|-----------|---------------------|
+| PAYMENT | PAY_ID | Payment ID (PK) | UUID | NOT NULL |
+| PAYMENT | PAY_REFERENCE | Human-readable receipt number (XPS-YYYYMMDD-XXXXXX) | VARCHAR | NOT NULL |
+| PAYMENT | CLN_ID | Clinic ID (FK → CLINIC) | UUID | NOT NULL |
+| PAYMENT | OWN_ID | Owner ID (FK → OWNER_PROFILE) | UUID | NOT NULL |
+| PAYMENT | APT_ID | Appointment this payment paid for (FK → APPOINTMENT, one-to-one) | UUID | NULL |
+| PAYMENT | PAY_AMOUNT | Amount collected | DECIMAL | NOT NULL |
+| PAYMENT | PAY_CURRENCY | ISO currency code | VARCHAR | NOT NULL |
+| PAYMENT | PAY_METHOD | GCASH / CARD / CASH | VARCHAR | NOT NULL |
+| PAYMENT | PAY_STATUS | PENDING / PAID / FAILED / EXPIRED / REFUNDED / VOID | VARCHAR | NOT NULL |
+| PAYMENT | PAY_PROVIDER | MOCK / PAYMONGO / CASH | VARCHAR | NOT NULL |
+| PAYMENT | PAY_PROVIDER_REF | Provider session or intent reference | VARCHAR | NULL |
+| PAYMENT | PAY_CHECKOUT_URL | Hosted checkout URL handed to the payer | TEXT | NULL |
+| PAYMENT | PAY_EXPIRES_AT | Checkout window deadline | TIMESTAMP | NULL |
+| PAYMENT | PAY_PAID_AT | Settlement timestamp | TIMESTAMP | NULL |
+| PAYMENT | PAY_FAILURE_REASON | Why the attempt did not settle | TEXT | NULL |
+| PAYMENT | PAY_METADATA | Snapshot of the booking context (pet, slot, type) | JSONB | NOT NULL |
+| PAYMENT | PAY_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| PAYMENT | PAY_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
+
+---
+
+## PAYMENT_EVENT
+
+| Table | Field Name | Description | Data type | Null Characteristic |
+|-------|------------|-------------|-----------|---------------------|
+| PAYMENT_EVENT | EVT_ID | Event ID (PK) | UUID | NOT NULL |
+| PAYMENT_EVENT | PAY_ID | Payment ID (FK → PAYMENT) | UUID | NOT NULL |
+| PAYMENT_EVENT | EVT_TYPE | CREATED / PAID / FAILED / EXPIRED / VOID / REFUNDED / LINKED | VARCHAR | NOT NULL |
+| PAYMENT_EVENT | EVT_PAYLOAD | Provider payload snapshot | JSONB | NOT NULL |
+| PAYMENT_EVENT | EVT_CREATED_AT | Event timestamp | TIMESTAMP | NULL |
+
+Unique constraint: `(PAY_ID, EVT_TYPE)` — one transition per payment per type,
+so a retried webhook cannot apply the same change twice.

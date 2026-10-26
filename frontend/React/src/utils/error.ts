@@ -27,3 +27,15 @@ export function apiErrorMessage(error: unknown): string {
   }
   return 'An unexpected error occurred.'
 }
+
+/**
+ * Machine-readable `code` from an error body, e.g. `PAYMENT_REQUIRED`.
+ * Use it to branch on how to react; `apiErrorMessage` is for display.
+ */
+export function apiErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined
+  const data = (error as Error & { response?: { data?: unknown } }).response?.data
+  if (typeof data !== 'object' || data === null) return undefined
+  const code = (data as Record<string, unknown>).code
+  return typeof code === 'string' ? code : undefined
+}
