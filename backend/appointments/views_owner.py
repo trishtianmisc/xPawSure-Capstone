@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
@@ -24,6 +25,7 @@ from appointments.services import (
 from clinics.models import Clinic, ClinicSettings
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
+from payments.services import PaymentError, PaymentService
 from pets.models import Pet
 from users.models import StaffPosition, StaffProfile
 
@@ -256,15 +258,39 @@ class OwnerAppointmentListCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Expiry is committed before the gate opens: the gate lives in a
+        # transaction that rolls back whenever payment is refused.
+        PaymentService.expire_due_checkout(validated.get('pay_id'))
+
         try:
-            appointment = AppointmentService.create_appointment(
-                clinic_id=slot.cln_id_id,
-                pet_id=pet.pet_id,
-                slot_id=slot.vsl_id,
-                apt_type=validated['apt_type'],
-                reason=validated.get('reason', ''),
-                created_by=request.user.usr_id,
-                screening=screening,
+            # Same gate as the receptionist flow: the payment is locked and
+            # attached inside the transaction that creates the appointment.
+            with transaction.atomic():
+                payment = PaymentService.lock_for_booking(
+                    clinic_id=slot.cln_id_id,
+                    pet_id=pet.pet_id,
+                    pay_id=validated.get('pay_id'),
+                )
+                appointment = AppointmentService.create_appointment(
+                    clinic_id=slot.cln_id_id,
+                    pet_id=pet.pet_id,
+                    slot_id=slot.vsl_id,
+                    apt_type=validated['apt_type'],
+                    reason=validated.get('reason', ''),
+                    created_by=request.user.usr_id,
+                    screening=screening,
+                )
+                if payment is not None:
+                    PaymentService.attach(
+                        payment=payment,
+                        appointment=appointment,
+                        actor_user_id=request.user.usr_id,
+                        ip_address=request.META.get('REMOTE_ADDR'),
+                    )
+        except PaymentError as e:
+            return Response(
+                e.as_dict(),
+                status=e.status_code,
             )
         except SlotUnavailableError as e:
             return Response(

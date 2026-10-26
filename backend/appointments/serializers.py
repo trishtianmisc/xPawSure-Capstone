@@ -160,6 +160,9 @@ class CreateAppointmentSerializer(serializers.Serializer):
     apt_type = serializers.ChoiceField(choices=AppointmentType.choices)
     reason = serializers.CharField(required=False, allow_blank=True, default='')
     screening_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    # Optional: ignored when the clinic charges no fee, required by the
+    # payments service when it does.
+    pay_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
 class ScheduleAppointmentSerializer(serializers.Serializer):

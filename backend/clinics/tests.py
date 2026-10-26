@@ -694,6 +694,113 @@ class ClinicSettingsTests(ClinicAPITestCase):
         ).last()
         self.assertIsNotNone(audit)
 
+    def test_get_settings_reports_default_consultation_fee(self):
+        response = self.client.get(
+            self.settings_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('consultation_fee', response.data)
+        self.assertEqual(response.data['consultation_fee'], 0)
+
+    def test_update_settings_saves_consultation_fee(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'consultation_fee': 500,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['consultation_fee'], 500)
+        clinic = StaffProfile.objects.get(usr_id=self.clinic_admin).cln_id
+        self.assertEqual(
+            ClinicSettings.objects.get(cln_id=clinic).cls_consultation_fee,
+            500,
+        )
+
+    def test_update_settings_rejects_negative_consultation_fee(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'consultation_fee': -100,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_settings_keeps_fee_when_field_omitted(self):
+        payload = {
+            'opening_time': '09:00:00',
+            'closing_time': '17:00:00',
+            'appointment_duration': 30,
+            'max_appointments_per_day': 50,
+            'allow_owner_booking': True,
+            'consultation_fee': 750,
+        }
+        first = self.client.put(
+            self.settings_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+
+        payload.pop('consultation_fee')
+        second = self.client.put(
+            self.settings_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data['consultation_fee'], 750)
+
+    def test_receptionist_can_read_settings_but_not_update(self):
+        receptionist = User.objects.create(
+            usr_email='desk@settings.test',
+            usr_first_name='Desk',
+            usr_last_name='User',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        receptionist.set_password(self.password)
+        receptionist.save()
+        clinic = StaffProfile.objects.get(usr_id=self.clinic_admin).cln_id
+        StaffProfile.objects.create(
+            usr_id=receptionist,
+            cln_id=clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        read = self.client.get(
+            self.settings_url, **self._auth_header(receptionist),
+        )
+        write = self.client.put(
+            self.settings_url,
+            {
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'consultation_fee': 999,
+            },
+            format='json',
+            **self._auth_header(receptionist),
+        )
+
+        self.assertEqual(read.status_code, status.HTTP_200_OK)
+        self.assertIn('consultation_fee', read.data)
+        self.assertEqual(write.status_code, status.HTTP_403_FORBIDDEN)
+
 
 class ClinicLogoTests(ClinicAPITestCase):
 

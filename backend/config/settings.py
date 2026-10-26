@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'vaccinations',
     'notifications',
     'audit_log',
+    'payments',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -143,6 +144,28 @@ BREVO_API_KEY = env('BREVO_API_KEY', default='')
 BREVO_API_URL = env('BREVO_API_URL', default='https://api.brevo.com/v3/smtp/email')
 
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
+
+# Payment gateway.
+#   mock     – built-in signed checkout page in the web app; needs no keys.
+#   paymongo – PayMongo hosted checkout (test or live keys).
+PAYMENT_MODE = env('PAYMENT_MODE', default='mock').lower()
+PAYMENT_CURRENCY = env('PAYMENT_CURRENCY', default='PHP')
+# How long a created checkout stays payable before it expires.
+PAYMENT_CHECKOUT_TTL_MINUTES = env.int('PAYMENT_CHECKOUT_TTL_MINUTES', default=30)
+PAYMONGO_SECRET_KEY = env('PAYMONGO_SECRET_KEY', default='')
+PAYMONGO_WEBHOOK_SECRET = env('PAYMONGO_WEBHOOK_SECRET', default='')
+PAYMONGO_API_URL = env('PAYMONGO_API_URL', default='https://api.paymongo.com')
+
+if PAYMENT_MODE not in ('mock', 'paymongo'):
+    raise ImproperlyConfigured(
+        'PAYMENT_MODE must be "mock" or "paymongo", not '
+        f'{PAYMENT_MODE!r}.',
+    )
+if not DEBUG and PAYMENT_MODE == 'paymongo' and not PAYMONGO_WEBHOOK_SECRET:
+    raise ImproperlyConfigured(
+        'PAYMONGO_WEBHOOK_SECRET is required when PAYMENT_MODE=paymongo in '
+        'production; without it webhook payloads cannot be authenticated.',
+    )
 
 
 AUTH_PASSWORD_VALIDATORS = [

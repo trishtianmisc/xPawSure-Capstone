@@ -130,6 +130,14 @@ class ClinicSettingsSerializer(serializers.Serializer):
     appointment_duration = serializers.IntegerField(source='cls_appointment_duration')
     max_appointments_per_day = serializers.IntegerField(source='cls_max_appointments_per_day')
     allow_owner_booking = serializers.BooleanField(source='cls_allow_owner_booking')
+    # Optional so an older client that PUTs the other settings unchanged
+    # cannot wipe the fee; omitting it keeps the stored value.
+    consultation_fee = serializers.DecimalField(
+        source='cls_consultation_fee',
+        max_digits=10, decimal_places=2,
+        required=False, min_value=0,
+        coerce_to_string=False,
+    )
     timezone = serializers.CharField(source='cls_timezone', read_only=True)
     created_at = serializers.DateTimeField(source='cls_created_at', read_only=True)
     updated_at = serializers.DateTimeField(source='cls_updated_at', read_only=True)
