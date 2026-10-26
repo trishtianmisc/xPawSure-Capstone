@@ -714,6 +714,14 @@ the gate entirely.
 Providers: `PAYMENT_MODE=mock` (default, signed checkout page in the web app) or
 `PAYMENT_MODE=paymongo` (hosted checkout + webhook). See `docs/database/PAYMENT.md`.
 
+The amount is also exposed before checkout so the booking flow can show it:
+`GET /api/owner/clinics/` returns `consultation_fee` per clinic (owners), and
+`GET /api/clinic/settings/` returns it for staff.
+
+When a payment settles or a checkout lapses the owner receives an in-app
+notification (`PAYMENT_COMPLETED` / `PAYMENT_EXPIRED`, `ntf_reference_table`
+`PAYMENT`) — the mobile app does not have to poll to learn the outcome.
+
 Payment object:
 
 {
@@ -784,6 +792,17 @@ Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
 `date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
 
 Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+
+---
+
+## GET /api/owner/payments/
+
+Requires authentication. Owner only — clinic staff get `403`. Same query params
+and response envelope as `GET /api/payments/`, scoped to the caller's own
+payments.
+
+`?status=PENDING` is how the mobile app finds a checkout that was abandoned
+mid-payment and offers "resume payment".
 
 ---
 
@@ -1724,7 +1743,7 @@ Users can only read or modify their own notifications (foreign ids return 404).
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
-AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, SYSTEM.
+AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
 
 ## GET /api/notifications/
 

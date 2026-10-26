@@ -151,48 +151,71 @@ class PaymentListView(APIView):
                 {'detail': 'Staff profile not found.', 'code': 'STAFF_NOT_FOUND'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        return _list_response(request, clinic_id=staff.cln_id_id)
 
-        date_from, date_from_error = _parse_date(request.query_params.get('date_from'))
-        if date_from_error:
+
+class OwnerPaymentListView(APIView):
+    """The caller's own receipts; owners have no clinic-wide visibility."""
+
+    permission_classes = [HasRole(UserRole.OWNER)]
+
+    def get(self, request):
+        owner = OwnerProfile.objects.filter(usr_id=request.user).first()
+        if owner is None:
             return Response(
-                {'detail': date_from_error, 'code': 'VALIDATION_ERROR'},
+                {'detail': 'Owner profile not found.', 'code': 'OWNER_NOT_FOUND'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        date_to, date_to_error = _parse_date(request.query_params.get('date_to'))
-        if date_to_error:
-            return Response(
-                {'detail': date_to_error, 'code': 'VALIDATION_ERROR'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        return _list_response(request, owner_id=owner.own_id)
 
-        try:
-            page = max(int(request.query_params.get('page', 1)), 1)
-            page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
-        except ValueError:
-            return Response(
-                {'detail': 'page and page_size must be integers.', 'code': 'VALIDATION_ERROR'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
 
-        data = PaymentService.list_payments(
-            clinic_id=staff.cln_id_id,
-            pay_status=request.query_params.get('status'),
-            method=request.query_params.get('method'),
-            reference=request.query_params.get('reference'),
-            appointment_id=request.query_params.get('appointment'),
-            date_from=date_from,
-            date_to=date_to,
-            page=page,
-            page_size=page_size,
+def _list_response(request, **scope) -> Response:
+    """Shared filters, pagination and envelope for both payment lists.
+
+    `scope` is the only difference between them: `clinic_id=` for staff,
+    `owner_id=` for an owner reading their own payments.
+    """
+    date_from, date_from_error = _parse_date(request.query_params.get('date_from'))
+    if date_from_error:
+        return Response(
+            {'detail': date_from_error, 'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-        serializer = PaymentSerializer(data['results'], many=True)
-        return Response({
-            'total': data['total'],
-            'page': data['page'],
-            'page_size': data['page_size'],
-            'total_pages': data['total_pages'],
-            'results': serializer.data,
-        })
+    date_to, date_to_error = _parse_date(request.query_params.get('date_to'))
+    if date_to_error:
+        return Response(
+            {'detail': date_to_error, 'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        page = max(int(request.query_params.get('page', 1)), 1)
+        page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
+    except ValueError:
+        return Response(
+            {'detail': 'page and page_size must be integers.', 'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    data = PaymentService.list_payments(
+        **scope,
+        pay_status=request.query_params.get('status'),
+        method=request.query_params.get('method'),
+        reference=request.query_params.get('reference'),
+        appointment_id=request.query_params.get('appointment'),
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
+    )
+    serializer = PaymentSerializer(data['results'], many=True)
+    return Response({
+        'total': data['total'],
+        'page': data['page'],
+        'page_size': data['page_size'],
+        'total_pages': data['total_pages'],
+        'results': serializer.data,
+    })
 
 
 class PaymentAccessMixin:

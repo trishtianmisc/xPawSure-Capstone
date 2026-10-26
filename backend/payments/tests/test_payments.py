@@ -1,10 +1,13 @@
 import hashlib
 import hmac
 import json
+from datetime import timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework import status
 
 from appointments.models import Appointment
@@ -16,7 +19,9 @@ from appointments.tests.test_owner_booking import (
     OwnerBookingBase,
 )
 from clinics.models import Clinic, ClinicSettings
+from notifications.models import Notification, NotificationType
 from payments.models import Payment, PaymentEvent, PaymentStatus
+from payments.services import PaymentService
 from users.models import StaffPosition, StaffProfile, UserRole
 
 FEE = Decimal('500.00')
@@ -94,6 +99,14 @@ class PaymentTestBase(OwnerBookingBase):
             '/api/appointments/', payload, format='json', **self._auth(email),
         )
 
+    def _owner_checkout(self):
+        """Owner checkout (screening included); returns the PENDING payment."""
+        screening = self._create_screening(pet=self.pet, email=OWNER_EMAIL)
+        payload = self._checkout_payload(screening_id=screening['ais_id'])
+        response = self._checkout(payload, email=OWNER_EMAIL)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        return Payment.objects.get(pay_id=response.data['pay_id'])
+
 
 class CheckoutTests(PaymentTestBase):
 
@@ -113,6 +126,17 @@ class CheckoutTests(PaymentTestBase):
         self.assertEqual(payment.cln_id_id, self.clinic.cln_id)
         self.assertEqual(payment.own_id_id, self.owner.own_id)
         self.assertEqual(payment.pay_metadata['pet_id'], str(self.pet.pet_id))
+
+    def test_owner_clinic_list_exposes_the_fee(self):
+        # The booking wizard shows what the owner must pay before checkout.
+        response = self.client.get('/api/owner/clinics/', **self._auth(OWNER_EMAIL))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        clinic = next(
+            row for row in response.data
+            if row['cln_id'] == str(self.clinic.cln_id)
+        )
+        self.assertEqual(clinic['consultation_fee'], float(FEE))
 
     def test_checkout_is_skipped_when_no_fee_is_configured(self):
         ClinicSettings.objects.filter(cln_id=self.clinic).update(
@@ -440,6 +464,48 @@ class PaymentReadTests(PaymentTestBase):
 
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_owner_list_returns_own_receipts_only(self):
+        mine = self._pay(email=OWNER_EMAIL)
+        theirs = self._pay(email=OTHER_OWNER_EMAIL, pet=self.other_pet)
+
+        response = self.client.get('/api/owner/payments/', **self._auth(OWNER_EMAIL))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data['total'], 1)
+        result = response.data['results'][0]
+        self.assertEqual(result['pay_id'], str(mine.pay_id))
+        self.assertNotEqual(result['pay_id'], str(theirs.pay_id))
+
+    def test_owner_list_filters_by_status_and_paginates(self):
+        self._pay(email=OWNER_EMAIL)
+        self._owner_checkout()
+
+        paid = self.client.get(
+            '/api/owner/payments/?status=PAID', **self._auth(OWNER_EMAIL),
+        )
+        pending = self.client.get(
+            '/api/owner/payments/?status=PENDING', **self._auth(OWNER_EMAIL),
+        )
+        first_page = self.client.get(
+            '/api/owner/payments/?page=1&page_size=1', **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(paid.data['total'], 1)
+        self.assertEqual(pending.data['total'], 1)
+        self.assertEqual(first_page.data['total'], 2)
+        self.assertEqual(first_page.data['total_pages'], 2)
+        self.assertEqual(len(first_page.data['results']), 1)
+
+    def test_staff_cannot_use_the_owner_list(self):
+        response = self.client.get('/api/owner/payments/', **self._auth(RECEPTIONIST_EMAIL))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_owner_list_requires_authentication(self):
+        response = self.client.get('/api/owner/payments/')
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_list_is_scoped_to_the_requesting_clinic(self):
         self._pay()
         other_clinic = Clinic.objects.create(cln_name='Other Clinic')
@@ -485,6 +551,83 @@ class PaymentReadTests(PaymentTestBase):
 
         self.assertEqual(response.data['total'], 1)
         self.assertEqual(response.data['results'][0]['pay_id'], str(payment.pay_id))
+
+
+class PaymentNotificationTests(PaymentTestBase):
+    """The owner hears about their money without having to poll."""
+
+    def test_paid_checkout_notifies_the_owner(self):
+        payment = self._pay(email=OWNER_EMAIL)
+
+        notification = Notification.objects.get(
+            ntf_type=NotificationType.PAYMENT_COMPLETED,
+        )
+        self.assertEqual(notification.usr_id_id, payment.own_id.usr_id_id)
+        self.assertEqual(notification.ntf_reference_table, 'PAYMENT')
+        self.assertEqual(str(notification.ntf_reference_id), str(payment.pay_id))
+        self.assertIn(payment.pay_reference, notification.ntf_message)
+
+    def test_cash_recorded_at_the_counter_notifies_the_owner(self):
+        response = self._checkout(self._checkout_payload(method='CASH'))
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        payment = Payment.objects.get(pay_id=response.data['pay_id'])
+
+        notification = Notification.objects.get(
+            ntf_type=NotificationType.PAYMENT_COMPLETED,
+        )
+        self.assertEqual(notification.usr_id_id, payment.own_id.usr_id_id)
+
+    def test_expired_checkout_notifies_the_owner(self):
+        payment = self._owner_checkout()
+        Payment.objects.filter(pay_id=payment.pay_id).update(
+            pay_expires_at=timezone.now() - timedelta(minutes=1),
+        )
+
+        response = self._book(pay_id=payment.pay_id)
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['code'], 'PAYMENT_REQUIRED')
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.EXPIRED)
+        self.assertTrue(
+            Notification.objects.filter(
+                ntf_type=NotificationType.PAYMENT_EXPIRED,
+                ntf_reference_id=payment.pay_id,
+            ).exists(),
+        )
+
+    def test_replayed_webhook_does_not_duplicate_the_notification(self):
+        payment = self._owner_checkout()
+
+        for _ in range(2):
+            PaymentService.apply_provider_event(
+                reference=payment.pay_reference,
+                event_type='checkout_session.payment.paid',
+                payload={'event_id': 'evt_replay'},
+            )
+
+        self.assertEqual(
+            Notification.objects.filter(
+                ntf_type=NotificationType.PAYMENT_COMPLETED,
+            ).count(),
+            1,
+        )
+
+    def test_a_broken_notification_never_fails_the_payment(self):
+        checkout = self._checkout()
+        payment = Payment.objects.get(pay_id=checkout.data['pay_id'])
+
+        with patch(
+            'notifications.services.NotificationService.create_notification',
+            side_effect=RuntimeError('notification backend down'),
+        ):
+            result = self._confirm(
+                payment.pay_reference, self._token_from(payment.pay_checkout_url),
+            )
+
+        self.assertEqual(result.status_code, status.HTTP_200_OK, result.data)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PAID)
 
 
 class PaymentCancelTests(PaymentTestBase):

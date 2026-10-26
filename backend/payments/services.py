@@ -75,7 +75,8 @@ class PaymentService:
     @staticmethod
     def list_payments(
         *,
-        clinic_id,
+        clinic_id=None,
+        owner_id=None,
         pay_status=None,
         method=None,
         reference=None,
@@ -85,9 +86,13 @@ class PaymentService:
         page=1,
         page_size=20,
     ) -> dict:
-        qs = Payment.objects.filter(cln_id_id=clinic_id).select_related(
-            'own_id__usr_id', 'apt_id',
-        )
+        """One list shape for both scopes: a clinic's payments (staff) or a
+        single owner's own receipts (owner app)."""
+        qs = Payment.objects.all().select_related('own_id__usr_id', 'apt_id')
+        if clinic_id:
+            qs = qs.filter(cln_id_id=clinic_id)
+        if owner_id:
+            qs = qs.filter(own_id_id=owner_id)
 
         if pay_status:
             qs = qs.filter(pay_status=pay_status)
@@ -233,8 +238,10 @@ class PaymentService:
             payment, PaymentEventType.CREATED,
             {'method': method, 'amount': str(fee), 'provider': payment.pay_provider},
         )
-        if is_cash:
-            cls._record_event(payment, PaymentEventType.PAID, {'channel': 'counter'})
+        if is_cash and cls._record_event(
+            payment, PaymentEventType.PAID, {'channel': 'counter'},
+        ):
+            cls._notify_owner(payment, PaymentEventType.PAID)
 
         cls._audit(
             action=AuditAction.PAYMENT_CREATED,
@@ -468,7 +475,8 @@ class PaymentService:
             payment.save(update_fields=[
                 'pay_status', 'pay_paid_at', 'pay_failure_reason', 'pay_updated_at',
             ])
-            cls._record_event(payment, event, {'outcome': outcome})
+            if cls._record_event(payment, event, {'outcome': outcome}):
+                cls._notify_owner(payment, event)
             cls._audit(
                 action=action,
                 payment=payment,
@@ -558,6 +566,7 @@ class PaymentService:
             payment, event_type_map[target_status],
             {'event': event_type, 'payload': payload or {}},
         )
+        cls._notify_owner(payment, event_type_map[target_status])
         return payment
 
     # ------------------------------------------------------------------
@@ -589,16 +598,71 @@ class PaymentService:
             payment.pay_status = PaymentStatus.EXPIRED
             payment.pay_failure_reason = 'Checkout session expired.'
             payment.save(update_fields=['pay_status', 'pay_failure_reason', 'pay_updated_at'])
-            cls._record_event(payment, PaymentEventType.EXPIRED, {'reason': 'ttl'})
+            if cls._record_event(payment, PaymentEventType.EXPIRED, {'reason': 'ttl'}):
+                cls._notify_owner(payment, PaymentEventType.EXPIRED)
         return payment
 
     @staticmethod
-    def _record_event(payment, event_type, payload=None) -> None:
-        PaymentEvent.objects.get_or_create(
+    def _record_event(payment, event_type, payload=None) -> bool:
+        """Record a transition; returns True only when it is the first time.
+
+        Callers use the flag so side effects (notifications) happen once even
+        if a webhook is delivered twice.
+        """
+        _, created = PaymentEvent.objects.get_or_create(
             pay_id=payment,
             evt_type=event_type,
             defaults={'evt_payload': payload or {}},
         )
+        return created
+
+    @classmethod
+    def _notify_owner(cls, payment, event_type) -> None:
+        """Tell the owner what happened to their money.
+
+        Best-effort by design: a failed notification must never roll back or
+        fail the payment, so problems are logged and swallowed like the audit
+        trail.
+        """
+        notification_types = {
+            PaymentEventType.PAID: 'PAYMENT_COMPLETED',
+            PaymentEventType.EXPIRED: 'PAYMENT_EXPIRED',
+        }
+        ntf_type = notification_types.get(event_type)
+        if ntf_type is None:
+            return
+
+        if event_type == PaymentEventType.PAID:
+            title = 'Payment received'
+            message = (
+                f'We received {payment.pay_amount} {payment.pay_currency} for your '
+                f'consultation at {payment.cln_id.cln_name}. '
+                f'Receipt {payment.pay_reference}.'
+            )
+        else:
+            title = 'Payment checkout expired'
+            message = (
+                f'Checkout {payment.pay_reference} expired before it was paid. '
+                'Start a new payment to book your appointment.'
+            )
+
+        try:
+            from notifications.services import NotificationService
+
+            NotificationService.create_notification(
+                payment.own_id.usr_id_id,
+                title,
+                message,
+                ntf_type,
+                ref_table='PAYMENT',
+                ref_id=str(payment.pay_id),
+            )
+        except Exception:
+            logger.warning(
+                'Could not notify owner about payment %s',
+                payment.pay_reference,
+                exc_info=True,
+            )
 
     @staticmethod
     def _audit(*, action, payment, user_id, description, old_values=None,

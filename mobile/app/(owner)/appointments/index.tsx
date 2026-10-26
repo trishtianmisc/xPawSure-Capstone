@@ -84,13 +84,23 @@ export default function AppointmentsScreen() {
       <View style={styles.content}>
         <View style={styles.titleRow}>
           <Text style={styles.title}>Appointments</Text>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/(owner)/appointments/book')}
-            style={styles.addButton}
-          >
-            <Text style={styles.addButtonText}>+ Book</Text>
-          </Pressable>
+          <View style={styles.titleActions}>
+            <Pressable
+              accessibilityLabel="Payment receipts"
+              accessibilityRole="button"
+              onPress={() => router.push('/(owner)/payments')}
+              style={styles.receiptButton}
+            >
+              <MaterialCommunityIcons color={colors.primary} name="receipt" size={18} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(owner)/appointments/book')}
+              style={styles.addButton}
+            >
+              <Text style={styles.addButtonText}>+ Book</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.tabs}>
@@ -142,6 +152,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   screen: { backgroundColor: colors.surface, flex: 1 },
   content: { flex: 1, paddingHorizontal: 20, paddingTop: 24 },
   titleRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  titleActions: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  receiptButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 10, borderWidth: 1, height: 35, justifyContent: 'center', width: 38 },
   title: { ...font.extrabold, color: colors.text, fontSize: 22 },
   addButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 35, paddingHorizontal: 20, justifyContent: 'center' },
   addButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },

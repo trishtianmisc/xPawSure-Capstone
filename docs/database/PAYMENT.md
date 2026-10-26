@@ -142,6 +142,10 @@ The fee itself is per clinic: `CLINIC_SETTINGS.CLS_CONSULTATION_FEE`
 (DECIMAL(10,2), default `0.00`). **A fee of `0.00` disables the payment gate**
 — booking works exactly as before.
 
+`FRONTEND_URL` builds the mock `checkout_url`, so it must be a host the paying
+device can reach: use a real hostname (or your machine's LAN address in local
+development), not `localhost`, when the checkout is opened from a phone.
+
 ---
 
 # Booking Gate
@@ -167,6 +171,24 @@ with:
 
 The payment row and the appointment are written in one transaction, so a
 failed booking never consumes the payment.
+
+---
+
+# Owner Surface
+
+The owner app never sees clinic-wide data:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/owner/clinics/` | Clinic list with `consultation_fee`, so the booking wizard can show the amount before checkout |
+| `POST /api/payments/checkout/` | Create the payment (`GCASH`/`CARD` only, `screening_id` required) |
+| `GET /api/payments/{id}/` | Poll one payment until it settles |
+| `GET /api/owner/payments/` | Own receipts; `?status=PENDING` finds an abandoned checkout to resume |
+| `POST /api/payments/{id}/cancel/` | Discard an unpaid checkout |
+
+Settlement and expiry also write an owner notification
+(`PAYMENT_COMPLETED`, `PAYMENT_EXPIRED`, `NTF_REFERENCE_TABLE = 'PAYMENT'`), so
+money that moved without the owner watching the screen is never a surprise.
 
 ---
 
@@ -200,3 +222,4 @@ checkout, so only holders of the link can read or confirm the payment.
 3. Owners cannot record cash payments.
 4. Only Clinic Admin and Receptionist can read the clinic's payment list.
 5. `CLS_CONSULTATION_FEE = 0` means no payment is required.
+6. Settlement and expiry notify the owner exactly once per transition.

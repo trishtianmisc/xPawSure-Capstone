@@ -1,6 +1,7 @@
 from django.urls import path
 
 from payments.views import (
+    OwnerPaymentListView,
     PayMongoWebhookView,
     PaymentCancelView,
     PaymentCheckoutView,
@@ -13,6 +14,7 @@ from payments.views import (
 urlpatterns = [
     path('payments/checkout/', PaymentCheckoutView.as_view(), name='payment-checkout'),
     path('payments/', PaymentListView.as_view(), name='payment-list'),
+    path('owner/payments/', OwnerPaymentListView.as_view(), name='owner-payment-list'),
     # Mock routes are declared before the generic <uuid:pay_id> routes so the
     # literal 'mock' segment can never be read as a payment id.
     path(

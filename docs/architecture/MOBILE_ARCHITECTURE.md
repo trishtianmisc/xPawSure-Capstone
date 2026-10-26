@@ -139,12 +139,60 @@ Appointment booking requires:
 - Clinic selection
 - Preferred date and time
 - Reason for visit
+- Consultation fee paid first, when the clinic charges one
 
-The backend checks availability and confirms.
+The booking wizard shows the clinic's `consultation_fee` (from
+`GET /api/owner/clinics/`). When it is greater than `0` the final step is
+payment:
+
+1. The owner picks GCash or Card and taps **Pay & Book**.
+2. `POST /api/payments/checkout/` returns the payment with a `checkout_url`.
+3. The app opens `checkout_url` with `Linking.openURL` (external browser — no
+   extra dependency) and polls `GET /api/payments/{pay_id}/` every 2 seconds
+   while it is `PENDING`.
+4. Once it is `PAID`, the app posts `POST /api/owner/appointments/` with the
+   same `pay_id`.
+
+A fee of `0` means no payment step exists at all, and the booking posts
+exactly as before.
+
+The backend decides payment rules; the app branches on the error `code`, never
+on the message text:
+
+| Code | Meaning | App behaviour |
+|------|---------|---------------|
+| `PAYMENT_NOT_REQUIRED` | Clinic fee is `0` | Book without `pay_id` |
+| `PAYMENT_REQUIRED` | No (or unpaid) `pay_id` | Show the payment step |
+| `PAYMENT_EXPIRED` | Checkout window closed | Offer "Pay again" (new checkout) |
+| `SLOT_UNAVAILABLE` | Slot taken while paying | Re-pick the slot and book **with the same `pay_id`** — a paid payment funds the next slot |
+| `METHOD_NOT_ALLOWED` | e.g. cash chosen by an owner | Offer GCash / Card only |
+| `PROVIDER_ERROR` | Gateway unreachable | Retry; nothing was stored |
+| `SCREENING_REQUIRED` | Missing `screening_id` | Send the pet's screening id |
+
+The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
+`PAYMENT_EXPIRED`) when a payment settles or lapses.
 
 Owners may view upcoming appointments.
 
 Owners may cancel appointments.
+
+---
+
+## Payments (Receipts)
+
+`GET /api/owner/payments/` lists the owner's own payments with the same
+envelope as the staff list: `{ total, page, page_size, total_pages, results }`.
+
+Filters: `status`, `method`, `reference`, `appointment`, `date_from`,
+`date_to`, `page`, `page_size`.
+
+`?status=PENDING` is how an abandoned checkout is found again and resumed.
+
+Screen: `app/(owner)/payments/` — reached from the Appointments header
+(receipt icon) or from a `PAYMENT_*` notification; it is registered as a hidden
+tab (`href: null`).
+
+Refunds and cancellations of settled payments are out of scope until phase 3.
 
 ---
 

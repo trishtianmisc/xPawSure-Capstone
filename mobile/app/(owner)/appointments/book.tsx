@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import axios from 'axios'
+import * as Linking from 'expo-linking'
 import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -20,12 +20,18 @@ import { useVets } from '../../../features/appointment/hooks/useVets'
 import type { AppointmentType, OwnerSlot } from '../../../features/appointment/types'
 import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
+import { useCancelPayment } from '../../../features/payment/hooks/useCancelPayment'
+import { useCreateCheckout } from '../../../features/payment/hooks/useCreateCheckout'
+import { usePayment } from '../../../features/payment/hooks/usePayment'
+import { formatMoney } from '../../../features/payment/lib/format'
+import type { Payment, PaymentMethod } from '../../../features/payment/types'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { apiErrorCode, apiErrorMessage, apiErrorStatus } from '../../../src/utils/error'
 
-const TOTAL_STEPS = 7
+const TOTAL_STEPS = 8
 
 const STEP_TITLES = [
   'Choose a clinic',
@@ -35,6 +41,18 @@ const STEP_TITLES = [
   'Choose a veterinarian',
   'Pick a time slot',
   'Appointment details',
+  'Payment',
+]
+
+/** The steps used when the clinic charges no consultation fee. */
+const FREE_STEPS = STEP_TITLES.length - 1
+
+const PAYMENT_STEP = FREE_STEPS + 1
+
+/** Owners can never record cash, so it is never offered here. */
+const OWNER_METHODS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: 'GCASH', label: 'GCash' },
+  { value: 'CARD', label: 'Card' },
 ]
 
 const APT_TYPES: Array<{ value: AppointmentType; label: string }> = [
@@ -92,6 +110,13 @@ export default function BookAppointmentScreen() {
   const [slot, setSlot] = useState<OwnerSlot | null>(null)
   const [aptType, setAptType] = useState<AppointmentType>('CONSULTATION')
   const [reason, setReason] = useState('')
+  // Payment state. The server owns the amount; the app only owns the flow.
+  const [method, setMethod] = useState<PaymentMethod>('GCASH')
+  const [checkout, setCheckout] = useState<Payment | null>(null)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
+  // Set when the booking endpoint reports a fee the clinic list did not show.
+  const [feeRequired, setFeeRequired] = useState(false)
+  const bookingInFlight = useRef(false)
 
   const days = useMemo(() => buildDays(14), [])
 
@@ -111,9 +136,35 @@ export default function BookAppointmentScreen() {
     isError: screeningsError,
   } = useScreenings(step >= 3 && pet ? pet.id : undefined, step >= 3)
   const bookAppointment = useBookAppointment()
+  const createCheckout = useCreateCheckout()
+  const cancelPayment = useCancelPayment()
 
   const latestScreening = screenings?.results[0] ?? null
   const screeningId = latestScreening?.ais_id ?? null
+
+  const selectedClinic = clinics.find((current) => current.cln_id === clinicId) ?? null
+  const consultationFee = Number(selectedClinic?.consultation_fee ?? 0)
+  const requiresPayment = feeRequired || consultationFee > 0
+  const totalSteps = requiresPayment ? TOTAL_STEPS : FREE_STEPS
+
+  const { data: livePayment, refetch: refetchPayment } = usePayment(
+    checkout?.pay_id ?? null,
+    checkout ?? undefined,
+  )
+  // Once a checkout exists the poll is the source of truth about its status.
+  const payment = livePayment ?? checkout
+  useEffect(() => {
+    if (livePayment && livePayment.status !== checkout?.status) {
+      setCheckout(livePayment)
+    }
+  }, [livePayment, checkout])
+
+  // A settled payment books the appointment without asking the owner again.
+  useEffect(() => {
+    if (step === PAYMENT_STEP && payment?.status === 'PAID') {
+      handleBook(payment.pay_id)
+    }
+  }, [step, payment?.status])
 
   function goBack() {
     if (step === 1) {
@@ -138,6 +189,11 @@ export default function BookAppointmentScreen() {
       setVetId(null)
       setVetName(null)
       setSlot(null)
+      // A checkout belongs to one clinic. A paid one is kept so the money is
+      // never silently dropped; the backend will refuse it for another clinic.
+      setCheckout((current) => (current?.status === 'PAID' ? current : null))
+      setPaymentError(null)
+      setFeeRequired(false)
     }
     setStep(2)
   }
@@ -175,8 +231,49 @@ export default function BookAppointmentScreen() {
     router.push(pet ? `/(owner)/pets/screening?petId=${pet.id}` : '/(owner)/pets/screening')
   }
 
-  function handleBook() {
-    if (!pet || !slot || !screeningId) return
+  function handleBookingError(error: unknown) {
+    const code = apiErrorCode(error)
+    const detail = apiErrorMessage(error)
+    // Only an unlabelled 409 means the slot was taken; a coded error gets its
+    // own message below.
+    const slotTaken = code === 'SLOT_UNAVAILABLE' || (code === null && apiErrorStatus(error) === 409)
+
+    if (slotTaken) {
+      // The money, if any, stays with the payment and funds the next slot.
+      Alert.alert(
+        'Time slot taken',
+        'Someone else booked that time. Pick another slot — your payment still counts.',
+      )
+      setStep(6)
+      return
+    }
+
+    switch (code) {
+      case 'PAYMENT_REQUIRED':
+        // The fee was not visible when the clinic was picked: show the step.
+        setFeeRequired(true)
+        setStep(PAYMENT_STEP)
+        return
+      case 'PAYMENT_EXPIRED':
+        setCheckout(null)
+        setPaymentError(null)
+        setStep(PAYMENT_STEP)
+        return
+      case 'SCREENING_REQUIRED':
+        Alert.alert('Skin scan needed', detail)
+        setStep(3)
+        return
+      default:
+        Alert.alert('Booking failed', detail)
+    }
+  }
+
+  function handleBook(explicitPayId?: string) {
+    if (!pet || !slot || !screeningId || bookingInFlight.current) return
+
+    // A payment that already settled funds whichever slot is picked next.
+    const payId = explicitPayId ?? (payment?.status === 'PAID' ? payment.pay_id : undefined)
+    bookingInFlight.current = true
 
     bookAppointment.mutate(
       {
@@ -185,19 +282,75 @@ export default function BookAppointmentScreen() {
         apt_type: aptType,
         reason: reason.trim() || undefined,
         screening_id: screeningId,
+        ...(payId ? { pay_id: payId } : {}),
       },
       {
         onSuccess: (created) => {
           router.replace(`/(owner)/appointments/${created.apt_id}`)
         },
         onError: (error) => {
-          const detail = axios.isAxiosError(error)
-            ? (error.response?.data as { detail?: string } | undefined)?.detail
-            : undefined
-          Alert.alert('Booking failed', detail ?? 'Something went wrong. Please try again.')
+          bookingInFlight.current = false
+          handleBookingError(error)
         },
       },
     )
+  }
+
+  async function openCheckout(url: string | null) {
+    if (!url) return
+    try {
+      await Linking.openURL(url)
+    } catch {
+      setPaymentError('We could not open the checkout page. Tap "Open checkout page" to retry.')
+    }
+  }
+
+  function handlePay() {
+    if (!pet || !slot) return
+    setPaymentError(null)
+
+    createCheckout.mutate(
+      {
+        pet_id: pet.id,
+        slot_id: slot.vsl_id,
+        apt_type: aptType,
+        method,
+        reason: reason.trim() || undefined,
+        screening_id: screeningId ?? undefined,
+      },
+      {
+        onSuccess: (created) => {
+          setCheckout(created)
+          void openCheckout(created.checkout_url)
+        },
+        onError: (error) => {
+          const code = apiErrorCode(error)
+          if (code === 'PAYMENT_NOT_REQUIRED') {
+            // The clinic stopped charging: book straight away, no payment.
+            setFeeRequired(false)
+            setCheckout(null)
+            handleBook()
+            return
+          }
+          if (code === 'SLOT_UNAVAILABLE' || (code === null && apiErrorStatus(error) === 409)) {
+            Alert.alert('Time slot taken', 'Pick another slot and try again.')
+            setStep(6)
+            return
+          }
+          setPaymentError(apiErrorMessage(error))
+        },
+      },
+    )
+  }
+
+  function handleDiscardCheckout() {
+    if (!checkout) return
+    cancelPayment.mutate(checkout.pay_id, {
+      onSettled: () => {
+        setCheckout(null)
+        setPaymentError(null)
+      },
+    })
   }
 
   const canContinue =
@@ -206,7 +359,8 @@ export default function BookAppointmentScreen() {
     (step === 3 && !!screeningId) ||
     (step === 4 && !!date) ||
     (step === 5 && !!vetId) ||
-    (step === 6 && !!slot)
+    (step === 6 && !!slot) ||
+    (step === 7 && !!slot)
 
   return (
     <View style={styles.screen}>
@@ -227,9 +381,14 @@ export default function BookAppointmentScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.progressHeader}>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${(step / TOTAL_STEPS) * 100}%` }]} />
+            <View
+              style={[
+                styles.progressFill,
+                { width: `${(Math.min(step, totalSteps) / totalSteps) * 100}%` },
+              ]}
+            />
           </View>
-          <Text style={styles.stepLabel}>Step {step} of {TOTAL_STEPS}</Text>
+          <Text style={styles.stepLabel}>Step {Math.min(step, totalSteps)} of {totalSteps}</Text>
           <Text style={styles.stepTitle}>{STEP_TITLES[step - 1]}</Text>
         </View>
 
@@ -448,6 +607,11 @@ export default function BookAppointmentScreen() {
                 Time: {slot ? formatTime(slot.vsl_start_time) : ''}
               </Text>
               <Text style={styles.summaryLine}>Skin scan: {latestScreening?.disease ?? ''}</Text>
+              {requiresPayment ? (
+                <Text style={styles.summaryFee}>
+                  Consultation fee: {formatMoney(consultationFee, payment?.currency ?? 'PHP')}
+                </Text>
+              ) : null}
             </View>
 
             <Text style={styles.fieldLabel}>Appointment type</Text>
@@ -483,6 +647,112 @@ export default function BookAppointmentScreen() {
             )}
           </View>
         )}
+
+        {step === PAYMENT_STEP && (
+          <View style={styles.list}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Consultation fee</Text>
+              <Text style={styles.feeAmount}>
+                {formatMoney(payment?.amount ?? consultationFee, payment?.currency ?? 'PHP')}
+              </Text>
+              <Text style={styles.summaryLine}>Clinic: {clinicName}</Text>
+              <Text style={styles.summaryLine}>Pet: {pet?.name}</Text>
+              <Text style={styles.summaryLine}>
+                Date: {date} · {slot ? formatTime(slot.vsl_start_time) : ''}
+              </Text>
+              {payment ? (
+                <Text style={styles.summaryLine}>Reference: {payment.reference_no}</Text>
+              ) : null}
+            </View>
+
+            {!payment ||
+            payment.status === 'FAILED' ||
+            payment.status === 'EXPIRED' ||
+            payment.status === 'VOID' ? (
+              <View style={styles.methodBlock}>
+                <Text style={styles.fieldLabel}>Payment method</Text>
+                <View style={styles.typeRow}>
+                  {OWNER_METHODS.map((ownerMethod) => (
+                    <Pressable
+                      key={ownerMethod.value}
+                      accessibilityRole="button"
+                      onPress={() => setMethod(ownerMethod.value)}
+                      style={[
+                        styles.typeChip,
+                        method === ownerMethod.value && styles.typeChipSelected,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.typeText,
+                          method === ownerMethod.value && styles.typeTextSelected,
+                        ]}
+                      >
+                        {ownerMethod.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {paymentError ? <Text style={styles.errorText}>{paymentError}</Text> : null}
+
+            {payment?.status === 'PENDING' && (
+              <View style={styles.payStatusCard}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.blockText}>
+                  We opened the checkout page. Finish paying there — this screen updates on its own.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => openCheckout(payment.checkout_url)}
+                  style={styles.scanButton}
+                >
+                  <Text style={styles.scanButtonText}>Open checkout page</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => refetchPayment()}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>I&apos;ve paid — check status</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={cancelPayment.isPending}
+                  onPress={handleDiscardCheckout}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>Cancel this payment</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {payment?.status === 'PAID' && (
+              <View style={styles.payStatusCard}>
+                <MaterialCommunityIcons color={colors.primary} name="check-decagram" size={34} />
+                <Text style={styles.blockTitle}>Payment received</Text>
+                <Text style={styles.blockText}>Booking your appointment…</Text>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            )}
+
+            {payment?.status === 'FAILED' && (
+              <Text style={styles.errorText}>
+                The payment did not go through
+                {payment.failure_reason ? `: ${payment.failure_reason}` : ''}. Try again or pick
+                another method.
+              </Text>
+            )}
+
+            {payment?.status === 'EXPIRED' && (
+              <Text style={styles.errorText}>
+                This checkout expired before it was paid. Start a new payment to book.
+              </Text>
+            )}
+          </View>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -490,7 +760,7 @@ export default function BookAppointmentScreen() {
           <Text style={styles.backButtonText}>Back</Text>
         </Pressable>
 
-        {step < TOTAL_STEPS ? (
+        {step < totalSteps ? (
           <Pressable
             accessibilityRole="button"
             disabled={!canContinue}
@@ -499,11 +769,37 @@ export default function BookAppointmentScreen() {
           >
             <Text style={styles.nextButtonText}>Continue</Text>
           </Pressable>
+        ) : step === PAYMENT_STEP && requiresPayment && payment?.status !== 'PAID' ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={createCheckout.isPending}
+            onPress={
+              payment?.status === 'PENDING'
+                ? () => openCheckout(payment.checkout_url)
+                : handlePay
+            }
+            style={[
+              styles.nextButton,
+              createCheckout.isPending && styles.nextButtonDisabled,
+            ]}
+          >
+            {createCheckout.isPending ? (
+              <ActivityIndicator color={colors.inverse} />
+            ) : (
+              <Text style={styles.nextButtonText}>
+                {payment
+                  ? payment.status === 'PENDING'
+                    ? 'Open checkout page'
+                    : `Pay again (${formatMoney(payment.amount, payment.currency)})`
+                  : `Pay ${formatMoney(consultationFee, 'PHP')} & book`}
+              </Text>
+            )}
+          </Pressable>
         ) : (
           <Pressable
             accessibilityRole="button"
             disabled={bookAppointment.isPending}
-            onPress={handleBook}
+            onPress={() => handleBook()}
             style={[styles.nextButton, bookAppointment.isPending && styles.nextButtonDisabled]}
           >
             {bookAppointment.isPending ? (
@@ -560,6 +856,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   summaryCard: { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 6, padding: 16 },
   summaryTitle: { ...font.extrabold, color: colors.text, fontSize: 15 },
   summaryLine: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
+  summaryFee: { ...font.bold, color: colors.primaryDark, fontSize: 14, marginTop: 4 },
+  feeAmount: { ...font.extrabold, color: colors.text, fontSize: 28 },
+  methodBlock: { gap: 10 },
+  payStatusCard: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 12, padding: 16 },
+  secondaryButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 20, width: '100%' },
+  secondaryButtonText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
   fieldLabel: { ...font.bold, color: colors.text, fontSize: 14 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   typeChip: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 999, borderWidth: 1, minHeight: 38, paddingHorizontal: 14, justifyContent: 'center' },
