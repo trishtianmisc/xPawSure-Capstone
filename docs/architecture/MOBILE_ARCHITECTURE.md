@@ -1,8 +1,8 @@
 # MOBILE_ARCHITECTURE.md
 
-> Version: 2.0
+> Version: 2.1
 > Project: XPawSure
-> Last Updated: July 2026
+> Last Updated: October 2026
 
 ---
 
@@ -97,9 +97,13 @@ Owners may view and edit their pets' information after registration.
 
 The core feature of the mobile application.
 
-The owner captures or selects a photo of their dog's skin condition.
+The owner captures or selects three photos of their dog's skin condition from different angles: the main affected area, a wider view, and an additional angle. Camera capture and gallery selection are both supported.
 
-The application sends the image to TensorFlow Lite for on-device inference.
+The application runs inference on the device. Images are not sent to the server for inference.
+
+Each photo passes quality and dog-skin checks. Screening requires three photos, and all three must be valid and approved by the AI safety review. Rejected photos must be retaken or replaced before screening can run.
+
+A photo guide explains the three-slot flow, camera/gallery options, quality checks, and the all-photos-must-pass rule. It opens automatically on first use, can be reopened from the help icon, and records dismissal in `xpawsure_screening_guide_seen_v2`. A storage failure does not block screening.
 
 The AI model identifies possible skin conditions and returns:
 
@@ -108,9 +112,11 @@ The AI model identifies possible skin conditions and returns:
 - Top N predictions
 - Model version
 
-The user may then optionally book a veterinary appointment.
+After screening, the owner may answer the adaptive 12-question veterinary-informed questionnaire. The result screen presents independent AI-only, questionnaire-only, and combined screening suggestions. These are screening likelihoods, not diagnoses. The combined result is required before booking an appointment.
 
-The screening result is uploaded to the backend after the user provides consent.
+The questionnaire-only result uses a uniform prior and is unavailable when no informative answer exists. Answer review follows the canonical 12-question order, with Q11 remaining multi-select. The optional home-care card is mock content, is gated by `EXPO_PUBLIC_ENABLE_MOCK_HOME_CARE`, and is not a treatment plan.
+
+The screening result is uploaded to the backend after the user provides consent. The backend stores the final prediction and confidence only; questionnaire answers and mode-specific results remain on the device.
 
 ---
 
@@ -207,9 +213,9 @@ TensorFlow Lite Integration
 
 Storage:
 
-AsyncStorage for tokens
+Shared storage helper using SecureStore on native and localStorage on web
 
-SecureStore for sensitive data
+JWT access and refresh tokens, cached profile, and local UI flags such as the photo-guide seen key
 
 ---
 
@@ -245,6 +251,8 @@ Root
     │   └── PetScreening (Stack)
 
     │       ├── CaptureImage
+
+    │       ├── AdjustQuestionnaire
 
     │       ├── ScreeningResult
 
@@ -422,13 +430,20 @@ The mobile application handles errors gracefully:
 
 # 11. Testing
 
-The mobile application is tested with:
+The mobile application currently uses dependency-free Node test scripts for screening and questionnaire logic:
 
-- Unit tests for hooks and utilities
-- Component tests for screens
-- Integration tests for critical flows (registration, login, screening)
+```powershell
+npx tsc --noEmit
+npm run test:screening
+npm run test:bayesian
+npm run test:adaptive
+npm run test:summary
+npm run test:result-view
+```
 
-Testing framework: Jest + React Native Testing Library
+These scripts transpile the relevant TypeScript modules with the installed TypeScript compiler and assert the screening thresholds, Bayesian refinement, adaptive ordering, summary construction, and result-view gating.
+
+Jest and React Native Testing Library are not configured in the current repository. Screen and device-level behavior, including the photo guide and photo-quality flow, requires manual verification on an Expo development build or device.
 
 ---
 

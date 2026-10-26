@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 
-import { loadModel, runMultiScreening, runScreening, isReady } from '../services/tensorflow.service'
+import { hashScreeningImage, validateScreeningImage } from '../../src/services/screening'
+import { loadModel, runMultiScreening, isReady } from '../services/tensorflow.service'
 import type { ScreeningResult } from '../types/ai.types'
 
 interface UseAIScreeningReturn {
@@ -10,8 +11,7 @@ interface UseAIScreeningReturn {
   isScreening: boolean
   result: ScreeningResult | null
   screeningError: string | null
-  screenImage: (imageUri: string) => Promise<ScreeningResult>
-  screenImages: (imageUris: string[]) => Promise<ScreeningResult>
+  screenImages: (imageUris: string[], sessionId: string) => Promise<ScreeningResult>
   reset: () => void
 }
 
@@ -44,43 +44,30 @@ export function useAIScreening(): UseAIScreeningReturn {
     setIsModelLoading(false)
   }, [])
 
-  const screenImage = useCallback(async (imageUri: string): Promise<ScreeningResult> => {
-    setIsScreening(true)
-    setScreeningError(null)
-    setResult(null)
+  const screenImages = useCallback(
+    async (imageUris: string[], sessionId: string): Promise<ScreeningResult> => {
+      setIsScreening(true)
+      setScreeningError(null)
+      setResult(null)
 
-    try {
-      await ensureModel()
-      const screeningResult = await runScreening(imageUri)
-      setResult(screeningResult)
-      return screeningResult
-    } catch (error) {
-      const message = `Screening failed: ${error}`
-      setScreeningError(message)
-      throw new Error(message)
-    } finally {
-      setIsScreening(false)
-    }
-  }, [ensureModel])
-
-  const screenImages = useCallback(async (imageUris: string[]): Promise<ScreeningResult> => {
-    setIsScreening(true)
-    setScreeningError(null)
-    setResult(null)
-
-    try {
-      await ensureModel()
-      const screeningResult = await runMultiScreening(imageUris)
-      setResult(screeningResult)
-      return screeningResult
-    } catch (error) {
-      const message = `Screening failed: ${error}`
-      setScreeningError(message)
-      throw new Error(message)
-    } finally {
-      setIsScreening(false)
-    }
-  }, [ensureModel])
+      try {
+        await ensureModel()
+        const screeningResult = await runMultiScreening(imageUris, sessionId, {
+          callApi: validateScreeningImage,
+          shaFor: hashScreeningImage,
+        })
+        setResult(screeningResult)
+        return screeningResult
+      } catch (error) {
+        const message = `Screening failed: ${error}`
+        setScreeningError(message)
+        throw new Error(message)
+      } finally {
+        setIsScreening(false)
+      }
+    },
+    [ensureModel],
+  )
 
   const reset = useCallback(() => {
     setResult(null)
@@ -94,7 +81,6 @@ export function useAIScreening(): UseAIScreeningReturn {
     isScreening,
     result,
     screeningError,
-    screenImage,
     screenImages,
     reset,
   }

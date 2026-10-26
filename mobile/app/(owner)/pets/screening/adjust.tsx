@@ -17,8 +17,13 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
+import { REFINEMENT_METHOD } from '../../../../ai/decisionTree/bayesian.config'
+import { ADAPTIVE_CONFIG } from '../../../../ai/decisionTree/adaptive.config'
+import { commitAdaptiveAnswer, evaluateStopping, resolveQuestionnaireMode, selectNextQuestion } from '../../../../ai/decisionTree/adaptive'
+import { refinePredictionsBayesian } from '../../../../ai/decisionTree/bayesian'
 import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import type { Answers } from '../../../../ai/decisionTree/types'
+import { buildScreeningSummary } from '../../../../ai/decisionTree/summary'
+import type { Answers, BayesianRefinementResult, StoppingDecision } from '../../../../ai/decisionTree/types'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 
 export default function AdjustScreen() {
@@ -33,11 +38,19 @@ export default function AdjustScreen() {
     modelVersion?: string
     inferenceTimeMs?: string
     imageReports?: string
+    thumbnailUris?: string
+    validationImageUri?: string
+    validationToken?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const questions = KNOWLEDGE.questions
   const total = questions.length
+  const mode = useMemo(() => resolveQuestionnaireMode(REFINEMENT_METHOD), [])
+  const questionById = useMemo(
+    () => new Map(questions.map((question) => [question.id, question])),
+    [questions],
+  )
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -47,20 +60,48 @@ export default function AdjustScreen() {
     }
   }, [params.predictions])
 
-  const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
+  const [askedIds, setAskedIds] = useState<string[]>([])
+  const [cursor, setCursor] = useState(0)
+  const [drafts, setDrafts] = useState<Answers>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const hasResult = predictions.length > 0
 
-  const question = questions[step]
-  const selected = answers[question.id] ?? []
-  const isLast = step === total - 1
-  const canProceed = selected.length > 0
+  const question = useMemo(() => {
+    if (cursor < askedIds.length) {
+      return questionById.get(askedIds[cursor]) ?? null
+    }
+    return selectNextQuestion(predictions, answers, askedIds, KNOWLEDGE, mode)
+  }, [answers, askedIds, cursor, mode, predictions, questionById])
+
+  const selected = question ? drafts[question.id] ?? answers[question.id] ?? [] : []
+  const isLast = questions.every(
+    (item) => item.id === question?.id || askedIds.includes(item.id),
+  )
+  const canProceed = Boolean(question) && selected.length > 0
+  const pendingDecision = useMemo(() => {
+    if (!question || selected.length === 0) return null
+    const committed = commitAdaptiveAnswer(
+      { answers, askedQuestionIds: askedIds },
+      question.id,
+      selected,
+    )
+    return evaluateStopping(
+      predictions,
+      committed.answers,
+      committed.askedQuestionIds,
+      KNOWLEDGE,
+      ADAPTIVE_CONFIG,
+      mode.earlyStopping,
+    )
+  }, [answers, askedIds, mode.earlyStopping, predictions, question, selected])
+  const willStop = pendingDecision?.shouldStop === true
 
   const selectOption = (optionId: string) => {
-    setAnswers((prev) => {
-      const current = prev[question.id] ?? []
+    if (!question) return
+    setDrafts((prev) => {
+      const current = prev[question.id] ?? answers[question.id] ?? []
       if (question.multi) {
         const next = current.includes(optionId)
           ? current.filter((id) => id !== optionId)
@@ -71,11 +112,35 @@ export default function AdjustScreen() {
     })
   }
 
-  const finish = async () => {
+  const finish = async (
+    finalAnswers: Answers,
+    finalAskedIds: readonly string[],
+    decision: StoppingDecision,
+  ) => {
     if (isSubmitting) return
     setIsSubmitting(true)
 
-    const refined = refinePredictions(predictions, answers, KNOWLEDGE)
+    let refined
+    try {
+      refined = REFINEMENT_METHOD === 'bayesian-provisional-v1'
+        ? refinePredictionsBayesian(predictions, finalAnswers, KNOWLEDGE)
+        : refinePredictions(predictions, finalAnswers, KNOWLEDGE)
+    } catch {
+      setIsSubmitting(false)
+      return
+    }
+
+    const summary = REFINEMENT_METHOD === 'bayesian-provisional-v1'
+      ? JSON.stringify(
+        buildScreeningSummary(
+          predictions,
+          finalAnswers,
+          finalAskedIds,
+          refined as BayesianRefinementResult,
+          KNOWLEDGE,
+        ),
+      )
+      : ''
 
     let alreadySaved = false
     try {
@@ -87,6 +152,12 @@ export default function AdjustScreen() {
         model_version: params.modelVersion || 'unknown',
         inference_time_ms: Number(params.inferenceTimeMs) || undefined,
         device: Platform.OS,
+        ...(params.validationImageUri && params.validationToken
+          ? {
+              image_uri: params.validationImageUri,
+              claude_token: params.validationToken,
+            }
+          : {}),
       })
       alreadySaved = true
     } catch {
@@ -105,25 +176,51 @@ export default function AdjustScreen() {
         state: 'DISEASE_DETECTED',
         stateMessage: '',
         refined: JSON.stringify(refined.refined),
+        summary,
         changed: refined.changed ? 'true' : 'false',
+        refinementMethod: REFINEMENT_METHOD,
+        stoppingReason: decision.reason ?? '',
+        answeredCount: String(decision.answeredCount),
+        totalQuestions: String(decision.totalQuestions),
         alreadySaved: alreadySaved ? 'true' : 'false',
         imageReports: params.imageReports ?? '',
+        thumbnailUris: params.thumbnailUris ?? '',
+        validationImageUri: params.validationImageUri ?? '',
+        validationToken: params.validationToken ?? '',
       },
     })
   }
 
   const goNext = () => {
-    if (!canProceed || isSubmitting) return
-    if (!isLast) {
-      setStep(step + 1)
-    } else {
-      void finish()
+    if (!question || !canProceed || isSubmitting) return
+
+    const committed = commitAdaptiveAnswer(
+      { answers, askedQuestionIds: askedIds },
+      question.id,
+      selected,
+    )
+    const decision = evaluateStopping(
+      predictions,
+      committed.answers,
+      committed.askedQuestionIds,
+      KNOWLEDGE,
+      ADAPTIVE_CONFIG,
+      mode.earlyStopping,
+    )
+
+    if (decision.shouldStop) {
+      void finish(committed.answers, committed.askedQuestionIds, decision)
+      return
     }
+
+    setAnswers(committed.answers)
+    setAskedIds(committed.askedQuestionIds)
+    setCursor(cursor + 1)
   }
 
   const goBack = () => {
-    if (step > 0) {
-      setStep(step - 1)
+    if (cursor > 0) {
+      setCursor(cursor - 1)
     } else {
       router.back()
     }
@@ -153,7 +250,21 @@ export default function AdjustScreen() {
     )
   }
 
-  const progressPct = Math.round(((step + 1) / total) * 100)
+  if (!question) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+        <View style={styles.emptyCard}>
+          <MaterialCommunityIcons color={colors.textMuted} name="check-circle-outline" size={32} />
+          <Text style={styles.emptyTitle}>Questionnaire complete</Text>
+          <Text style={styles.emptyText}>All available questions have been answered.</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  const progressPct = Math.round(((cursor + 1) / total) * 100)
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -162,7 +273,7 @@ export default function AdjustScreen() {
 
       <View style={styles.progressSection}>
         <Text style={styles.progressLabel}>
-          Question {step + 1} of {total}
+          Question {cursor + 1} of {total}
         </Text>
         <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
           <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
@@ -217,7 +328,7 @@ export default function AdjustScreen() {
         >
           {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-            {isSubmitting ? 'Saving...' : isLast ? 'See Suggestions' : 'Next'}
+            {isSubmitting ? 'Saving...' : isLast || willStop ? 'See Suggestions' : 'Next'}
           </Text>
         </Pressable>
       </View>

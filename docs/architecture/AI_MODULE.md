@@ -24,7 +24,8 @@ The AI subsystem aims to:
 
 - Detect common canine skin diseases
 - Provide fast preliminary screening
-- Operate completely offline
+- Run inference on-device; a server-side image safety review (never
+  inference) checks photo suitability before classification
 - Produce confidence scores
 - Reduce consultation time
 - Improve record consistency
@@ -37,6 +38,7 @@ The AI subsystem aims to:
 The AI module is responsible for:
 
 - Image preprocessing
+- Reviewing photo suitability before classification (stateless, server-side; see section 26)
 - Running TensorFlow Lite inference
 - Returning prediction probabilities
 - Returning confidence score
@@ -51,6 +53,7 @@ The AI module is NOT responsible for:
 - Veterinary decision making
 - Cloud training
 - Dataset management
+- Server-side disease inference
 
 ---
 
@@ -303,6 +306,11 @@ Upload Result
 
 Inference occurs entirely on the mobile device.
 
+Before TensorFlow Lite runs, every quality-passing photo of the screening
+session (three slots, at most three photos) goes through the stateless image
+safety review described in section 26.
+Photos that are not approved by the review never reach the model.
+
 ---
 
 # 14. Backend Integration
@@ -314,9 +322,12 @@ The backend receives:
 - Model Version
 - Inference Time
 - Consultation ID
-- Captured Image
+- The reviewed photo together with its signed validation token (multipart
+  create path only)
 
-The backend stores these values without modification and stores the captured image in Supabase Storage.
+The backend stores these values without modification. The uploaded photo is
+used solely to recompute its SHA-256 for validation-token verification and is
+not stored; no image-review data is persisted.
 
 ---
 
@@ -326,11 +337,12 @@ Each screening record stores:
 
 - Prediction
 - Confidence
-- Image reference in Supabase Storage
 - Model Version
 - Timestamp
 - Veterinarian
 - Consultation
+
+No image is stored with the screening record.
 
 Historical predictions are preserved permanently.
 
@@ -540,6 +552,9 @@ When working on the AI module:
 
 - Keep inference entirely on-device.
 - Never perform inference on the backend.
+- Never classify a photo that the image safety review did not approve.
+- Never spend more than three review requests per screening session
+  (retries included).
 - Match preprocessing to the training pipeline.
 - Do not hardcode disease names outside configuration files.
 - Preserve model version information.
@@ -547,3 +562,77 @@ When working on the AI module:
 - Never present predictions as confirmed diagnoses.
 - Ensure the AI module can be upgraded without changing the public API.
 - Maintain compatibility with the mobile application architecture.
+
+---
+
+# 26. Image Validation Gate (Mobile)
+
+Multi-image screening validates every photo before disease prediction.
+
+Quality and similarity gate (on-device):
+
+- Quality gate: brightness must be between `15` and `240`, and variance must be at least `30`.
+- Similarity below `0.10` is classified as `low_similarity`.
+- Similarity from `0.10` to below `0.30` is classified as `not_skin`.
+- Similarity at or above `0.30` is classified as `ok` and is a skin-valid image.
+- At least three skin-valid images are required. If fewer than three pass, the result is `NOT_SKIN_IMAGE` and no disease prediction is shown.
+- If fewer than three images pass the quality gate, the result is `INVALID_IMAGE`.
+- Disease probabilities and mean similarity are computed only from skin-valid images.
+- A green check means the photo was accepted as a dog-skin image. It does not mean a disease was detected.
+
+Claude image safety review (stateless, runs after the quality gate and before inference; logic in `mobile/ai/services/claudeValidation.ts`):
+
+- Every quality-passing photo of a screening session is reviewed through
+  `POST /api/owner/screenings/vision-analysis/`. The capture screen has three
+  slots, so a session reviews at most three photos.
+- A session is one visit to the capture screen. It may spend at most **three
+  requests including retries**. All first attempts run before any retry; a
+  transient failure (`TIMEOUT`, `PROVIDER_ERROR`, transport errors) is retried
+  at most once and only while budget remains. `RATE_LIMITED`,
+  `QUOTA_EXHAUSTED`, `NOT_CONFIGURED`, `MALFORMED_RESPONSE` and
+  `NOT_VALIDATED` are never retried.
+- Only photos answered `OK` + `SUITABLE` + `ELIGIBLE` are approved. Screening
+  continues only when all three photos are approved:
+  - If any photo fails the quality gate, fewer than three photos reach the
+    review, and screening is blocked with a message asking the owner to retake
+    the photos that are blurry, too dark, or unclear.
+  - If any reviewed photo is rejected, screening is blocked with a message
+    asking the owner to replace the rejected photo(s) and then start a new
+    screening. A rejection run always spends the whole session budget.
+- Replacing a photo inside the session keeps the session
+  budget; an exhausted budget reports the replacement as `not_validated` and
+  a new screening (new session) is required.
+- Approved photos are then classified as before. A photo rejected as
+  `POOR_QUALITY` is reported as `quality_failed`, other rejections as
+  `not_skin`, and failed reviews as `validation_error`.
+- The approval travels as a signed token bound to the owner and the image
+  SHA-256 (expiry `SCREENING_CLAUDE_TOKEN_MAX_AGE`, default 3600 seconds).
+  The backend re-verifies it on screening create and persists nothing about
+  the review.
+- The review never diagnoses: it only triages photo suitability, and its
+  wording must never state a disease.
+- Regression coverage is available through `npm run test:claude` in `mobile/`.
+
+The `0.30` skin-valid threshold must be calibrated against real canine skin images. Human faces must not be accepted as skin-valid. Regression coverage is available through `npm run test:screening` in `mobile/`.
+
+---
+
+# 27. Provisional Bayesian Questionnaire Refinement (Mobile)
+
+The questionnaire refinement step is an experimental mobile-only layer over the five-class image model.
+
+- The active method is `bayesian-provisional-v1`, configured in `mobile/ai/decisionTree/bayesian.config.ts`.
+- The image model, quality gates, skin-validity gates, and minimum-valid-image rule are unchanged.
+- Questionnaire vote points are converted to provisional option likelihoods using `softmax(vote / 20)`.
+- Related questions are averaged in groups; multi-select locations are averaged across selected locations.
+- Expert log-odds are centered and capped at `2.5` before combining with the normalized image prior.
+- The output is a normalized posterior over the five classes, labeled as screening likelihood rather than confidence.
+- Adaptive ordering is enabled by default. It selects the unanswered question with the highest top-two discrimination.
+- Early stopping is implemented but disabled by default. When enabled it requires `P1 >= 0.85`, margin `>= 0.30`, at least two informative groups, and two consecutive stable informative updates.
+- `unsure` answers and unanswered questions add no evidence. All 12 questions remain the fallback.
+- Setting `REFINEMENT_METHOD` to `additive` forces the original static 12-question order and disables Bayesian early stopping.
+- The refinement is not clinically calibrated and does not provide a diagnosis.
+- Questionnaire answers, refinement method, and stopping metadata are not yet persisted by the backend.
+- Regression coverage is available through `npm run test:bayesian` and `npm run test:adaptive` in `mobile/`.
+
+Detailed assumptions, formula, limitations, rollout, and evaluation requirements are documented in `docs/ai/BAYESIAN_REFINEMENT.md`.

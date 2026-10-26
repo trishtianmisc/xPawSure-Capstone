@@ -2,6 +2,24 @@ export type ScreeningStatus = 'PENDING_REVIEW' | 'REVIEWED' | 'CONFIRMED' | 'DIS
 
 export type ScreeningSource = 'DEVICE'
 
+export interface ClaudeAnalysisResponse {
+  status: string
+  model?: string
+  analyzed_at?: string
+  latency_ms?: number | null
+  usage?: {
+    input_tokens?: number | null
+    output_tokens?: number | null
+  }
+  result: {
+    image_suitability: string
+    screening_eligibility: string
+    screening_message?: string
+  } | null
+  detail?: string
+  token?: string
+}
+
 export interface Screening {
   ais_id: string
   pet_id: string
@@ -45,4 +63,6 @@ export interface CreateScreeningPayload {
   model_version: string
   inference_time_ms?: number
   device?: string
+  image_uri?: string
+  claude_token?: string
 }

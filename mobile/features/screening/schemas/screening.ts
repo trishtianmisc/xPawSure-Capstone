@@ -8,6 +8,8 @@ export const createScreeningSchema = z.object({
   model_version: z.string().min(1, 'A model version is required'),
   inference_time_ms: z.number().int().min(0).optional(),
   device: z.string().optional(),
+  image_uri: z.string().min(1).optional(),
+  claude_token: z.string().min(1).optional(),
 })
 
 export type CreateScreeningFormValues = z.infer<typeof createScreeningSchema>

@@ -16,18 +16,27 @@ import {
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
-import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import type { ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { countRejectedReports } from '../../../../ai/services/screening.logic'
+import AnswerReviewCard from '../../../../features/screening/components/AnswerReviewCard'
+import ConfidenceBar from '../../../../features/screening/components/ConfidenceBar'
+import MockHomeCareCard from '../../../../features/screening/components/MockHomeCareCard'
+import ScreeningModeCard from '../../../../features/screening/components/ScreeningModeCard'
+import { DISEASE_META } from '../../../../features/screening/constants'
 import { usePet } from '../../../../features/pet/hooks/usePet'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import {
+  firstRouteParam,
+  normalizeScreeningState,
+  parseRouteImageReports,
+  parseRoutePredictions,
+  parseRouteThumbnailUris,
+  resolveScreeningResultView,
+} from '../../../../features/screening/logic/resultViewModel'
 
-const DISEASE_META: Record<string, { color: string; icon: string }> = {
-  ALLERGIC_DERMATITIS: { color: '#E67E22', icon: 'alert-circle-outline' },
-  BACTERIAL: { color: '#C0392B', icon: 'bacteria-outline' },
-  FUNGAL: { color: '#8E44AD', icon: 'flower-tulip-outline' },
-  HOTSPOT: { color: '#D35400', icon: 'fire' },
-  MANGE: { color: '#27AE60', icon: 'bug-outline' },
-}
+const MOCK_HOME_CARE_ENABLED =
+  (process.env.EXPO_PUBLIC_ENABLE_MOCK_HOME_CARE ?? '').toLowerCase() === 'true'
 
 const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> = {
   DISEASE_DETECTED: { color: '#C0392B', icon: 'medical-bag' },
@@ -36,52 +45,32 @@ const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> 
   INVALID_IMAGE: { color: '#E74C3C', icon: 'image-off-outline' },
 }
 
-function ConfidenceBar({ label, confidence, isTop, color }: {
-  label: string
-  confidence: number
-  isTop: boolean
-  color: string
-}) {
-  const { colors } = useTheme()
-  const pct = Math.round(confidence)
-
-  return (
-    <View style={barStyles.row}>
-      <View style={barStyles.labelRow}>
-        <Text style={[barStyles.label, isTop && { color: colors.text }]} numberOfLines={1}>
-          {isTop ? '★ ' : '  '}{label}
-        </Text>
-        <Text style={[barStyles.pct, isTop && { ...font.bold, color: colors.text }]}>{pct}%</Text>
-      </View>
-      <View style={[barStyles.track, { backgroundColor: colors.surfaceAlt }]}>
-        <View
-          style={[
-            barStyles.fill,
-            {
-              backgroundColor: isTop ? color : colors.border,
-              width: `${pct}%`,
-            },
-          ]}
-        />
-      </View>
-    </View>
-  )
+function buildStoppingNotice(
+  reason: string | undefined,
+  answeredCount: number,
+  totalQuestions: number,
+): string | null {
+  if (reason === 'criteria-met') {
+    if (answeredCount >= totalQuestions) {
+      return `All ${totalQuestions} questions were answered and the configured provisional criteria were met. This is not a diagnosis.`
+    }
+    return `Questionnaire stopped early after ${answeredCount} of ${totalQuestions} answers because the configured provisional criteria were met. This is not a diagnosis.`
+  }
+  if (reason === 'all-questions-answered') {
+    return `All ${totalQuestions} questions were answered without meeting the early-stop criteria. Showing the best available preliminary result; uncertainty remains.`
+  }
+  if (reason === 'completed-with-early-stopping-disabled') {
+    return `All ${totalQuestions} questions completed. Showing the best available preliminary result.`
+  }
+  return null
 }
-
-const barStyles = StyleSheet.create({
-  row: { gap: 6, marginBottom: 14 },
-  labelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  label: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
-  pct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
-  track: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
-  fill: { borderRadius: 4, height: '100%' },
-})
 
 export default function ResultScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
   const createScreening = useCreateScreening()
   const [saveError, setSaveError] = useState(false)
+  const [failedThumbnails, setFailedThumbnails] = useState<Record<number, boolean>>({})
   const params = useLocalSearchParams<{
     imageUri: string
     petId: string
@@ -93,47 +82,86 @@ export default function ResultScreen() {
     stateMessage: string
     alreadySaved: string
     refined?: string
+    summary?: string | string[]
     changed?: string
+    refinementMethod?: string
+    stoppingReason?: string
+    answeredCount?: string
+    totalQuestions?: string
     imageReports?: string
+    thumbnailUris?: string
+    validationImageUri?: string
+    validationToken?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
+  const petId = firstRouteParam(params.petId)
+  const petName = firstRouteParam(params.petName) ?? ''
   const { data: pet } = usePet(
-    params.petId && params.petId !== 'unknown' ? params.petId : undefined,
+    petId && petId !== 'unknown' ? petId : undefined,
   )
 
-  const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
-  const stateMessage = params.stateMessage || ''
+  const screeningState = normalizeScreeningState(params.state)
+  const stateMessage = firstRouteParam(params.stateMessage) ?? ''
 
-  const predictions: Prediction[] = useMemo(() => {
-    try {
-      return JSON.parse(params.predictions || '[]')
-    } catch {
-      return []
-    }
-  }, [params.predictions])
+  const predictions = useMemo(() => parseRoutePredictions(params.predictions), [params.predictions])
+  const refinedPredictions = useMemo(
+    () => {
+      const parsed = parseRoutePredictions(params.refined)
+      return parsed.length > 0 ? parsed : null
+    },
+    [params.refined],
+  )
 
-  const refinedPredictions: Prediction[] | null = useMemo(() => {
-    try {
-      const parsed = params.refined ? JSON.parse(params.refined) : null
-      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
-    } catch {
-      return null
-    }
-  }, [params.refined])
+  const imageReports = useMemo(
+    () => parseRouteImageReports(params.imageReports),
+    [params.imageReports],
+  )
+  const thumbnailUris = useMemo(
+    () => parseRouteThumbnailUris(params.thumbnailUris),
+    [params.thumbnailUris],
+  )
 
-  const imageReports: ImageReport[] = useMemo(() => {
-    try {
-      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
-      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
-    } catch {
-      return []
+  const markThumbnailFailed = (index: number) => {
+    setFailedThumbnails((prev) =>
+      prev[index] ? prev : { ...prev, [index]: true },
+    )
+  }
+
+  const rejectionMessages = useMemo(() => {
+    const counts = countRejectedReports(imageReports)
+    const messages: string[] = []
+    const notSkin = counts.notSkin + counts.lowSimilarity
+
+    if (screeningState !== 'INVALID_IMAGE' && notSkin > 0) {
+      messages.push(`${notSkin} ${notSkin === 1 ? 'photo' : 'photos'} did not look like dog skin.`)
     }
-  }, [params.imageReports])
+    if (counts.quality > 0) {
+      messages.push(`${counts.quality} ${counts.quality === 1 ? 'photo was' : 'photos were'} too dark or blurry.`)
+    }
+    if (counts.validationError > 0) {
+      messages.push(
+        `${counts.validationError} ${counts.validationError === 1 ? 'photo could' : 'photos could'} not complete the AI safety review.`,
+      )
+    }
+    if (counts.notValidated > 0) {
+      messages.push(
+        `${counts.notValidated} ${counts.notValidated === 1 ? 'photo was' : 'photos were'} not AI-validated in this screening session.`,
+      )
+    }
+
+    return messages
+  }, [imageReports, screeningState])
 
   const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
   const top = sorted[0]
   const finalTop = refinedPredictions ? refinedPredictions[0] : top
-  const isChanged = params.changed === 'true'
+  const isChanged = firstRouteParam(params.changed) === 'true'
+  const isBayesian = firstRouteParam(params.refinementMethod) === 'bayesian-provisional-v1'
+  const answeredCount = Number(firstRouteParam(params.answeredCount)) || 0
+  const totalQuestions = Number(firstRouteParam(params.totalQuestions)) || 12
+  const stoppingNotice = isBayesian
+    ? buildStoppingNotice(firstRouteParam(params.stoppingReason) ?? undefined, answeredCount, totalQuestions)
+    : null
   const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
   const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
   const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
@@ -141,24 +169,43 @@ export default function ResultScreen() {
   const stateMeta = STATE_META[screeningState]
   const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
 
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
+  const resultView = useMemo(
+    () =>
+      resolveScreeningResultView({
+        summaryRaw: params.summary,
+        screeningState,
+        petId,
+        legacyTop: finalTop,
+        mockHomeCareEnabled: MOCK_HOME_CARE_ENABLED,
+      }),
+    [finalTop, petId, params.summary, screeningState],
+  )
+  const summary = resultView.summary
+  const canBook = resultView.canBook
+  const bookingTop = resultView.bookingTop
 
   const handleSaveAndBook = () => {
-    if (!canBook || !finalTop || createScreening.isPending) return
-    if (params.alreadySaved === 'true') {
+    if (!canBook || !bookingTop || !petId || createScreening.isPending) return
+    if (firstRouteParam(params.alreadySaved) === 'true') {
       router.replace('/(owner)/appointments/book')
       return
     }
     setSaveError(false)
     createScreening.mutate(
       {
-        pet_id: params.petId,
+        pet_id: petId,
         source: 'DEVICE',
-        prediction: finalTop.disease,
-        confidence: Math.round(finalTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+        prediction: bookingTop.disease,
+        confidence: Math.round(bookingTop.confidence),
+        model_version: firstRouteParam(params.modelVersion) || 'unknown',
+        inference_time_ms: Number(firstRouteParam(params.inferenceTimeMs)) || undefined,
         device: Platform.OS,
+        ...(firstRouteParam(params.validationImageUri) && firstRouteParam(params.validationToken)
+          ? {
+              image_uri: firstRouteParam(params.validationImageUri) ?? '',
+              claude_token: firstRouteParam(params.validationToken) ?? '',
+            }
+          : {}),
       },
       {
         onSuccess: () => {
@@ -193,7 +240,7 @@ export default function ResultScreen() {
             </View>
           )}
           <View style={styles.imageInfo}>
-            <Text style={styles.petName}>{params.petName}</Text>
+            <Text style={styles.petName}>{petName}</Text>
             <Text style={styles.timestamp}>
               {imageReports.length > 0
                 ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
@@ -204,32 +251,164 @@ export default function ResultScreen() {
 
         {imageReports.length > 0 && (
           <View style={styles.reportStrip}>
-            {imageReports.map((report, i) => (
-              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
-                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
-                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
-                  <MaterialCommunityIcons
-                    color="#FFF"
-                    name={report.status === 'ok' ? 'check' : 'close'}
-                    size={10}
-                  />
+            {imageReports.map((report, i) => {
+              const displayUri = thumbnailUris[i] ?? report.uri
+              const showFallback = failedThumbnails[i] === true || !displayUri
+              const isSkipped = report.status === 'not_validated'
+              const badgeStyle =
+                report.status === 'ok'
+                  ? styles.reportBadgeOk
+                  : isSkipped
+                    ? styles.reportBadgeSkipped
+                    : styles.reportBadgeFail
+              const badgeIcon = report.status === 'ok' ? 'check' : isSkipped ? 'minus' : 'close'
+
+              return (
+                <View key={`${report.uri}-${i}`} style={styles.reportItem}>
+                  {showFallback ? (
+                    <View
+                      accessibilityLabel="Photo preview unavailable"
+                      style={[
+                        styles.reportThumb,
+                        styles.reportThumbPlaceholder,
+                        report.status !== 'ok' && styles.reportThumbFailed,
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        color={colors.textMuted}
+                        name="image-outline"
+                        size={20}
+                      />
+                    </View>
+                  ) : (
+                    <Image
+                      onError={() => markThumbnailFailed(i)}
+                      source={{ uri: displayUri }}
+                      style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]}
+                    />
+                  )}
+                  <View style={[styles.reportBadge, badgeStyle]}>
+                    <MaterialCommunityIcons color="#FFF" name={badgeIcon} size={10} />
+                  </View>
                 </View>
-              </View>
-            ))}
+              )
+            })}
           </View>
         )}
 
-        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
+        {rejectionMessages.length > 0 && (
+          <View style={styles.rejectionNote}>
+            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={14} />
+            <Text style={styles.rejectionText}>{rejectionMessages.join(' ')}</Text>
+          </View>
+        )}
+
+        {stoppingNotice && (
+          <View style={[styles.stoppingNote, { backgroundColor: colors.surfaceAlt }]}>
+            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
+            <Text style={styles.stoppingText}>{stoppingNotice}</Text>
+          </View>
+        )}
+
+        {resultView.summaryWarning && (
+          <View style={[styles.summaryWarning, { backgroundColor: colors.surfaceAlt }]}>
+            <MaterialCommunityIcons color={colors.textMuted} name="alert-circle-outline" size={16} />
+            <Text style={styles.summaryWarningText}>{resultView.summaryWarning}</Text>
+          </View>
+        )}
+
+        {screeningState === 'DISEASE_DETECTED' && summary ? (
+          <>
+            <View style={styles.sectionIntro}>
+              <Text style={styles.sectionTitle}>Screening views</Text>
+              <Text style={styles.sectionHint}>
+                These views are independent. The combined view uses both photos and questionnaire answers.
+              </Text>
+            </View>
+
+            {summary.aiOnly ? (
+              <ScreeningModeCard
+                title="Photo-only screening"
+                badge="AI ONLY"
+                icon="camera-outline"
+                accentColor={colors.primary}
+                confidenceLabel="photo-only score"
+                subtitle="Based only on the three photos. It does not use your questionnaire answers."
+                predictions={summary.aiOnly}
+              />
+            ) : null}
+
+            {summary.questionnaireOnly ? (
+              <ScreeningModeCard
+                title="Questionnaire-only screening"
+                badge="PRELIMINARY"
+                icon="clipboard-text-outline"
+                accentColor="#8E44AD"
+                confidenceLabel="uncalibrated questionnaire score"
+                subtitle="Uses only your answers with a uniform starting assumption. Preliminary and not clinically calibrated."
+                predictions={summary.questionnaireOnly}
+              />
+            ) : (
+              <View style={styles.unavailableCard}>
+                <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={18} />
+                <View style={styles.unavailableCopy}>
+                  <Text style={styles.unavailableTitle}>No informative questionnaire result is available.</Text>
+                  <Text style={styles.unavailableText}>
+                    The answers did not contain enough distinguishing information.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {summary.combined ? (
+              <ScreeningModeCard
+                title="Combined screening"
+                badge="COMBINED"
+                icon="pulse"
+                accentColor="#B96534"
+                confidenceLabel="combined screening score"
+                subtitle="Combines the photo screening with your questionnaire answers. Experimental and provisional."
+                predictions={summary.combined}
+              />
+            ) : (
+              <View style={styles.unavailableCard}>
+                <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={18} />
+                <View style={styles.unavailableCopy}>
+                  <Text style={styles.unavailableTitle}>Combined result is unavailable.</Text>
+                  <Text style={styles.unavailableText}>
+                    Booking is disabled because there is no valid combined result.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {resultView.showMockHomeCare && <MockHomeCareCard />}
+
+            <AnswerReviewCard
+              rows={summary.answerReview}
+              answersValid={summary.answersValid}
+              invalidAnswerQuestionIds={summary.invalidAnswerQuestionIds}
+            />
+          </>
+        ) : screeningState === 'DISEASE_DETECTED' && finalTop && topMeta ? (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
                 <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
               </View>
-              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
+              <Text style={styles.topLabel}>
+                {isBayesian
+                  ? 'Bayesian Screening Suggestion'
+                  : refinedPredictions
+                    ? 'Closest Match'
+                    : 'Predicted Condition'}
+              </Text>
               <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
               <View style={styles.confidenceBadge}>
                 <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-                <Text style={styles.confidenceLabel}>confidence</Text>
+                <Text style={styles.confidenceLabel}>
+                  {isBayesian ? 'screening likelihood' : 'confidence'}
+                </Text>
               </View>
               {refinedPredictions && (
                 <Text style={styles.comparisonText}>
@@ -242,7 +421,11 @@ export default function ResultScreen() {
 
             <View style={styles.breakdownCard}>
               <Text style={styles.breakdownTitle}>
-                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
+                {isBayesian
+                  ? 'Top 3 Screening Likelihoods'
+                  : refinedPredictions
+                    ? 'Top 3 Suggestions'
+                    : 'All Predictions'}
               </Text>
               {displayBars.map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
@@ -263,7 +446,7 @@ export default function ResultScreen() {
               )}
             </View>
           </>
-        )}
+        ) : null}
 
         {(screeningState === 'NOT_SKIN_IMAGE' || screeningState === 'UNCERTAIN' || screeningState === 'INVALID_IMAGE') && (
           <View style={[styles.stateCard, { borderColor: stateMeta.color + '30' }]}>
@@ -279,7 +462,12 @@ export default function ResultScreen() {
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
             This is an AI-assisted screening and does not replace professional veterinary diagnosis.
-            Consult a vet for definitive results.
+            {summary
+              ? ' Photo-only, questionnaire-only, and combined views are independent. Questionnaire-only and combined scores are provisional and not clinically calibrated.'
+              : isBayesian
+                ? ' Questionnaire-adjusted likelihoods are experimental and use provisional expert weights.'
+                : ''}
+            {' '}Consult a vet for definitive results.
           </Text>
         </View>
 
@@ -313,7 +501,7 @@ export default function ResultScreen() {
           onPress={() =>
             router.replace({
               pathname: '/(owner)/pets/screening',
-              params: { petId: params.petId, petName: params.petName },
+              params: { petId: petId ?? undefined, petName: petName || undefined },
             })
           }
           style={[styles.actionBtn, styles.secondaryBtn, styles.scanAgainBtn, { borderColor: colors.border }]}
@@ -345,9 +533,72 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
   reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
+  rejectionNote: { alignItems: 'flex-start', flexDirection: 'row', gap: 6, marginBottom: 16, marginTop: -10 },
+  rejectionText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  stoppingNote: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  stoppingText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
+  summaryWarning: {
+    alignItems: 'flex-start',
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summaryWarningText: {
+    ...font.medium,
+    color: colors.textMuted,
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  sectionIntro: { marginBottom: 12 },
+  sectionTitle: { ...font.extrabold, color: colors.text, fontSize: 18 },
+  sectionHint: {
+    ...font.regular,
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  unavailableCard: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+    padding: 16,
+  },
+  unavailableCopy: { flex: 1 },
+  unavailableTitle: { ...font.bold, color: colors.text, fontSize: 13, lineHeight: 18 },
+  unavailableText: {
+    ...font.regular,
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
   reportItem: { position: 'relative' },
-  reportThumb: { borderRadius: 12, height: 56, width: 56 },
+  reportThumb: { backgroundColor: colors.surfaceAlt, borderRadius: 12, height: 56, width: 56 },
   reportThumbFailed: { opacity: 0.4 },
+  reportThumbPlaceholder: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderWidth: 1,
+    justifyContent: 'center',
+  },
   reportBadge: {
     alignItems: 'center',
     borderRadius: 9,
@@ -359,6 +610,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 18,
   },
   reportBadgeOk: { backgroundColor: '#27AE60' },
+  reportBadgeSkipped: { backgroundColor: '#95A5A6' },
   reportBadgeFail: { backgroundColor: '#C0392B' },
   thumbnailPlaceholder: {
     alignItems: 'center',

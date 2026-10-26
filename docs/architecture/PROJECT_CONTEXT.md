@@ -300,7 +300,9 @@ Current objective:
 
 Detect common canine skin diseases.
 
-The AI runs completely offline using TensorFlow Lite.
+The AI runs inference completely on-device using TensorFlow Lite; a
+server-side image safety review (never inference) checks photo suitability
+before classification.
 
 Inference pipeline:
 

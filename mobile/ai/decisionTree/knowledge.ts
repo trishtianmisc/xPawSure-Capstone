@@ -1,18 +1,17 @@
 import type { Knowledge } from './types'
 
-// VET-CONSENSUS DECISION-TREE KNOWLEDGE
+// VET-INFORMED SCREENING REFERENCE
 // Derived from the two completed Veterinary Symptom Verification Questionnaires:
 //   Vet 1 — Maggie Galawara, South Veterinary Clinic, 13 yrs — 2026-09-14
 //   Vet 2 — Ivone Claire D. Arrogante, South Veterinary Clinic, 10 yrs — 2026-09-19
-// Frequency ratings were mapped to a 0-4 scale (A/Always=4 … N/Never=0) and
-// averaged equally across both vets. Pair discriminators (both rated High
-// confidence) come from each vet's Table 5; onset/contagion from Table 4;
-// body locations from Table 3. The vets conflict on sudden onset (Vet 1:
-// Hotspot, Vet 2: Allergic Dermatitis) — weights are split, Hotspot favored.
-// Question order: pair discriminators first, then supporting signs, body
-// location, and onset. Per the questionnaire interpretation notes, these marks
-// are a screening reference only and should be confirmed with the veterinarians
-// before being treated as verified clinical knowledge.
+// Source sections: pair discriminators (both rated High confidence) from each
+// vet's Table 5; onset/contagion from Table 4; body locations from Table 3.
+// The vote points below are a manual screening reference, not calibrated
+// likelihoods and not a reproducibly averaged consensus. The vets conflict on
+// sudden onset (Vet 1: Hotspot, Vet 2: Allergic Dermatitis). These marks must
+// be confirmed with the veterinarians before being treated as clinical
+// knowledge. See docs/ai/BAYESIAN_REFINEMENT.md for the current method and
+// limitations.
 
 export const KNOWLEDGE: Knowledge = {
   source: 'VET',

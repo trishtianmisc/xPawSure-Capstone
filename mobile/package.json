@@ -16,6 +16,7 @@
     "expo-asset": "~55.0.20",
     "expo-camera": "~55.0.23",
     "expo-constants": "~55.0.17",
+    "expo-crypto": "~55.0.19",
     "expo-file-system": "~55.0.26",
     "expo-font": "~55.0.8",
     "expo-gl": "~55.0.18",
@@ -48,7 +49,13 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "compute:reference": "node scripts/compute_training_reference_tfjs.js"
+    "compute:reference": "node scripts/compute_training_reference_tfjs.js",
+    "test:screening": "node scripts/test-screening-logic.js",
+    "test:claude": "node scripts/test-claude-validation-logic.js",
+    "test:bayesian": "node scripts/test-bayesian-logic.js",
+    "test:adaptive": "node scripts/test-adaptive-logic.js",
+    "test:summary": "node scripts/test-summary-logic.js",
+    "test:result-view": "node scripts/test-result-view-logic.js"
   },
   "private": true
 }
