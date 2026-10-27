@@ -7,12 +7,10 @@ import { apiErrorMessage } from '../../../../utils/error'
 import {
   CLINIC_TIME_ZONE,
   formatDate,
-  formatPhone,
 } from '../../../../utils/format'
 import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
 import { PageHero } from '../../../receptionist/components/PageHero'
-import { PatientVaccinationBadge } from '../components/PatientVaccinationBadge'
-import { useBreeds, useClinicPatients } from '../hooks/usePatients'
+import { useClinicPatients } from '../hooks/usePatients'
 import type {
   PatientSort,
   SortOrder,
@@ -21,34 +19,6 @@ import type {
 
 const INPUT_CLASSES =
   'rounded-md border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40'
-
-const VACCINATION_FILTERS: Array<{
-  value: VaccinationStatus | ''
-  label: string
-}> = [
-    { value: '', label: 'All vaccination statuses' },
-    { value: 'up_to_date', label: 'Up to date' },
-    { value: 'due_soon', label: 'Due soon' },
-    { value: 'overdue', label: 'Overdue' },
-    { value: 'none_recorded', label: 'None recorded' },
-  ]
-
-const SORT_OPTIONS: Array<{ value: PatientSort; label: string }> = [
-  { value: 'name', label: 'Name' },
-  { value: 'last_visit', label: 'Last visit' },
-  { value: 'no_shows', label: 'No-shows' },
-]
-
-function labelize(value: string): string {
-  const lower = value.replace(/_/g, ' ').toLowerCase()
-  return lower.charAt(0).toUpperCase() + lower.slice(1)
-}
-
-function ageLabel(age: number | null): string {
-  if (age === null) return '-'
-  if (age === 0) return '<1 yr'
-  return `${age} ${age === 1 ? 'yr' : 'yrs'}`
-}
 
 function initial(name: string): string {
   return name.trim()[0]?.toUpperCase() ?? '?'
@@ -62,13 +32,12 @@ export function ClinicAdminPatientsPage() {
     VaccinationStatus | ''
   >('')
   const [noShowsOnly, setNoShowsOnly] = useState(false)
-  const [sort, setSort] = useState<PatientSort>('name')
+  const [sort] = useState<PatientSort>('name')
   const [order, setOrder] = useState<SortOrder>('asc')
   const [page, setPage] = useState(1)
 
   const debouncedSearch = useDebounce(search, 300)
   const settings = useClinicSettings()
-  const breeds = useBreeds()
 
   const params = useMemo(
     () => ({
@@ -95,21 +64,6 @@ export function ClinicAdminPatientsPage() {
 
   function changeSearch(value: string) {
     setSearch(value)
-    setPage(1)
-  }
-
-  function changeBreed(value: string) {
-    setBreed(value)
-    setPage(1)
-  }
-
-  function changeVaccinationStatus(value: string) {
-    setVaccinationStatus(value as VaccinationStatus | '')
-    setPage(1)
-  }
-
-  function toggleNoShows() {
-    setNoShowsOnly((current) => !current)
     setPage(1)
   }
 

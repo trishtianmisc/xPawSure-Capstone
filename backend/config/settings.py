@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     'vaccinations',
     'notifications',
     'audit_log',
+    'reports',
     'rest_framework_simplejwt.token_blacklist',
 ]
 

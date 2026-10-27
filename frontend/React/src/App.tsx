@@ -12,6 +12,7 @@ const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dash
 const ClinicAdminAppointmentsPage = lazy(() => import('./features/clinic-admin/appointments/pages/ClinicAdminAppointmentsPage').then(m => ({ default: m.ClinicAdminAppointmentsPage })))
 const ClinicAdminAppointmentDetailPage = lazy(() => import('./features/clinic-admin/appointments/pages/ClinicAdminAppointmentDetailPage').then(m => ({ default: m.ClinicAdminAppointmentDetailPage })))
 const ClinicAdminPatientsPage = lazy(() => import('./features/clinic-admin/patients/pages/ClinicAdminPatientsPage').then(m => ({ default: m.ClinicAdminPatientsPage })))
+const ClinicAdminReportsPage = lazy(() => import('./features/clinic-admin/reports/pages/ReportsPage').then(m => ({ default: m.ClinicAdminReportsPage })))
 const ClinicAdminPatientDetailPage = lazy(() => import('./features/clinic-admin/patients/pages/ClinicAdminPatientDetailPage').then(m => ({ default: m.ClinicAdminPatientDetailPage })))
 const ClinicProfilePage = lazy(() => import('./features/clinic-profile/pages/ClinicProfilePage').then(m => ({ default: m.ClinicProfilePage })))
 const UserProfilePage = lazy(() => import('./features/clinic-admin/profile/pages/UserProfilePage').then(m => ({ default: m.UserProfilePage })))
@@ -111,6 +112,7 @@ function App() {
   <Route path="appointments/:id" element={<ClinicAdminAppointmentDetailPage />} />
   <Route path="patients" element={<ClinicAdminPatientsPage />} />
   <Route path="patients/:id" element={<ClinicAdminPatientDetailPage />} />
+  <Route path="reports" element={<ClinicAdminReportsPage />} />
   <Route path="profile" element={<ClinicProfilePage />} />
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>

@@ -1694,3 +1694,164 @@ Marks all of the caller's unread notifications as read.
 Response:
 
 { "detail": "All notifications marked as read." }
+
+---
+
+# 15. Clinic Admin Reports Endpoints (Web)
+
+All four endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+Any write method returns `403`; unauthenticated requests return `401`. The
+clinic scope always comes from the caller's own staff profile, never from the
+request, so one clinic's admin cannot read another clinic's numbers.
+
+Reports are strictly read-only: they never run past-due reconciliation
+(BUSINESS_RULES section 23), so a stale PENDING appointment counts as
+not-completed until the next dashboard or appointment-list reconciliation.
+
+## Shared query parameters (all optional)
+
+- `date_from`, `date_to` — `YYYY-MM-DD`, clinic-local calendar days.
+  Omitting both defaults to the last 30 clinic-local days ending today;
+  omitting one end fills only that end.
+- `vet_id` — a `stf_id`. Malformed UUID returns `400 {"detail": "Invalid 'vet_id'."}`;
+  an id outside the caller's clinic returns
+  `400 {"detail": "'vet_id' does not belong to this clinic."}` (no data leak).
+
+Validation errors (all `400` with `{"detail": "..."}`):
+
+- `Invalid 'date_from'; expected YYYY-MM-DD.` (same for `date_to`)
+- `'date_from' cannot be after 'date_to'.`
+- `'date_from' and 'date_to' must span at most 366 days.`
+
+Comparison period (`previous` in responses) is the equal-length window
+immediately before the requested one: Oct 1-8 compares against Sep 23-30,
+never against "last month".
+
+Rate denominators: `completion_rate` and `no_show_rate` use elapsed,
+non-cancelled appointments in the window (scheduled time already passed) as
+the denominator; `cancellation_rate` uses all appointments in the window.
+Rates are rounded to one decimal. An empty denominator yields `0`, never an
+error.
+
+## GET /api/reports/summary/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "total_appointments": 10,
+  "completion_rate": 33.3,
+  "no_show_rate": 50.0,
+  "cancellation_rate": 40.0,
+  "new_patients": 1,
+  "previous": {
+    "total_appointments": 0,
+    "completion_rate": 0.0,
+    "no_show_rate": 0.0,
+    "cancellation_rate": 0.0,
+    "new_patients": 0
+  }
+}
+```
+
+`new_patients` counts pets whose first qualifying (non-cancelled, non-no-show,
+non-deleted) appointment at this clinic falls inside the window. It is always
+clinic-wide, even when `vet_id` is supplied; the UI labels it "(all vets)"
+in that case.
+
+## GET /api/reports/appointments/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "series": [
+    { "date": "2026-10-20", "count": 4 },
+    { "date": "2026-10-21", "count": 2 }
+  ],
+  "by_status": [
+    { "status": "PENDING", "count": 0 },
+    { "status": "CONFIRMED", "count": 0 },
+    { "status": "CHECKED_IN", "count": 0 },
+    { "status": "IN_PROGRESS", "count": 1 },
+    { "status": "COMPLETED", "count": 2 },
+    { "status": "CANCELLED", "count": 4 },
+    { "status": "NO_SHOW", "count": 3 }
+  ]
+}
+```
+
+`series` is zero-filled for every day in the window and bucketed by
+clinic-local calendar day. `by_status` always returns all seven statuses
+(zero-filled) so the chart legend stays stable between periods.
+
+## GET /api/reports/vet-workload/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "results": [
+    {
+      "vet_id": "01520dfe-3ba0-41a3-a7c0-d5dda3889ebb",
+      "vet_name": "Hey Sister",
+      "total": 10,
+      "completed": 2,
+      "no_shows": 3,
+      "avg_per_day": 1.7
+    }
+  ],
+  "days": 6
+}
+```
+
+`avg_per_day` divides each vet's totals by `days`, the number of clinic
+**open days** (`ClinicOperatingHours`, `is_closed = false`) inside the window,
+falling back to the calendar-day count when the clinic has no open hours
+configured. With `vet_id` supplied the list contains at most that vet.
+
+## GET /api/reports/screenings/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "by_condition": [
+    { "disease": "Bacterial", "count": 11 },
+    { "disease": "Mange", "count": 11 }
+  ],
+  "avg_confidence": 82.8,
+  "reviewed": 1,
+  "pending_review": 36,
+  "vet_confirmed": 1,
+  "vet_changed": 0
+}
+```
+
+Scoping notes:
+
+- Clinic scope uses a pet-level semi-join (the pet has any non-deleted
+  appointment at this clinic), so a screening still counts even when it was
+  not attached to a booking. One row per screening regardless of how many
+  appointments the pet has.
+- With `vet_id` supplied, only screenings referenced by an appointment of
+  that vet (in this clinic) are counted; unbooked screenings drop out.
+  Clinic-wide figures include screenings not linked to a booking — the UI
+  shows this caveat next to the filter.
+- `ais_confidence` is stored as a 0-100 percentage and returned as-is;
+  `avg_confidence` is `0.0` when there are no screenings.
+- "Reviewed" is derived: `ais_compared_at` is set or the status moved off
+  `PENDING_REVIEW`. `vet_confirmed` / `vet_changed` come from
+  `ais_is_correct` on reviewed rows (true / false / null = not yet judged).
+
+Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
+`/clinic/reports`, CSV export is client-side and downloads
+`xpawsure-report-summary_{date_from}_{date_to}.csv`).
