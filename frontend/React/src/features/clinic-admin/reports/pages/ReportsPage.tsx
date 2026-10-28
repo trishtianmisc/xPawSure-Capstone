@@ -191,24 +191,27 @@ export function ClinicAdminReportsPage() {
         title="Reports & Analytics"
         subtitle="Track appointments, outcomes, workload, and AI screening activity."
         actions={
+          // Hero buttons mirror the staff list's PageHero design: solid
+          // amber primary (Add Staff) + glassy white/10 secondary (Upload
+          // CSV), because the shared Button variants clash with the dark
+          // amber hero gradient.
           <div className="flex flex-wrap gap-2 print:hidden">
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              loading={summary.isFetching}
               disabled={!summary.data}
               onClick={handleExport}
+              className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Export CSV
-            </Button>
-            <Button
+            </button>
+            <button
               type="button"
-              variant="secondary"
               disabled={!summary.data}
               onClick={handlePrint}
+              className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Print
-            </Button>
+            </button>
           </div>
         }
       />
@@ -280,6 +283,7 @@ export function ClinicAdminReportsPage() {
             <StatusBreakdownChart
               data={data.by_status}
               statusHref={(status) => appointmentsHref({ status })}
+              rangeLabel={rangeLabel}
             />
           )}
         />

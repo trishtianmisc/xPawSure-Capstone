@@ -25,9 +25,16 @@ interface StatusBreakdownChartProps {
   // When provided, each legend row becomes a deep link (e.g. the appointments
   // page pre-filtered to that status).
   statusHref?: (status: string) => string
+  // Active page-level date range, shown in the header so it is obvious the
+  // breakdown follows the filter bar rather than covering all time.
+  rangeLabel?: string
 }
 
-export function StatusBreakdownChart({ data, statusHref }: StatusBreakdownChartProps) {
+export function StatusBreakdownChart({
+  data,
+  statusHref,
+  rangeLabel,
+}: StatusBreakdownChartProps) {
   const points = data.map((row) => ({
     status: row.status,
     label: statusLabel(row.status),
@@ -42,9 +49,16 @@ export function StatusBreakdownChart({ data, statusHref }: StatusBreakdownChartP
         <h3 className="text-sm font-bold text-stone-700 dark:text-stone-300">
           Status Breakdown
         </h3>
-        <span className="text-xs text-stone-400 dark:text-stone-500">
-          {total} appointment{total === 1 ? '' : 's'}
-        </span>
+        <div className="text-right">
+          {rangeLabel && (
+            <p className="text-xs text-stone-400 dark:text-stone-500">
+              {rangeLabel}
+            </p>
+          )}
+          <span className="text-xs text-stone-400 dark:text-stone-500">
+            {total} appointment{total === 1 ? '' : 's'}
+          </span>
+        </div>
       </div>
       {total === 0 ? (
         <p className="py-8 text-center text-sm text-stone-400 dark:text-stone-500">
