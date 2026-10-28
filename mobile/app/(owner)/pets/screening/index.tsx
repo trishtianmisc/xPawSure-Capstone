@@ -484,7 +484,7 @@ export default function CaptureScreen() {
               {pickerLoading
                 ? 'Converting the photo to a single analysis copy'
                 : analysisPhase === 'validating'
-                  ? 'Claude Vision is checking whether this photo is suitable for screening'
+                  ? 'Independent image review is checking whether this photo is suitable for screening'
                   : 'Validation passed. The on-device model is analyzing the same photo'}
             </Text>
           </View>

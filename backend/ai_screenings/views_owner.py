@@ -226,6 +226,7 @@ class OwnerScreeningListCreateView(APIView):
                 device=validated.get('device'),
                 claude_payload=claude_payload,
                 image=image_data,
+                symptom_answers=validated.get('symptom_answers'),
             )
         except InvalidScreeningImage as exc:
             return Response(

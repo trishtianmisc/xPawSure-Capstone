@@ -92,6 +92,10 @@ class AiScreening(models.Model):
     )
     ais_cross_analysis_summary = models.TextField(null=True, blank=True, db_column='AIS_CROSS_ANALYSIS_SUMMARY')
 
+    # Display-ready supplementary questionnaire rows (question/answer text).
+    # Never used for prediction, confidence, ranking, review, or booking.
+    ais_symptom_answers = models.JSONField(null=True, blank=True, db_column='AIS_SYMPTOM_ANSWERS')
+
     ais_created_at = models.DateTimeField(auto_now_add=True, db_index=True, db_column='AIS_CREATED_AT')
 
     class Meta:

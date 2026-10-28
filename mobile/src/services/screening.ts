@@ -50,6 +50,9 @@ export async function createScreening(payload: CreateScreeningPayload): Promise<
     }
     if (payload.device) form.append('device', payload.device)
     if (payload.claude_token) form.append('claude_token', payload.claude_token)
+    if (payload.symptom_answers && payload.symptom_answers.length > 0) {
+      form.append('symptom_answers', JSON.stringify(payload.symptom_answers))
+    }
     form.append('image', {
       uri: payload.image_uri,
       name: 'screening.jpg',

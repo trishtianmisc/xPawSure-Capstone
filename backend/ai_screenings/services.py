@@ -62,12 +62,15 @@ class ScreeningService:
     @transaction.atomic
     def create_screening(pet, user, prediction, confidence, model_version,
                          inference_time_ms=None, device=None,
-                         claude_payload=None, image=None) -> AiScreening:
+                         claude_payload=None, image=None,
+                         symptom_answers=None) -> AiScreening:
         """Persist one screening with its single image and both AI outputs.
 
         The on-device prediction and the Claude result are stored separately.
         The cross-analysis is a deterministic comparison only; it does not
         change either result or produce a combined probability.
+        `symptom_answers` is supplementary display data only and never
+        influences the prediction, confidence, status, or cross-analysis.
         """
         if image is not None:
             result = (
@@ -132,6 +135,7 @@ class ScreeningService:
             ais_claude_output_tokens=claude_output_tokens,
             ais_cross_analysis_status=cross_status,
             ais_cross_analysis_summary=cross_summary,
+            ais_symptom_answers=symptom_answers,
         )
 
         if image is not None:

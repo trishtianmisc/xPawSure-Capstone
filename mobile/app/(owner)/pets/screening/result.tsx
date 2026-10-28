@@ -18,8 +18,11 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
+import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { ClaudeReviewCard } from '../../../../features/screening/components/AnalysisCards'
+import { SymptomSummaryCard } from '../../../../features/screening/components/SymptomSummaryCard'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import { buildScreeningSavePayload } from '../../../../features/screening/savePayload'
 import type {
   ClaudeAnalysisResponse,
   ClaudeImageSuitability,
@@ -79,8 +82,6 @@ const GATE_META: Record<
 }
 
 const RESULT_STATES = Object.keys(SCREENING_STATE_MESSAGES) as ScreeningResultState[]
-
-const QUESTIONNAIRE_COLOR = '#8E44AD'
 
 function parseClaude(value?: string): ClaudeAnalysisResponse | null {
   if (!value) return null
@@ -154,10 +155,7 @@ export default function ResultScreen() {
     classifierSkipped?: string
     claude?: string
     claudeRequestFailed?: string
-    refined?: string
-    questionnaireOnly?: string
-    changed?: string
-    refinementMethod?: string
+    answers?: string
     stoppingReason?: string
     answeredCount?: string
     totalQuestions?: string
@@ -184,41 +182,31 @@ export default function ResultScreen() {
     }
   }, [params.predictions])
 
-  const refinedPredictions: Prediction[] = useMemo(() => {
+  // Supplementary questionnaire answers (display context only). These never
+  // alter the AI predictions, confidence, or the persisted screening record.
+  const questionnaireAnswers: Record<string, string[]> = useMemo(() => {
     try {
-      const parsed = JSON.parse(params.refined || '[]')
-      return Array.isArray(parsed) ? (parsed as Prediction[]) : []
+      const parsed = JSON.parse(params.answers || '{}')
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, string[]>)
+        : {}
     } catch {
-      return []
+      return {}
     }
-  }, [params.refined])
+  }, [params.answers])
 
-  const sortedRefined = useMemo(
-    () => [...refinedPredictions].sort((a, b) => b.confidence - a.confidence),
-    [refinedPredictions],
-  )
-  const refinedTop = sortedRefined[0] ?? null
-  const refinedTopMeta = refinedTop
-    ? DISEASE_META[refinedTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' as IconName }
-    : null
-
-  const questionnaireOnlyPredictions: Prediction[] = useMemo(() => {
-    try {
-      const parsed = JSON.parse(params.questionnaireOnly || '[]')
-      return Array.isArray(parsed) ? (parsed as Prediction[]) : []
-    } catch {
-      return []
+  const symptomRows = useMemo(() => {
+    const rows: { question: string; answer: string }[] = []
+    for (const question of KNOWLEDGE.questions) {
+      const selectedIds = questionnaireAnswers[question.id]
+      if (!Array.isArray(selectedIds) || selectedIds.length === 0) continue
+      const labels = selectedIds.map(
+        (id) => question.options.find((option) => option.id === id)?.label ?? id,
+      )
+      rows.push({ question: question.text, answer: labels.join(', ') })
     }
-  }, [params.questionnaireOnly])
-
-  const sortedQuestionnaireOnly = useMemo(
-    () => [...questionnaireOnlyPredictions].sort((a, b) => b.confidence - a.confidence),
-    [questionnaireOnlyPredictions],
-  )
-  const questionnaireOnlyTop = sortedQuestionnaireOnly[0] ?? null
-  const questionnaireOnlyTopMeta = questionnaireOnlyTop
-    ? DISEASE_META[questionnaireOnlyTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' as IconName }
-    : null
+    return rows
+  }, [questionnaireAnswers])
 
   const answeredCount = Number(params.answeredCount) || 0
   const totalQuestions = Number(params.totalQuestions) || 0
@@ -264,21 +252,20 @@ export default function ResultScreen() {
       if (savedId) onSaved(savedId)
       return
     }
-    const bookingTop = refinedTop ?? top
-    if (!bookingTop) return
+    // Sole primary result: the persisted prediction and confidence come
+    // exclusively from the raw on-device AI output (`top`). Questionnaire
+    // answers are never part of the save payload.
+    if (!top) return
     setSaveError(false)
     createScreening.mutate(
-      {
-        pet_id: params.petId,
-        source: 'DEVICE',
-        prediction: bookingTop.disease,
-        confidence: Math.round(bookingTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+      buildScreeningSavePayload(top, {
+        petId: params.petId,
+        modelVersion: params.modelVersion,
+        inferenceTimeMs: params.inferenceTimeMs,
+        imageUri: params.imageUri,
+        claudeToken: claudeResponse?.token || undefined,
         device: Platform.OS,
-        image_uri: params.imageUri,
-        claude_token: claudeResponse?.token || undefined,
-      },
+      }),
       {
         onSuccess: (created) => {
           setSaved(true)
@@ -380,7 +367,9 @@ export default function ResultScreen() {
           </>
         )}
 
-        {!classifierSkipped && <Text style={styles.sectionLabel}>ON-DEVICE RESULT</Text>}
+        {!classifierSkipped && (
+          <Text style={styles.sectionLabel}>AI Preliminary Screening Result</Text>
+        )}
 
         {!classifierSkipped && deviceFailed && (
           <View style={[styles.stateCard, { borderColor: colors.error + '40' }]}>
@@ -417,8 +406,8 @@ export default function ResultScreen() {
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>All Predictions</Text>
-              {sorted.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>Top 3 Predictions</Text>
+              {sorted.slice(0, 3).map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -434,98 +423,12 @@ export default function ResultScreen() {
           </>
         )}
 
-        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && questionnaireOnlyTop && questionnaireOnlyTopMeta && (
-          <>
-            <Text style={styles.sectionLabel}>QUESTIONNAIRE-ONLY RESULT</Text>
-            <View style={[styles.topCard, { borderColor: QUESTIONNAIRE_COLOR + '40' }]}>
-              <View style={[styles.topIconCircle, { backgroundColor: QUESTIONNAIRE_COLOR + '18' }]}>
-                <MaterialCommunityIcons color={QUESTIONNAIRE_COLOR} name="clipboard-text-outline" size={28} />
-              </View>
-              <Text style={styles.topLabel}>Answer-Only Suggestion</Text>
-              <Text style={[styles.topDisease, { color: QUESTIONNAIRE_COLOR }]}>
-                {questionnaireOnlyTop.label}
-              </Text>
-              <View style={styles.confidenceBadge}>
-                <Text style={[styles.confidenceText, { color: QUESTIONNAIRE_COLOR }]}>
-                  {Math.round(questionnaireOnlyTop.confidence)}%
-                </Text>
-                <Text style={styles.confidenceLabel}>uncalibrated answer score</Text>
-              </View>
-              <Text style={styles.comparisonText}>
-                Uses only your {answeredCount} of {totalQuestions} answers, starting from an even
-                assumption. Independent of the photo screening. Preliminary and not clinically
-                calibrated.
-              </Text>
-            </View>
-
-            <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>Answer-Only Predictions</Text>
-              {sortedQuestionnaireOnly.map((pred, i) => {
-                const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
-                return (
-                  <ConfidenceBar
-                    key={pred.disease}
-                    label={pred.label}
-                    confidence={pred.confidence}
-                    isTop={i === 0}
-                    color={meta.color}
-                  />
-                )
-              })}
-            </View>
-          </>
-        )}
-
-        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && !questionnaireOnlyTop && answeredCount > 0 && (
-          <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt, marginBottom: 16 }]}>
-            <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
-            <Text style={styles.infoText}>
-              No separate questionnaire-only result is available. Your answers did not contain
-              enough distinguishing information on their own.
-            </Text>
-          </View>
-        )}
-
-        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && refinedTop && refinedTopMeta && (
-          <>
-            <Text style={styles.sectionLabel}>COMBINED MODEL + QUESTIONNAIRE</Text>
-            <View style={[styles.topCard, { borderColor: refinedTopMeta.color + '30' }]}>
-              <View style={[styles.topIconCircle, { backgroundColor: refinedTopMeta.color + '18' }]}>
-                <MaterialCommunityIcons color={refinedTopMeta.color} name={refinedTopMeta.icon} size={28} />
-              </View>
-              <Text style={styles.topLabel}>Combined Screening Suggestion</Text>
-              <Text style={[styles.topDisease, { color: refinedTopMeta.color }]}>{refinedTop.label}</Text>
-              <View style={styles.confidenceBadge}>
-                <Text style={[styles.confidenceText, { color: refinedTopMeta.color }]}>
-                  {Math.round(refinedTop.confidence)}%
-                </Text>
-                <Text style={styles.confidenceLabel}>combined screening score</Text>
-              </View>
-              <Text style={styles.comparisonText}>
-                Combines the on-device screening with {answeredCount} of {totalQuestions} questionnaire answers.
-                {params.changed === 'true'
-                  ? ' Your answers changed the leading suggestion.'
-                  : ' Your answers did not change the leading suggestion.'}
-                {' '}Provisional and not clinically calibrated.
-              </Text>
-            </View>
-
-            <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>Adjusted Predictions</Text>
-              {sortedRefined.map((pred, i) => {
-                const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
-                return (
-                  <ConfidenceBar
-                    key={pred.disease}
-                    label={pred.label}
-                    confidence={pred.confidence}
-                    isTop={i === 0}
-                    color={meta.color}
-                  />
-                )
-              })}
-            </View>
-          </>
+        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (
+          <SymptomSummaryCard
+            rows={symptomRows}
+            answeredCount={answeredCount}
+            totalQuestions={totalQuestions}
+          />
         )}
 
         {!deviceFailed && screeningState !== 'DISEASE_DETECTED' && stateMeta && stateConfig && (
@@ -548,9 +451,7 @@ export default function ResultScreen() {
           <Text style={styles.infoText}>
             {classifierSkipped || deviceFailed
               ? 'The image review was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
-              : refinedTop
-                ? 'AI-assisted screening does not replace professional veterinary diagnosis. The photo-only, questionnaire-only, and combined views are independent; the questionnaire-only and combined scores are provisional. Consult a vet for definitive results.'
-                : 'AI-assisted screening does not replace professional veterinary diagnosis. The two analyses are independent and are never merged into one probability. Consult a vet for definitive results.'}
+              : 'AI-assisted screening is preliminary and does not replace professional veterinary diagnosis. The on-device AI result is the primary prediction. Questionnaire answers are supplementary and never modify the AI prediction or confidence. Consult a vet for definitive results.'}
           </Text>
         </View>
 
@@ -719,7 +620,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-
   stateCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,
