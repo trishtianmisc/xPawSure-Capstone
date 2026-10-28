@@ -50,6 +50,8 @@ This is the primary medical record of XPawSure.
 | CON_SPECIFIC_DISEASE | TEXT | NULL |
 | CON_TREATMENT | TEXT | NULL |
 | CON_NOTES | TEXT | NULL |
+| CON_FOLLOW_UP_REQUIRED | BOOLEAN | NOT NULL, DEFAULT FALSE |
+| CON_FOLLOW_UP_TARGET_DATE | DATE | NULL |
 | CON_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | CON_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 
@@ -69,6 +71,16 @@ Consultations become read-only once the appointment leaves `IN_PROGRESS`;
 the assigned veterinarian may edit them while the appointment is in progress.
 
 All updates must be recorded in the Audit Log.
+
+A follow-up recommendation is optional. When a follow-up is requested, a preferred follow-up date is required, must be after the appointment date, and cannot be in the past.
+
+Requesting a follow-up stores the recommendation on the consultation while the
+source appointment is `IN_PROGRESS`. When the source appointment is marked
+`COMPLETED`, the system creates one linked `FOLLOW_UP` appointment in `REVIEW`
+status for the same pet, clinic, and veterinarian. Completing the source
+appointment makes the consultation read-only, so the recommendation cannot be
+changed afterward. If the source appointment is cancelled before completion,
+no follow-up appointment is created.
 
 ---
 
@@ -111,6 +123,16 @@ CONSULTATION
 PRESCRIPTION
 
 CONSULTATION
+
+0
+
+↓
+
+1
+
+↓
+
+FOLLOW_UP APPOINTMENT (APT_SOURCE_CONSULTATION)
 
 1
 

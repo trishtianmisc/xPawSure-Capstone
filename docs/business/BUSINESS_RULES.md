@@ -259,9 +259,17 @@ Appointments must have
 
 Statuses
 
+Review
+
+Confirmation (Awaiting Payment)
+
 Pending
 
 Confirmed
+
+Checked In
+
+In Progress
 
 Completed
 
@@ -301,7 +309,7 @@ Payment comes before the appointment when the clinic charges a consultation fee.
 
 A consultation requires:
 
-- A completed appointment
+- An appointment that is in progress (`IN_PROGRESS`)
 - A veterinarian
 
 A consultation contains
@@ -315,6 +323,31 @@ A consultation contains
 - Notes
 
 Each consultation belongs to exactly one appointment.
+
+The veterinarian may recommend a follow-up consultation with a preferred
+follow-up date. The date is required when follow-up is requested, must be after
+the appointment date, and cannot be in the past. The recommendation is stored
+on the consultation while the source appointment is `IN_PROGRESS`; no follow-up
+appointment exists yet.
+
+When the source appointment is marked `COMPLETED`, the system creates one
+linked `FOLLOW_UP` appointment in `REVIEW` status for the same pet, clinic, and
+veterinarian. Completing the source appointment makes the consultation
+read-only, so the recommendation cannot be changed afterward. If the source
+appointment is cancelled before completion, no follow-up appointment is
+created.
+
+A receptionist schedules the follow-up by choosing a future available slot for
+the assigned veterinarian. This books the slot and sets the appointment to
+`CONFIRMATION` (displayed as `AWAITING PAYMENT`). `CONFIRMATION` is not final
+confirmation; owner acceptance/payment is a separate deferred step.
+
+If a `CONFIRMATION` appointment is not paid before its scheduled time, it is
+cancelled with reason "Payment not completed before appointment time" and the
+slot returns to `AVAILABLE`.
+
+Cancelling a `REVIEW` follow-up is an internal action and does not notify the
+owner because the appointment was never visible to them.
 
 Consultations become permanent medical records.
 
@@ -561,6 +594,11 @@ Consultation Completed
 
 Owner bookings are created PENDING and await clinic confirmation.
 Receptionist desk bookings are created CONFIRMED.
+
+Follow-up recommendations create a REVIEW appointment when the source
+appointment is completed. Scheduling its slot moves it to CONFIRMATION
+(AWAITING PAYMENT), then to PENDING once owner payment handling is implemented.
+Phase 1 stops at CONFIRMATION.
 
 ---
 

@@ -1,5 +1,14 @@
 export type AppointmentType = 'CONSULTATION' | 'FOLLOW_UP' | 'VACCINATION' | 'AI_REVIEW' | 'EMERGENCY'
-export type AppointmentStatus = 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+export type AppointmentStatus =
+  | 'REVIEW'
+  | 'CONFIRMATION'
+  | 'PENDING'
+  | 'CONFIRMED'
+  | 'CHECKED_IN'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'NO_SHOW'
 
 export interface ScreeningSummary {
   ais_id: string
@@ -246,6 +255,7 @@ export interface DashboardStats {
   total_pets: number
   recent_appointments: Appointment[]
   needs_attention: number
+  review_pending: number
 }
 
 export type SlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED'

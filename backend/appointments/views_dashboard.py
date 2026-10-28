@@ -32,4 +32,5 @@ class DashboardStatsView(APIView):
             'total_pets': stats['total_pets'],
             'recent_appointments': recent_serializer.data,
             'needs_attention': stats['needs_attention'],
+            'review_pending': stats['review_pending'],
         })

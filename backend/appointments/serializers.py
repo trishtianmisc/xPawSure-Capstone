@@ -178,6 +178,10 @@ class CreateAppointmentSerializer(serializers.Serializer):
     pay_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
 
+class ConfirmFollowUpSerializer(serializers.Serializer):
+    slot_id = serializers.UUIDField()
+
+
 class ScheduleAppointmentSerializer(serializers.Serializer):
     apt_id = serializers.CharField()
     pet_name = serializers.CharField()

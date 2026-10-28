@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { Card } from '../../../../components/ui'
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { ConsultationsTable } from '../components/ConsultationsTable'
 import { useStartConsultation, useVetAppointments } from '../hooks/useVetAppointments'
 import type { AppointmentStatus, VetAppointmentSummary } from '../types/dashboard.types'
@@ -60,68 +62,66 @@ export function ConsultationsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-8">
-        <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-            Consultations
-          </h1>
-          <p className="mt-2 max-w-xl text-base text-amber-200/80">
-            Manage and review all veterinary consultations.
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 items-center gap-3">
-          <input
-            className="flex-1 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder-stone-400 transition focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder-stone-500"
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search"
-            type="text"
-            value={search}
-          />
-          <input
-            className="rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 transition focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-            onChange={(e) => setDateFilter(e.target.value)}
-            type="date"
-            value={dateFilter}
+    <div className="p-6">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8">
+          <PageHero
+            title="Consultations"
+            subtitle="Manage and review all veterinary consultations."
           />
         </div>
-      </div>
 
-      <div className="mb-6 flex gap-2">
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-              activeTab === tab
-                ? 'bg-amber-900 text-white'
-                : 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600'
-            }`}
-            onClick={() => setActiveTab(tab)}
-            type="button"
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+        <Card padding="md">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <input
+              className="w-full flex-1 rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 placeholder-stone-400 transition focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder-stone-500"
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search pets or species..."
+              type="text"
+              value={search}
+            />
+            <input
+              className="w-full rounded-md border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 transition focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 sm:w-44"
+              onChange={(e) => setDateFilter(e.target.value)}
+              type="date"
+              value={dateFilter}
+            />
+          </div>
+        </Card>
 
-      {error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-6 py-8 text-center dark:border-red-900/40 dark:bg-red-950/30">
-          <p className="text-sm font-semibold text-red-700 dark:text-red-400">
-            Failed to load consultations. Please try again.
-          </p>
+        <div className="mb-6 mt-6 flex flex-wrap gap-2">
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                activeTab === tab
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-stone-200 text-stone-600 hover:bg-stone-300 dark:bg-stone-700 dark:text-stone-400 dark:hover:bg-stone-600'
+              }`}
+              onClick={() => setActiveTab(tab)}
+              type="button"
+            >
+              {tab}
+            </button>
+          ))}
         </div>
-      ) : isLoading ? (
-        <div className="h-64 animate-pulse rounded-md border border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800" />
-      ) : (
-        <ConsultationsTable
-          consultations={filtered}
-          onStart={handleStart}
-          onView={handleView}
-        />
-      )}
+
+        {error ? (
+          <div className="rounded-md border border-red-200 bg-red-50 px-6 py-8 text-center dark:border-red-900/40 dark:bg-red-950/30">
+            <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+              Failed to load consultations. Please try again.
+            </p>
+          </div>
+        ) : isLoading ? (
+          <div className="h-64 animate-pulse rounded-md border border-stone-200 bg-stone-100 dark:border-stone-700 dark:bg-stone-800" />
+        ) : (
+          <ConsultationsTable
+            consultations={filtered}
+            onStart={handleStart}
+            onView={handleView}
+          />
+        )}
+      </div>
     </div>
   )
 }

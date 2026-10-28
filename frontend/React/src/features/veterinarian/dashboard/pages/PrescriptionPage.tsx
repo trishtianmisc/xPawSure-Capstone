@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { ROUTE_OPTIONS } from '../constants/prescription'
 import { useAppointmentDetail, useSavePrescription } from '../hooks/useVetAppointments'
 import type { VetAppointmentDetail } from '../types/dashboard.types'
@@ -27,7 +28,7 @@ export function PrescriptionPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl animate-pulse space-y-4">
+      <div className="mx-auto max-w-4xl animate-pulse space-y-4 p-6">
         <div className="h-8 w-40 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-64 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-40 rounded-md bg-stone-200 dark:bg-stone-700" />
@@ -37,13 +38,13 @@ export function PrescriptionPage() {
 
   if (error || !appointment) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
         <div className="text-center">
           <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
             Appointment not found
           </h2>
           <button
-            className="mt-4 rounded-md bg-amber-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-950"
+            className="mt-4 rounded-md bg-amber-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
             onClick={() => window.history.back()}
             type="button"
           >
@@ -180,21 +181,25 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100'
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
-      <button
-        className="flex items-center gap-1 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-        onClick={() => navigate(`/veterinarian/consultations/${aptId}`)}
-        type="button"
-      >
-        <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-        </svg>
-        Back
-      </button>
+    <div className="p-6">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <button
+          className="flex items-center gap-1 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+          onClick={() => navigate(`/veterinarian/consultations/${aptId}`)}
+          type="button"
+        >
+          <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
 
-      <h2 className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">Prescription</h2>
+        <PageHero
+          title="Prescription"
+          subtitle={`Complete the prescription for ${appointment.pet_name}.`}
+        />
 
-      <div className="rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800 space-y-5">
+        <div className="space-y-5 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300">Medicine Name</label>
@@ -267,7 +272,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
 
         <div className="flex justify-end">
           <button
-            className="rounded-md bg-amber-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-950"
+            className="rounded-md bg-amber-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
             onClick={handleAdd}
             type="button"
           >
@@ -280,26 +285,26 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
         <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
           <table className="w-full text-left text-sm">
             <thead>
-              <tr className="border-b border-stone-200 dark:border-stone-800">
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Medicine</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Generic</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Dosage</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Frequency</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Duration</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Route of Administration</th>
-                <th className="px-6 py-3 font-semibold text-stone-500 dark:text-stone-400">Actions</th>
+              <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
+                <th className="px-5 py-4 font-semibold">Medicine</th>
+                <th className="px-5 py-4 font-semibold">Generic</th>
+                <th className="px-5 py-4 font-semibold">Dosage</th>
+                <th className="px-5 py-4 font-semibold">Frequency</th>
+                <th className="px-5 py-4 font-semibold">Duration</th>
+                <th className="px-5 py-4 font-semibold">Route of Administration</th>
+                <th className="px-5 py-4 text-right font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
               {rows.map((p) => (
-                <tr key={p.id} className="border-b border-stone-100 last:border-0 dark:border-stone-800/50">
-                  <td className="px-6 py-4 font-medium text-stone-900 dark:text-stone-100">{p.medicine_name}</td>
-                  <td className="px-6 py-4 text-stone-600 dark:text-stone-400">{p.generic_name ?? '—'}</td>
-                  <td className="px-6 py-4 text-stone-600 dark:text-stone-400">{p.dosage}</td>
-                  <td className="px-6 py-4 text-stone-600 dark:text-stone-400">{p.frequency}</td>
-                  <td className="px-6 py-4 text-stone-600 dark:text-stone-400">{p.duration}</td>
-                  <td className="px-6 py-4 text-stone-600 dark:text-stone-400">{routeLabel(p.route)}</td>
-                  <td className="px-6 py-4">
+                <tr key={p.id} className="transition hover:bg-amber-50/50 dark:hover:bg-amber-900/10">
+                  <td className="px-5 py-4 font-medium text-stone-900 dark:text-stone-100">{p.medicine_name}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.generic_name ?? '—'}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.dosage}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.frequency}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.duration}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{routeLabel(p.route)}</td>
+                  <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
                       <button
                         className="text-amber-700 hover:text-amber-900 dark:text-amber-400"
@@ -332,13 +337,14 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
 
       <div className="flex justify-end gap-3">
         <button
-          className="rounded-md bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950 disabled:opacity-50"
+          className="rounded-md bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
           disabled={savePrescription.isPending}
           onClick={handleComplete}
           type="button"
         >
           {savePrescription.isPending ? 'Saving…' : 'Complete Consultation'}
         </button>
+      </div>
       </div>
     </div>
   )

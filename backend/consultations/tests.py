@@ -19,7 +19,8 @@ NO_PROFILE_EMAIL = 'connoprofile@example.com'
 LIST_FIELDS = {
     'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
     'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-    'diagnosis', 'specific_disease', 'treatment', 'notes', 'created_at',
+    'diagnosis', 'specific_disease', 'treatment', 'notes',
+    'follow_up_required', 'follow_up_target_date', 'created_at',
 }
 
 
@@ -118,6 +119,8 @@ class ConsultationListTests(ConsultationBase):
         self.assertEqual(record['veterinarian'], 'Vera Vet')
         self.assertEqual(record['diagnosis'], 'Allergic dermatitis')
         self.assertEqual(record['treatment'], 'Antihistamine course')
+        self.assertFalse(record['follow_up_required'])
+        self.assertIsNone(record['follow_up_target_date'])
 
     def test_list_excludes_other_owners_records(self):
         response = self.client.get('/api/consultations/', **self._auth(OWNER_EMAIL))

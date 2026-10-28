@@ -8,9 +8,9 @@ const STATUS_COLORS: Record<string, string> = {
   CONFIRMED:
     'bg-blue-100 border-l-4 border-blue-500 text-blue-900 dark:bg-blue-900/30 dark:text-blue-300',
   CHECKED_IN:
-    'bg-purple-100 border-l-4 border-purple-500 text-purple-900 dark:bg-purple-900/30 dark:text-purple-300',
+    'bg-amber-100 border-l-4 border-amber-500 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300',
   IN_PROGRESS:
-    'bg-orange-100 border-l-4 border-orange-500 text-orange-900 dark:bg-orange-900/30 dark:text-orange-300',
+    'bg-violet-100 border-l-4 border-violet-500 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300',
   COMPLETED:
     'bg-green-100 border-l-4 border-green-500 text-green-900 dark:bg-green-900/30 dark:text-green-300',
 }
@@ -53,7 +53,7 @@ export function WeeklyCalendar({ days, slots, onSlotClick }: WeeklyCalendarProps
   return (
     <div className="overflow-x-auto rounded-md border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
       <div className="min-w-[1000px]">
-        <div className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-stone-200 dark:border-stone-700">
+        <div className="grid grid-cols-[80px_repeat(7,1fr)] border-b border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-800/50">
           <div className="border-r border-stone-200 dark:border-stone-700" />
           {days.map((day) => {
             const isToday = toDateKey(day) === todayKey

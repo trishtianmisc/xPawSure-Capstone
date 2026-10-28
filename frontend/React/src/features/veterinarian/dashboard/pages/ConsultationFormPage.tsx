@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { OTHER_DISEASE, isSkinDisease } from '../constants/diseases'
 import { DiseaseCombobox } from '../components/DiseaseCombobox'
 import { useAppointmentDetail, useSaveConsultation } from '../hooks/useVetAppointments'
@@ -18,6 +19,24 @@ function ageFromBirthDate(birthDate: string | null): string {
   return `${years} yr${years === 1 ? '' : 's'}`
 }
 
+function toLocalDateInputValue(date: Date): string {
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function minFollowUpDate(scheduledAt: string): string {
+  const scheduled = new Date(scheduledAt)
+  const dayAfter = new Date(
+    scheduled.getFullYear(),
+    scheduled.getMonth(),
+    scheduled.getDate() + 1,
+  )
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  return toLocalDateInputValue(dayAfter > today ? dayAfter : today)
+}
+
 function buildInitialForm(appointment: VetAppointmentDetail) {
   const stored = appointment.consultation?.diagnosis ?? ''
   const isKnownDisease = isSkinDisease(stored)
@@ -29,6 +48,8 @@ function buildInitialForm(appointment: VetAppointmentDetail) {
     custom_diagnosis: isKnownDisease || !stored ? '' : stored,
     specific_disease: appointment.consultation?.specific_disease ?? '',
     notes: appointment.consultation?.notes ?? '',
+    follow_up_required: appointment.consultation?.follow_up_required ?? false,
+    follow_up_target_date: appointment.consultation?.follow_up_target_date ?? '',
   }
 }
 
@@ -38,7 +59,7 @@ export function ConsultationFormPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl animate-pulse space-y-4">
+      <div className="mx-auto max-w-4xl animate-pulse space-y-4 p-6">
         <div className="h-24 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-40 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-64 rounded-md bg-stone-200 dark:bg-stone-700" />
@@ -48,13 +69,13 @@ export function ConsultationFormPage() {
 
   if (error || !appointment) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
         <div className="text-center">
           <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
             Appointment not found
           </h2>
           <button
-            className="mt-4 rounded-md bg-amber-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-950"
+            className="mt-4 rounded-md bg-amber-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
             onClick={() => window.history.back()}
             type="button"
           >
@@ -84,6 +105,17 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     setForm((prev) => ({ ...prev, diagnosis: value }))
   }
 
+  function handleFollowUpToggle() {
+    setForm((prev) => {
+      const followUpRequired = !prev.follow_up_required
+      return {
+        ...prev,
+        follow_up_required: followUpRequired,
+        follow_up_target_date: followUpRequired ? prev.follow_up_target_date : '',
+      }
+    })
+  }
+
   async function handleNext() {
     const selection = form.diagnosis
     if (!selection) {
@@ -94,6 +126,19 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     const diagnosis = selection === OTHER_DISEASE ? form.custom_diagnosis.trim() : selection
     if (!diagnosis) {
       setError('Please enter the disease name.')
+      return
+    }
+
+    if (form.follow_up_required && !form.follow_up_target_date) {
+      setError('Please select a preferred follow-up date.')
+      return
+    }
+
+    if (
+      form.follow_up_required
+      && form.follow_up_target_date < minFollowUpDate(appointment.apt_scheduled_at)
+    ) {
+      setError('Preferred follow-up date must be after the appointment date and cannot be in the past.')
       return
     }
 
@@ -108,6 +153,10 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
           diagnosis,
           specific_disease: form.specific_disease.trim(),
           notes: form.notes,
+          follow_up_required: form.follow_up_required,
+          follow_up_target_date: form.follow_up_required
+            ? form.follow_up_target_date
+            : null,
         },
       })
       navigate(`/veterinarian/consultations/${aptId}/prescription`)
@@ -120,17 +169,14 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     'w-full rounded-md border border-stone-300 bg-stone-50 px-3 py-2 text-sm text-stone-900 focus:outline-none dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100'
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <div className="mb-8">
-        <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
-          <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-            Consultation Form
-          </h1>
-          <p className="mt-2 max-w-xl text-base text-amber-200/80">
-            Record pet information and consultation details.
-          </p>
+    <div className="p-6">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8">
+          <PageHero
+            title="Consultation Form"
+            subtitle="Record pet information and consultation details."
+          />
         </div>
-      </div>
 
       <h2 className="mb-4 text-base font-bold text-stone-900 dark:text-stone-100">Pet Information</h2>
 
@@ -251,13 +297,66 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
           />
         </div>
 
+        <div className="rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900/40">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <label
+                className="block text-sm font-semibold text-stone-700 dark:text-stone-300"
+                htmlFor="consultation-follow-up-required"
+              >
+                Needs follow-up consultation
+              </label>
+              <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                Recommend a follow-up visit for this pet.
+              </p>
+            </div>
+            <button
+              aria-checked={form.follow_up_required}
+              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${
+                form.follow_up_required
+                  ? 'bg-amber-700'
+                  : 'bg-stone-300 dark:bg-stone-600'
+              }`}
+              id="consultation-follow-up-required"
+              onClick={handleFollowUpToggle}
+              role="switch"
+              type="button"
+            >
+              <span
+                className={`inline-block size-5 rounded-full bg-white shadow transition ${
+                  form.follow_up_required ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+
+          {form.follow_up_required && (
+            <div className="mt-4 max-w-xs">
+              <label
+                className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300"
+                htmlFor="consultation-follow-up-date"
+              >
+                Preferred follow-up date
+              </label>
+              <input
+                className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-600 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                id="consultation-follow-up-date"
+                min={minFollowUpDate(appointment.apt_scheduled_at)}
+                onChange={(e) => handleChange('follow_up_target_date', e.target.value)}
+                type="date"
+                value={form.follow_up_target_date}
+              />
+            </div>
+          )}
+        </div>
+
         {error && (
           <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
         )}
 
         <div className="flex justify-end">
           <button
-            className="rounded-md bg-amber-900 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950 disabled:opacity-50"
+            className="rounded-md bg-amber-700 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
             disabled={saveConsultation.isPending}
             onClick={handleNext}
             type="button"
@@ -265,6 +364,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
             {saveConsultation.isPending ? 'Saving…' : 'Next'}
           </button>
         </div>
+      </div>
       </div>
     </div>
   )

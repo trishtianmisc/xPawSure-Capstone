@@ -9,6 +9,8 @@ const consultationPayload = {
   diagnosis: 'Fungal',
   specific_disease: 'Microsporum canis',
   notes: 'Follow up',
+  follow_up_required: true,
+  follow_up_target_date: '2026-11-02',
 }
 
 const prescriptionPayload = {
