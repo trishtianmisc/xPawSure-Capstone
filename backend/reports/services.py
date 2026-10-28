@@ -12,6 +12,7 @@ from appointments.services import (
     get_clinic_timezone,
 )
 from clinics.models import ClinicOperatingHours
+from pets.models import Pet, Sex
 from users.models import StaffProfile
 
 # Guard rail: the series endpoint zero-fills every day in the window and the
@@ -21,6 +22,10 @@ MAX_REPORT_DAYS = 366
 
 # Default window when the caller passes no dates: last 30 clinic-local days.
 DEFAULT_DATE_FROM_OFFSET = 29
+
+# Fixed age-bucket labels (en-dash in "1–6 yrs") so the demographics card
+# keeps the same four tiles between periods, like the status breakdown.
+AGE_BUCKETS = ('<1 yr', '1–6 yrs', '7+ yrs', 'Unknown')
 
 
 def resolve_window(clinic_id, date_from=None, date_to=None):
@@ -125,6 +130,21 @@ def _new_patients(clinic_id, date_from, date_to):
         .filter(first__gte=start, first__lt=end_exclusive)
     )
     return first_visits.count()
+
+
+def _age_bucket(birth_date, today):
+    if birth_date is None:
+        return 'Unknown'
+    # Whole years completed as of today; the day/month comparison handles
+    # birthdays that have not arrived yet this year.
+    years = today.year - birth_date.year - (
+        (today.month, today.day) < (birth_date.month, birth_date.day)
+    )
+    if years < 1:
+        return '<1 yr'
+    if years <= 6:
+        return '1–6 yrs'
+    return '7+ yrs'
 
 
 class ReportService:
@@ -308,6 +328,67 @@ class ReportService:
             'pending_review': pending,
             'vet_confirmed': vet_confirmed,
             'vet_changed': vet_changed,
+        }
+
+    @staticmethod
+    def get_patients(clinic_id, date_from, date_to, vet_id=None):
+        """Breed / sex / age mix of the clinic's patients seen in the window.
+
+        vet_id is accepted for the shared param shape but never narrows the
+        result: like new_patients, these demographics describe the clinic's
+        patients, not one vet's (the UI carries the "(all vets)" caveat).
+        """
+        # Canonical patient rule inside the window: a semi-join on pet_id
+        # counts each pet once no matter how many qualifying visits it had.
+        qualifying_visits = (
+            _appointments_in_window(clinic_id, date_from, date_to)
+            .exclude(apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
+            .values('pet_id')
+        )
+        pets = Pet.objects.filter(
+            pet_is_active=True,
+            pet_deleted_at__isnull=True,
+            pet_id__in=qualifying_visits,
+        )
+
+        total = pets.count()
+
+        breed_counts = {
+            row['brd_id__brd_name'] or 'Unknown': row['count']
+            for row in pets.values('brd_id__brd_name')
+            .annotate(count=Count('pet_id'))
+        }
+        by_breed = [
+            {'breed': name, 'count': count}
+            for name, count in sorted(
+                breed_counts.items(), key=lambda item: (-item[1], item[0]),
+            )
+        ]
+
+        sex_counts = {
+            row['pet_sex']: row['count']
+            for row in pets.values('pet_sex').annotate(count=Count('pet_id'))
+        }
+        # Zero-filled so the card tiles stay stable between periods.
+        by_sex = [
+            {'sex': code, 'count': sex_counts.get(code, 0)}
+            for code in Sex.values
+        ]
+
+        today = datetime.now(get_clinic_timezone(clinic_id)).date()
+        bucket_counts = dict.fromkeys(AGE_BUCKETS, 0)
+        for birth_date in pets.values_list('pet_birth_date', flat=True):
+            bucket_counts[_age_bucket(birth_date, today)] += 1
+        age_buckets = [
+            {'bucket': label, 'count': bucket_counts[label]}
+            for label in AGE_BUCKETS
+        ]
+
+        return {
+            'total': total,
+            'by_breed': by_breed,
+            'by_sex': by_sex,
+            'age_buckets': age_buckets,
         }
 
 

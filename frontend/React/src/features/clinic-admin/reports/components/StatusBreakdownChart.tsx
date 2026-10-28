@@ -1,4 +1,5 @@
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
+import { Link } from 'react-router-dom'
 
 import type { StatusCount } from '../types/reports.types'
 
@@ -21,10 +22,14 @@ function statusLabel(code: string): string {
 
 interface StatusBreakdownChartProps {
   data: StatusCount[]
+  // When provided, each legend row becomes a deep link (e.g. the appointments
+  // page pre-filtered to that status).
+  statusHref?: (status: string) => string
 }
 
-export function StatusBreakdownChart({ data }: StatusBreakdownChartProps) {
+export function StatusBreakdownChart({ data, statusHref }: StatusBreakdownChartProps) {
   const points = data.map((row) => ({
+    status: row.status,
     label: statusLabel(row.status),
     value: row.count,
     color: STATUS_COLORS[row.status] ?? '#6b7280',
@@ -79,23 +84,39 @@ export function StatusBreakdownChart({ data }: StatusBreakdownChartProps) {
             </PieChart>
           </ResponsiveContainer>
           <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-            {points.map((point) => (
-              <div
-                key={point.label}
-                className="flex items-center justify-between gap-2 text-xs text-stone-600 dark:text-stone-400"
-              >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: point.color }}
-                  />
-                  <span className="truncate">{point.label}</span>
-                </span>
-                <span className="font-semibold text-stone-700 dark:text-stone-300">
-                  {point.value}
-                </span>
-              </div>
-            ))}
+            {points.map((point) => {
+              const href = statusHref?.(point.status)
+              const content = (
+                <>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: point.color }}
+                    />
+                    <span className="truncate">{point.label}</span>
+                  </span>
+                  <span className="font-semibold text-stone-700 dark:text-stone-300">
+                    {point.value}
+                  </span>
+                </>
+              )
+              const rowClasses =
+                'flex items-center justify-between gap-2 text-xs text-stone-600 dark:text-stone-400'
+              return href ? (
+                <Link
+                  key={point.status}
+                  to={href}
+                  aria-label={`View ${point.label} appointments`}
+                  className={`${rowClasses} rounded px-1 -mx-1 transition hover:bg-stone-50 hover:text-amber-700 dark:hover:bg-stone-700/50 dark:hover:text-amber-400`}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={point.status} className={rowClasses}>
+                  {content}
+                </div>
+              )
+            })}
           </div>
         </>
       )}

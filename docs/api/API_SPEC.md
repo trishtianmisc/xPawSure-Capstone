@@ -1,4 +1,4 @@
-# API_SPEC.md
+﻿# API_SPEC.md
 
 > Version: 2.0
 > Project: XPawSure
@@ -204,7 +204,7 @@ Response (200):
 
 Implementation notes:
 
-- `clinic` is always `null` — owners are not permanently attached to a clinic
+- `clinic` is always `null` â€” owners are not permanently attached to a clinic
   (see AUTHENTICATION.md). The key is kept so the documented shape stays stable.
 - `profile_picture` is `""` when no picture has been uploaded.
 
@@ -225,7 +225,7 @@ Request:
 Supabase `owner-images` bucket and the returned URL is saved. Sending
 `"profile_picture": null` clears the current picture.
 
-Response (200) — same shape as GET above.
+Response (200) â€” same shape as GET above.
 
 ---
 
@@ -317,7 +317,7 @@ Owner: Can update own pets.
 Clinic staff: Can update any pet at their clinic.
 
 Note: Currently owner-only (`IsOwner`); clinic-staff update is not yet implemented.
-Partial updates are supported — only provided fields change. `profile_picture: null`
+Partial updates are supported â€” only provided fields change. `profile_picture: null`
 clears the picture; a new image upload replaces it (multipart).
 
 ---
@@ -342,7 +342,7 @@ is preserved.
 Public. No authentication required.
 
 Reached by scanning a pet's QR code (encoded value:
-`{FRONTEND_URL}/pets/{qr_code}/public` → rendered by the web at
+`{FRONTEND_URL}/pets/{qr_code}/public` â†’ rendered by the web at
 `/pets/:qrCode/public`). Throttled to 60 requests/min per IP.
 
 Returns a restricted, privacy-safe profile of an active pet looked up by its
@@ -398,7 +398,7 @@ Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
 Requires authentication. Receptionist.
 
 Registers a pet for an existing owner. Registration does not attach the pet to a
-clinic — the pet appears in the clinic's Patients tab after its first appointment
+clinic â€” the pet appears in the clinic's Patients tab after its first appointment
 there.
 
 ## GET /api/receptionist/pets/{id}/
@@ -412,7 +412,7 @@ otherwise `404`.
 
 Requires authentication. Receptionist.
 
-Same clinic rule as GET — otherwise `404`.
+Same clinic rule as GET â€” otherwise `404`.
 
 ## GET /api/receptionist/pets/{id}/history/
 
@@ -434,12 +434,12 @@ Response:
 }
 ```
 
-Scoping (shared patients — a pet treated at multiple clinics):
+Scoping (shared patients â€” a pet treated at multiple clinics):
 
 - `consultations`, `prescriptions`, `appointments`: only records from the
-  receptionist's own clinic (per `BUSINESS_RULES.md` — no records outside their
+  receptionist's own clinic (per `BUSINESS_RULES.md` â€” no records outside their
   own clinic).
-- `vaccinations`, `screenings`: **pet-level** — returned in full, including
+- `vaccinations`, `screenings`: **pet-level** â€” returned in full, including
   owner-reported vaccinations and phone AI screenings that belong to the pet
   rather than any clinic.
 
@@ -447,7 +447,7 @@ Read-only: the endpoint never mutates records (medical history is immutable).
 
 Web UI presentation: prescriptions are rendered inside their (one-to-one)
 consultation, and a consultation's AI screening is resolved through
-`appointments[].screening` — only screenings tied to a consultation are shown.
+`appointments[].screening` â€” only screenings tied to a consultation are shown.
 Response shape is unchanged.
 
 ---
@@ -637,7 +637,7 @@ Requires authentication. Receptionist or Clinic Admin dashboard summary
 (read-only).
 
 Response: `today` (clinic-local-day status counts), `total_owners`, `total_pets`,
-`recent_appointments`, and `needs_attention` — the count of past-due
+`recent_appointments`, and `needs_attention` â€” the count of past-due
 appointments still awaiting action. `today.pending` counts only upcoming
 `PENDING` appointments; past-due ones surface through `needs_attention`
 instead of double-counting in Pending/Confirmed.
@@ -660,7 +660,7 @@ appointments more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as
 (`select_for_update`), so no scheduler, Celery worker, or beat process is
 required. Because the refresh runs first, past-due `PENDING` rows are already
 `CANCELLED` and expired `CONFIRMED` rows are already `NO_SHOW` when the
-counts are taken — `needs_attention` therefore surfaces late-but-actionable
+counts are taken â€” `needs_attention` therefore surfaces late-but-actionable
 `CONFIRMED` appointments (inside the grace window).
 
 ---
@@ -1524,7 +1524,7 @@ Clinic Admin.
 Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
 
 The `201` response includes `temp_password` exactly once (it is also emailed to
-the staff member via the welcome email). It is never returned again — the
+the staff member via the welcome email). It is never returned again â€” the
 `reset-password` and `resend-welcome` actions deliver a new temporary password by
 email only.
 
@@ -1699,7 +1699,7 @@ Response:
 
 # 15. Clinic Admin Reports Endpoints (Web)
 
-All four endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+All five endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
 Any write method returns `403`; unauthenticated requests return `401`. The
 clinic scope always comes from the caller's own staff profile, never from the
 request, so one clinic's admin cannot read another clinic's numbers.
@@ -1710,10 +1710,10 @@ not-completed until the next dashboard or appointment-list reconciliation.
 
 ## Shared query parameters (all optional)
 
-- `date_from`, `date_to` — `YYYY-MM-DD`, clinic-local calendar days.
+- `date_from`, `date_to` â€” `YYYY-MM-DD`, clinic-local calendar days.
   Omitting both defaults to the last 30 clinic-local days ending today;
   omitting one end fills only that end.
-- `vet_id` — a `stf_id`. Malformed UUID returns `400 {"detail": "Invalid 'vet_id'."}`;
+- `vet_id` â€” a `stf_id`. Malformed UUID returns `400 {"detail": "Invalid 'vet_id'."}`;
   an id outside the caller's clinic returns
   `400 {"detail": "'vet_id' does not belong to this clinic."}` (no data leak).
 
@@ -1844,7 +1844,7 @@ Scoping notes:
   appointments the pet has.
 - With `vet_id` supplied, only screenings referenced by an appointment of
   that vet (in this clinic) are counted; unbooked screenings drop out.
-  Clinic-wide figures include screenings not linked to a booking — the UI
+  Clinic-wide figures include screenings not linked to a booking â€” the UI
   shows this caveat next to the filter.
 - `ais_confidence` is stored as a 0-100 percentage and returned as-is;
   `avg_confidence` is `0.0` when there are no screenings.
@@ -1852,6 +1852,61 @@ Scoping notes:
   `PENDING_REVIEW`. `vet_confirmed` / `vet_changed` come from
   `ais_is_correct` on reviewed rows (true / false / null = not yet judged).
 
+## GET /api/reports/patients/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "total": 42,
+  "by_breed": [
+    { "breed": "Shih Tzu", "count": 11 },
+    { "breed": "Unknown", "count": 4 }
+  ],
+  "by_sex": [
+    { "sex": "MALE", "count": 22 },
+    { "sex": "FEMALE", "count": 20 }
+  ],
+  "age_buckets": [
+    { "bucket": "<1 yr", "count": 6 },
+    { "bucket": "1â€“6 yrs", "count": 25 },
+    { "bucket": "7+ yrs", "count": 11 },
+    { "bucket": "Unknown", "count": 0 }
+  ]
+}
+```
+
+Scoping notes:
+
+- `total` counts distinct pets with at least one qualifying appointment
+  (non-deleted, never CANCELLED/NO_SHOW) scheduled inside the window at this
+  clinic â€” the canonical patient rule â€” restricted to active, non-deleted
+  pets. A pet with several visits in the window still counts once.
+- `by_sex` always returns both sexes and `age_buckets` all four buckets
+  (zero-filled) so the card layout stays stable between periods. Breed rows
+  appear only when present, sorted by count (ties broken by name); pets with
+  no breed are reported as `Unknown`.
+- Age is measured in whole clinic-local years against today: `<1 yr`
+  (under 1 year), `1â€“6 yrs`, `7+ yrs`; pets without `pet_birth_date`
+  land in `Unknown`.
+- `vet_id` is accepted and validated like every other report but does not
+  narrow these demographics (they describe the clinic's patients, not one
+  vet's); the UI shows the "(all vets)" caveat next to the filter.
+
 Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
-`/clinic/reports`, CSV export is client-side and downloads
-`xpawsure-report-summary_{date_from}_{date_to}.csv`).
+`/clinic/reports`). Exports are client-side: one multi-section CSV covering
+every loaded panel (KPIs, status breakdown, daily series, workload,
+screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
+plus a
+print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
+the UI as `vet_confirmed / (vet_confirmed + vet_changed)` (null when nothing
+is judged â†’ shown as "â€”"); its previous-period baseline is fetched with a
+second call to this endpoint using the previous window, since the payload has
+no `previous` block. The appointments chart supports a client-side
+daily/weekly/monthly granularity toggle (calendar-aligned buckets), and the
+status legend / workload rows deep-link to
+`/clinic/appointments?status&vet_id&date_from&date_to` â€” the appointments page
+initializes its filters from those URL params (changes written with
+`replace`).

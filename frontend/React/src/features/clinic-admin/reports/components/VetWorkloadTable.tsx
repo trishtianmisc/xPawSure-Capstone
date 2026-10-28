@@ -1,10 +1,15 @@
+import { Link } from 'react-router-dom'
+
 import type { VetWorkloadReport } from '../types/reports.types'
 
 interface VetWorkloadTableProps {
   report: VetWorkloadReport
+  // When provided, each veterinarian name deep-links to the appointments
+  // page pre-filtered to that vet (and the current date range).
+  vetHref?: (vetId: string) => string
 }
 
-export function VetWorkloadTable({ report }: VetWorkloadTableProps) {
+export function VetWorkloadTable({ report, vetHref }: VetWorkloadTableProps) {
   const { results, days } = report
 
   return (
@@ -42,25 +47,38 @@ export function VetWorkloadTable({ report }: VetWorkloadTableProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
-              {results.map((row) => (
-                <tr key={row.vet_id}>
-                  <td className="py-3 pr-4 font-semibold text-stone-900 dark:text-stone-100">
-                    {row.vet_name}
-                  </td>
-                  <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
-                    {row.total}
-                  </td>
-                  <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
-                    {row.completed}
-                  </td>
-                  <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
-                    {row.no_shows}
-                  </td>
-                  <td className="py-3 text-right font-semibold text-stone-900 dark:text-stone-100">
-                    {row.avg_per_day}
-                  </td>
-                </tr>
-              ))}
+              {results.map((row) => {
+                const href = vetHref?.(row.vet_id)
+                return (
+                  <tr key={row.vet_id}>
+                    <td className="py-3 pr-4 font-semibold text-stone-900 dark:text-stone-100">
+                      {href ? (
+                        <Link
+                          to={href}
+                          aria-label={`View appointments for ${row.vet_name}`}
+                          className="transition hover:text-amber-700 hover:underline dark:hover:text-amber-400"
+                        >
+                          {row.vet_name}
+                        </Link>
+                      ) : (
+                        row.vet_name
+                      )}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
+                      {row.total}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
+                      {row.completed}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
+                      {row.no_shows}
+                    </td>
+                    <td className="py-3 text-right font-semibold text-stone-900 dark:text-stone-100">
+                      {row.avg_per_day}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

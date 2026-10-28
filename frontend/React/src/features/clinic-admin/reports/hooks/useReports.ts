@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import {
   getReportAppointments,
+  getReportPatients,
   getReportScreenings,
   getReportSummary,
   getReportVetWorkload,
@@ -39,6 +40,14 @@ export function useReportScreenings(params: ReportQuery) {
   return useQuery({
     queryKey: reportsKey('screenings', params),
     queryFn: () => getReportScreenings(params),
+    staleTime: 60_000,
+  })
+}
+
+export function useReportPatients(params: ReportQuery) {
+  return useQuery({
+    queryKey: reportsKey('patients', params),
+    queryFn: () => getReportPatients(params),
     staleTime: 60_000,
   })
 }

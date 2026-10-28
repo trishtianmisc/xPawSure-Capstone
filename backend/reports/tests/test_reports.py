@@ -9,7 +9,7 @@ from ai_screenings.models import AiScreening, Disease, ScreeningStatus
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from clinics.models import Clinic, ClinicOperatingHours
 from owners.models import OwnerProfile
-from pets.models import Pet, Sex
+from pets.models import Breed, Pet, Sex
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import StaffPosition, StaffProfile, User, UserRole
 
@@ -26,6 +26,7 @@ ENDPOINTS = (
     '/api/reports/appointments/',
     '/api/reports/vet-workload/',
     '/api/reports/screenings/',
+    '/api/reports/patients/',
 )
 
 
@@ -654,6 +655,166 @@ class ReportScreeningsTests(ReportsBase):
         self.assertEqual(response.data['pending_review'], 0)
         self.assertEqual(response.data['vet_confirmed'], 0)
         self.assertEqual(response.data['vet_changed'], 0)
+
+
+class ReportPatientsTests(ReportsBase):
+
+    def test_counts_distinct_qualifying_pets_once(self):
+        response = self._get('/api/reports/patients/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        data = response.data
+        # Rex (several visits) and Milo (two visits) count once each. Zoe's
+        # only visit is cancelled, Pip's only visit is in the previous
+        # window, and the Rival Clinic visit is out of scope.
+        self.assertEqual(data['total'], 2)
+        self.assertEqual(
+            data['by_breed'], [{'breed': 'Unknown', 'count': 2}],
+        )
+        self.assertEqual(data['by_sex'], [
+            {'sex': 'MALE', 'count': 2},
+            {'sex': 'FEMALE', 'count': 0},
+        ])
+
+    def test_vet_filter_does_not_narrow_demographics(self):
+        unfiltered = self._get('/api/reports/patients/', **WINDOW)
+        filtered = self._get(
+            '/api/reports/patients/',
+            vet_id=str(self.vet_a.stf_id), **WINDOW,
+        )
+        self.assertEqual(filtered.status_code, 200, filtered.data)
+        # Like new_patients, demographics describe the clinic's patients,
+        # not one vet's; the UI carries the "(all vets)" caveat.
+        self.assertEqual(filtered.data, unfiltered.data)
+
+    def test_empty_window_returns_zeroed_stable_shape(self):
+        response = self._get(
+            '/api/reports/patients/',
+            date_from='2025-01-01', date_to='2025-01-08',
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        data = response.data
+        self.assertEqual(data['total'], 0)
+        self.assertEqual(data['by_breed'], [])
+        self.assertEqual(data['by_sex'], [
+            {'sex': 'MALE', 'count': 0},
+            {'sex': 'FEMALE', 'count': 0},
+        ])
+        self.assertEqual(
+            [row['bucket'] for row in data['age_buckets']],
+            ['<1 yr', '1–6 yrs', '7+ yrs', 'Unknown'],
+        )
+        self.assertTrue(all(row['count'] == 0 for row in data['age_buckets']))
+
+    def test_age_buckets_split_on_whole_years(self):
+        today = datetime.now(MNL).date()
+        owner = self.pet.own_id
+        # Offsets chosen so leap days can never shift the whole-year count.
+        for offset in (timedelta(days=100), timedelta(days=400),
+                       timedelta(days=365 * 6 + 100), timedelta(days=365 * 8)):
+            pet = Pet.objects.create(
+                own_id=owner, pet_name=f'Pet {offset.days}',
+                pet_sex=Sex.FEMALE, pet_birth_date=today - offset,
+            )
+            self._apt(
+                datetime(2026, 10, 6, 9, 0, tzinfo=MNL),
+                pet=pet, status=AppointmentStatus.COMPLETED,
+            )
+        # A visited pet without a birth date lands in Unknown.
+        no_birth = Pet.objects.create(
+            own_id=owner, pet_name='Ageless', pet_sex=Sex.FEMALE,
+        )
+        self._apt(
+            datetime(2026, 10, 6, 10, 0, tzinfo=MNL),
+            pet=no_birth, status=AppointmentStatus.COMPLETED,
+        )
+
+        response = self._get('/api/reports/patients/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        buckets = {
+            row['bucket']: row['count'] for row in response.data['age_buckets']
+        }
+        # Fixture pets Rex and Milo have no birth date either.
+        self.assertEqual(buckets, {
+            '<1 yr': 1,
+            '1–6 yrs': 2,
+            '7+ yrs': 1,
+            'Unknown': 3,
+        })
+
+    def test_breed_counts_sort_by_count_then_name(self):
+        owner = self.pet.own_id
+        beagle = Breed.objects.create(brd_name='Beagle')
+        shih_tzu = Breed.objects.create(brd_name='Shih Tzu')
+        self.pet.brd_id = beagle
+        self.pet.save()
+        self.pet_multi.brd_id = beagle
+        self.pet_multi.save()
+        for name, breed in (('Spot', shih_tzu), ('Stray', None)):
+            pet = Pet.objects.create(
+                own_id=owner, pet_name=name, pet_sex=Sex.FEMALE,
+                brd_id=breed,
+            )
+            self._apt(
+                datetime(2026, 10, 7, 9, 0, tzinfo=MNL),
+                pet=pet, status=AppointmentStatus.COMPLETED,
+            )
+
+        response = self._get('/api/reports/patients/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 4)
+        self.assertEqual(response.data['by_breed'], [
+            {'breed': 'Beagle', 'count': 2},
+            {'breed': 'Shih Tzu', 'count': 1},
+            {'breed': 'Unknown', 'count': 1},
+        ])
+
+    def test_inactive_and_deleted_pets_drop_out(self):
+        owner = self.pet.own_id
+        inactive = Pet.objects.create(
+            own_id=owner, pet_name='Retired', pet_sex=Sex.MALE,
+            pet_is_active=False,
+        )
+        self._apt(
+            datetime(2026, 10, 6, 11, 0, tzinfo=MNL),
+            pet=inactive, status=AppointmentStatus.COMPLETED,
+        )
+        deleted = Pet.objects.create(
+            own_id=owner, pet_name='Gone', pet_sex=Sex.MALE,
+            pet_deleted_at=datetime(2026, 10, 2, tzinfo=MNL),
+        )
+        self._apt(
+            datetime(2026, 10, 6, 12, 0, tzinfo=MNL),
+            pet=deleted, status=AppointmentStatus.COMPLETED,
+        )
+
+        response = self._get('/api/reports/patients/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        # Both pets have qualifying visits but neither is an active,
+        # non-deleted patient, so the fixture total is unchanged.
+        self.assertEqual(response.data['total'], 2)
+
+    def test_no_show_only_pets_are_not_patients(self):
+        pet = Pet.objects.create(
+            own_id=self.pet.own_id, pet_name='Ghost', pet_sex=Sex.FEMALE,
+        )
+        self._apt(
+            datetime(2026, 10, 6, 13, 0, tzinfo=MNL),
+            pet=pet, status=AppointmentStatus.NO_SHOW,
+        )
+        response = self._get('/api/reports/patients/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 2)
+
+    def test_other_clinic_sees_only_its_own_patients(self):
+        response = self._get(
+            '/api/reports/patients/', user=self.other_admin, **WINDOW,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        # Rival Clinic has exactly one qualifying visit (Rex, Oct 3).
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(
+            response.data['by_sex'][0], {'sex': 'MALE', 'count': 1},
+        )
 
 
 class ReportQueryCountTests(ReportsBase):

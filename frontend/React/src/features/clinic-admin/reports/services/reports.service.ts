@@ -1,6 +1,7 @@
 import http from '../../../../services/http'
 import type {
   AppointmentsReport,
+  PatientsReport,
   ReportQuery,
   ReportSummary,
   ScreeningsReport,
@@ -40,6 +41,15 @@ export async function getReportScreenings(
   params: ReportQuery,
 ): Promise<ScreeningsReport> {
   const { data } = await http.get<ScreeningsReport>('/reports/screenings/', {
+    params,
+  })
+  return data
+}
+
+export async function getReportPatients(
+  params: ReportQuery,
+): Promise<PatientsReport> {
+  const { data } = await http.get<PatientsReport>('/reports/patients/', {
     params,
   })
   return data

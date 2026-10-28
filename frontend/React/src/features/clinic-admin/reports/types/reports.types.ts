@@ -60,3 +60,25 @@ export interface ScreeningsReport {
   vet_confirmed: number
   vet_changed: number
 }
+
+export interface BreedCount {
+  breed: string
+  count: number
+}
+
+export interface SexCount {
+  sex: 'MALE' | 'FEMALE'
+  count: number
+}
+
+export interface AgeBucketCount {
+  bucket: string
+  count: number
+}
+
+export interface PatientsReport {
+  total: number
+  by_breed: BreedCount[]
+  by_sex: SexCount[]
+  age_buckets: AgeBucketCount[]
+}

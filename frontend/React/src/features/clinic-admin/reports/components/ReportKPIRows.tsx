@@ -35,6 +35,17 @@ function rateDelta(current: number, previous: number): Delta {
   }
 }
 
+// A rate with no baseline on either side (nothing judged last period, or the
+// screenings query has not landed yet) shows no delta, like count deltas
+// with a zero previous period.
+function optionalRateDelta(
+  current: number | null,
+  previous: number | null,
+): Delta | null {
+  if (current === null || previous === null) return null
+  return rateDelta(current, previous)
+}
+
 function deltaClasses(direction: Direction, good: GoodDirection): string {
   if (direction === 'flat') return 'text-stone-400 dark:text-stone-500'
   const isGood = (direction === 'up') === (good === 'up')
@@ -97,6 +108,8 @@ function KpiCard({ label, value, delta, goodDirection, hint }: KpiCardProps) {
 interface ReportKPIRowsProps {
   summary: SummaryCounts
   previous: SummaryCounts
+  agreementRate: number | null
+  previousAgreementRate: number | null
   days: number
   vetSelected: boolean
 }
@@ -104,6 +117,8 @@ interface ReportKPIRowsProps {
 export function ReportKPIRows({
   summary,
   previous,
+  agreementRate,
+  previousAgreementRate,
   days,
   vetSelected,
 }: ReportKPIRowsProps) {
@@ -141,11 +156,11 @@ export function ReportKPIRows({
           hint="of elapsed, non-cancelled visits"
         />
         <KpiCard
-          label="Cancellation Rate"
-          value={`${summary.cancellation_rate}%`}
-          delta={rateDelta(summary.cancellation_rate, previous.cancellation_rate)}
-          goodDirection="down"
-          hint="of all appointments"
+          label="Vet Agreement Rate"
+          value={agreementRate === null ? '—' : `${agreementRate}%`}
+          delta={optionalRateDelta(agreementRate, previousAgreementRate)}
+          goodDirection="up"
+          hint="of judged AI screenings"
         />
         <KpiCard
           label={vetSelected ? 'New Patients (all vets)' : 'New Patients'}
