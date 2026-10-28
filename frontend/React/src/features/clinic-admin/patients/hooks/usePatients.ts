@@ -3,9 +3,13 @@ import { useQuery } from '@tanstack/react-query'
 import {
   getClinicPatient,
   listBreeds,
+  listClinicPatientAppointments,
   listClinicPatients,
 } from '../services/patients.service'
-import type { ClinicPatientQuery } from '../types/patient.types'
+import type {
+  ClinicPatientAppointmentQuery,
+  ClinicPatientQuery,
+} from '../types/patient.types'
 
 export function useClinicPatients(params: ClinicPatientQuery) {
   return useQuery({
@@ -19,6 +23,18 @@ export function useClinicPatient(patientId: string) {
   return useQuery({
     queryKey: ['clinic-admin', 'patient', patientId],
     queryFn: () => getClinicPatient(patientId),
+    enabled: Boolean(patientId),
+    staleTime: 30_000,
+  })
+}
+
+export function useClinicPatientAppointments(
+  patientId: string,
+  params: ClinicPatientAppointmentQuery,
+) {
+  return useQuery({
+    queryKey: ['clinic-admin', 'patient', patientId, 'appointments', params],
+    queryFn: () => listClinicPatientAppointments(patientId, params),
     enabled: Boolean(patientId),
     staleTime: 30_000,
   })

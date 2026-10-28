@@ -189,6 +189,13 @@ class ClinicAdminPatientBase(TestCase):
             user=user,
         )
 
+    def _history(self, pet=None, user=None, params=None):
+        return self._get(
+            f'/api/clinic/patients/{(pet or self.patient).pet_id}/appointments/',
+            user=user,
+            params=params,
+        )
+
 
 class ClinicAdminPatientListTests(ClinicAdminPatientBase):
 
@@ -580,6 +587,7 @@ class ClinicAdminPatientPermissionTests(ClinicAdminPatientBase):
     def test_clinic_admin_can_view_list_and_detail(self):
         self.assertEqual(self._get('/api/clinic/patients/').status_code, 200)
         self.assertEqual(self._detail().status_code, 200)
+        self.assertEqual(self._history().status_code, 200)
 
     def test_other_clinic_admin_cannot_see_patient(self):
         response = self._get(
@@ -601,6 +609,8 @@ class ClinicAdminPatientPermissionTests(ClinicAdminPatientBase):
             response = self._get('/api/clinic/patients/', user=user)
             self.assertEqual(response.status_code, 403)
             response = self._detail(user=user)
+            self.assertEqual(response.status_code, 403)
+            response = self._history(user=user)
             self.assertEqual(response.status_code, 403)
 
     def test_admin_writes_are_forbidden(self):
@@ -628,6 +638,14 @@ class ClinicAdminPatientPermissionTests(ClinicAdminPatientBase):
         )
         self.assertEqual(response.status_code, 403)
 
+        response = self.client.post(
+            f'/api/clinic/patients/{self.patient.pet_id}/appointments/',
+            payload,
+            content_type='application/json',
+            **self._auth(self.admin),
+        )
+        self.assertEqual(response.status_code, 403)
+
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.pet_name, 'Rex')
 
@@ -639,6 +657,8 @@ class ClinicAdminPatientPermissionTests(ClinicAdminPatientBase):
             'Admin',
         )
         response = self._get('/api/clinic/patients/', user=loner)
+        self.assertEqual(response.status_code, 400)
+        response = self._history(user=loner)
         self.assertEqual(response.status_code, 400)
 
 
@@ -801,3 +821,144 @@ class ClinicAdminPatientDetailTests(ClinicAdminPatientBase):
             by_id[str(cancelled.apt_id)]['vet_name'],
             'Vera Vet',
         )
+
+
+class ClinicAdminPatientAppointmentHistoryTests(ClinicAdminPatientBase):
+    """GET /api/clinic/patients/{id}/appointments/ — the paginated history."""
+
+    def _seed(self, count):
+        """Extra appointments with distinct, newest-first-able times."""
+        created = []
+        for index in range(count):
+            created.append(self._appointment(
+                self.patient,
+                AppointmentStatus.COMPLETED,
+                timezone.now() - timedelta(hours=index + 1),
+                vet=self.vet,
+            ))
+        return created
+
+    def test_envelope_follows_the_standard_list_shape(self):
+        # Base fixture already has 1 appointment; 24 more make 25 total.
+        self._seed(24)
+
+        response = self._history()
+        self.assertEqual(response.status_code, 200, response.data)
+        data = response.data
+        self.assertEqual(
+            set(data.keys()),
+            {'total', 'page', 'page_size', 'total_pages', 'results'},
+        )
+        self.assertEqual(data['total'], 25)
+        self.assertEqual(data['page'], 1)
+        self.assertEqual(data['page_size'], 10)
+        self.assertEqual(data['total_pages'], 3)
+        self.assertEqual(len(data['results']), 10)
+
+    def test_pages_slice_the_full_history(self):
+        self._seed(24)
+
+        page_two = self._history(params={'page': 2})
+        self.assertEqual(page_two.data['total'], 25)
+        self.assertEqual(page_two.data['page'], 2)
+        self.assertEqual(len(page_two.data['results']), 10)
+
+        page_three = self._history(params={'page': 3})
+        self.assertEqual(page_three.data['total_pages'], 3)
+        self.assertEqual(len(page_three.data['results']), 5)
+
+        # Beyond the last page: empty results, but the totals stay truthful.
+        page_four = self._history(params={'page': 4})
+        self.assertEqual(page_four.data['results'], [])
+        self.assertEqual(page_four.data['total'], 25)
+        self.assertEqual(page_four.data['total_pages'], 3)
+
+    def test_results_are_newest_first_across_page_boundaries(self):
+        self._seed(14)
+
+        page_one = self._history(params={'page': 1}).data['results']
+        page_two = self._history(params={'page': 2}).data['results']
+        stamps = [
+            row['apt_scheduled_at'] for row in page_one + page_two
+        ]
+        self.assertEqual(len(stamps), 15)
+        self.assertEqual(stamps, sorted(stamps, reverse=True))
+
+    def test_clinic_scoping_and_row_shape(self):
+        other_clinic = Appointment.objects.create(
+            pet_id=self.patient,
+            cln_id=self.other_clinic,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.COMPLETED,
+            apt_scheduled_at=timezone.now(),
+        )
+        cancelled = self._appointment(
+            self.patient,
+            AppointmentStatus.CANCELLED,
+            timezone.now() - timedelta(hours=5),
+            vet=self.vet,
+            cancellation_reason='Owner unavailable',
+        )
+
+        response = self._history()
+        self.assertEqual(response.status_code, 200, response.data)
+        results = response.data['results']
+        ids = [row['apt_id'] for row in results]
+        self.assertNotIn(str(other_clinic.apt_id), ids)
+        self.assertEqual(self._history().data['total'], 2)
+        self.assertEqual(
+            set(results[0].keys()),
+            {
+                'apt_id', 'apt_scheduled_at', 'apt_type', 'apt_status',
+                'vet_name', 'apt_cancellation_reason',
+            },
+        )
+        by_id = {row['apt_id']: row for row in results}
+        self.assertEqual(
+            by_id[str(cancelled.apt_id)]['apt_cancellation_reason'],
+            'Owner unavailable',
+        )
+
+    def test_page_and_page_size_are_clamped(self):
+        self._seed(24)
+
+        oversized = self._history(params={'page_size': 1000})
+        self.assertEqual(oversized.data['page_size'], 100)
+
+        invalid_size = self._history(params={'page_size': 'many'})
+        self.assertEqual(invalid_size.data['page_size'], 10)
+
+        zero_page = self._history(params={'page': '0'})
+        self.assertEqual(zero_page.data['page'], 1)
+
+        invalid_page = self._history(params={'page': 'abc'})
+        self.assertEqual(invalid_page.data['page'], 1)
+
+    def test_soft_deleted_appointments_are_excluded(self):
+        # A patient always has at least one qualifying appointment (the
+        # detail/history guard is the canonical patient rule), so an empty
+        # 200 response is unreachable; what matters is that a soft-deleted
+        # row drops out while the pet stays a patient.
+        keep = self._appointment(
+            self.patient,
+            AppointmentStatus.COMPLETED,
+            timezone.now() - timedelta(days=1),
+            vet=self.vet,
+        )
+        self.valid_appointment.apt_deleted_at = timezone.now()
+        self.valid_appointment.save(update_fields=['apt_deleted_at'])
+
+        response = self._history()
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = [row['apt_id'] for row in response.data['results']]
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(ids, [str(keep.apt_id)])
+        self.assertNotIn(str(self.valid_appointment.apt_id), ids)
+
+    def test_404_for_non_patients_and_other_clinic(self):
+        for pet in (self.cancelled_only, self.no_show_only, self.stray):
+            response = self._history(pet=pet)
+            self.assertEqual(response.status_code, 404, pet.pet_name)
+
+        response = self._history(user=self.other_admin)
+        self.assertEqual(response.status_code, 404)

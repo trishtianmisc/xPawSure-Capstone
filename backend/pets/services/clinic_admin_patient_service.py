@@ -327,3 +327,42 @@ class ClinicAdminPatientService:
             'today': today,
             'timezone': tz,
         }
+
+    @staticmethod
+    def list_patient_appointments(pet_id, clinic_id, page=1, page_size=10):
+        """Paginated appointment history for one clinic patient.
+
+        Same scoping and ordering as the detail payload's embedded history
+        (newest first), but sliced like every other list endpoint so the
+        history table can page through instead of rendering everything.
+        Returns None when the pet is not this clinic's patient (→ 404).
+        """
+        try:
+            pet = ClinicAdminPatientService._base_queryset(
+                clinic_id,
+            ).get(pet_id=pet_id)
+        except Pet.DoesNotExist:
+            return None
+
+        queryset = Appointment.objects.filter(
+            pet_id=pet,
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id',
+        ).order_by('-apt_scheduled_at')
+
+        total = queryset.count()
+        page = ClinicAdminPatientService._parse_page(page, 1)
+        page_size = ClinicAdminPatientService._parse_page(
+            page_size, 10, maximum=100,
+        )
+        start = (page - 1) * page_size
+
+        return {
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size,
+            'results': list(queryset[start:start + page_size]),
+        }

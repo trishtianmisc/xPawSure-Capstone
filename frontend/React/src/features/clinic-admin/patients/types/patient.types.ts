@@ -58,6 +58,19 @@ export interface ClinicPatientAppointment {
   apt_cancellation_reason: string | null
 }
 
+export interface ClinicPatientAppointmentListResponse {
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  results: ClinicPatientAppointment[]
+}
+
+export interface ClinicPatientAppointmentQuery {
+  page?: number
+  page_size?: number
+}
+
 export interface ClinicPatientSummary {
   consultations: number
   vaccinations: number

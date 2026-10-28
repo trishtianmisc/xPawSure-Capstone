@@ -1,6 +1,8 @@
 import http from '../../../../services/http'
 import type {
   BreedOption,
+  ClinicPatientAppointmentListResponse,
+  ClinicPatientAppointmentQuery,
   ClinicPatientDetail,
   ClinicPatientListResponse,
   ClinicPatientQuery,
@@ -17,6 +19,17 @@ export async function getClinicPatient(
   patientId: string,
 ): Promise<ClinicPatientDetail> {
   const { data } = await http.get(`/clinic/patients/${patientId}/`)
+  return data
+}
+
+export async function listClinicPatientAppointments(
+  patientId: string,
+  params: ClinicPatientAppointmentQuery,
+): Promise<ClinicPatientAppointmentListResponse> {
+  const { data } = await http.get<ClinicPatientAppointmentListResponse>(
+    `/clinic/patients/${patientId}/appointments/`,
+    { params },
+  )
   return data
 }
 

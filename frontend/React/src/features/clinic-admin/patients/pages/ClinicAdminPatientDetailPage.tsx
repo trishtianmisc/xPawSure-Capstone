@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../../components/ui'
@@ -12,7 +13,10 @@ import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettin
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { PageHero } from '../../../receptionist/components/PageHero'
 import { PatientVaccinationBadge } from '../components/PatientVaccinationBadge'
-import { useClinicPatient } from '../hooks/usePatients'
+import { useClinicPatient, useClinicPatientAppointments } from '../hooks/usePatients'
+
+// Matches the staff list's table pagination: 10 rows per page.
+const APPOINTMENTS_PAGE_SIZE = 10
 
 function labelize(value: string): string {
   if (value === 'AI_REVIEW') return 'AI Review'
@@ -72,6 +76,20 @@ export function ClinicAdminPatientDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: patient, isLoading, error, refetch, isFetching } =
     useClinicPatient(id ?? '')
+  const [page, setPage] = useState(1)
+  // Switching patients must never leave the previous patient's page number
+  // pointing beyond the new history; adjusting during render avoids a frame
+  // that fetches the new history with the old page (React's documented
+  // "adjusting state when props change" pattern).
+  const [renderedPatientId, setRenderedPatientId] = useState(id)
+  if (id !== renderedPatientId) {
+    setRenderedPatientId(id)
+    setPage(1)
+  }
+  const history = useClinicPatientAppointments(id ?? '', {
+    page,
+    page_size: APPOINTMENTS_PAGE_SIZE,
+  })
   const settings = useClinicSettings()
   const displayTimeZone = settings.data?.timezone ?? CLINIC_TIME_ZONE
 
@@ -128,6 +146,14 @@ export function ClinicAdminPatientDetailPage() {
       </div>
     )
   }
+
+  const historyData = history.data
+  const startItem = historyData
+    ? (historyData.page - 1) * historyData.page_size + 1
+    : 0
+  const endItem = historyData
+    ? Math.min(historyData.page * historyData.page_size, historyData.total)
+    : 0
 
   const subtitle = [
     patient.breed,
@@ -271,51 +297,97 @@ export function ClinicAdminPatientDetailPage() {
             Appointment history
           </h2>
         </div>
-        {patient.appointments.length === 0 ? (
+        {history.isLoading ? (
+          <div className="h-40 animate-pulse rounded-md bg-stone-100 dark:bg-stone-800" />
+        ) : history.isError ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-stone-500 dark:text-stone-400">
+              {apiErrorMessage(history.error)}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              loading={history.isFetching}
+              onClick={() => history.refetch()}
+              className="mt-3"
+            >
+              Try again
+            </Button>
+          </div>
+        ) : history.data && history.data.total === 0 ? (
           <p className="py-8 text-center text-sm text-stone-500 dark:text-stone-400">
             No appointments recorded.
           </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-stone-100 text-stone-500 dark:border-stone-700 dark:text-stone-400">
-                  <th className="px-3 py-3 font-semibold">Date and time</th>
-                  <th className="px-3 py-3 font-semibold">Type</th>
-                  <th className="px-3 py-3 font-semibold">Veterinarian</th>
-                  <th className="px-3 py-3 font-semibold">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
-                {patient.appointments.map((appointment) => (
-                  <tr key={appointment.apt_id}>
-                    <td className="whitespace-nowrap px-3 py-3 text-stone-600 dark:text-stone-300">
-                      {formatDateTime(
-                        appointment.apt_scheduled_at,
-                        displayTimeZone,
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-stone-600 dark:text-stone-300">
-                      {labelize(appointment.apt_type)}
-                    </td>
-                    <td className="px-3 py-3 text-stone-600 dark:text-stone-300">
-                      {appointment.vet_name ?? 'Unassigned'}
-                    </td>
-                    <td className="px-3 py-3">
-                      <AppointmentStatusBadge status={appointment.apt_status} />
-                      {appointment.apt_status === 'CANCELLED' &&
-                        appointment.apt_cancellation_reason && (
-                          <p className="mt-1 max-w-xs text-xs text-stone-500 dark:text-stone-400">
-                            Reason: {appointment.apt_cancellation_reason}
-                          </p>
-                        )}
-                    </td>
+        ) : history.data ? (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-stone-100 text-stone-500 dark:border-stone-700 dark:text-stone-400">
+                    <th className="px-3 py-3 font-semibold">Date and time</th>
+                    <th className="px-3 py-3 font-semibold">Type</th>
+                    <th className="px-3 py-3 font-semibold">Veterinarian</th>
+                    <th className="px-3 py-3 font-semibold">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
+                  {history.data.results.map((appointment) => (
+                    <tr key={appointment.apt_id}>
+                      <td className="whitespace-nowrap px-3 py-3 text-stone-600 dark:text-stone-300">
+                        {formatDateTime(
+                          appointment.apt_scheduled_at,
+                          displayTimeZone,
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-stone-600 dark:text-stone-300">
+                        {labelize(appointment.apt_type)}
+                      </td>
+                      <td className="px-3 py-3 text-stone-600 dark:text-stone-300">
+                        {appointment.vet_name ?? 'Unassigned'}
+                      </td>
+                      <td className="px-3 py-3">
+                        <AppointmentStatusBadge status={appointment.apt_status} />
+                        {appointment.apt_status === 'CANCELLED' &&
+                          appointment.apt_cancellation_reason && (
+                            <p className="mt-1 max-w-xs text-xs text-stone-500 dark:text-stone-400">
+                              Reason: {appointment.apt_cancellation_reason}
+                            </p>
+                          )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-700">
+              <span className="text-sm text-stone-500 dark:text-stone-400">
+                Showing {startItem}–{endItem} of {history.data.total}{' '}
+                appointments
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  Previous
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={page >= history.data.total_pages}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : null}
       </Card>
     </div>
   )

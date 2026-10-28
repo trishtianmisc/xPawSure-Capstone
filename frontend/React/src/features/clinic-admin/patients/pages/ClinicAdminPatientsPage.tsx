@@ -246,7 +246,7 @@ export function ClinicAdminPatientsPage() {
                     <th className="px-5 py-4 font-semibold">Owner</th>
                     <th className="px-5 py-4 font-semibold">Last visit</th>
                     <th className="px-5 py-4 font-semibold">Next appointment</th>
-                    <th className="px-5 py-4 font-semibold">Appointments</th>
+                    <th className="px-5 py-4 font-semibold">Total Appointments</th>
                     <th className="px-5 py-4 font-semibold">Action</th>
                   </tr>
                 </thead>
@@ -298,9 +298,9 @@ export function ClinicAdminPatientsPage() {
                       <td className="whitespace-nowrap px-5 py-4 text-stone-600 dark:text-stone-300">
                         {formatDate(patient.next_appointment_date, displayTimeZone)}
                       </td>
-                      <td className="px-5 py-4">
+                      <td className="px-5 py-4 text-center">
                         <p className="font-semibold text-stone-800 dark:text-stone-200">
-                          {patient.total_appointments} total
+                          {patient.total_appointments}
                         </p>
                         <p className="text-xs text-stone-500 dark:text-stone-400">
                           {patient.no_show_count} no-shows | {patient.cancelled_count}{' '}

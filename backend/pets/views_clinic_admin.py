@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 
 from core.permissions import IsClinicAdminReadOnly
 from pets.serializers_clinic_admin import (
+    ClinicPatientAppointmentSerializer,
     ClinicPatientDetailSerializer,
     ClinicPatientListSerializer,
 )
@@ -107,3 +108,39 @@ class ClinicPatientDetailView(APIView):
             },
         )
         return Response(serializer.data)
+
+
+class ClinicPatientAppointmentListView(APIView):
+    permission_classes = [IsClinicAdminReadOnly]
+
+    def get(self, request, pet_id):
+        clinic_id = _get_clinic_id(request)
+        if clinic_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        result = ClinicAdminPatientService.list_patient_appointments(
+            pet_id=pet_id,
+            clinic_id=clinic_id,
+            page=request.query_params.get('page', 1),
+            page_size=request.query_params.get('page_size', 10),
+        )
+        if result is None:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ClinicPatientAppointmentSerializer(
+            result['results'],
+            many=True,
+        )
+        return Response({
+            'total': result['total'],
+            'page': result['page'],
+            'page_size': result['page_size'],
+            'total_pages': result['total_pages'],
+            'results': serializer.data,
+        })

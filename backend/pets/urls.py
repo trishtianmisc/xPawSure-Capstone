@@ -1,7 +1,11 @@
 from django.urls import path
 
 from pets.views import BreedListView, PetDetailView, PetListCreateView, PublicPetDetailView
-from pets.views_clinic_admin import ClinicPatientDetailView, ClinicPatientListView
+from pets.views_clinic_admin import (
+    ClinicPatientAppointmentListView,
+    ClinicPatientDetailView,
+    ClinicPatientListView,
+)
 
 urlpatterns = [
     path('breeds/', BreedListView.as_view(), name='breed-list'),
@@ -10,4 +14,9 @@ urlpatterns = [
     path('pets/<uuid:pet_id>/', PetDetailView.as_view(), name='pet-detail'),
     path('clinic/patients/', ClinicPatientListView.as_view(), name='clinic-patient-list'),
     path('clinic/patients/<uuid:pet_id>/', ClinicPatientDetailView.as_view(), name='clinic-patient-detail'),
+    path(
+        'clinic/patients/<uuid:pet_id>/appointments/',
+        ClinicPatientAppointmentListView.as_view(),
+        name='clinic-patient-appointments',
+    ),
 ]
