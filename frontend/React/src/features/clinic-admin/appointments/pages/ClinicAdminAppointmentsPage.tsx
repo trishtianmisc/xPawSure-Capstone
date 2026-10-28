@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
@@ -38,11 +38,31 @@ function labelize(value: string): string {
 
 export function ClinicAdminAppointmentsPage() {
   const navigate = useNavigate()
-  const [vetId, setVetId] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  // Filters initialize from the URL so deep links (e.g. from Reports &
+  // Analytics) pre-filter the list; changes are written back with replace so
+  // filter tweaks never stack up history entries.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [vetId, setVetId] = useState(() => searchParams.get('vet_id') ?? '')
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get('date_from') ?? '')
+  const [dateTo, setDateTo] = useState(() => searchParams.get('date_to') ?? '')
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? '')
   const [page, setPage] = useState(1)
+
+  function syncParams(
+    patch: { vet_id?: string; date_from?: string; date_to?: string; status?: string },
+  ) {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value)
+          else next.delete(key)
+        }
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const params = useMemo(
     () => ({
@@ -83,6 +103,7 @@ export function ClinicAdminAppointmentsPage() {
     setDateTo('')
     setStatusFilter('')
     setPage(1)
+    setSearchParams({}, { replace: true })
   }
 
   return (
@@ -129,7 +150,11 @@ export function ClinicAdminAppointmentsPage() {
               className={`${INPUT_CLASSES} w-56 shrink-0`}
               value={vetId}
               disabled={vets.isLoading}
-              onChange={(e) => { setVetId(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setVetId(e.target.value)
+                setPage(1)
+                syncParams({ vet_id: e.target.value })
+              }}
               aria-label="Filter by veterinarian"
             >
               <option value="">
@@ -146,21 +171,33 @@ export function ClinicAdminAppointmentsPage() {
               className={`${INPUT_CLASSES} w-44 shrink-0`}
               type="date"
               value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setDateFrom(e.target.value)
+                setPage(1)
+                syncParams({ date_from: e.target.value })
+              }}
               aria-label="Filter from date"
             />
             <input
               className={`${INPUT_CLASSES} w-44 shrink-0`}
               type="date"
               value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setDateTo(e.target.value)
+                setPage(1)
+                syncParams({ date_to: e.target.value })
+              }}
               aria-label="Filter to date"
             />
 
             <select
               className={`${INPUT_CLASSES} shrink-0`}
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(1)
+                syncParams({ status: e.target.value })
+              }}
               aria-label="Filter by status"
             >
               {STATUS_FILTERS.map((f) => (

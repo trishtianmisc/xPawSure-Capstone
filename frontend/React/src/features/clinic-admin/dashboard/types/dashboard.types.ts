@@ -13,10 +13,6 @@ export interface ChartDataPoint {
   value: number
 }
 
-export interface DashboardCharts {
-  vet_workload: ChartDataPoint[]
-}
-
 export type RecentCategory = 'staff' | 'clinic' | 'cancellation'
 
 export interface RecentItem {
@@ -28,6 +24,5 @@ export interface RecentItem {
 }
 
 export interface DashboardData {
-  charts: DashboardCharts
   recent: RecentItem[]
 }

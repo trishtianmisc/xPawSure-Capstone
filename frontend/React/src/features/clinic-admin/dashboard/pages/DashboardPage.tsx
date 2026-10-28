@@ -11,6 +11,7 @@ import { Button } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
 import { useAppointmentVolume } from '../../appointments/hooks/useAppointments'
 import { aggregateVolumeByMonth } from '../../appointments/utils/volume'
+import { useReportVetWorkload } from '../../reports/hooks/useReports'
 
 function rollingWindowStart(): string {
   const now = new Date()
@@ -26,6 +27,7 @@ export function DashboardPage() {
   const screeningStats = useScreeningStats()
   const { data: staffStats, isLoading: staffStatsLoading } = useStaffStats()
   const volume = useAppointmentVolume({ date_from: rollingWindowStart() })
+  const vetWorkload = useReportVetWorkload({})
   const appointmentsByMonth = aggregateVolumeByMonth(volume.data ?? [])
   const thisMonthCount = appointmentsByMonth[appointmentsByMonth.length - 1]?.value
   const lastMonthCount = appointmentsByMonth[appointmentsByMonth.length - 2]?.value
@@ -94,7 +96,7 @@ export function DashboardPage() {
                   icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
                   label="Total Patients"
                   value={clinicStats.data?.total_pets ?? '—'}
-                  hint="Excludes cancelled and no-show visits"
+                  hint="Active pets with a qualifying visit at this clinic"
                 />
               )}
               <StatCard
@@ -179,8 +181,39 @@ export function DashboardPage() {
               )}
             </section>
 
-            <section className="grid grid-cols-1 gap-6 ">
-              <VetWorkloadChart data={data.charts.vet_workload} />
+            <section className="grid grid-cols-1 gap-6">
+              {vetWorkload.isLoading ? (
+                <ChartSkeleton />
+              ) : vetWorkload.error ? (
+                <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+                  <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">
+                    Vet Workload Distribution
+                  </h3>
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {apiErrorMessage(vetWorkload.error)}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      loading={vetWorkload.isFetching}
+                      onClick={() => vetWorkload.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <VetWorkloadChart
+                  data={(vetWorkload.data?.results ?? []).map((row) => ({
+                    label: row.vet_name,
+                    value: row.total,
+                  }))}
+                  subtitle="Last 30 days · appointments per vet"
+                />
+              )}
             </section>
 
 
