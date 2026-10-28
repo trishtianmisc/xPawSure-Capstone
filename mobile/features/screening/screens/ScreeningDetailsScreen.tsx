@@ -13,7 +13,9 @@ import {
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
 import { ClaudeReviewCard } from '../components/AnalysisCards'
+import { SymptomSummaryCard } from '../components/SymptomSummaryCard'
 import { DISEASE_META, BOOKED_PILL } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
 import type { CrossAnalysisStatus } from '../types'
@@ -65,6 +67,9 @@ export default function ScreeningDetailsScreen() {
   const crossMeta = screening ? CROSS_META[screening.cross_analysis.status] : null
   const showCrossAnalysis =
     !!screening && screening.cross_analysis.status !== 'INSUFFICIENT_EVIDENCE'
+  // Supplementary answers are absent on screenings saved without a
+  // questionnaire or records that predate their storage — hide the section.
+  const symptomRows = screening?.symptom_answers ?? []
 
   const metaRow = (label: string, value: string) => (
     <View key={label} style={styles.metaRow}>
@@ -161,6 +166,12 @@ export default function ScreeningDetailsScreen() {
                 <Text style={styles.crossSummary}>{screening.cross_analysis.summary}</Text>
               </View>
             ) : null}
+
+            <SymptomSummaryCard
+              rows={symptomRows}
+              answeredCount={symptomRows.length}
+              totalQuestions={KNOWLEDGE.questions.length}
+            />
 
             <View style={styles.infoCard}>
               <MaterialCommunityIcons

@@ -23,9 +23,8 @@ import {
   resolveQuestionnaireMode,
   selectNextQuestion,
 } from '../../../../ai/decisionTree/adaptive'
-import { refinePredictionsBayesian, refineQuestionnaireOnly } from '../../../../ai/decisionTree/bayesian'
-import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import type { Answers, BayesianRefinementResult, StoppingDecision } from '../../../../ai/decisionTree/types'
+import type { Answers, StoppingDecision } from '../../../../ai/decisionTree/types'
+import { buildResultNavigationParams } from '../../../../features/screening/resultNavigationParams'
 
 export default function AdjustScreen() {
   const router = useRouter()
@@ -113,49 +112,32 @@ export default function AdjustScreen() {
 
   const finish = (
     finalAnswers: Answers,
-    finalAskedIds: readonly string[],
+    _finalAskedIds: readonly string[],
     decision: StoppingDecision,
   ) => {
-    let refined
-    try {
-      refined = REFINEMENT_METHOD === 'bayesian-provisional-v1'
-        ? refinePredictionsBayesian(predictions, finalAnswers, KNOWLEDGE)
-        : refinePredictions(predictions, finalAnswers, KNOWLEDGE)
-    } catch {
-      return
-    }
-
-    // Independent questionnaire-only view: answers alone, no image input.
-    const questionnaireOnly = REFINEMENT_METHOD === 'bayesian-provisional-v1'
-      ? refineQuestionnaireOnly(finalAnswers, KNOWLEDGE)
-      : null
-
     // Nothing is uploaded here. The result screen lets the owner choose
     // "Save Result" or "Book an Appointment"; both persist on demand.
+    // The questionnaire answers travel as supplementary display context
+    // only — the AI prediction vector is forwarded untouched, and no
+    // questionnaire-derived value is ever sent to the result screen.
     router.replace({
       pathname: '/(owner)/pets/screening/result',
-      params: {
-        imageUri: params.imageUri ?? '',
-        petId: params.petId,
-        petName: params.petName,
-        predictions: params.predictions,
-        modelVersion: params.modelVersion ?? '',
-        inferenceTimeMs: params.inferenceTimeMs ?? '0',
-        state: 'DISEASE_DETECTED',
-        stateMessage: '',
-        deviceFailed: params.deviceFailed ?? 'false',
-        classifierSkipped: params.classifierSkipped ?? 'false',
-        claude: params.claude ?? '',
-        claudeRequestFailed: params.claudeRequestFailed ?? 'false',
-        refined: JSON.stringify(refined.refined),
-        questionnaireOnly: questionnaireOnly ? JSON.stringify(questionnaireOnly) : '',
-        changed: refined.changed ? 'true' : 'false',
-        refinementMethod: REFINEMENT_METHOD,
-        stoppingReason: decision.reason ?? '',
-        answeredCount: String(decision.answeredCount),
-        totalQuestions: String(decision.totalQuestions),
-        alreadySaved: 'false',
-      },
+      params: buildResultNavigationParams(
+        {
+          predictions: params.predictions,
+          petId: params.petId,
+          petName: params.petName,
+          imageUri: params.imageUri,
+          modelVersion: params.modelVersion,
+          inferenceTimeMs: params.inferenceTimeMs,
+          claude: params.claude,
+          claudeRequestFailed: params.claudeRequestFailed,
+          deviceFailed: params.deviceFailed,
+          classifierSkipped: params.classifierSkipped,
+        },
+        finalAnswers,
+        decision,
+      ),
     })
   }
 

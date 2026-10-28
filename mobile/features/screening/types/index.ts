@@ -112,6 +112,11 @@ export interface Screening {
   cross_analysis: CrossAnalysis
   /** True while a non-cancelled appointment was booked from this scan. */
   is_booked: boolean
+  /**
+   * Supplementary questionnaire rows stored with this screening; null when
+   * the screening was saved without answers or predates their storage.
+   */
+  symptom_answers: { question: string; answer: string }[] | null
 }
 
 export interface ScreeningSummary {
@@ -146,4 +151,6 @@ export interface CreateScreeningPayload {
   device?: string
   image_uri?: string
   claude_token?: string
+  /** Display-ready supplementary rows; never affects AI fields. */
+  symptom_answers?: { question: string; answer: string }[]
 }

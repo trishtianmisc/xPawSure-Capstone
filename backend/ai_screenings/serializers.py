@@ -26,6 +26,10 @@ class ScreeningSerializer(serializers.ModelSerializer):
     claude = serializers.SerializerMethodField()
     cross_analysis = serializers.SerializerMethodField()
     is_booked = serializers.SerializerMethodField()
+    # Supplementary display rows; null for screenings saved without answers.
+    symptom_answers = serializers.JSONField(
+        source='ais_symptom_answers', read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = AiScreening
@@ -34,6 +38,7 @@ class ScreeningSerializer(serializers.ModelSerializer):
             'ais_confidence', 'ais_model_version', 'ais_inference_time_ms',
             'ais_device', 'ais_status', 'ais_source', 'ais_is_correct',
             'ais_created_at', 'image', 'claude', 'cross_analysis', 'is_booked',
+            'symptom_answers',
         ]
         read_only_fields = fields
 
@@ -114,6 +119,9 @@ class ScreeningSummarySerializer(serializers.ModelSerializer):
 
 
 class CreateScreeningSerializer(serializers.Serializer):
+    MAX_SYMPTOM_ROWS = 12
+    MAX_SYMPTOM_TEXT_LENGTH = 300
+
     pet_id = serializers.UUIDField()
     source = serializers.ChoiceField(choices=ScreeningSource.choices, default=ScreeningSource.DEVICE)
     prediction = serializers.CharField(required=False, allow_blank=True, default='')
@@ -122,3 +130,33 @@ class CreateScreeningSerializer(serializers.Serializer):
     inference_time_ms = serializers.IntegerField(required=False, min_value=0, allow_null=True, default=None)
     device = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
     claude_token = serializers.CharField(required=False, allow_blank=True, default='', trim_whitespace=False)
+    # Supplementary questionnaire rows (display-ready question/answer text).
+    # Multipart uploads send this as a JSON string; DRF's JSONField parses it.
+    symptom_answers = serializers.JSONField(required=False, allow_null=True, default=None)
+
+    def validate_symptom_answers(self, value):
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError('symptom_answers must be a list of rows.')
+        if len(value) > self.MAX_SYMPTOM_ROWS:
+            raise serializers.ValidationError(
+                f'symptom_answers may contain at most {self.MAX_SYMPTOM_ROWS} rows.',
+            )
+        for index, row in enumerate(value):
+            if not isinstance(row, dict) or set(row.keys()) != {'question', 'answer'}:
+                raise serializers.ValidationError(
+                    f'symptom_answers row {index} must contain only "question" and "answer".',
+                )
+            for key in ('question', 'answer'):
+                text = row[key]
+                if not isinstance(text, str):
+                    raise serializers.ValidationError(
+                        f'symptom_answers row {index} "{key}" must be a string.',
+                    )
+                if len(text) > self.MAX_SYMPTOM_TEXT_LENGTH:
+                    raise serializers.ValidationError(
+                        f'symptom_answers row {index} "{key}" may be at most '
+                        f'{self.MAX_SYMPTOM_TEXT_LENGTH} characters.',
+                    )
+        return value

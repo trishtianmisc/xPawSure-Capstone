@@ -332,6 +332,13 @@ image-validation review uses the same JPEG bytes but is an independent external
 analysis, not a second run of the classifier. The backend never runs the
 classifier.
 
+After a `DISEASE_DETECTED` result, the app offers the supplementary symptom
+questionnaire (adaptive question order, early stopping). The on-device
+prediction is the **sole primary result**: questionnaire answers are displayed
+only as supplementary context on the result screen and are never merged into,
+or allowed to modify, the prediction or confidence. The saved record always
+contains the raw classifier output.
+
 ---
 
 # 14. Backend Integration
@@ -345,6 +352,14 @@ The backend receives:
 - Exactly one captured image
 - Signed summary of the image-validation gate (only eligible results are saved)
 - Consultation ID (when later linked)
+
+`prediction` and `confidence` are the raw on-device classifier output. The
+mobile app may also send `symptom_answers` — display-ready questionnaire rows
+(a JSON array of `{question, answer}` objects, at most 12 rows, each string at
+most 300 characters). They are stored verbatim as supplementary display data
+for the result/details screens and are never read by the AI path: they cannot
+influence prediction, confidence, ranking, review, or booking, and no
+questionnaire content is included in any AI prompt.
 
 Before the final create request, the mobile app must call
 `POST /api/owner/screenings/vision-analysis/`. That endpoint:
@@ -464,6 +479,45 @@ Memory Usage
 Model Size
 
 Performance metrics must be documented for every release.
+
+## Verified held-out evaluation (model 2.0.0)
+
+Verified on 2026-10-27 by re-running the model-conversion repo's read-only
+scripts (`verify_5class_s42.py`, `verify_mobile_model.py`) on this machine:
+
+- Dataset: `ProcessedDataset224_Clean_5class` — 641 train / 136 validation /
+  **143 held-out test images** (920 total; five classes)
+- Shipped model: EfficientNetB0 + classification head, seed 42,
+  `fine_tuned_best_effnet_clean_5class_s42.keras`, converted to the bundled
+  TF.js `model.json` + `weights.bin`
+- Test accuracy: **93.71% (134/143)**, test loss 0.3140
+- Per-class F1: Allergic Dermatitis 0.889 · Bacterial 0.906 · Fungal 0.967 ·
+  Hotspot 0.952 · Mange 0.942 (macro F1 0.931, weighted F1 0.937)
+- Confusion matrix (rows = true, columns = predicted):
+
+  |  | AD | Bact | Fung | Hot | Mange |
+  | --- | --- | --- | --- | --- | --- |
+  | Allergic Dermatitis | 12 | 0 | 0 | 1 | 0 |
+  | Bacterial | 1 | 24 | 0 | 0 | 2 |
+  | Fungal | 0 | 0 | 29 | 0 | 1 |
+  | Hotspot | 1 | 0 | 0 | 20 | 0 |
+  | Mange | 0 | 2 | 1 | 0 | 49 |
+
+- Deployment equivalence: the repo's bundled `weights.bin` (330 tensors,
+  17,670,816 bytes) executes layer-by-layer identical to the evaluated Keras
+  model (checkpoint MAD < 1e-6, same predicted class), so the deployed weights
+  are the evaluated weights
+- A stale `confusion_matrix.png` in the model repo shows 88.81%; that figure
+  belongs to seed 7's run and must not be cited
+
+Evaluation conditions and limitations:
+
+- Single held-out split of a small, dataset-limited corpus (143 images);
+  no cross-validation of this release
+- Lab-style conditions (224 × 224 JPEG, desktop CPU); real-world photos vary
+  in lighting, framing, and camera quality
+- These figures are **not** a guarantee of real-world screening accuracy; the
+  system remains a preliminary screening aid, never a diagnosis
 
 ---
 

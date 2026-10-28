@@ -51,7 +51,7 @@
     "web": "expo start --web",
     "compute:reference": "node scripts/compute_training_reference_tfjs.js",
     "test": "npm run test:screening && npm run test:appointment",
-    "test:screening": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/screening/__tests__/comparison.test.ts ai/constants/__tests__/classes.test.ts",
+    "test:screening": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/screening/__tests__/comparison.test.ts features/screening/__tests__/resultNavigationParams.test.ts features/screening/__tests__/savePayload.test.ts ai/constants/__tests__/classes.test.ts",
     "test:appointment": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/appointment/__tests__/findConflictingAppointment.test.ts",
     "test:bayesian": "node scripts/test-bayesian-logic.js",
     "test:adaptive": "node scripts/test-adaptive-logic.js",

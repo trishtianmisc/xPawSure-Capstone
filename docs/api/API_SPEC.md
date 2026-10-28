@@ -1310,6 +1310,14 @@ the image suitable and eligible does the same image run through the on-device
 EfficientNetB0 classifier. The two results are stored separately and are never
 averaged into a combined probability.
 
+The `prediction` and `confidence` fields are the raw on-device classifier
+output — the sole primary result. The questionnaire's display-ready answer rows
+are sent in the optional `symptom_answers` field (JSON array of at most 12
+`{question, answer}` rows, each string at most 300 characters) and stored only
+as supplementary display context; no other questionnaire state is ever part of
+a request or stored field, and `symptom_answers` can never influence the AI
+outputs.
+
 Owner write endpoints are rate limited (`VISION_ANALYSIS_THROTTLE_RATE`,
 `SCREENING_CREATE_THROTTLE_RATE`). Image uploads are capped by
 `SCREENING_IMAGE_MAX_BYTES` and validated by MIME type, file signature, and
@@ -1349,6 +1357,9 @@ Response:
       "ais_is_correct": null,
       "ais_created_at": "...",
       "is_booked": false,
+      "symptom_answers": [
+        { "question": "Where is the affected area?", "answer": "Back, Ears" }
+      ],
       "image": {
         "url": "https://.../screening.jpg",
         "content_type": "image/jpeg",
@@ -1392,6 +1403,11 @@ below).
 `is_booked` is `true` while a non-cancelled appointment was booked from the
 screening; cancelling that appointment returns it to `false`.
 
+`symptom_answers` is the stored questionnaire summary, returned as display
+context only. It is `null` when the screening was saved without answers or
+predates the column; stored rows never influence prediction, confidence,
+review, or booking.
+
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
 
@@ -1418,11 +1434,18 @@ Multipart fields:
 | `device` | no | e.g. `android`, `ios` |
 | `image` | yes for validated screening | Exactly one file under this field |
 | `claude_token` | yes with image | Signed token from the vision-analysis endpoint |
+| `symptom_answers` | no | JSON string of an array of up to 12 `{"question","answer"}` rows (each string ≤ 300 chars). Display-only; multipart sends the JSON string, plain JSON requests may send the array itself |
 
 Rules:
 
 - Exactly one file may be uploaded. Multiple files, unexpected field names, or
   an array under `image` return `400`.
+- `symptom_answers` must be a list of at most 12 objects with exactly the
+  `question` and `answer` keys, both strings of at most 300 characters.
+  Anything else (non-list, extra keys, non-string or oversized values, or
+  malformed JSON in multipart) returns `400` with a field-level error. The
+  stored rows are supplementary display data and can never modify the
+  persisted prediction, confidence, status, review outputs, or booking.
 - The file must be a valid JPEG, PNG, or WebP whose declared MIME type matches
   its decoded format. Empty, oversized, or invalid files return `400`.
 - An uploaded image requires a signed validation token. The image SHA-256 must

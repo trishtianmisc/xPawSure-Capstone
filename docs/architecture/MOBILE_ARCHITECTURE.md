@@ -122,6 +122,22 @@ deterministic cross-analysis for audit and history — the fresh result screen
 does not display it, while a stored screening's read-only details screen shows
 the recorded summary. Agreement is not confirmation.
 
+When the classifier reports `DISEASE_DETECTED`, the owner may answer a
+supplementary symptom questionnaire (adaptive question order; answers may
+influence which questions are asked next, but never the result). The result
+screen presents:
+
+- **AI Preliminary Screening Result** — the raw on-device prediction as the
+  sole primary result, with its top-3 confidence list
+- **Symptom Summary · Supplementary** — the plain questionnaire answers,
+  labeled as context that does not change the AI prediction
+- **Independent Review** — the Claude image-validation findings, shown
+  separately
+
+Saving persists the raw AI prediction and confidence plus the display-only
+`symptom_answers` rows (shown on the result and details screens); the stored
+answers are never read back into the AI path.
+
 If the gate rejects the photo, the UI shows the explanation and an option to
 upload another image; no prediction is shown. If the gate fails, the classifier
 is not run and a retry/error message is shown. If the classifier fails after
@@ -430,6 +446,12 @@ Post-processing (softmax, thresholds)
 
 Display on-device result
 
+↓ (DISEASE_DETECTED only)
+
+Supplementary questionnaire (adaptive order) → answers shown on the result
+screen and details screen as a symptom summary, stored only as display rows
+(`symptom_answers`); they never modify the displayed or saved prediction
+
 The app displays the review separately. Cross-analysis is not displayed on the
 mobile result screen.
 
@@ -439,7 +461,8 @@ the backend gate before it runs. The review requires network access and may
 return `NOT_CONFIGURED`, `TIMEOUT`, `RATE_LIMITED`, `QUOTA_EXHAUSTED`,
 `MALFORMED_RESPONSE`, or `PROVIDER_ERROR`. A review failure or non-eligible
 decision stops the classifier and shows a retry/error or gate explanation. No
-score averaging or combined disease probability is performed.
+score averaging or combined disease probability is performed — neither between
+the AI outputs nor between the classifier output and questionnaire answers.
 
 ---
 

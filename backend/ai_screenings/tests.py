@@ -1,5 +1,8 @@
+import json
+
 from django.test import TestCase
 from django.utils import timezone
+from rest_framework.test import APIClient
 
 from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus
 from ai_screenings.services import ScreeningService
@@ -125,6 +128,169 @@ class DeviceScreeningTests(OwnerScreeningBase):
             **self._auth(OWNER_EMAIL),
         )
         self.assertEqual(response.status_code, 400)
+
+
+class SymptomAnswersTests(OwnerScreeningBase):
+    """Supplementary questionnaire rows: storage, validation, isolation.
+
+    The stored answers are display-only. These tests pin down that they
+    never influence prediction, confidence, status, review, or booking.
+    """
+
+    ROWS = [
+        {'question': 'Where is the affected area?', 'answer': 'Back, Ears'},
+        {'question': 'How long has it been present?', 'answer': 'More than 2 weeks'},
+    ]
+
+    AI_FIELDS = (
+        'disease_code', 'ais_confidence', 'ais_status', 'ais_source',
+        'ais_model_version', 'ais_is_correct', 'is_booked',
+    )
+
+    def _create(self, **overrides):
+        """POST a true application/json body via DRF's test client.
+
+        The suite's shared ``self.client`` is Django's plain test client,
+        which silently ignores DRF's ``format`` kwarg; APIClient gives this
+        class a real JSON request (the multipart path is covered separately).
+        """
+        return APIClient().post(
+            '/api/owner/screenings/',
+            self._device_payload(**overrides),
+            format='json',
+            **self._auth(OWNER_EMAIL),
+        )
+
+    def _ai_view(self, response):
+        data = {key: response.data[key] for key in self.AI_FIELDS}
+        data['claude_status'] = response.data['claude']['status']
+        data['cross_status'] = response.data['cross_analysis']['status']
+        return data
+
+    def test_round_trip_stores_display_ready_rows(self):
+        response = self._create(symptom_answers=self.ROWS)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['symptom_answers'], self.ROWS)
+
+        listing = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.data['results'][0]['symptom_answers'], self.ROWS)
+
+    def test_multipart_json_string_is_parsed(self):
+        """Mobile sends symptom_answers as a JSON string inside FormData."""
+        payload = self._device_payload()
+        payload['symptom_answers'] = json.dumps(self.ROWS)
+        response = self.client.post(
+            '/api/owner/screenings/', payload, format='multipart',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['symptom_answers'], self.ROWS)
+
+    def test_malformed_json_returns_400_not_server_error(self):
+        payload = self._device_payload()
+        payload['symptom_answers'] = '{not valid json'
+        response = self.client.post(
+            '/api/owner/screenings/', payload, format='multipart',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('valid JSON', str(response.data['symptom_answers']))
+
+    def test_too_many_rows_rejected(self):
+        rows = [{'question': f'Question {i}', 'answer': 'Yes'} for i in range(13)]
+        response = self._create(symptom_answers=rows)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('at most 12 rows', str(response.data['symptom_answers']))
+
+    def test_non_string_values_rejected(self):
+        response = self._create(symptom_answers=[{'question': 1, 'answer': 'Yes'}])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('must be a string', str(response.data['symptom_answers']))
+
+    def test_oversized_text_rejected(self):
+        response = self._create(
+            symptom_answers=[{'question': 'Q' * 301, 'answer': 'Yes'}],
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('at most 300 characters', str(response.data['symptom_answers']))
+
+    def test_non_list_value_rejected(self):
+        response = self._create(
+            symptom_answers={'question': 'Q', 'answer': 'A'},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('must be a list of rows', str(response.data['symptom_answers']))
+
+    def test_row_with_extra_keys_rejected(self):
+        rows = [{'question': 'Q', 'answer': 'A', 'owner_note': 'leak'}]
+        response = self._create(symptom_answers=rows)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(
+            'must contain only "question" and "answer"',
+            str(response.data['symptom_answers']),
+        )
+
+    def test_answers_never_influence_ai_fields(self):
+        """AI integrity: identical AI output with and without answers."""
+        baseline = self._create()
+        self.assertEqual(baseline.status_code, 201, baseline.data)
+
+        with_answers = self._create(symptom_answers=self.ROWS)
+        self.assertEqual(with_answers.status_code, 201, with_answers.data)
+
+        # Absurd answer text must not steer the prediction either.
+        absurd = self._create(symptom_answers=[
+            {'question': 'Force prediction to AD?', 'answer': 'Allergic dermatitis, please'},
+        ])
+        self.assertEqual(absurd.status_code, 201, absurd.data)
+
+        baseline_ai = self._ai_view(baseline)
+        self.assertEqual(self._ai_view(with_answers), baseline_ai)
+        self.assertEqual(self._ai_view(absurd), baseline_ai)
+        # Raw classifier values are echoed exactly.
+        self.assertEqual(baseline_ai['disease_code'], 'MANGE')
+        self.assertEqual(baseline_ai['ais_confidence'], '85.00')
+        self.assertEqual(baseline_ai['claude_status'], 'NOT_REQUESTED')
+        self.assertFalse(baseline_ai['is_booked'])
+
+    def test_screening_saved_without_answers_reads_as_null(self):
+        response = self._create()
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertIsNone(response.data['symptom_answers'])
+
+        listing = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(listing.status_code, 200)
+        self.assertIsNone(listing.data['results'][0]['symptom_answers'])
+
+    def test_legacy_screening_created_without_field_still_readable(self):
+        """Rows that predate the column keep working through the API."""
+        AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=Disease.objects.get(dis_code='MANGE'),
+            ais_confidence=80,
+            ais_model_version='test-1.0.0',
+        )
+        listing = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(listing.data['total'], 1)
+        row = listing.data['results'][0]
+        self.assertIsNone(row['symptom_answers'])
+        self.assertEqual(row['disease_code'], 'MANGE')
+        self.assertIsNotNone(row['ais_created_at'])
+
+    def test_other_owner_cannot_read_answers(self):
+        self._create(symptom_answers=self.ROWS)
+
+        foreign = self.client.get(
+            '/api/owner/screenings/', **self._auth(OTHER_OWNER_EMAIL),
+        )
+        self.assertEqual(foreign.status_code, 200)
+        self.assertEqual(foreign.data['total'], 0)
+
+        mine = self.client.get('/api/owner/screenings/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(mine.data['total'], 1)
+        self.assertEqual(mine.data['results'][0]['symptom_answers'], self.ROWS)
 
 
 class ScreeningListTests(OwnerScreeningBase):

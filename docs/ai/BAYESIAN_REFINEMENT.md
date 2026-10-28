@@ -1,12 +1,36 @@
 # Provisional Bayesian Questionnaire Refinement
 
-Status: experimental mobile-only screening refinement. Not a diagnosis and not a validated probability model.
+Status: experimental mobile-only library. **Not used to modify, display, or save any prediction in the active screening flow.** Not a diagnosis and not a validated probability model.
+
+## Current role in the app
+
+As of the AI-only screening refactor, the active flow never combines the
+questionnaire with the classifier output:
+
+- The on-device prediction is the sole primary result; the result screen shows
+  it with the top-3 list, and the saved record contains exactly those raw
+  classifier values (`features/screening/savePayload.ts`).
+- Questionnaire answers are passed to the result screen only as a supplementary
+  symptom summary (`features/screening/resultNavigationParams.ts`) and are
+  persisted only as display rows on the screening record (`symptom_answers`,
+  rendered by `SymptomSummaryCard`); the refinement engine never reads them
+  back and they never alter prediction or confidence.
+- `adaptive.ts` continues to call `refinePredictionsBayesian` **internally** to
+  choose the next question and detect early stopping. That influences which
+  questions are asked — never what is displayed or saved.
+- `engine.ts` (additive refinement), `summary.ts`, and this document's
+  combined/questionnaire-only algorithms remain in the repository as tested
+  library code but are unreachable from the active flow. Their removal is
+  deferred to a separate cleanup after reference verification.
 
 ## Purpose
 
-The image model produces five class probabilities. After a screening, the owner answers the 12-question veterinary-informed questionnaire. The refinement engine combines the image probabilities with those answers and returns five screening likelihoods.
+The image model produces five class probabilities. This document specifies the
+provisional refinement algorithm that historically combined those probabilities
+with the 12-question veterinary-informed questionnaire answers. It is retained
+for reference and for the adaptive-ordering internals described above.
 
-The questionnaire is adaptively ordered by default. Early stopping is implemented but disabled by default. This replaces the previous additive score as the active method, but the additive engine remains available as a rollback. The image pipeline, TensorFlow.js model, three-photo flow, quality gates, skin-validity gates, minimum-valid-image rule, and rejection states are unchanged.
+The questionnaire is adaptively ordered by default. Early stopping is implemented but disabled by default. The image pipeline, TensorFlow.js model, single-photo flow, quality gates, skin-validity gates, rejection states, and Claude image-validation gate are unchanged.
 
 ## Why this is Bayesian-style rather than a fully calibrated Bayesian model
 
@@ -133,7 +157,11 @@ The active method is passed to the result screen. Older result links without a m
 - Extra disclaimer about experimental questionnaire-adjusted likelihoods
 - A stopping notice when criteria were met early, when all 12 questions completed without meeting them, or when early stopping was disabled
 
-The backend still stores the final prediction and confidence only. Questionnaire answers, the refinement method, the stopping reason, and the answer count are not persisted yet, so this implementation does not provide a production evaluation dataset.
+The backend stores the final prediction and confidence as the primary result,
+plus the display-only `symptom_answers` rows (no other questionnaire state).
+The refinement method, the stopping reason, and the answer count are not
+persisted, so this implementation does not provide a production evaluation
+dataset.
 
 ## Result Summary
 
@@ -159,7 +187,7 @@ The combined result is also the only result that can reveal the optional mock ho
 - Adaptive ordering and the stopping thresholds are heuristic design choices, not validated clinical decision rules.
 - Early stopping is disabled by default pending evaluation. Enabling it does not make the result diagnostic.
 - No paired labeled questionnaire cases are available; accuracy improvement and stopping safety are unproven.
-- Only the final prediction/confidence is persisted; the method, answers, and stopping metadata are lost after the result screen.
+- The final prediction/confidence and the display-only answer rows are persisted; the method, refinement metadata, and stopping metadata are lost after the result screen.
 - The underlying image model's file-split `93.71%` result is not leakage-free and is not an accuracy claim for this combined flow.
 - The result is a screening suggestion and must continue to direct users to veterinary confirmation.
 

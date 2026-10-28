@@ -370,9 +370,20 @@ into one disease probability. `COMPATIBLE` means agreement only, not
 confirmation.
 
 Screenings are created only from on-device AI results (`source: DEVICE`).
-Mock or server-fabricated screenings are rejected. If the independent review
-fails, the on-device result may still be saved; the failure state is recorded
-without inventing findings.
+Mock or server-fabricated screenings are rejected. A screening can be saved
+only after the image-validation gate approved the photo (suitable and eligible)
+and the on-device classifier produced the prediction. If the review fails or
+does not approve the photo, no screening record is created; the failure state
+is shown to the owner without inventing findings.
+
+The AI prediction is the sole primary result. The questionnaire is
+supplementary: its answers may influence adaptive question selection only and
+are never merged into, or allowed to modify, the displayed or saved prediction
+and confidence. Display-ready answer rows are persisted with the screening
+(`symptom_answers`: at most 12 `{question, answer}` rows, each string at most
+300 characters) only so the result and details screens can show the summary;
+stored answers are never read by or fed into prediction, confidence, ranking,
+review, or booking logic.
 
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
