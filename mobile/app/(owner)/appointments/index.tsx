@@ -1,4 +1,4 @@
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
@@ -12,18 +12,6 @@ import { font } from '../../../src/theme/typography'
 const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
 type Tab = 'upcoming' | 'history'
 
-function formatDateTime(iso: string): string {
-  const date = new Date(iso)
-  return date.toLocaleString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-}
-
 function AppointmentRow({
   appointment,
   onPress,
@@ -34,19 +22,47 @@ function AppointmentRow({
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
 
+  const scheduled = new Date(appointment.apt_scheduled_at)
+  const weekday = scheduled.toLocaleDateString(undefined, { weekday: 'short' })
+  const day = scheduled.getDate()
+  const month = scheduled.toLocaleDateString(undefined, { month: 'short' })
+  const time = scheduled.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={styles.card}>
-      <View style={styles.cardHeader}>
-        <Text numberOfLines={1} style={styles.petName}>{appointment.pet_name}</Text>
-        <StatusPill status={appointment.apt_status} />
+    <Pressable
+      accessibilityHint="Opens the appointment details"
+      accessibilityLabel={`Appointment for ${appointment.pet_name} on ${weekday} ${day} ${month} at ${time}`}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={styles.card}
+    >
+      <View style={styles.dateBlock}>
+        <Text style={styles.dateWeekday}>{weekday}</Text>
+        <Text style={styles.dateDay}>{day}</Text>
+        <Text style={styles.dateMonth}>{month}</Text>
       </View>
-      <Text numberOfLines={1} style={styles.meta}>
-        {appointment.vet_name ?? 'Vet to be assigned'} · {appointment.apt_type.replace('_', ' ')}
-      </Text>
-      <View style={styles.cardFooter}>
-        <Text style={styles.dateTime}>{formatDateTime(appointment.apt_scheduled_at)}</Text>
-        <Ionicons color={colors.textMuted} name="chevron-forward" size={16} />
+
+      <View style={styles.cardBody}>
+        <View style={styles.cardHeader}>
+          <Text numberOfLines={1} style={styles.petName}>{appointment.pet_name}</Text>
+          <StatusPill status={appointment.apt_status} />
+        </View>
+        <View style={styles.metaRow}>
+          <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={14} />
+          <Text numberOfLines={1} style={styles.metaText}>
+            {appointment.vet_name ?? 'Vet to be assigned'}
+          </Text>
+        </View>
+        <View style={styles.metaRow}>
+          <MaterialCommunityIcons color={colors.primary} name="clock-outline" size={14} />
+          <Text style={styles.metaText}>{time}</Text>
+        </View>
       </View>
+
+      <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={18} />
     </Pressable>
   )
 }
@@ -132,7 +148,6 @@ export default function AppointmentsScreen() {
                   ? 'No upcoming appointments yet. Run a skin screening to book one.'
                   : 'No past appointments yet.'}
               </Text>
-             
             </View>
           )}
         </ScrollView>
@@ -154,15 +169,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
   tabTextActive: { color: colors.text },
   list: { gap: 12, paddingBottom: 24, paddingTop: 20 },
-  card: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 6, paddingHorizontal: 16, paddingVertical: 14 },
+  card: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  dateBlock: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, gap: 1, paddingVertical: 10, width: 58 },
+  dateWeekday: { ...font.bold, color: colors.textMuted, fontSize: 10, letterSpacing: 0.6, textTransform: 'uppercase' },
+  dateDay: { ...font.extrabold, color: colors.text, fontSize: 22, lineHeight: 26 },
+  dateMonth: { ...font.semibold, color: colors.textSecondary, fontSize: 11 },
+  cardBody: { flex: 1, gap: 4 },
   cardHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  petName: { ...font.bold, color: colors.text, flex: 1, fontSize: 16, marginRight: 10 },
-  meta: { ...font.regular, color: colors.textSecondary, fontSize: 13 },
-  cardFooter: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  dateTime: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  petName: { ...font.bold, color: colors.text, flex: 1, fontSize: 15, marginRight: 8 },
+  metaRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  metaText: { ...font.semibold, color: colors.textSecondary, fontSize: 12, flexShrink: 1 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
   emptyState: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center', minHeight: 140, paddingHorizontal: 24 },
   statusText: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
-  emptyButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 40, paddingHorizontal: 18, justifyContent: 'center' },
-  emptyButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
 })

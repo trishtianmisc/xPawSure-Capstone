@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useMemo } from 'react'
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../context/ThemeContext'
 import { font } from '../theme/typography'
@@ -13,6 +13,16 @@ interface ConfirmDialogProps {
   cancelLabel?: string
   icon?: string
   busy?: boolean
+  /**
+   * Optional controlled reason capture (e.g. a cancellation reason).
+   * Omit it and the dialog renders exactly as before.
+   */
+  reasonInput?: {
+    label: string
+    value: string
+    placeholder?: string
+    onChange: (text: string) => void
+  }
   onConfirm: () => void
   onCancel: () => void
 }
@@ -25,6 +35,7 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   icon = 'trash-can-outline',
   busy = false,
+  reasonInput,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -41,6 +52,22 @@ export function ConfirmDialog({
 
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
+
+          {reasonInput ? (
+            <View style={styles.reasonBlock}>
+              <Text style={styles.reasonLabel}>{reasonInput.label}</Text>
+              <TextInput
+                accessibilityLabel={reasonInput.label}
+                editable={!busy}
+                multiline
+                onChangeText={reasonInput.onChange}
+                placeholder={reasonInput.placeholder}
+                placeholderTextColor={colors.textMuted}
+                style={styles.reasonInput}
+                value={reasonInput.value}
+              />
+            </View>
+          ) : null}
 
           <View style={styles.buttons}>
             <Pressable
@@ -110,6 +137,28 @@ const createStyles = (colors: AppColors) =>
       fontSize: 13,
       lineHeight: 19,
       textAlign: 'center',
+    },
+    reasonBlock: {
+      gap: 6,
+      marginTop: 12,
+      width: '100%',
+    },
+    reasonLabel: {
+      ...font.semibold,
+      color: colors.text,
+      fontSize: 13,
+    },
+    reasonInput: {
+      ...font.regular,
+      backgroundColor: colors.surfaceAlt,
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderWidth: 1,
+      color: colors.text,
+      fontSize: 13,
+      minHeight: 68,
+      padding: 10,
+      textAlignVertical: 'top',
     },
     buttons: {
       columnGap: 12,

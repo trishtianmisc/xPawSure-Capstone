@@ -25,6 +25,8 @@ export async function getPayment(payId: string): Promise<Payment> {
 /** The caller's own receipts; `status: 'PENDING'` resumes an abandoned checkout. */
 export async function listMyPayments(params?: {
   status?: PaymentStatus
+  /** Narrow the list to one appointment's payments (details screen). */
+  appointment?: string
   page?: number
   page_size?: number
 }): Promise<PaymentListResponse> {

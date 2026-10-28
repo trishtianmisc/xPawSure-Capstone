@@ -205,6 +205,13 @@ The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
 
 Owners may view upcoming appointments.
 
+The appointment details screen presents the record formally: a status banner
+with a per-status explanation, the schedule (date block, time, clinic,
+veterinarian, type), the patient, the visit reason, the linked skin scan
+(with a shortcut to its full screening log), and the consultation-fee payment
+receipt (amount, method, status, reference). Cancelling optionally captures an
+owner-stated reason, which the record then displays.
+
 Owners may cancel appointments.
 
 ---
