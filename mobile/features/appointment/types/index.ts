@@ -57,6 +57,13 @@ export interface OwnerClinic {
   cln_logo_url: string | null
   /** Consultation fee in the clinic's currency; 0 means booking is free. */
   consultation_fee: number
+  /**
+   * Map coordinates geocoded from the clinic address by the backend. Either
+   * both are set, or both are null when no location could be resolved — such a
+   * clinic stays selectable in the list but has no map pin.
+   */
+  cln_latitude: number | null
+  cln_longitude: number | null
 }
 
 export interface OwnerVet {

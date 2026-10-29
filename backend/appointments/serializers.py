@@ -12,12 +12,17 @@ class OwnerClinicSerializer(serializers.ModelSerializer):
     # Shown in the booking wizard so an owner sees what they must pay before
     # they reach the payment step; 0 means booking is free.
     consultation_fee = serializers.SerializerMethodField()
+    # Read-only map coordinates, geocoded from the clinic address by the
+    # backend. Null when a location could not be resolved; the clinic stays
+    # selectable in the list, it just has no map pin.
+    cln_latitude = serializers.FloatField(read_only=True)
+    cln_longitude = serializers.FloatField(read_only=True)
 
     class Meta:
         model = Clinic
         fields = [
             'cln_id', 'cln_name', 'cln_address', 'cln_phone', 'cln_logo_url',
-            'consultation_fee',
+            'consultation_fee', 'cln_latitude', 'cln_longitude',
         ]
         read_only_fields = fields
 

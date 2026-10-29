@@ -1,10 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import * as Linking from 'expo-linking'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   View,
 } from 'react-native'
 
+import { ClinicMap } from '../../../features/appointment/components/ClinicMap'
 import { useBookAppointment } from '../../../features/appointment/hooks/useBookAppointment'
 import { useClinics } from '../../../features/appointment/hooks/useClinics'
 import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppointments'
@@ -427,7 +429,9 @@ export default function BookAppointmentScreen() {
 
         <View style={styles.guardWrap}>
           <View style={styles.blockCard}>
-            <MaterialCommunityIcons color={colors.primary} name="camera" size={34} />
+            <View style={styles.blockIcon}>
+              <MaterialCommunityIcons color={colors.primary} name="calendar-search" size={28} />
+            </View>
             <Text style={styles.blockTitle}>Skin scan required</Text>
             <Text style={styles.blockText}>
               Booking starts from a skin screening result. Run a scan for your pet to continue.
@@ -435,9 +439,9 @@ export default function BookAppointmentScreen() {
             <Pressable
               accessibilityRole="button"
               onPress={handleGoScan}
-              style={styles.scanButton}
+              style={styles.primaryButton}
             >
-              <Text style={styles.scanButtonText}>Start a skin screening</Text>
+              <Text style={styles.primaryButtonText}>Start a skin screening</Text>
             </Pressable>
           </View>
         </View>
@@ -463,16 +467,47 @@ export default function BookAppointmentScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.progressHeader}>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${(Math.min(step, totalSteps) / totalSteps) * 100}%` },
-              ]}
-            />
+          <View style={styles.stepper}>
+            {Array.from({ length: totalSteps }).map((_, index) => {
+              const position = index + 1
+              const isDone = position < Math.min(step, totalSteps)
+              const isCurrent = position === Math.min(step, totalSteps)
+              return (
+                <Fragment key={position}>
+                  <View
+                    style={[
+                      styles.stepDot,
+                      isDone && styles.stepDotDone,
+                      isCurrent && styles.stepDotCurrent,
+                    ]}
+                  >
+                    {isDone ? (
+                      <Ionicons color={colors.inverse} name="checkmark" size={14} />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.stepDotText,
+                          isCurrent && styles.stepDotTextCurrent,
+                          !isDone && !isCurrent && styles.stepDotTextUpcoming,
+                        ]}
+                      >
+                        {position}
+                      </Text>
+                    )}
+                  </View>
+                  {index < totalSteps - 1 && (
+                    <View style={[styles.stepLine, isDone && styles.stepLineDone]} />
+                  )}
+                </Fragment>
+              )
+            })}
           </View>
-          <Text style={styles.stepLabel}>Step {Math.min(step, totalSteps)} of {totalSteps}</Text>
-          <Text style={styles.stepTitle}>{STEP_TITLES[step - 1]}</Text>
+          <View style={styles.stepHeading}>
+            <Text style={styles.stepTitle}>{STEP_TITLES[step - 1]}</Text>
+            <Text style={styles.stepLabel}>
+              Step {Math.min(step, totalSteps)} of {totalSteps}
+            </Text>
+          </View>
         </View>
 
         {step === 1 && (
@@ -482,25 +517,43 @@ export default function BookAppointmentScreen() {
             ) : clinicsError ? (
               <Text style={styles.statusText}>We couldn&apos;t load clinics. Please try again.</Text>
             ) : clinics.length > 0 ? (
-              clinics.map((clinic) => (
-                <Pressable
-                  key={clinic.cln_id}
-                  accessibilityRole="button"
-                  onPress={() => selectClinic(clinic)}
-                  style={[styles.optionCard, clinicId === clinic.cln_id && styles.optionCardSelected]}
-                >
-                  <View style={styles.optionIcon}>
-                    <MaterialCommunityIcons color={colors.primary} name="hospital-building" size={22} />
-                  </View>
-                  <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{clinic.cln_name}</Text>
-                    {clinic.cln_address ? (
-                      <Text numberOfLines={1} style={styles.optionSubtitle}>{clinic.cln_address}</Text>
-                    ) : null}
-                  </View>
-                  <Ionicons color={colors.textMuted} name="chevron-forward" size={18} />
-                </Pressable>
-              ))
+              <>
+                {/* Map of geocoded clinics above the list; tapping a pin runs
+                    the same selection path as tapping the list row. Clinics
+                    without coordinates simply have no pin but stay listed. */}
+                <ClinicMap
+                  clinics={clinics}
+                  selectedClinicId={clinicId}
+                  onSelect={(clinicIdToSelect) => {
+                    const clinic = clinics.find((current) => current.cln_id === clinicIdToSelect)
+                    if (clinic) selectClinic(clinic)
+                  }}
+                />
+                {clinics.map((clinic) => {
+                  const selected = clinicId === clinic.cln_id
+                  return (
+                    <Pressable
+                      key={clinic.cln_id}
+                      accessibilityRole="button"
+                      onPress={() => selectClinic(clinic)}
+                      style={[styles.optionCard, selected && styles.optionCardSelected]}
+                    >
+                      <ClinicLogo logoUrl={clinic.cln_logo_url} />
+                      <View style={styles.optionBody}>
+                        <Text style={styles.optionTitle}>{clinic.cln_name}</Text>
+                        {clinic.cln_address ? (
+                          <Text numberOfLines={1} style={styles.optionSubtitle}>{clinic.cln_address}</Text>
+                        ) : null}
+                      </View>
+                      <View style={[styles.optionCheck, selected && styles.optionCheckOn]}>
+                        {selected ? (
+                          <Ionicons color={colors.inverse} name="checkmark" size={13} />
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  )
+                })}
+              </>
             ) : (
               <View style={styles.stateBox}>
                 <Text style={styles.statusText}>No clinics available for online booking.</Text>
@@ -516,27 +569,34 @@ export default function BookAppointmentScreen() {
             ) : vetsError ? (
               <Text style={styles.statusText}>We couldn&apos;t load veterinarians. Please try again.</Text>
             ) : vets.length > 0 ? (
-              vets.map((vet) => (
-                <Pressable
-                  key={vet.stf_id}
-                  accessibilityRole="button"
-                  onPress={() => selectVet(vet)}
-                  style={[styles.optionCard, vetId === vet.stf_id && styles.optionCardSelected]}
-                >
-                  <View style={styles.optionIcon}>
-                    <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={22} />
-                  </View>
-                  <View style={styles.optionBody}>
-                    <Text style={styles.optionTitle}>{vet.full_name}</Text>
-                    {vet.available_count !== null ? (
-                      <Text style={styles.optionSubtitle}>
-                        {vet.available_count} slot{vet.available_count === 1 ? '' : 's'} available
-                      </Text>
-                    ) : null}
-                  </View>
-                  <Ionicons color={colors.textMuted} name="chevron-forward" size={18} />
-                </Pressable>
-              ))
+              vets.map((vet) => {
+                const selected = vetId === vet.stf_id
+                return (
+                  <Pressable
+                    key={vet.stf_id}
+                    accessibilityRole="button"
+                    onPress={() => selectVet(vet)}
+                    style={[styles.optionCard, selected && styles.optionCardSelected]}
+                  >
+                    <View style={styles.optionIcon}>
+                      <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={20} />
+                    </View>
+                    <View style={styles.optionBody}>
+                      <Text style={styles.optionTitle}>{vet.full_name}</Text>
+                      {vet.available_count !== null ? (
+                        <Text style={styles.optionSubtitle}>
+                          {vet.available_count} slot{vet.available_count === 1 ? '' : 's'} available
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={[styles.optionCheck, selected && styles.optionCheckOn]}>
+                      {selected ? (
+                        <Ionicons color={colors.inverse} name="checkmark" size={13} />
+                      ) : null}
+                    </View>
+                  </Pressable>
+                )
+              })
             ) : (
               <View style={styles.stateBox}>
                 <Text style={styles.statusText}>
@@ -554,24 +614,27 @@ export default function BookAppointmentScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.dayRow}
             >
-              {days.map((day) => (
-                <Pressable
-                  key={day.iso}
-                  accessibilityRole="button"
-                  onPress={() => selectDate(day.iso)}
-                  style={[styles.dayChip, date === day.iso && styles.dayChipSelected]}
-                >
-                  <Text style={[styles.dayWeekday, date === day.iso && styles.dayChipTextSelected]}>
-                    {day.weekday}
-                  </Text>
-                  <Text style={[styles.dayNumber, date === day.iso && styles.dayChipTextSelected]}>
-                    {day.day}
-                  </Text>
-                  <Text style={[styles.dayMonth, date === day.iso && styles.dayChipTextSelected]}>
-                    {day.month}
-                  </Text>
-                </Pressable>
-              ))}
+              {days.map((day) => {
+                const selected = date === day.iso
+                return (
+                  <Pressable
+                    key={day.iso}
+                    accessibilityRole="button"
+                    onPress={() => selectDate(day.iso)}
+                    style={[styles.dayChip, selected && styles.dayChipSelected]}
+                  >
+                    <Text style={[styles.dayWeekday, selected && styles.dayChipTextSelected]}>
+                      {day.weekday}
+                    </Text>
+                    <Text style={[styles.dayNumber, selected && styles.dayChipTextSelected]}>
+                      {day.day}
+                    </Text>
+                    <Text style={[styles.dayMonth, selected && styles.dayChipTextSelected]}>
+                      {day.month}
+                    </Text>
+                  </Pressable>
+                )
+              })}
             </ScrollView>
 
             {slotsLoading ? (
@@ -580,23 +643,21 @@ export default function BookAppointmentScreen() {
               <Text style={styles.statusText}>We couldn&apos;t load time slots. Please try again.</Text>
             ) : slots.length > 0 ? (
               <View style={styles.slotGrid}>
-                {slots.map((currentSlot) => (
-                  <Pressable
-                    key={currentSlot.vsl_id}
-                    accessibilityRole="button"
-                    onPress={() => selectSlot(currentSlot)}
-                    style={[styles.slotChip, slot?.vsl_id === currentSlot.vsl_id && styles.slotChipSelected]}
-                  >
-                    <Text
-                      style={[
-                        styles.slotText,
-                        slot?.vsl_id === currentSlot.vsl_id && styles.slotTextSelected,
-                      ]}
+                {slots.map((currentSlot) => {
+                  const selected = slot?.vsl_id === currentSlot.vsl_id
+                  return (
+                    <Pressable
+                      key={currentSlot.vsl_id}
+                      accessibilityRole="button"
+                      onPress={() => selectSlot(currentSlot)}
+                      style={[styles.slotChip, selected && styles.slotChipSelected]}
                     >
-                      {formatTime(currentSlot.vsl_start_time)}
-                    </Text>
-                  </Pressable>
-                ))}
+                      <Text style={[styles.slotText, selected && styles.slotTextSelected]}>
+                        {formatTime(currentSlot.vsl_start_time)}
+                      </Text>
+                    </Pressable>
+                  )
+                })}
               </View>
             ) : (
               <View style={styles.stateBox}>
@@ -613,31 +674,35 @@ export default function BookAppointmentScreen() {
           <View style={styles.list}>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Booking summary</Text>
-              <Text style={styles.summaryLine}>Clinic: {clinicName}</Text>
-              <Text style={styles.summaryLine}>Pet: {screening?.pet_name ?? 'Your pet'}</Text>
-              <Text style={styles.summaryLine}>Date: {date}</Text>
-              <Text style={styles.summaryLine}>Veterinarian: {vetName}</Text>
-              <Text style={styles.summaryLine}>
-                Time: {slot ? formatTime(slot.vsl_start_time) : ''}
-              </Text>
-              <Text style={styles.summaryLine}>Skin scan: {screening?.disease ?? ''}</Text>
+              <View style={styles.summaryDivider} />
+              <SummaryRow label="Clinic" value={clinicName ?? '—'} />
+              <SummaryRow label="Pet" value={screening?.pet_name ?? 'Your pet'} />
+              <SummaryRow label="Date" value={date} />
+              <SummaryRow label="Veterinarian" value={vetName ?? '—'} />
+              <SummaryRow label="Time" value={slot ? formatTime(slot.vsl_start_time) : '—'} />
+              <SummaryRow label="Skin scan" value={screening?.disease ?? '—'} />
               {requiresPayment ? (
-                <Text style={styles.summaryFee}>
-                  Consultation fee: {formatMoney(consultationFee, payment?.currency ?? 'PHP')}
-                </Text>
+                <View style={styles.summaryFeeRow}>
+                  <Text style={styles.summaryFeeLabel}>Consultation fee</Text>
+                  <Text style={styles.summaryFeeValue}>
+                    {formatMoney(consultationFee, payment?.currency ?? 'PHP')}
+                  </Text>
+                </View>
               ) : null}
             </View>
 
-            <Text style={styles.fieldLabel}>Reason (optional)</Text>
-            <TextInput
-              accessibilityLabel="Reason for the appointment"
-              multiline
-              onChangeText={setReason}
-              placeholder="Describe the reason for this visit..."
-              placeholderTextColor={colors.textMuted}
-              style={styles.reasonInput}
-              value={reason}
-            />
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Reason <Text style={styles.fieldOptional}>(optional)</Text></Text>
+              <TextInput
+                accessibilityLabel="Reason for the appointment"
+                multiline
+                onChangeText={setReason}
+                placeholder="Describe the reason for this visit..."
+                placeholderTextColor={colors.textMuted}
+                style={styles.reasonInput}
+                value={reason}
+              />
+            </View>
             {bookAppointment.isError && (
               <Text style={styles.errorText}>Booking failed. Please try again.</Text>
             )}
@@ -646,19 +711,19 @@ export default function BookAppointmentScreen() {
 
         {step === PAYMENT_STEP && (
           <View style={styles.list}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Consultation fee</Text>
+            <View style={styles.feeCard}>
+              <Text style={styles.feeLabel}>Consultation fee</Text>
               <Text style={styles.feeAmount}>
                 {formatMoney(payment?.amount ?? consultationFee, payment?.currency ?? 'PHP')}
               </Text>
-              <Text style={styles.summaryLine}>Clinic: {clinicName}</Text>
-              <Text style={styles.summaryLine}>Pet: {screening?.pet_name ?? 'Your pet'}</Text>
-              <Text style={styles.summaryLine}>
-                Date: {date} · {slot ? formatTime(slot.vsl_start_time) : ''}
-              </Text>
-              {payment ? (
-                <Text style={styles.summaryLine}>Reference: {payment.reference_no}</Text>
-              ) : null}
+              <View style={styles.summaryDivider} />
+              <SummaryRow label="Clinic" value={clinicName ?? '—'} />
+              <SummaryRow label="Pet" value={screening?.pet_name ?? 'Your pet'} />
+              <SummaryRow
+                label="Date & time"
+                value={`${date}${slot ? ` · ${formatTime(slot.vsl_start_time)}` : ''}`}
+              />
+              {payment ? <SummaryRow label="Reference" value={payment.reference_no} /> : null}
             </View>
 
             {!payment ||
@@ -668,26 +733,21 @@ export default function BookAppointmentScreen() {
               <View style={styles.methodBlock}>
                 <Text style={styles.fieldLabel}>Payment method</Text>
                 <View style={styles.typeRow}>
-                  {OWNER_METHODS.map((ownerMethod) => (
-                    <Pressable
-                      key={ownerMethod.value}
-                      accessibilityRole="button"
-                      onPress={() => setMethod(ownerMethod.value)}
-                      style={[
-                        styles.typeChip,
-                        method === ownerMethod.value && styles.typeChipSelected,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.typeText,
-                          method === ownerMethod.value && styles.typeTextSelected,
-                        ]}
+                  {OWNER_METHODS.map((ownerMethod) => {
+                    const selected = method === ownerMethod.value
+                    return (
+                      <Pressable
+                        key={ownerMethod.value}
+                        accessibilityRole="button"
+                        onPress={() => setMethod(ownerMethod.value)}
+                        style={[styles.typeChip, selected && styles.typeChipSelected]}
                       >
-                        {ownerMethod.label}
-                      </Text>
-                    </Pressable>
-                  ))}
+                        <Text style={[styles.typeText, selected && styles.typeTextSelected]}>
+                          {ownerMethod.label}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
                 </View>
               </View>
             ) : null}
@@ -703,9 +763,9 @@ export default function BookAppointmentScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => openCheckout(payment.checkout_url)}
-                  style={styles.scanButton}
+                  style={styles.primaryButton}
                 >
-                  <Text style={styles.scanButtonText}>Open checkout page</Text>
+                  <Text style={styles.primaryButtonText}>Open checkout page</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -727,7 +787,9 @@ export default function BookAppointmentScreen() {
 
             {payment?.status === 'PAID' && (
               <View style={styles.payStatusCard}>
-                <MaterialCommunityIcons color={colors.primary} name="check-decagram" size={34} />
+                <View style={styles.successIcon}>
+                  <MaterialCommunityIcons color={colors.primary} name="check-decagram" size={28} />
+                </View>
                 <Text style={styles.blockTitle}>Payment received</Text>
                 <Text style={styles.blockText}>Booking your appointment…</Text>
                 <ActivityIndicator color={colors.primary} />
@@ -810,72 +872,342 @@ export default function BookAppointmentScreen() {
   )
 }
 
+/** Shows a clinic logo when available, falling back to the clinic icon. */
+function ClinicLogo({ logoUrl }: { logoUrl: string | null }) {
+  const { colors } = useTheme()
+  const styles = useMemo(() => createStyles(colors), [colors])
+  const [imageFailed, setImageFailed] = useState(false)
+
+  useEffect(() => {
+    setImageFailed(false)
+  }, [logoUrl])
+
+  return (
+    <View style={styles.optionIcon}>
+      {logoUrl && !imageFailed ? (
+        <Image
+          accessibilityIgnoresInvertColors
+          onError={() => setImageFailed(true)}
+          resizeMode="cover"
+          source={{ uri: logoUrl }}
+          style={styles.clinicLogoImage}
+        />
+      ) : (
+        <MaterialCommunityIcons color={colors.primary} name="hospital-building" size={20} />
+      )}
+    </View>
+  )
+}
+
+/** A single labelled line in a booking / payment summary card. */
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme()
+  const rowStyles = useMemo(() => createSummaryRowStyles(colors), [colors])
+  return (
+    <View style={rowStyles.row}>
+      <Text style={rowStyles.label}>{label}</Text>
+      <Text numberOfLines={1} style={rowStyles.value}>{value}</Text>
+    </View>
+  )
+}
+
+const createSummaryRowStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    row: {
+      alignItems: 'flex-start',
+      flexDirection: 'row',
+      gap: 12,
+      justifyContent: 'space-between',
+      paddingVertical: 3,
+    },
+    label: { ...font.medium, color: colors.textSecondary, flexShrink: 0, fontSize: 13 },
+    value: {
+      ...font.semibold,
+      color: colors.text,
+      flexShrink: 1,
+      fontSize: 13,
+      textAlign: 'right',
+    },
+  })
+
 const createStyles = (colors: AppColors) => StyleSheet.create({
-  screen: { backgroundColor: colors.surface, flex: 1 },
-  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: 4 },
-  headerBack: {
+  screen: { backgroundColor: colors.bg, flex: 1 },
+  header: {
     alignItems: 'center',
-    height: 50,
-    justifyContent: 'center',
-    width: 50,
-    marginTop: 5,
+    backgroundColor: colors.surface,
+    borderBottomColor: colors.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    height: 54,
+    paddingHorizontal: 8,
   },
-  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
-  headerRight: { width: 20 },
-  content: { gap: 16, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 20 },
-  guardWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
-  progressHeader: { gap: 8 },
-  progressTrack: { backgroundColor: colors.surfaceAlt, borderRadius: 999, height: 6, overflow: 'hidden' },
-  progressFill: { backgroundColor: colors.primary, borderRadius: 999, height: '100%' },
-  stepLabel: { ...font.bold, color: colors.textMuted, fontSize: 12, textTransform: 'uppercase' },
-  stepTitle: { ...font.extrabold, color: colors.text, fontSize: 20 },
+  headerBack: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
+  headerTitle: { ...font.semibold, color: colors.text, flex: 1, fontSize: 17, textAlign: 'center' },
+  headerRight: { width: 44 },
+  content: { gap: 20, paddingBottom: 28, paddingHorizontal: 20, paddingTop: 22 },
+  guardWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
+
+  progressHeader: { gap: 16 },
+  stepper: { alignItems: 'center', flexDirection: 'row' },
+  stepDot: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  stepDotDone: { backgroundColor: colors.primary, borderColor: colors.primary },
+  stepDotCurrent: { backgroundColor: colors.primary, borderColor: colors.primary },
+  stepDotText: { ...font.semibold, fontSize: 12 },
+  stepDotTextCurrent: { color: colors.inverse },
+  stepDotTextUpcoming: { color: colors.textMuted },
+  stepLine: { backgroundColor: colors.border, borderRadius: 2, flex: 1, height: 2, marginHorizontal: 6 },
+  stepLineDone: { backgroundColor: colors.primary },
+  stepHeading: { alignItems: 'center', gap: 3 },
+  stepTitle: { ...font.semibold, color: colors.text, fontSize: 18, textAlign: 'center' },
+  stepLabel: { ...font.medium, color: colors.textMuted, fontSize: 12, letterSpacing: 0.3 },
+
   list: { gap: 12 },
-  stateBox: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, justifyContent: 'center', minHeight: 140, paddingHorizontal: 24 },
-  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  optionCard: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, minHeight: 72, paddingHorizontal: 14 },
-  optionCardSelected: { borderColor: colors.primary, borderWidth: 2 },
-  optionIcon: { alignItems: 'center', backgroundColor: colors.iconBg, borderRadius: 12, height: 44, justifyContent: 'center', width: 44 },
-  optionBody: { flex: 1 },
-  optionTitle: { ...font.bold, color: colors.text, fontSize: 15 },
-  optionSubtitle: { ...font.regular, color: colors.textSecondary, fontSize: 13, marginTop: 2 },
-  dayRow: { gap: 10, paddingVertical: 4 },
-  dayChip: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 2, paddingHorizontal: 12, paddingVertical: 10, width: 64 },
+  stateBox: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 150,
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+  },
+  statusText: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+
+  optionCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  optionCardSelected: { backgroundColor: colors.surfaceAlt, borderColor: colors.primary },
+  optionIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBg,
+    borderRadius: 12,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  clinicLogoImage: { borderRadius: 12, height: '100%', width: '100%' },
+  optionBody: { flex: 1, gap: 2 },
+  optionTitle: { ...font.semibold, color: colors.text, fontSize: 15 },
+  optionSubtitle: { ...font.regular, color: colors.textSecondary, fontSize: 12.5 },
+  optionCheck: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  optionCheckOn: { backgroundColor: colors.primary, borderColor: colors.primary },
+
+  dayRow: { gap: 8, paddingVertical: 2 },
+  dayChip: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: 60,
+  },
   dayChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
   dayChipTextSelected: { color: colors.inverse },
-  dayWeekday: { ...font.bold, color: colors.textSecondary, fontSize: 11, textTransform: 'uppercase' },
-  dayNumber: { ...font.extrabold, color: colors.text, fontSize: 18 },
-  dayMonth: { ...font.semibold, color: colors.textSecondary, fontSize: 11 },
+  dayWeekday: { ...font.medium, color: colors.textMuted, fontSize: 10, letterSpacing: 0.4, textTransform: 'uppercase' },
+  dayNumber: { ...font.semibold, color: colors.text, fontSize: 17 },
+  dayMonth: { ...font.medium, color: colors.textSecondary, fontSize: 10 },
+
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  slotChip: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 44, minWidth: 100, paddingHorizontal: 14 },
+  slotChip: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 100,
+    paddingHorizontal: 16,
+  },
   slotChipSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
-  slotText: { ...font.bold, color: colors.text, fontSize: 14 },
+  slotText: { ...font.medium, color: colors.text, fontSize: 14 },
   slotTextSelected: { color: colors.inverse },
-  summaryCard: { backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 6, padding: 16 },
-  summaryTitle: { ...font.extrabold, color: colors.text, fontSize: 15 },
-  summaryLine: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
-  summaryFee: { ...font.bold, color: colors.primaryDark, fontSize: 14, marginTop: 4 },
-  feeAmount: { ...font.extrabold, color: colors.text, fontSize: 28 },
+
+  summaryCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 2,
+    padding: 18,
+  },
+  summaryTitle: { ...font.semibold, color: colors.text, fontSize: 15, marginBottom: 4 },
+  summaryDivider: { backgroundColor: colors.border, height: StyleSheet.hairlineWidth, marginVertical: 10 },
+  summaryFeeRow: {
+    alignItems: 'center',
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 12,
+  },
+  summaryFeeLabel: { ...font.medium, color: colors.textSecondary, fontSize: 13 },
+  summaryFeeValue: { ...font.semibold, color: colors.primaryDark, fontSize: 14 },
+
+  fieldBlock: { gap: 8 },
+  fieldLabel: { ...font.medium, color: colors.text, fontSize: 13.5 },
+  fieldOptional: { ...font.regular, color: colors.textMuted, fontSize: 12.5 },
+  reasonInput: {
+    ...font.regular,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: colors.text,
+    fontSize: 14,
+    minHeight: 96,
+    padding: 14,
+    textAlignVertical: 'top',
+  },
+
+  feeCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 2,
+    padding: 18,
+  },
+  feeLabel: { ...font.medium, color: colors.textSecondary, fontSize: 12.5, letterSpacing: 0.3 },
+  feeAmount: { ...font.semibold, color: colors.text, fontSize: 28, marginBottom: 2 },
+
   methodBlock: { gap: 10 },
-  payStatusCard: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderColor: colors.border, borderRadius: 14, borderWidth: 1, gap: 12, padding: 16 },
-  secondaryButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 20, width: '100%' },
-  secondaryButtonText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
-  fieldLabel: { ...font.bold, color: colors.text, fontSize: 14 },
   typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  typeChip: { backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 999, borderWidth: 1, minHeight: 38, paddingHorizontal: 14, justifyContent: 'center' },
+  typeChip: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 18,
+  },
   typeChipSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  typeText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
-  typeTextSelected: { ...font.bold, color: colors.primaryDark },
-  reasonInput: { ...font.regular, backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 12, borderWidth: 1, color: colors.text, fontSize: 14, minHeight: 96, padding: 14, textAlignVertical: 'top' },
-  blockCard: { alignItems: 'center', borderColor: colors.border, borderRadius: 14, borderStyle: 'dashed', borderWidth: 1, gap: 10, justifyContent: 'center', minHeight: 220, paddingHorizontal: 24, paddingVertical: 24 },
-  blockTitle: { ...font.extrabold, color: colors.text, fontSize: 16 },
-  blockText: { ...font.regular, color: colors.textSecondary, fontSize: 14, lineHeight: 20, textAlign: 'center' },
-  scanButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, justifyContent: 'center', minHeight: 48, paddingHorizontal: 28 },
-  scanButtonText: { ...font.bold, color: colors.inverse, fontSize: 15 },
-  errorText: { ...font.semibold, color: colors.error, fontSize: 13 },
-  footer: { backgroundColor: colors.surface, borderTopColor: colors.border, borderTopWidth: 1, flexDirection: 'row', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
-  backButton: { alignItems: 'center', borderColor: colors.border, borderRadius: 12, borderWidth: 1, justifyContent: 'center', minHeight: 48, paddingHorizontal: 22 },
-  backButtonText: { ...font.bold, color: colors.text, fontSize: 15 },
-  nextButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 12, flex: 1, justifyContent: 'center', minHeight: 48 },
-  nextButtonDisabled: { opacity: 0.5 },
-  nextButtonText: { ...font.bold, color: colors.inverse, fontSize: 15 },
+  typeText: { ...font.medium, color: colors.textSecondary, fontSize: 13 },
+  typeTextSelected: { ...font.semibold, color: colors.primaryDark },
+
+  payStatusCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    padding: 20,
+  },
+  successIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.primaryLight,
+    borderRadius: 999,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  blockCard: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 20,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    gap: 12,
+    justifyContent: 'center',
+    padding: 28,
+  },
+  blockIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.iconBg,
+    borderRadius: 999,
+    height: 60,
+    justifyContent: 'center',
+    marginBottom: 4,
+    width: 60,
+  },
+  blockTitle: { ...font.semibold, color: colors.text, fontSize: 16 },
+  blockText: { ...font.regular, color: colors.textSecondary, fontSize: 13.5, lineHeight: 20, textAlign: 'center' },
+  errorText: { ...font.medium, color: colors.error, fontSize: 12.5, lineHeight: 18 },
+
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 28,
+    width: '100%',
+  },
+  primaryButtonText: { ...font.semibold, color: colors.inverse, fontSize: 14.5 },
+  secondaryButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 20,
+    width: '100%',
+  },
+  secondaryButtonText: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
+
+  footer: {
+    backgroundColor: colors.surface,
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  backButton: {
+    alignItems: 'center',
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: 24,
+  },
+  backButtonText: { ...font.medium, color: colors.text, fontSize: 14.5 },
+  nextButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  nextButtonDisabled: { opacity: 0.45 },
+  nextButtonText: { ...font.semibold, color: colors.inverse, fontSize: 14.5 },
 })

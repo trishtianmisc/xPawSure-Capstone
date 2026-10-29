@@ -882,6 +882,38 @@ the stored value) and must be between 0 and 1000000 with at most 2 decimals.
 
 ---
 
+# 5C. Owner Clinic Discovery (Mobile)
+
+Requires authentication with the `OWNER` role.
+
+## GET /api/owner/clinics/
+
+Returns clinics that are `ACTIVE`, not deleted, and have owner booking enabled.
+The response is a JSON array ordered by clinic name:
+
+```json
+[
+  {
+    "cln_id": "5e0f5d8e-8e5d-4f0e-9d6a-6d4d7a3a1f0e",
+    "cln_name": "Happy Paws Clinic",
+    "cln_address": "123 Main Street, Manila",
+    "cln_phone": "09171234567",
+    "cln_logo_url": null,
+    "consultation_fee": 500,
+    "cln_latitude": 14.599512,
+    "cln_longitude": 120.984222
+  }
+]
+```
+
+`cln_latitude` and `cln_longitude` are numbers when the clinic address has been
+geocoded, or `null` when no map location is available yet. A clinic without
+coordinates remains in the list and is still bookable; the mobile app simply
+does not render a pin for it. This endpoint only reads cached coordinates and
+never calls the geocoding provider.
+
+---
+
 # 6. Schedule Management
 
 ## GET /api/schedule/
@@ -1605,6 +1637,12 @@ Requires authentication.
 ---
 
 # 10. Clinic Endpoints (Super Admin)
+
+Clinic responses include the read-only `latitude` and `longitude` fields. They
+are resolved from `address` by the backend and are not writable. Creating a
+clinic with an address or changing that address triggers a best-effort
+geocoding lookup; a lookup failure leaves both fields `null` and does not block
+the clinic write.
 
 ## GET /api/clinics/
 
