@@ -19,6 +19,9 @@ const StaffDetailPage = lazy(() => import('./features/staff/pages/StaffDetailPag
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
+const AnalyticsPage = lazy(() => import('./features/super-admin/analytics/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
+const AdminsPage = lazy(() => import('./features/super-admin/admins/pages/AdminsPage').then(m => ({ default: m.AdminsPage })))
+const AuditLogsPage = lazy(() => import('./features/super-admin/audit-logs/pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })))
 const ClinicAdminLayout = lazy(() => import('./features/clinic-admin/components/ClinicAdminLayout').then(m => ({ default: m.ClinicAdminLayout })))
 const ReceptionistLayout = lazy(() => import('./features/receptionist/components/ReceptionistLayout').then(m => ({ default: m.ReceptionistLayout })))
 const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -99,6 +102,30 @@ function App() {
             path="/super-admin/clinics/:id"
           />
           <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AnalyticsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/analytics"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AdminsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/admins"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AuditLogsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/audit-logs"
+          />
+          <Route
   path="/clinic"
   element={
     <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
@@ -115,14 +142,6 @@ function App() {
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
 
-<Route
-  path="/super-admin/staff"
-  element={
-    <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-      <StaffListPage />
-    </ProtectedRoute>
-  }
-/>
           <Route element={<VetDashboardLayout />} path="/veterinarian">
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />

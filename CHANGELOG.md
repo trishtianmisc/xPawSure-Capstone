@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0] — 2026-10-31
+
+### Added
+- Backend `super_admin` app (`backend/super_admin/`) — no models, service-layer only (same pattern as `staff`), all endpoints `IsSuperAdmin`-gated and audit-logged
+- Platform analytics: `GET /api/super-admin/analytics/overview/` with cross-clinic counts (clinics by status, users by role, owners, pets, appointments by status, consultations, prescriptions, vaccinations, screenings, payments) and 12-month zero-filled growth series
+- Per-clinic overview: `GET /api/super-admin/clinics/{id}/overview/` — staff breakdown, owners, pets, appointments by status, revenue
+- Clinic Admin account management: `GET/POST /api/super-admin/clinics/{id}/admins/`, cross-clinic `GET /api/super-admin/admins/` (filter by clinic/search/status), and `POST /api/super-admin/admins/{user_id}/{resend-credentials|deactivate|activate}/` — credential resends rotate the password, set `must_change_password`, and revoke sessions via `usr_token_version`; resend is throttled (`admin-credentials`, default `10/hour`)
+- Read-only cross-clinic drill-down: `GET /api/super-admin/clinics/{id}/{staff|owners|pets|appointments}/` — strictly read-only; medical records stay unwritable
+- Cross-clinic audit trail: `GET /api/super-admin/audit-logs/` with clinic/module/action/search/date-range filters and pagination
+- Backend test suite `super_admin/tests.py` (44 tests): per-role permission matrix, analytics aggregates and scoping, admin create/resend/deactivate/activate with token revocation and self-guard, drill-down clinic scoping, audit-log filters and pagination
+- Frontend `super-admin` features: Analytics page (`/super-admin/analytics`, recharts growth charts + role/status breakdowns), Admins page (`/super-admin/admins`, cross-clinic table with resend credentials / deactivate / activate), Audit Logs page (`/super-admin/audit-logs`, filter bar + paginated table)
+- `CreateAdminModal` (RHF + Zod) and clinic-detail tabs (Overview, Admins, Staff, Owners, Pets, Activity) built on a shared read-only `ReadTab` table component
+- Frontend service unit tests for `adminService`, `analyticsService`, `drilldownService`, and `auditLogService`
+
+### Fixed
+- Removed the broken `/super-admin/staff` route (reused the clinic-admin-gated `StaffListPage`, which 403'd for Super Admin); staff browsing now lives in the clinic detail Staff tab
+- The Super Admin sidebar's dead `Admins` and `Analytics` links now resolve to real pages
+
 ## [0.4.0] — 2026-10-26
 
 ### Added

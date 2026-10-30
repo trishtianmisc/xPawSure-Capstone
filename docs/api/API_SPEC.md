@@ -1662,6 +1662,88 @@ Super Admin only.
 
 ---
 
+# 10A. Super Admin Endpoints
+
+All endpoints below are Super Admin only (`IsSuperAdmin`). Every write is
+audit-logged. Medical records are never writable through these endpoints — the
+per-clinic drill-down listings are strictly read-only.
+
+## GET /api/super-admin/analytics/overview/
+
+Platform-wide aggregates: clinics by status, users by role, owners, pets,
+appointments by status, consultations, prescriptions, vaccinations, AI
+screenings, payments (paid amount/count), and 12-month zero-filled growth
+series for clinics, users, pets, and appointments.
+
+## GET /api/super-admin/clinics/{id}/overview/
+
+Single-clinic aggregates: staff breakdown by position and activity, owners,
+pets, appointments by status and this-month count, consultations,
+prescriptions, vaccinations, screenings, and payments. Returns `404` for
+unknown or soft-deleted clinics.
+
+## GET /api/super-admin/admins/
+
+Cross-clinic listing of every Clinic Admin account.
+
+Query params: `clinic_id`, `search` (name, email, or clinic name), `status`
+(`ACTIVE` | `PENDING` | `DEACTIVATED`), `page`, `page_size`. Shares the
+standard pagination envelope.
+
+## GET /api/super-admin/clinics/{id}/admins/
+
+Clinic Admin accounts for one clinic.
+
+## POST /api/super-admin/clinics/{id}/admins/
+
+Creates an additional Clinic Admin for an existing clinic. Body: `email`,
+`first_name`, `last_name`, optional `phone`. Generates a temporary password,
+sets `must_change_password`, emails the credentials to the admin, and returns
+`temp_password` once (it is never retrievable again). Returns `400` on
+duplicate email or invalid phone.
+
+## POST /api/super-admin/admins/{user_id}/{action}/
+
+Actions:
+
+- `resend-credentials` — rotates the password, sets `must_change_password`,
+  increments `usr_token_version` (revoking all active sessions), and resends
+  the email. Throttled (`admin-credentials`, default `10/hour`).
+- `deactivate` — sets `usr_is_active=false` and revokes outstanding tokens.
+  Rejects deactivating your own account.
+- `activate` — sets `usr_is_active=true`.
+
+Only `CLINIC_ADMIN` targets resolve; anything else returns `404`.
+
+## GET /api/super-admin/clinics/{id}/staff/
+
+Read-only staff listing for one clinic (reuses the staff service). Query
+params: `role`, `search`, `status`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/owners/
+
+Read-only owner listing scoped to pets seen at that clinic. Query params:
+`search`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/pets/
+
+Read-only pet listing scoped to appointments at that clinic. Query params:
+`search`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/appointments/
+
+Read-only appointment listing for one clinic. Query params: `status`,
+`page`, `page_size`.
+
+## GET /api/super-admin/audit-logs/
+
+Cross-clinic audit trail. Query params: `clinic_id` (resolves to that
+clinic's staff user IDs), `module`, `action`, `search` (description or table
+name), `date_from` / `date_to` (`YYYY-MM-DD`, inclusive), `page`,
+`page_size`. Shares the standard pagination envelope.
+
+---
+
 # 11. User Management Endpoints (Clinic Admin)
 
 ## GET /api/staff/
