@@ -8,6 +8,13 @@ export const STATUS_PRESENTATION: Record<
   AppointmentStatus,
   { label: string; bg: string; text: string; icon: string; note: string }
 > = {
+  CONFIRMATION: {
+    label: 'Awaiting payment',
+    bg: '#F5E6FA',
+    text: '#8E44AD',
+    icon: 'credit-card-outline',
+    note: 'Your follow-up slot is reserved and is awaiting payment. Please complete payment to keep this appointment.',
+  },
   PENDING: {
     label: 'Awaiting confirmation',
     bg: '#FDEBD0',

@@ -16,6 +16,8 @@ import {
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All statuses' },
+  { value: 'REVIEW', label: 'Needs Review' },
+  { value: 'CONFIRMATION', label: 'Awaiting Payment' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'CONFIRMED', label: 'Confirmed' },
   { value: 'CHECKED_IN', label: 'Checked In' },

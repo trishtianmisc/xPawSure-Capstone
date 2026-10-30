@@ -475,7 +475,9 @@ Requires authentication. Receptionist.
 Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
 `GET /api/owner/appointments/`.
 
-Owner: Returns own pets' appointments.
+Owner: Returns own pets' appointments. `REVIEW` follow-ups are hidden from
+owners until the receptionist schedules them. `CONFIRMATION` appointments are
+visible read-only and displayed as `AWAITING PAYMENT`.
 Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
@@ -500,17 +502,20 @@ Notes:
 Requires authentication. Receptionist dashboard summary.
 
 Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
-`recent_appointments`, and `needs_attention` — the count of past-due
-appointments still awaiting action. `today.pending` counts only upcoming
-`PENDING` appointments; past-due ones surface through `needs_attention`
-instead of double-counting in Pending/Confirmed.
+`recent_appointments`, `needs_attention` (the count of past-due appointments
+still awaiting action), and `review_pending` (all open `REVIEW` follow-ups in
+the clinic). `review_pending` drives the receptionist dashboard's "needs
+review" card. `today.pending` counts only upcoming `PENDING` appointments;
+past-due ones surface through `needs_attention` instead of double-counting in
+Pending/Confirmed.
 
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
-for the requesting clinic before returning. It cancels past-due `PENDING`
-appointments (reason "Not confirmed in time") and marks `CONFIRMED`
-appointments more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as
-`NO_SHOW`. The work is idempotent, clinic-scoped, and row-locked
+for the requesting clinic before returning. It cancels past-due
+`CONFIRMATION` appointments (reason "Payment not completed before appointment
+time") and releases their slots, cancels past-due `PENDING` appointments
+(reason "Not confirmed in time"), and marks `CONFIRMED` appointments more than
+60 minutes past (`NO_SHOW_GRACE_MINUTES`) as `NO_SHOW`. The work is idempotent, clinic-scoped, and row-locked
 (`select_for_update`), so no scheduler, Celery worker, or beat process is
 required. Because the refresh runs first, past-due `PENDING` rows are already
 `CANCELLED` and expired `CONFIRMED` rows are already `NO_SHOW` when the
@@ -552,7 +557,9 @@ not belong to this clinic/owner, the API responds `400` with:
 
 Initial status: owner bookings start as `PENDING` (awaiting clinic confirmation; owner
 notified with `APPOINTMENT_CREATED`). Receptionist desk bookings start as `CONFIRMED`
-(owner notified with `APPOINTMENT_CONFIRMED`).
+(owner notified with `APPOINTMENT_CONFIRMED`). Follow-up appointments created from
+a consultation recommendation start as `REVIEW` and are not directly creatable
+through this endpoint.
 
 Request (owner):
 
@@ -573,8 +580,38 @@ Request (receptionist) is the same payload minus `screening_id`.
 
 Requires authentication.
 
-Owner: own pets' appointments only. Clinic staff: appointments within their own clinic,
-otherwise `404`.
+Owner: own pets' appointments only; `REVIEW` follow-ups return `404`. Clinic
+staff: appointments within their own clinic, otherwise `404`.
+
+---
+
+## POST /api/appointments/{id}/confirm-follow-up/
+
+Requires authentication. Receptionist only.
+
+Schedules a `REVIEW` follow-up appointment and moves it to `CONFIRMATION`
+(displayed as `AWAITING PAYMENT`). The slot must be future, available, in the
+same clinic, and assigned to the follow-up's veterinarian. The slot becomes
+`BOOKED` and `apt_scheduled_at` becomes the slot start time.
+
+Request:
+
+{
+  "slot_id": "uuid"
+}
+
+Responses:
+
+- 200: updated appointment object
+- 400: appointment is not `REVIEW`, is not a `FOLLOW_UP`, has no veterinarian,
+  or `slot_id` is missing/invalid
+- 403: caller is not a receptionist or belongs to another clinic
+- 404: unknown appointment
+- 409: slot is unknown, blocked/taken/past, or belongs to another
+  veterinarian/clinic
+
+This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
+`PATCH` cannot make that transition.
 
 ---
 
@@ -599,6 +636,13 @@ Time-based rules (Asia/Manila "now"):
   auto-close (`AppointmentService.close_past_due`) and the UI's Check In
   action.
 - Invalid status transitions still return `400` as before.
+- `REVIEW` and `CONFIRMATION` may only transition to `CANCELLED` through this
+  endpoint. Scheduling a `REVIEW` follow-up uses the dedicated confirm endpoint.
+- Marking an appointment `COMPLETED` creates its consultation's linked
+  `FOLLOW_UP` appointment in `REVIEW` status when follow-up was requested.
+  Cancelling the source appointment before completion creates no follow-up.
+  If a linked follow-up was already processed under the previous behavior, it
+  is left untouched.
 
 ---
 
@@ -1070,9 +1114,12 @@ Query params:
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
-specific_disease, treatment, notes, created_at }
+specific_disease, treatment, notes, follow_up_required,
+follow_up_target_date, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
+`follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
+when no follow-up is requested.
 
 ---
 
@@ -1102,15 +1149,28 @@ Request body:
 - specific_disease (optional): string, a more specific disease/subtype for the
   diagnosis (stored as null when blank)
 - notes (optional): string
+- follow_up_required (optional): boolean, defaults to `false`
+- follow_up_target_date (optional): date (`YYYY-MM-DD`), required when
+  `follow_up_required` is `true`; must be after the appointment date and cannot
+  be in the past (Asia/Manila). Stored as `null` when follow-up is not
+  requested.
 
 Responses:
 
 - 201: Consultation object as above
-- 400: blank diagnosis, or the caller has no staff profile
+- 400: blank diagnosis, invalid or missing follow-up date, or the caller has no
+  staff profile
 - 403: appointment belongs to another veterinarian, or caller is not a
   veterinarian
 - 404: unknown appointment
 - 409: appointment is not `IN_PROGRESS`, or a consultation already exists
+
+When `follow_up_required` is `true`, the recommendation is stored on the
+consultation, but no appointment is created yet. When the source appointment is
+marked `COMPLETED`, the system creates one linked `FOLLOW_UP` appointment in
+`REVIEW` status for the same pet, clinic, and veterinarian. Its initial
+`apt_scheduled_at` is the preferred date at midnight Asia/Manila; the
+receptionist replaces it with an actual slot time.
 
 Diagnosis date is not stored on the consultation; the appointment's
 `apt_checked_in_at` records when the patient arrived.
@@ -1127,10 +1187,19 @@ Replaces the consultation fields while the appointment is still
 
 Request body: same fields as POST, except `appointment_id`.
 
+Omitted follow-up fields keep their stored values. Setting
+`follow_up_required` to `false` clears `follow_up_target_date`.
+
+The recommendation is stored on the consultation while the source appointment
+is `IN_PROGRESS`; no follow-up appointment exists until the source appointment
+is marked `COMPLETED`. Completing the source appointment makes the consultation
+read-only, so any later update returns `409`.
+
 Responses:
 
 - 200: Consultation object as above
-- 400: blank diagnosis, or the caller has no staff profile
+- 400: blank diagnosis, invalid or missing follow-up date, or the caller has no
+  staff profile
 - 403: consultation belongs to another veterinarian, or caller is not a
   veterinarian
 - 404: unknown consultation

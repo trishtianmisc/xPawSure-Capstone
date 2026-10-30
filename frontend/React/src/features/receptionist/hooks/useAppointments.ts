@@ -5,6 +5,7 @@ import {
   listAppointments,
   getAppointmentDetail,
   createAppointment,
+  confirmFollowUp,
   updateAppointmentStatus,
 } from '../services/appointment.service'
 
@@ -59,6 +60,26 @@ export function useCreateAppointment() {
       if (code === 'PAYMENT_REQUIRED' || code === 'PAYMENT_INVALID') {
         queryClient.invalidateQueries({ queryKey: ['receptionist', 'clinic-settings'] })
       }
+      showToast(apiErrorMessage(error), 'error')
+    },
+  })
+}
+
+export function useConfirmFollowUp() {
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
+  return useMutation({
+    mutationFn: ({ aptId, slotId }: { aptId: string; slotId: string }) =>
+      confirmFollowUp(aptId, slotId),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointment', vars.aptId] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'slots'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'schedule'] })
+      showToast('Follow-up scheduled — awaiting payment')
+    },
+    onError: (error) => {
       showToast(apiErrorMessage(error), 'error')
     },
   })

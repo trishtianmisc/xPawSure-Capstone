@@ -9,6 +9,7 @@ from appointments.models import AppointmentStatus, SlotStatus
 from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
+    ConfirmFollowUpSerializer,
     CreateAppointmentSerializer,
     GenerateSlotsSerializer,
     VetSlotSerializer,
@@ -426,6 +427,54 @@ class AppointmentDetailView(APIView):
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
+
+
+class ConfirmFollowUpView(APIView):
+    permission_classes = [IsReceptionist]
+
+    def post(self, request, apt_id):
+        from users.models import StaffProfile
+
+        serializer = ConfirmFollowUpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            staff = StaffProfile.objects.get(usr_id=request.user)
+        except StaffProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = AppointmentService.confirm_follow_up(
+                apt_id=apt_id,
+                clinic_id=staff.cln_id_id,
+                slot_id=serializer.validated_data['slot_id'],
+                user_id=request.user.usr_id,
+            )
+        except PermissionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ValueError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except InvalidTransitionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except SlotUnavailableError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(AppointmentDetailSerializer(appointment).data)
 
 
 class ScheduleView(APIView):

@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { Card } from '../../../../components/ui'
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { WeeklyCalendar } from '../components/WeeklyCalendar'
 import { useVetScheduleAppointments } from '../hooks/useVetAppointments'
 import type { VetAppointmentSummary } from '../types/dashboard.types'
@@ -158,97 +160,102 @@ export function SchedulePage() {
     'flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-600 transition hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800'
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">
-          Schedule
-        </h2>
+    <div className="p-6">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <PageHero
+          title="Schedule"
+          subtitle="View your weekly appointments and consultation slots."
+        />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={navButtonClass}
-            type="button"
-            onClick={() => setAnchorDate((prev) => addDays(prev, -7))}
-            aria-label="Previous week"
-          >
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-            Previous
-          </button>
+        <Card padding="sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
+              {weekLabel}
+            </h2>
 
-          <button
-            className={navButtonClass}
-            type="button"
-            onClick={() => setAnchorDate((prev) => addDays(prev, 7))}
-            aria-label="Next week"
-          >
-            Next
-            <svg
-              className="size-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className={navButtonClass}
+                type="button"
+                onClick={() => setAnchorDate((prev) => addDays(prev, -7))}
+                aria-label="Previous week"
+              >
+                <svg
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+                Previous
+              </button>
 
-          <input
-            className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
-            type="month"
-            aria-label="Select month"
-            value={monthValue}
-            onChange={(e) => handleMonthChange(e.target.value)}
-          />
-        </div>
-      </div>
+              <button
+                className={navButtonClass}
+                type="button"
+                onClick={() => setAnchorDate((prev) => addDays(prev, 7))}
+                aria-label="Next week"
+              >
+                Next
+                <svg
+                  className="size-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
 
-      <h3 className="text-lg font-bold text-stone-900 dark:text-stone-100">
-        {weekLabel}
-      </h3>
+              <input
+                className="rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-200"
+                type="month"
+                aria-label="Select month"
+                value={monthValue}
+                onChange={(e) => handleMonthChange(e.target.value)}
+              />
+            </div>
+          </div>
+        </Card>
 
-      {isLoading ? (
-        <div className="space-y-3">
-          <div className="h-8 w-64 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-          <div className="h-96 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
-        </div>
-      ) : error ? (
-        <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900">
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            Failed to load schedule
-          </p>
-          <button
-            className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
-            type="button"
-            onClick={() => refetch()}
-          >
-            Retry
-          </button>
-        </div>
-      ) : (
-        <>
-          <WeeklyCalendar
-            days={weekDays}
-            slots={slots}
-            onSlotClick={(slot) =>
-              navigate(`/veterinarian/appointments/${slot.id}`)
-            }
-          />
-          {slots.length === 0 && (
+        {isLoading ? (
+          <div className="space-y-3">
+            <div className="h-8 w-64 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
+            <div className="h-96 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+          </div>
+        ) : error ? (
+          <div className="flex min-h-[300px] flex-col items-center justify-center rounded-md border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
             <p className="text-sm text-stone-500 dark:text-stone-400">
-              No appointments scheduled for this week.
+              Failed to load schedule
             </p>
-          )}
-        </>
-      )}
+            <button
+              className="mt-3 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
+              type="button"
+              onClick={() => refetch()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <>
+            <WeeklyCalendar
+              days={weekDays}
+              slots={slots}
+              onSlotClick={(slot) =>
+                navigate(`/veterinarian/appointments/${slot.id}`)
+              }
+            />
+            {slots.length === 0 && (
+              <p className="text-sm text-stone-500 dark:text-stone-400">
+                No appointments scheduled for this week.
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }

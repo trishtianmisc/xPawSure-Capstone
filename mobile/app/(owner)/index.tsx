@@ -41,7 +41,7 @@ export default function HomeScreen() {
   })
 
   const nextAppointment = useMemo(() => {
-    const activeStatuses = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
+    const activeStatuses = ['CONFIRMATION', 'PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
     const now = Date.now()
     return appointments?.results
       .filter(

@@ -16,7 +16,7 @@
 | PetSex | MALE, FEMALE |
 | PetStatus | ACTIVE, DECEASED, MISSING, ADOPTED, ARCHIVED |
 | PetImageType | PROFILE, MEDICAL, AI_SCREENING, FOLLOW_UP, OTHER |
-| AppointmentStatus | PENDING, CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW |
+| AppointmentStatus | REVIEW, CONFIRMATION, PENDING, CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW |
 | AppointmentType | CONSULTATION, FOLLOW_UP, VACCINATION, AI_REVIEW, EMERGENCY |
 | DiagnosisStatus | PRELIMINARY, CONFIRMED, CHRONIC, RESOLVED |
 | AttachmentType | IMAGE, PDF, XRAY, LAB_RESULT, DOCUMENT, OTHER |
@@ -182,6 +182,7 @@
 | APPOINTMENT | APT_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_DELETED_AT | Soft delete timestamp | TIMESTAMP | NULL |
+| APPOINTMENT | APT_SOURCE_CONSULTATION | Source consultation for a linked follow-up appointment (unique) | UUID | NULL |
 
 ---
 
@@ -202,6 +203,8 @@
 | CONSULTATION | CON_DIAGNOSIS_STATUS | Diagnosis status (DiagnosisStatus enum) | ENUM | NULL |
 | CONSULTATION | CON_TREATMENT | Treatment description | TEXT | NULL |
 | CONSULTATION | CON_NOTES | Additional notes | TEXT | NULL |
+| CONSULTATION | CON_FOLLOW_UP_REQUIRED | Whether the veterinarian recommends a follow-up consultation | BOOLEAN | NOT NULL |
+| CONSULTATION | CON_FOLLOW_UP_TARGET_DATE | Preferred follow-up date recommended by the veterinarian | DATE | NULL |
 | CONSULTATION | CON_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | CONSULTATION | CON_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 

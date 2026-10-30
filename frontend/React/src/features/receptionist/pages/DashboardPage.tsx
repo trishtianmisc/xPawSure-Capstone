@@ -170,6 +170,40 @@ export function DashboardPage() {
         />
       </div>
 
+      {/* Follow-ups needing review */}
+      {(stats?.review_pending ?? 0) > 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/receptionist/appointments?status=REVIEW')}
+          className="mb-8 flex w-full items-center justify-between gap-4 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3.5 text-left transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-900/20 dark:hover:bg-amber-900/30"
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            <svg
+              className="size-5 shrink-0 text-amber-600 dark:text-amber-400"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.75}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12h6m-6 4h6m2.25-13.5H6.75A2.25 2.25 0 004.5 4.5v15a2.25 2.25 0 002.25 2.25h10.5A2.25 2.25 0 0019.5 19.5v-15a2.25 2.25 0 00-2.25-2.25z"
+              />
+            </svg>
+            <span className="min-w-0 truncate text-sm font-semibold text-amber-800 dark:text-amber-300">
+              {stats?.review_pending ?? 0} follow-up appointment
+              {(stats?.review_pending ?? 0) === 1 ? '' : 's'} need
+              {(stats?.review_pending ?? 0) === 1 ? 's' : ''} review
+            </span>
+          </span>
+          <span className="shrink-0 text-sm font-bold text-amber-700 dark:text-amber-400">
+            Review &rarr;
+          </span>
+        </button>
+      )}
+
       {/* Needs attention */}
       {(stats?.needs_attention ?? 0) > 0 && (
         <button

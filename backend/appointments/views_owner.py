@@ -196,6 +196,8 @@ class OwnerAppointmentListCreateView(APIView):
         qs = Appointment.objects.filter(
             pet_id__own_id=owner_profile,
             apt_deleted_at__isnull=True,
+        ).exclude(
+            apt_status=AppointmentStatus.REVIEW,
         ).select_related(
             'pet_id', 'pet_id__brd_id', 'stf_id__usr_id', 'cln_id',
         )
@@ -339,6 +341,7 @@ class OwnerAppointmentDetailView(APIView):
             not appointment
             or appointment.apt_deleted_at is not None
             or appointment.pet_id.own_id_id != owner_profile.own_id
+            or appointment.apt_status == AppointmentStatus.REVIEW
         ):
             return Response(
                 {'detail': 'Appointment not found.'},

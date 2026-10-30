@@ -1,6 +1,7 @@
 import type { ScreeningSummary } from '../../screening/types'
 
 export type AppointmentStatus =
+  | 'CONFIRMATION'
   | 'PENDING'
   | 'CONFIRMED'
   | 'CHECKED_IN'

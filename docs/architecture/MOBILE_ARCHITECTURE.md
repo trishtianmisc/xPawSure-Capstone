@@ -271,7 +271,10 @@ Veterinarians have read-only access to:
 
 Completed appointment details include read-only consultation and prescription records from the appointment detail response.
 
-Veterinarian mobile lists and schedules exclude `PENDING` owner bookings; clinic staff manage pending bookings through the web receptionist workflow.
+Veterinarian mobile lists and schedules exclude `PENDING` owner bookings and
+the internal `REVIEW`/`CONFIRMATION` follow-up states; clinic staff manage
+those through the web receptionist workflow. Owner mobile lists hide `REVIEW`
+and show `CONFIRMATION` read-only as "Awaiting payment".
 
 Veterinarians cannot register owners, manage pets, perform AI screening, or book appointments through the mobile app.
 

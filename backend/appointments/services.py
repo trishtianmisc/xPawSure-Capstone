@@ -6,7 +6,7 @@ from django.db import models, transaction
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
-from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetSlot
+from appointments.models import Appointment, AppointmentStatus, AppointmentType, SlotStatus, VetSlot
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import ClinicOperatingHours, ClinicSettings
@@ -394,6 +394,12 @@ class VetSlotService:
 class AppointmentService:
 
     VALID_TRANSITIONS = {
+        AppointmentStatus.REVIEW: [
+            AppointmentStatus.CANCELLED,
+        ],
+        AppointmentStatus.CONFIRMATION: [
+            AppointmentStatus.CANCELLED,
+        ],
         AppointmentStatus.PENDING: [
             AppointmentStatus.CONFIRMED,
             AppointmentStatus.CANCELLED,
@@ -507,6 +513,90 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
+    def confirm_follow_up(apt_id, clinic_id, slot_id, user_id):
+        try:
+            appointment = Appointment.objects.select_for_update().get(
+                apt_id=apt_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.cln_id_id != clinic_id:
+            raise PermissionError('This appointment belongs to another clinic.')
+
+        if appointment.apt_type != AppointmentType.FOLLOW_UP:
+            raise InvalidTransitionError(
+                'Only follow-up appointments can be confirmed this way.',
+            )
+
+        if appointment.apt_status != AppointmentStatus.REVIEW:
+            raise InvalidTransitionError(
+                f'Cannot confirm a follow-up appointment from status '
+                f'{appointment.apt_status}.',
+            )
+
+        if appointment.stf_id_id is None:
+            raise InvalidTransitionError(
+                'This follow-up appointment has no assigned veterinarian.',
+            )
+
+        try:
+            slot = VetSlot.objects.select_for_update().get(vsl_id=slot_id)
+        except VetSlot.DoesNotExist:
+            raise SlotUnavailableError('This slot is no longer available.')
+
+        if (
+            slot.cln_id_id != clinic_id
+            or slot.stf_id_id != appointment.stf_id_id
+            or slot.vsl_status != SlotStatus.AVAILABLE
+            or slot.vsl_appointment_id is not None
+        ):
+            raise SlotUnavailableError(
+                'This slot is not available for the assigned veterinarian.',
+            )
+
+        scheduled_at = timezone.make_aware(
+            datetime.combine(slot.vsl_date, slot.vsl_start_time),
+            CLINIC_TIMEZONE,
+        )
+        if scheduled_at < datetime.now(CLINIC_TIMEZONE):
+            raise SlotUnavailableError('This slot is in the past.')
+
+        appointment.apt_scheduled_at = scheduled_at
+        appointment.apt_status = AppointmentStatus.CONFIRMATION
+        appointment.save(update_fields=[
+            'apt_scheduled_at', 'apt_status', 'apt_updated_at',
+        ])
+
+        slot.vsl_appointment = appointment
+        slot.vsl_status = SlotStatus.BOOKED
+        slot.save(update_fields=[
+            'vsl_appointment', 'vsl_status', 'vsl_updated_at',
+        ])
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.BOOK_APPOINTMENT,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description=(
+                'Follow-up appointment scheduled and set to confirmation; '
+                'awaiting owner payment.'
+            ),
+            old_values={'apt_status': AppointmentStatus.REVIEW},
+            new_values={
+                'apt_status': AppointmentStatus.CONFIRMATION,
+                'apt_scheduled_at': scheduled_at.isoformat(),
+                'slot_id': str(slot.vsl_id),
+            },
+        )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
     def update_status(apt_id, new_status, user_id, cancellation_reason=None):
         try:
             appointment = Appointment.objects.select_for_update().get(apt_id=apt_id)
@@ -570,6 +660,14 @@ class AppointmentService:
                 new_values={'apt_status': new_status},
             )
 
+        if new_status == AppointmentStatus.COMPLETED and user_id:
+            from consultations.services import ConsultationService
+
+            ConsultationService.sync_follow_up_for_completed_appointment(
+                appointment=appointment,
+                user_id=user_id,
+            )
+
         from notifications.models import NotificationType
 
         owner_user_id = None
@@ -589,20 +687,21 @@ class AppointmentService:
                 ref_id=appointment.apt_id,
             )
         elif new_status == AppointmentStatus.CANCELLED:
-            reason_text = (
-                f' Reason: {cancellation_reason}' if cancellation_reason else ''
-            )
-            _notify(
-                user_id=owner_user_id,
-                title='Appointment Cancelled',
-                message=(
-                    f'Your appointment for {appointment.pet_id.pet_name} on '
-                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
-                    f'has been cancelled.{reason_text}'
-                ),
-                ntf_type=NotificationType.APPOINTMENT_CANCELLED,
-                ref_id=appointment.apt_id,
-            )
+            if old_status != AppointmentStatus.REVIEW:
+                reason_text = (
+                    f' Reason: {cancellation_reason}' if cancellation_reason else ''
+                )
+                _notify(
+                    user_id=owner_user_id,
+                    title='Appointment Cancelled',
+                    message=(
+                        f'Your appointment for {appointment.pet_id.pet_name} on '
+                        f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                        f'has been cancelled.{reason_text}'
+                    ),
+                    ntf_type=NotificationType.APPOINTMENT_CANCELLED,
+                    ref_id=appointment.apt_id,
+                )
 
         return appointment
 
@@ -610,10 +709,12 @@ class AppointmentService:
     def close_past_due(clinic_id=None):
         """Close appointments whose scheduled time has passed.
 
-        PENDING past its scheduled time becomes CANCELLED ("Not confirmed in
-        time"); CONFIRMED more than NO_SHOW_GRACE_MINUTES past becomes
-        NO_SHOW. Replaces the removed hourly Celery beat job — reads trigger
-        it instead.
+        CONFIRMATION past its scheduled time becomes CANCELLED ("Payment not
+        completed before appointment time") and releases its slot; PENDING past
+        its scheduled time becomes CANCELLED ("Not confirmed in time");
+        CONFIRMED more than NO_SHOW_GRACE_MINUTES past becomes NO_SHOW.
+        Replaces the removed hourly Celery beat job; reads trigger it
+        instead.
 
         Idempotent and concurrency-safe: candidate rows are scoped to a
         single clinic, and every transition re-checks the row under
@@ -635,6 +736,18 @@ class AppointmentService:
             if clinic_id is not None:
                 qs = qs.filter(cln_id_id=clinic_id)
             return list(qs.values_list('apt_id', flat=True))
+
+        for apt_id in _past_due_ids(AppointmentStatus.CONFIRMATION, now):
+            try:
+                AppointmentService.update_status(
+                    apt_id=apt_id,
+                    new_status=AppointmentStatus.CANCELLED,
+                    user_id=None,
+                    cancellation_reason='Payment not completed before appointment time',
+                )
+                summary['cancelled'] += 1
+            except (InvalidTransitionError, ValueError):
+                continue
 
         for apt_id in _past_due_ids(AppointmentStatus.PENDING, now):
             try:
@@ -850,6 +963,12 @@ class DashboardService:
             apt_deleted_at__isnull=True,
         ).count()
 
+        review_pending = Appointment.objects.filter(
+            cln_id_id=clinic_id,
+            apt_status=AppointmentStatus.REVIEW,
+            apt_deleted_at__isnull=True,
+        ).count()
+
         from owners.models import OwnerProfile
         from pets.models import Pet
 
@@ -886,6 +1005,7 @@ class DashboardService:
             'total_pets': total_pets,
             'recent_appointments': recent_appointments,
             'needs_attention': needs_attention,
+            'review_pending': review_pending,
         }
 
 
@@ -951,7 +1071,12 @@ class VetDashboardService:
 
     @staticmethod
     def list_appointments(stf_id, start_date=None, end_date=None):
-        qs = VetDashboardService._vet_appointments(stf_id).select_related(
+        qs = VetDashboardService._vet_appointments(stf_id).exclude(
+            apt_status__in=[
+                AppointmentStatus.REVIEW,
+                AppointmentStatus.CONFIRMATION,
+            ],
+        ).select_related(
             'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
             'stf_id__usr_id', 'apt_screening__dis_id',
         )

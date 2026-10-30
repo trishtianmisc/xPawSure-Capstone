@@ -9,7 +9,7 @@ import type { AppointmentListItem } from '../../../features/appointment/types'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 
-const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
+const ACTIVE_STATUSES = ['CONFIRMATION', 'PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
 type Tab = 'upcoming' | 'history'
 
 function AppointmentRow({
