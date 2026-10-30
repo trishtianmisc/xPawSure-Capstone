@@ -27,6 +27,8 @@ class ClinicSerializer(serializers.ModelSerializer):
     address = serializers.CharField(
         source='cln_address', required=False, allow_blank=True, allow_null=True,
     )
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(
         source='cln_license_no', required=False, allow_blank=True, allow_null=True,
     )
@@ -37,7 +39,7 @@ class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = [
-            'id', 'name', 'email', 'phone', 'address',
+            'id', 'name', 'email', 'phone', 'address', 'latitude', 'longitude',
             'license_number', 'status', 'created_at', 'updated_at',
         ]
 
@@ -84,6 +86,8 @@ class ClinicProfileSerializer(serializers.Serializer):
     email = serializers.EmailField(source='cln_email', required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(source='cln_phone', required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(source='cln_address', required=False, allow_blank=True, allow_null=True)
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(source='cln_license_no', read_only=True)
     status = serializers.CharField(source='cln_status', read_only=True)
     logo_url = serializers.SerializerMethodField()

@@ -159,6 +159,17 @@ class OwnerDiscoveryTests(OwnerBookingBase):
         names = [c['cln_name'] for c in response.data]
         self.assertIn('Happy Paws Clinic', names)
 
+    def test_clinic_list_includes_coordinates(self):
+        self.clinic.cln_latitude = '14.599512'
+        self.clinic.cln_longitude = '120.984222'
+        self.clinic.save(update_fields=['cln_latitude', 'cln_longitude'])
+
+        response = self.client.get('/api/owner/clinics/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200)
+        clinic = next(c for c in response.data if c['cln_id'] == str(self.clinic.cln_id))
+        self.assertEqual(clinic['cln_latitude'], 14.599512)
+        self.assertEqual(clinic['cln_longitude'], 120.984222)
+
     def test_clinic_list_excludes_booking_disabled_clinic(self):
         disabled = Clinic.objects.create(cln_name='No Booking Clinic')
         ClinicSettings.objects.create(

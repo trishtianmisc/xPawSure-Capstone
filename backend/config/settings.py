@@ -246,6 +246,20 @@ SCREENING_CLAUDE_TOKEN_MAX_AGE = env.int(
     'SCREENING_CLAUDE_TOKEN_MAX_AGE', default=3600,
 )
 
+# Clinic geocoding. Uses OpenStreetMap's Nominatim service, which is free but
+# requires an identifying User-Agent and at most one request per second. The
+# app caches resolved coordinates in the CLINIC table and only calls Nominatim
+# when a clinic address is created or changed.
+NOMINATIM_BASE_URL = env(
+    'NOMINATIM_BASE_URL',
+    default='https://nominatim.openstreetmap.org',
+)
+NOMINATIM_USER_AGENT = env(
+    'NOMINATIM_USER_AGENT',
+    default='XPawSure/1.0 (+https://github.com/trishtianmisc/xPawSure-Capstone)',
+)
+NOMINATIM_TIMEOUT = env.int('NOMINATIM_TIMEOUT', default=10)
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 

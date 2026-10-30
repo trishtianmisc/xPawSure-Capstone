@@ -21,6 +21,12 @@ class Clinic(models.Model):
     )
     cln_phone = models.CharField(max_length=20, null=True, blank=True, db_column='CLN_PHONE')
     cln_address = models.TextField(null=True, blank=True, db_column='CLN_ADDRESS')
+    cln_latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, db_column='CLN_LATITUDE',
+    )
+    cln_longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, db_column='CLN_LONGITUDE',
+    )
     cln_logo_url = models.TextField(null=True, blank=True, db_column='CLN_LOGO_URL')
     cln_license_no = models.CharField(
         max_length=100, null=True, blank=True, db_column='CLN_LICENSE_NO',

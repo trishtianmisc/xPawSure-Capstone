@@ -43,6 +43,8 @@ Stores the primary information of every veterinary clinic registered in XPawSure
 | CLN_EMAIL | VARCHAR(255) | UNIQUE |
 | CLN_PHONE | VARCHAR(20) | NULL |
 | CLN_ADDRESS | TEXT | NOT NULL |
+| CLN_LATITUDE | DECIMAL(9,6) | NULL |
+| CLN_LONGITUDE | DECIMAL(9,6) | NULL |
 | CLN_LOGO_URL | TEXT | NULL |
 | CLN_STATUS | ENUM | NOT NULL |
 | CLN_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
@@ -60,6 +62,26 @@ INACTIVE
 SUSPENDED
 
 ARCHIVED
+
+---
+
+# Geocoding
+
+Clinic coordinates are resolved automatically from `CLN_ADDRESS` through the
+OpenStreetMap Nominatim service. They are displayed as pins in the owner mobile
+appointment booking flow.
+
+- `CLN_LATITUDE` and `CLN_LONGITUDE` are nullable because geocoding is
+  best-effort. A clinic without coordinates still appears in the owner clinic
+  list, but it has no map pin.
+- Coordinates are written when a clinic is created with an address or when its
+  address changes. Non-address updates do not call the geocoding provider.
+- `python manage.py geocode_clinics` backfills missing coordinates for existing
+  clinics. Use `--force` to refresh clinics that already have coordinates and
+  `--dry-run` to inspect the queue without making network calls.
+- The public Nominatim service requires an identifying `User-Agent` and at most
+  one request per second. The application enforces the rate limit and caches
+  results in the `CLINIC` table.
 
 ---
 

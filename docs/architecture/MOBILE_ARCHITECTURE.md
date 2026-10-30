@@ -172,6 +172,16 @@ dialog the owner can override. Other clinics and terminal statuses
 (completed, cancelled, no-show) never warn. This guardrail is client-side
 only — the booking API itself stays permissive.
 
+Step 1 shows a map of all bookable clinics above the scrollable clinic list.
+Coordinates come from `GET /api/owner/clinics/` (`cln_latitude` /
+`cln_longitude`), geocoded once by the backend; clinics without a location stay
+selectable in the list but have no pin. Tapping a pin runs the same selection
+path as tapping the list row. The map is a Leaflet + OpenStreetMap page rendered
+inside `react-native-webview`, chosen because it runs in **Expo Go with no
+development build and no API key** — `react-native-maps` would require both, so
+it is deliberately avoided. The component renders nothing when no clinic has
+coordinates, so the list always works even offline or without geocoding.
+
 The booking wizard shows the clinic's `consultation_fee` (from
 `GET /api/owner/clinics/`). When it is greater than `0` the final step is
 payment:
