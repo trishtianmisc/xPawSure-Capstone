@@ -15,6 +15,8 @@ interface AppointmentsOverTimeChartProps {
   data: SeriesPoint[]
   granularity: Granularity
   onGranularityChange: (granularity: Granularity) => void
+  // The printable report renders this chart without interactive controls.
+  hideControls?: boolean
 }
 
 const GRANULARITY_OPTIONS: Array<{ value: Granularity; label: string }> = [
@@ -33,6 +35,7 @@ export function AppointmentsOverTimeChart({
   data,
   granularity,
   onGranularityChange,
+  hideControls = false,
 }: AppointmentsOverTimeChartProps) {
   const points = data.map((point) => ({
     label: seriesLabel(point.date, granularity),
@@ -51,7 +54,11 @@ export function AppointmentsOverTimeChart({
           </span>
         </div>
         <div
-          className="flex shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-700"
+          className={`${
+            hideControls
+              ? 'hidden'
+              : 'flex shrink-0 overflow-hidden rounded-md border border-stone-200 dark:border-stone-700'
+          }`}
           role="group"
           aria-label="Chart granularity"
         >

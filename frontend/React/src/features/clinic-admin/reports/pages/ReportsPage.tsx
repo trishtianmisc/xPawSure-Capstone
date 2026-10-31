@@ -1,12 +1,17 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 
 import { Button } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
+import { CLINIC_TIME_ZONE } from '../../../../utils/format'
 import { PageHero } from '../../../receptionist/components/PageHero'
+import { useClinicProfile } from '../../../clinic-profile/hooks/useClinicProfile'
+import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
 import { useVeterinarians } from '../../appointments/hooks/useAppointments'
 import { ChartSkeleton } from '../../dashboard/components/Charts/AppointmentsByMonthChart'
 import { AppointmentsOverTimeChart } from '../components/AppointmentsOverTimeChart'
 import { PatientDemographicsCard } from '../components/PatientDemographicsCard'
+import { PrintableReport } from '../components/PrintableReport'
 import { ReportFilters } from '../components/ReportFilters'
 import { ReportKPIRows } from '../components/ReportKPIRows'
 import { ScreeningsAnalyticsCard } from '../components/ScreeningsAnalyticsCard'
@@ -105,6 +110,7 @@ export function ClinicAdminReportsPage() {
   const [window, setWindow] = useState<DateWindow>(defaultRange)
   const [vetId, setVetId] = useState('')
   const [granularity, setGranularity] = useState<Granularity>('day')
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null)
 
   const params = useMemo<ReportQuery>(
     () => ({
@@ -121,6 +127,38 @@ export function ClinicAdminReportsPage() {
   const screenings = useReportScreenings(params)
   const patients = useReportPatients(params)
   const vets = useVeterinarians()
+  const profile = useClinicProfile()
+  const settings = useClinicSettings()
+
+  // The printable report is styled light-only, and the screen layout is
+  // hidden at print time, so flip to light right before the browser takes
+  // the print snapshot (works for both the Print button and Ctrl+P) and
+  // restore the theme when printing finishes. The data-attribute marker
+  // makes restore idempotent if both paths run.
+  useEffect(() => {
+    const stamp = () => {
+      flushSync(() => setGeneratedAt(new Date()))
+      const root = document.documentElement
+      if (root.classList.contains('dark')) {
+        root.setAttribute('data-print-dark', 'true')
+        root.classList.remove('dark')
+      }
+    }
+    const restore = () => {
+      const root = document.documentElement
+      if (root.hasAttribute('data-print-dark')) {
+        root.classList.add('dark')
+        root.removeAttribute('data-print-dark')
+      }
+    }
+    globalThis.window.addEventListener('beforeprint', stamp)
+    globalThis.window.addEventListener('afterprint', restore)
+    return () => {
+      globalThis.window.removeEventListener('beforeprint', stamp)
+      globalThis.window.removeEventListener('afterprint', restore)
+      restore()
+    }
+  }, [])
 
   // The screenings report has no previous-window block, so the comparison
   // baseline for the Vet Agreement Rate KPI is fetched here instead of
@@ -148,6 +186,16 @@ export function ClinicAdminReportsPage() {
     window.date_from !== defaultRange.date_from ||
     window.date_to !== defaultRange.date_to
 
+  // The printable document needs every section loaded; printing mid-load
+  // would silently drop charts or the workload table from the report.
+  const reportReady = Boolean(
+    summary.data &&
+      appointments.data &&
+      workload.data &&
+      screenings.data &&
+      patients.data,
+  )
+
   function handleExport() {
     if (!summary.data) return
     const rows = reportCsvRows({
@@ -164,6 +212,9 @@ export function ClinicAdminReportsPage() {
   }
 
   function handlePrint() {
+    // Exact generation time committed before anything else; the beforeprint
+    // listener registered above stamps again and flips to light mode.
+    flushSync(() => setGeneratedAt(new Date()))
     // The page's local `window` state shadows the global, so go through
     // globalThis to reach the browser print dialog.
     globalThis.window.print()
@@ -186,7 +237,8 @@ export function ClinicAdminReportsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+    <>
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6 print:hidden">
       <PageHero
         title="Reports & Analytics"
         subtitle="Track appointments, outcomes, workload, and AI screening activity."
@@ -206,7 +258,7 @@ export function ClinicAdminReportsPage() {
             </button>
             <button
               type="button"
-              disabled={!summary.data}
+              disabled={!reportReady}
               onClick={handlePrint}
               className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -322,5 +374,30 @@ export function ClinicAdminReportsPage() {
         agreement covers judged AI screenings only.
       </p>
     </div>
+
+    {summary.data &&
+      appointments.data &&
+      workload.data &&
+      screenings.data &&
+      patients.data && (
+        <PrintableReport
+          profile={profile.data}
+          summary={summary.data}
+          appointments={appointments.data}
+          workload={workload.data}
+          screenings={screenings.data}
+          patients={patients.data}
+          rangeLabel={rangeLabel}
+          days={days}
+          vetLabel={vetLabel}
+          vetSelected={vetSelected}
+          generatedAt={generatedAt}
+          timezone={settings.data?.timezone ?? CLINIC_TIME_ZONE}
+          granularity={granularity}
+          agreementRate={agreementCurrent}
+          previousAgreementRate={agreementPrevious}
+        />
+      )}
+    </>
   )
 }

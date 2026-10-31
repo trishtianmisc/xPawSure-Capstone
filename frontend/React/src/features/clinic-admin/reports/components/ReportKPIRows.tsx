@@ -156,7 +156,7 @@ export function ReportKPIRows({
           hint="of elapsed, non-cancelled visits"
         />
         <KpiCard
-          label="Vet Agreement Rate"
+          label="AI-Vet Agreement Rate"
           value={agreementRate === null ? '—' : `${agreementRate}%`}
           delta={optionalRateDelta(agreementRate, previousAgreementRate)}
           goodDirection="up"

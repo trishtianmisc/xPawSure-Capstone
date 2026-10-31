@@ -72,10 +72,10 @@ export function ClinicAdminLayout() {
     .join(' / ') || 'Dashboard'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-stone-50 dark:bg-stone-950">
+    <div className="flex h-screen overflow-hidden bg-stone-50 print:h-auto print:overflow-visible dark:bg-stone-950">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
+        className={`print:hidden fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
           } ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
 
@@ -226,15 +226,15 @@ export function ClinicAdminLayout() {
       {/* Mobile overlay */}
       {isMobileNavOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/20 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/20 print:hidden lg:hidden"
           onClick={() => setIsMobileNavOpen(false)}
         />
       )}
 
       {/* Main content area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
         {/* Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900 sm:px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 print:hidden dark:border-stone-800 dark:bg-stone-900 sm:px-6">
           <button
             className="grid size-10 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 lg:hidden"
             onClick={() => setIsMobileNavOpen((open) => !open)}
@@ -307,7 +307,7 @@ export function ClinicAdminLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto print:overflow-visible">
           <Outlet />
         </main>
       </div>
