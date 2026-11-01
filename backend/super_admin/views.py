@@ -12,12 +12,18 @@ from staff.services import StaffService
 from super_admin.serializers import (
     ClinicAdminSerializer,
     CreateClinicAdminSerializer,
+    SuperAdminOwnerDetailSerializer,
+    UpdateOwnerContactSerializer,
 )
 from super_admin.services import (
+    AccuracyReportService,
     ClinicAdminService,
     CrossClinicAuditService,
     CrossClinicReadService,
+    DiseaseReportService,
     PlatformAnalyticsService,
+    SuperAdminOwnerService,
+    VaccinationReadService,
 )
 from users.models import User
 from users.throttles import AdminCredentialsThrottle
@@ -33,6 +39,18 @@ def _parse_page(request) -> tuple[int, int]:
     except (ValueError, TypeError):
         page_size = 20
     return page, page_size
+
+
+def _parse_date(raw, end_of_day: bool = False):
+    if not raw:
+        return None
+    try:
+        parsed = datetime.strptime(raw.strip(), '%Y-%m-%d')
+    except (ValueError, AttributeError):
+        return None
+    if end_of_day:
+        parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
 
 
 def _get_clinic(clinic_id) -> Clinic | None:
@@ -242,8 +260,8 @@ class AuditLogListView(APIView):
     def get(self, request):
         page, page_size = _parse_page(request)
 
-        date_from = self._parse_date(request.query_params.get('date_from'))
-        date_to = self._parse_date(request.query_params.get('date_to'), end_of_day=True)
+        date_from = _parse_date(request.query_params.get('date_from'))
+        date_to = _parse_date(request.query_params.get('date_to'), end_of_day=True)
 
         clinic_id = request.query_params.get('clinic_id') or None
         if clinic_id and _get_clinic(clinic_id) is None:
@@ -261,14 +279,111 @@ class AuditLogListView(APIView):
         )
         return Response(result)
 
-    @staticmethod
-    def _parse_date(raw, end_of_day: bool = False):
-        if not raw:
-            return None
-        try:
-            parsed = datetime.strptime(raw.strip(), '%Y-%m-%d')
-        except (ValueError, AttributeError):
-            return None
-        if end_of_day:
-            parsed = parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
-        return timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+
+class SuperAdminOwnerListView(APIView):
+    """Cross-clinic pet owner listing (read)."""
+
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        page, page_size = _parse_page(request)
+
+        clinic_id = request.query_params.get('clinic_id') or None
+        if clinic_id and _get_clinic(clinic_id) is None:
+            return Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        result = SuperAdminOwnerService.list_owners(
+            clinic_id=str(clinic_id) if clinic_id else None,
+            search=request.query_params.get('search', '').strip(),
+            page=page,
+            page_size=page_size,
+        )
+        return Response(result)
+
+
+class SuperAdminOwnerDetailView(APIView):
+    """Owner detail (read) and contact-info edit (write, audit-logged)."""
+
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request, own_id):
+        owner = SuperAdminOwnerService.get_owner(own_id)
+        if owner is None:
+            return Response({'detail': 'Owner not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(SuperAdminOwnerDetailSerializer(owner).data)
+
+    def put(self, request, own_id):
+        owner = SuperAdminOwnerService.get_owner(own_id)
+        if owner is None:
+            return Response({'detail': 'Owner not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = UpdateOwnerContactSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        SuperAdminOwnerService.update_contact(
+            owner,
+            serializer.validated_data,
+            user_id=str(request.user.usr_id),
+            ip_address=request.META.get('REMOTE_ADDR'),
+        )
+        owner.refresh_from_db()
+        return Response(SuperAdminOwnerDetailSerializer(owner).data)
+
+
+class SuperAdminVaccinationListView(APIView):
+    """Read-only cross-clinic vaccination records — medical history stays immutable."""
+
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        page, page_size = _parse_page(request)
+
+        clinic_id = request.query_params.get('clinic_id') or None
+        if clinic_id and _get_clinic(clinic_id) is None:
+            return Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        date_from = _parse_date(request.query_params.get('date_from'))
+        date_to = _parse_date(request.query_params.get('date_to'), end_of_day=True)
+
+        result = VaccinationReadService.list_vaccinations(
+            clinic_id=str(clinic_id) if clinic_id else None,
+            search=request.query_params.get('search', '').strip(),
+            date_from=date_from,
+            date_to=date_to,
+            page=page,
+            page_size=page_size,
+        )
+        return Response(result)
+
+
+class AccuracyReportView(APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        clinic_id = request.query_params.get('clinic_id') or None
+        if clinic_id and _get_clinic(clinic_id) is None:
+            return Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        report = AccuracyReportService.get_report(
+            clinic_id=str(clinic_id) if clinic_id else None,
+            model_version=request.query_params.get('model_version', ''),
+            date_from=_parse_date(request.query_params.get('date_from')),
+            date_to=_parse_date(request.query_params.get('date_to'), end_of_day=True),
+        )
+        return Response(report)
+
+
+class DiseaseReportView(APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def get(self, request):
+        clinic_id = request.query_params.get('clinic_id') or None
+        if clinic_id and _get_clinic(clinic_id) is None:
+            return Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        report = DiseaseReportService.get_report(
+            clinic_id=str(clinic_id) if clinic_id else None,
+            date_from=_parse_date(request.query_params.get('date_from')),
+            date_to=_parse_date(request.query_params.get('date_to'), end_of_day=True),
+        )
+        return Response(report)

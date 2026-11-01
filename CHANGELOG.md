@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0] — 2026-11-02
+
+### Added
+- Cross-clinic Pet Owner management: `GET /api/super-admin/owners/` (clinic/search filters) and `GET/PUT /api/super-admin/owners/{own_id}/` — edit **contact info only** (first/last name, phone, address); email and role are not editable (unknown fields reject with `400`); audit-logged with old/new values via `SuperAdminOwnerService.update_contact`
+- Read-only cross-clinic vaccination listing: `GET /api/super-admin/vaccinations/` (clinic/search/date-range filters) — no writes by design; vaccination records are medical history and stay immutable
+- Preliminary AI accuracy report: `GET /api/super-admin/analytics/accuracy/` — on-device classifier predictions vs. the veterinarian's confirmed diagnosis (`ais_is_correct`), grouped by model version, disease, clinic, and monthly trend; never fuses classifier and Claude review outputs, agreement is not confirmation, and screenings awaiting comparison are shown separately from accuracy %
+- Cross-clinic disease report: `GET /api/super-admin/analytics/diseases/` — structured screening predictions with severity breakdown plus confirmed consultation diagnoses grouped case-insensitively (free text, top 20) and a monthly trend
+- `SuperAdminOwnerService`, `VaccinationReadService`, `AccuracyReportService`, `DiseaseReportService` in `backend/super_admin/services.py` — zero new models/migrations (reuses existing tables)
+- 32 new backend tests (76 total): permission matrix for the new routes, owner detail/update guards (email/role rejection, audit-log assertions), vaccination scoping/filters, accuracy aggregation and empty-state behavior, disease grouping and severity breakdown
+- Frontend `super-admin` features: Pet Owners page (`/super-admin/owners`, searchable/clinic-filtered table + `EditContactModal` with RHF + Zod contact validation), Vaccinations page (`/super-admin/vaccinations`, read-only table with clinic/date filters), Reports page (`/super-admin/reports`, AI Accuracy + Diseases tabs with shared clinic/model/date filters)
+- Frontend service unit tests for `ownerService`, `vaccinationService`, and `reportService`
+
 ## [0.5.0] — 2026-10-31
 
 ### Added

@@ -1742,6 +1742,51 @@ clinic's staff user IDs), `module`, `action`, `search` (description or table
 name), `date_from` / `date_to` (`YYYY-MM-DD`, inclusive), `page`,
 `page_size`. Shares the standard pagination envelope.
 
+## GET /api/super-admin/owners/
+
+Cross-clinic pet owner directory. Query params: `clinic_id` (owners linked
+through pets seen at that clinic), `search` (name or email), `page`,
+`page_size`. Shares the standard pagination envelope. Each row includes
+`first_name`, `last_name`, `email`, `phone`, `address`, `is_active`,
+`pet_count`, `created_at`.
+
+## GET /api/super-admin/owners/{own_id}/
+
+Owner detail with `pets` (active, non-soft-deleted) and the distinct
+`clinics` their pets have appointments at. Returns `404` for unknown owners.
+
+## PUT /api/super-admin/owners/{own_id}/
+
+Edits contact info only: `first_name`, `last_name`, optional `phone`,
+optional `address`. Email and role are **not** editable — unknown fields
+reject with `400`. Audit-logged (`UPDATE`, module `owners`) with old/new
+values. Returns the updated detail.
+
+## GET /api/super-admin/vaccinations/
+
+Read-only cross-clinic vaccination listing (medical history is never
+writable through Super Admin). Query params: `clinic_id`, `search` (vaccine,
+pet, or owner name), `date_from` / `date_to` (`vac_date_given`, inclusive),
+`page`, `page_size`. Shares the standard pagination envelope.
+
+## GET /api/super-admin/analytics/accuracy/
+
+Preliminary AI accuracy: on-device classifier predictions vs. the
+veterinarian's confirmed diagnosis (`ais_is_correct`, recorded after the
+fact by the consultation signal). Never fuses classifier and review outputs;
+agreement is not confirmation. Query params: `clinic_id`, `model_version`,
+`date_from` / `date_to`. Returns `summary` (total, compared, correct,
+incorrect, awaiting comparison, accuracy %), `model_versions`,
+`by_model_version`, `by_disease`, `by_clinic`, and a zero-filled monthly
+`trend`.
+
+## GET /api/super-admin/analytics/diseases/
+
+Cross-clinic disease distribution. Query params: `clinic_id`, `date_from` /
+`date_to`. Returns `totals`, `screenings_by_disease` (structured prediction
+with severity), `confirmed_by_disease` (consultation free text grouped
+case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
+
 ---
 
 # 11. User Management Endpoints (Clinic Admin)

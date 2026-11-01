@@ -3,10 +3,14 @@ import re
 from rest_framework import serializers
 
 from audit_log.models import AuditLog
+from owners.models import OwnerProfile
 from staff.services import normalize_phone
 from users.models import StaffProfile, User
+from vaccinations.serializers import VaccinationResponseSerializer
 
 _NAME_RE = re.compile(r"^[A-Za-zÀ-ÿ\u00C0-\u024F]+([.\u0027\u2019 -][A-Za-zÀ-ÿ\u00C0-\u024F]+)*$")
+
+_NAME_ERROR = 'Name may only contain letters, spaces, hyphens, apostrophes, and periods.'
 
 
 class ClinicAdminSerializer(serializers.ModelSerializer):
@@ -83,7 +87,6 @@ class OwnerListSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(source='own_created_at', read_only=True)
 
     class Meta:
-        from owners.models import OwnerProfile
         model = OwnerProfile
         fields = ['id', 'user_id', 'email', 'first_name', 'last_name', 'phone', 'is_active', 'created_at']
         read_only_fields = fields
@@ -162,3 +165,107 @@ class AuditLogListSerializer(serializers.ModelSerializer):
             'description', 'ip_address', 'device', 'timestamp',
         ]
         read_only_fields = fields
+
+
+class SuperAdminOwnerListSerializer(serializers.ModelSerializer):
+    id = serializers.UUIDField(source='own_id', read_only=True)
+    user_id = serializers.UUIDField(source='usr_id.usr_id', read_only=True)
+    first_name = serializers.CharField(source='usr_id.usr_first_name', read_only=True)
+    last_name = serializers.CharField(source='usr_id.usr_last_name', read_only=True)
+    email = serializers.EmailField(source='usr_id.usr_email', read_only=True)
+    phone = serializers.CharField(source='usr_id.usr_phone', read_only=True, allow_null=True)
+    address = serializers.CharField(source='own_address', read_only=True, allow_null=True)
+    is_active = serializers.BooleanField(source='usr_id.usr_is_active', read_only=True)
+    pet_count = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(source='own_created_at', read_only=True)
+
+    class Meta:
+        model = OwnerProfile
+        fields = [
+            'id', 'user_id', 'first_name', 'last_name', 'email', 'phone',
+            'address', 'is_active', 'pet_count', 'created_at',
+        ]
+        read_only_fields = fields
+
+    def get_pet_count(self, obj) -> int:
+        return obj.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True).count()
+
+
+class SuperAdminOwnerDetailSerializer(SuperAdminOwnerListSerializer):
+    pets = serializers.SerializerMethodField()
+    clinics = serializers.SerializerMethodField()
+
+    class Meta(SuperAdminOwnerListSerializer.Meta):
+        fields = SuperAdminOwnerListSerializer.Meta.fields + ['pets', 'clinics']
+        read_only_fields = fields
+
+    def get_pets(self, obj) -> list[dict]:
+        from pets.serializers import PetResponseSerializer
+        pets = obj.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True).select_related('brd_id')
+        return PetResponseSerializer(pets, many=True).data
+
+    def get_clinics(self, obj) -> list[dict]:
+        from super_admin.services import SuperAdminOwnerService
+        return [
+            {'id': str(clin.cln_id), 'name': clin.cln_name, 'status': clin.cln_status}
+            for clin in SuperAdminOwnerService.linked_clinics(obj)
+        ]
+
+
+class UpdateOwnerContactSerializer(serializers.Serializer):
+    """Contact info only — email and role are intentionally not accepted."""
+
+    first_name = serializers.CharField(max_length=100, trim_whitespace=True)
+    last_name = serializers.CharField(max_length=100, trim_whitespace=True)
+    phone = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, allow_null=True, trim_whitespace=True,
+    )
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+
+    @staticmethod
+    def _validate_name(value: str) -> str:
+        value = re.sub(r'\s+', ' ', value.strip())
+        if not _NAME_RE.match(value):
+            raise serializers.ValidationError(_NAME_ERROR)
+        return value
+
+    def validate_first_name(self, value):
+        return self._validate_name(value)
+
+    def validate_last_name(self, value):
+        return self._validate_name(value)
+
+    def validate_phone(self, value):
+        if not value:
+            return value or ''
+        try:
+            return normalize_phone(value)
+        except ValueError:
+            raise serializers.ValidationError(
+                'Phone must be a valid Philippine number (e.g. 09171234567 or +639171234567).'
+            )
+
+    def validate(self, attrs):
+        # Reject unknown write fields (email, role, ...) instead of silently
+        # ignoring them — the caller may believe they were applied.
+        allowed = {'first_name', 'last_name', 'phone', 'address'}
+        unknown = set(self.initial_data) - allowed
+        if unknown:
+            raise serializers.ValidationError(
+                f"Field(s) not editable through this endpoint: {', '.join(sorted(unknown))}."
+            )
+        return attrs
+
+
+class VaccinationListSerializer(VaccinationResponseSerializer):
+    owner_name = serializers.SerializerMethodField()
+
+    class Meta(VaccinationResponseSerializer.Meta):
+        fields = VaccinationResponseSerializer.Meta.fields + ['owner_name']
+        read_only_fields = fields
+
+    def get_owner_name(self, obj) -> str:
+        user = getattr(getattr(obj.pet_id, 'own_id', None), 'usr_id', None)
+        if not user:
+            return ''
+        return f'{user.usr_first_name} {user.usr_last_name}'.strip()

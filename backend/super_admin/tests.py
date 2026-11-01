@@ -7,13 +7,16 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from ai_screenings.models import AiScreening, Disease, DiseaseSeverity
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from audit_log.models import AuditAction, AuditLog
 from clinics.models import Clinic, ClinicStatus
+from consultations.models import Consultation
 from owners.models import OwnerProfile
 from payments.models import Payment, PaymentMethod, PaymentProvider, PaymentStatus
 from pets.models import Breed, Pet, Sex
 from users.models import StaffPosition, StaffProfile, User, UserRole
+from vaccinations.models import VaccinationRecord, VaccinationRoute
 
 
 @patch('super_admin.services.send_staff_welcome_email')
@@ -99,10 +102,24 @@ class PermissionTests(SuperAdminTestBase):
         ('get', 'super-admin-clinic-owners', ['clinic_id']),
         ('get', 'super-admin-clinic-pets', ['clinic_id']),
         ('get', 'super-admin-clinic-appointments', ['clinic_id']),
+        ('get', 'super-admin-owners', []),
+        ('get', 'super-admin-owner-detail', ['own_id']),
+        ('put', 'super-admin-owner-detail', ['own_id']),
+        ('get', 'super-admin-vaccinations', []),
+        ('get', 'super-admin-analytics-accuracy', []),
+        ('get', 'super-admin-analytics-diseases', []),
     ]
 
     def _resolve_args(self, names):
-        return [str(self.clinic.cln_id) if n == 'clinic_id' else n for n in names]
+        resolved = []
+        for name in names:
+            if name == 'clinic_id':
+                resolved.append(str(self.clinic.cln_id))
+            elif name == 'own_id':
+                resolved.append(str(self.owner.own_id))
+            else:
+                resolved.append(name)
+        return resolved
 
     def test_all_endpoints_reject_clinic_admin(self):
         self._assert_rejected(self.clinic_admin)
@@ -565,3 +582,466 @@ class SuperAdminAuditLogTests(SuperAdminTestBase):
         response = self.client.get(url, {'page_size': 1}, **self._auth_header(self.super_admin))
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['total_pages'], 2)
+
+
+class OwnerManagementTests(SuperAdminTestBase):
+
+    def _make_other_owner(self, email='outsider@sample.com', first='Out', last='Sider'):
+        user = self._make_user(email, UserRole.OWNER, first, last)
+        return OwnerProfile.objects.create(usr_id=user)
+
+    def test_list_returns_all_owners_cross_clinic(self):
+        self._make_other_owner()
+
+        url = self._url('super-admin-owners')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 2)
+        emails = {row['email'] for row in response.data['results']}
+        self.assertEqual(emails, {'owner@sample.com', 'outsider@sample.com'})
+
+    def test_list_search_filters_by_email_and_name(self):
+        url = self._url('super-admin-owners')
+        response = self.client.get(url, {'search': 'owner@sample'}, **self._auth_header(self.super_admin))
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['email'], 'owner@sample.com')
+
+        response = self.client.get(url, {'search': 'Pet'}, **self._auth_header(self.super_admin))
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['first_name'], 'Pet')
+
+    def test_list_clinic_filter_scopes_to_linked_owners(self):
+        self._make_appointment()
+        self._make_other_owner()
+
+        url = self._url('super-admin-owners')
+        response = self.client.get(
+            url, {'clinic_id': str(self.clinic.cln_id)}, **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['email'], 'owner@sample.com')
+
+    def test_list_rejects_unknown_clinic(self):
+        url = self._url('super-admin-owners')
+        response = self.client.get(
+            url, {'clinic_id': '00000000-0000-0000-0000-000000000000'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_includes_pets_and_linked_clinics(self):
+        self._make_appointment()
+
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], 'owner@sample.com')
+        self.assertEqual(response.data['pet_count'], 1)
+        self.assertEqual(len(response.data['pets']), 1)
+        self.assertEqual(response.data['pets'][0]['name'], 'Buddy')
+        self.assertEqual(len(response.data['clinics']), 1)
+        self.assertEqual(response.data['clinics'][0]['name'], 'Happy Paws Veterinary Clinic')
+
+    def test_detail_returns_404_for_unknown_owner(self):
+        url = self._url('super-admin-owner-detail', '00000000-0000-0000-0000-000000000000')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_contact_updates_user_and_profile_and_audits(self):
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {
+            'first_name': 'Updated',
+            'last_name': 'Owner',
+            'phone': '09171234567',
+            'address': '123 Sample Street, Manila',
+        }
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.owner_user.refresh_from_db()
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner_user.usr_first_name, 'Updated')
+        self.assertEqual(self.owner_user.usr_last_name, 'Owner')
+        self.assertEqual(self.owner_user.usr_phone, '+639171234567')
+        self.assertEqual(self.owner.own_address, '123 Sample Street, Manila')
+
+        log = AuditLog.objects.get(adl_table_name='OWNER_PROFILE')
+        self.assertEqual(log.adl_action, AuditAction.UPDATE)
+        self.assertEqual(str(log.usr_id), str(self.super_admin.usr_id))
+        self.assertEqual(log.adl_old_values['first_name'], 'Pet')
+        self.assertEqual(log.adl_new_values['first_name'], 'Updated')
+
+    def test_update_rejects_email_field(self):
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {'first_name': 'Pet', 'last_name': 'Owner', 'email': 'changed@sample.com'}
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.owner_user.refresh_from_db()
+        self.assertEqual(self.owner_user.usr_email, 'owner@sample.com')
+
+    def test_update_rejects_role_field(self):
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {'first_name': 'Pet', 'last_name': 'Owner', 'usr_role': UserRole.CLINIC_ADMIN}
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.owner_user.refresh_from_db()
+        self.assertEqual(self.owner_user.usr_role, UserRole.OWNER)
+
+    def test_update_rejects_invalid_phone(self):
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {'first_name': 'Pet', 'last_name': 'Owner', 'phone': 'not-a-number'}
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_invalid_name(self):
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {'first_name': '12345', 'last_name': 'Owner'}
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_returns_404_for_unknown_owner(self):
+        url = self._url('super-admin-owner-detail', '00000000-0000-0000-0000-000000000000')
+        payload = {'first_name': 'Pet', 'last_name': 'Owner'}
+        response = self.client.put(url, payload, format='json', **self._auth_header(self.super_admin))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class VaccinationReadTests(SuperAdminTestBase):
+
+    def setUp(self):
+        super().setUp()
+        other_vet_user = self._make_user('vet2@other.com', UserRole.VETERINARIAN, 'Other', 'Vet')
+        self.other_vet_profile = StaffProfile.objects.create(
+            usr_id=other_vet_user, cln_id=self.other_clinic, stf_position=StaffPosition.VETERINARIAN,
+        )
+
+    def _make_vaccination(self, name='Rabies', pet=None, stf=None, date_given=None):
+        return VaccinationRecord.objects.create(
+            pet_id=pet or self.pet,
+            stf_id=stf if stf is not None else self.vet_profile,
+            vac_name=name,
+            vac_dose='1 dose',
+            vac_route=VaccinationRoute.ORAL,
+            vac_date_given=date_given or timezone.now().date(),
+        )
+
+    def test_list_returns_records_with_owner_name(self):
+        self._make_vaccination(name='Rabies')
+
+        url = self._url('super-admin-vaccinations')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        row = response.data['results'][0]
+        self.assertEqual(row['name'], 'Rabies')
+        self.assertEqual(row['pet_name'], 'Buddy')
+        self.assertEqual(row['owner_name'], 'Pet Owner')
+        self.assertEqual(row['veterinarian'], 'Vet Erinary')
+
+    def test_clinic_filter_scopes_to_clinic_records(self):
+        self._make_vaccination(name='Rabies')
+        outsider = self._make_user('never@sample.com', UserRole.OWNER, 'Never', 'Seen')
+        outsider_owner = OwnerProfile.objects.create(usr_id=outsider)
+        outsider_pet = Pet.objects.create(
+            own_id=outsider_owner, brd_id=self.breed, pet_name='Ghost', pet_sex=Sex.MALE,
+        )
+        self._make_vaccination(name='Distemper', pet=outsider_pet, stf=self.other_vet_profile)
+
+        url = self._url('super-admin-vaccinations')
+        unfiltered = self.client.get(url, **self._auth_header(self.super_admin))
+        self.assertEqual(unfiltered.data['total'], 2)
+
+        filtered = self.client.get(
+            url, {'clinic_id': str(self.clinic.cln_id)}, **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(filtered.data['total'], 1)
+        self.assertEqual(filtered.data['results'][0]['name'], 'Rabies')
+
+    def test_search_by_vaccine_name(self):
+        self._make_vaccination(name='Rabies')
+        self._make_vaccination(name='Bordetella')
+
+        url = self._url('super-admin-vaccinations')
+        response = self.client.get(url, {'search': 'bordetella'}, **self._auth_header(self.super_admin))
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['name'], 'Bordetella')
+
+    def test_date_range_filters(self):
+        today = timezone.localdate()
+        self._make_vaccination(name='Recent', date_given=today)
+        self._make_vaccination(name='Old', date_given=today - timedelta(days=120))
+
+        url = self._url('super-admin-vaccinations')
+        response = self.client.get(
+            url,
+            {'date_from': (today - timedelta(days=30)).isoformat()},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['name'], 'Recent')
+
+    def test_rejects_unknown_clinic(self):
+        url = self._url('super-admin-vaccinations')
+        response = self.client.get(
+            url, {'clinic_id': '00000000-0000-0000-0000-000000000000'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_write_methods_are_not_allowed(self):
+        url = self._url('super-admin-vaccinations')
+        for method in ('post', 'put', 'patch', 'delete'):
+            response = getattr(self.client, method)(url, {}, format='json', **self._auth_header(self.super_admin))
+            self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED, method)
+
+
+class AccuracyReportTests(SuperAdminTestBase):
+
+    def setUp(self):
+        super().setUp()
+        # Unique code: MANGE is already seeded by 0002_seed_diseases.
+        self.disease = Disease.objects.create(
+            dis_code='TEST_MANGE', dis_name='Test Mange', dis_severity=DiseaseSeverity.HIGH,
+        )
+
+    def _make_screening(self, correct=None, model_version='tfjs-v1', disease=None, pet=None):
+        screening = AiScreening.objects.create(
+            dis_id=disease or self.disease,
+            pet_id=pet or self.pet,
+            ais_confidence=Decimal('87.50'),
+            ais_model_version=model_version,
+        )
+        if correct is not None:
+            screening.ais_is_correct = correct
+            screening.ais_compared_diagnosis = 'Mange'
+            screening.ais_compared_at = timezone.now()
+            screening.save(update_fields=['ais_is_correct', 'ais_compared_diagnosis', 'ais_compared_at'])
+        return screening
+
+    def test_summary_math_includes_awaiting_comparison(self):
+        self._make_screening(correct=True)
+        self._make_screening(correct=False)
+        self._make_screening()
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        summary = response.data['summary']
+        self.assertEqual(summary['total_screenings'], 3)
+        self.assertEqual(summary['compared'], 2)
+        self.assertEqual(summary['correct'], 1)
+        self.assertEqual(summary['incorrect'], 1)
+        self.assertEqual(summary['awaiting_comparison'], 1)
+        self.assertEqual(summary['accuracy_percent'], 50.0)
+
+    def test_accuracy_is_null_when_nothing_compared(self):
+        self._make_screening()
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        summary = response.data['summary']
+        self.assertEqual(summary['compared'], 0)
+        self.assertIsNone(summary['accuracy_percent'])
+        self.assertEqual(summary['awaiting_comparison'], 1)
+
+    def test_groups_by_model_version(self):
+        self._make_screening(correct=True, model_version='tfjs-v1')
+        self._make_screening(correct=False, model_version='tfjs-v1')
+        self._make_screening(correct=True, model_version='tfjs-v2')
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.data['model_versions'], ['tfjs-v1', 'tfjs-v2'])
+        rows = {row['model_version']: row for row in response.data['by_model_version']}
+        self.assertEqual(rows['tfjs-v1']['compared'], 2)
+        self.assertEqual(rows['tfjs-v1']['correct'], 1)
+        self.assertEqual(rows['tfjs-v1']['accuracy_percent'], 50.0)
+        self.assertEqual(rows['tfjs-v2']['accuracy_percent'], 100.0)
+
+    def test_groups_by_disease(self):
+        other_disease = Disease.objects.create(
+            dis_code='RING', dis_name='Ringworm', dis_severity=DiseaseSeverity.LOW,
+        )
+        self._make_screening(correct=True)
+        self._make_screening(correct=False, disease=other_disease)
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        rows = {row['disease']: row for row in response.data['by_disease']}
+        self.assertEqual(rows['Test Mange']['accuracy_percent'], 100.0)
+        self.assertEqual(rows['Ringworm']['accuracy_percent'], 0.0)
+
+    def test_trend_covers_twelve_months(self):
+        self._make_screening(correct=True)
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        trend = response.data['trend']
+        self.assertEqual(len(trend), 12)
+        current = timezone.now().strftime('%Y-%m')
+        last = trend[-1]
+        self.assertEqual(last['month'], current)
+        self.assertEqual(last['compared'], 1)
+        self.assertEqual(last['correct'], 1)
+
+    def test_clinic_filter_attributes_screenings_to_visiting_clinic(self):
+        self._make_appointment()
+        self._make_screening(correct=True)
+
+        outsider = self._make_user('never@sample.com', UserRole.OWNER, 'Never', 'Seen')
+        outsider_owner = OwnerProfile.objects.create(usr_id=outsider)
+        outsider_pet = Pet.objects.create(
+            own_id=outsider_owner, brd_id=self.breed, pet_name='Ghost', pet_sex=Sex.MALE,
+        )
+        self._make_screening(correct=False, pet=outsider_pet)
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(
+            url, {'clinic_id': str(self.clinic.cln_id)}, **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.data['summary']['total_screenings'], 1)
+        self.assertEqual(response.data['summary']['correct'], 1)
+        self.assertEqual(len(response.data['by_clinic']), 1)
+        self.assertEqual(response.data['by_clinic'][0]['clinic_name'], 'Happy Paws Veterinary Clinic')
+        self.assertEqual(response.data['by_clinic'][0]['accuracy_percent'], 100.0)
+
+    def test_model_version_filter(self):
+        self._make_screening(correct=True, model_version='tfjs-v1')
+        self._make_screening(correct=False, model_version='tfjs-v2')
+
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(
+            url, {'model_version': 'tfjs-v1'}, **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.data['summary']['total_screenings'], 1)
+        self.assertEqual(response.data['summary']['accuracy_percent'], 100.0)
+
+    def test_rejects_unknown_clinic(self):
+        url = self._url('super-admin-analytics-accuracy')
+        response = self.client.get(
+            url, {'clinic_id': '00000000-0000-0000-0000-000000000000'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class DiseaseReportTests(SuperAdminTestBase):
+
+    def setUp(self):
+        super().setUp()
+        # Unique code: MANGE is already seeded by 0002_seed_diseases.
+        self.disease = Disease.objects.create(
+            dis_code='TEST_MANGE', dis_name='Test Mange', dis_severity=DiseaseSeverity.HIGH,
+        )
+
+    def _make_screening(self, disease=None, pet=None):
+        return AiScreening.objects.create(
+            dis_id=disease or self.disease,
+            pet_id=pet or self.pet,
+            ais_confidence=Decimal('80.00'),
+            ais_model_version='tfjs-v1',
+        )
+
+    def _make_consultation(self, specific_disease):
+        return Consultation.objects.create(
+            apt_id=self._make_appointment(),
+            stf_id=self.vet_profile,
+            con_diagnosis='Confirmed diagnosis',
+            con_specific_disease=specific_disease,
+        )
+
+    def test_screenings_by_disease_includes_severity(self):
+        ringworm = Disease.objects.create(
+            dis_code='RING', dis_name='Ringworm', dis_severity=DiseaseSeverity.LOW,
+        )
+        self._make_screening()
+        self._make_screening()
+        self._make_screening(disease=ringworm)
+
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        rows = {row['disease']: row for row in response.data['screenings_by_disease']}
+        self.assertEqual(rows['Test Mange']['count'], 2)
+        self.assertEqual(rows['Test Mange']['severity'], 'HIGH')
+        self.assertEqual(rows['Ringworm']['count'], 1)
+        self.assertEqual(rows['Ringworm']['severity'], 'LOW')
+
+    def test_confirmed_diagnoses_grouped_case_insensitively(self):
+        self._make_consultation('Sarcoptic mange')
+        self._make_consultation('  sarcoptic mange ')
+
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.data['totals']['confirmed_diagnoses'], 2)
+        self.assertEqual(len(response.data['confirmed_by_disease']), 1)
+        row = response.data['confirmed_by_disease'][0]
+        self.assertEqual(row['disease'], 'sarcoptic mange')
+        self.assertEqual(row['count'], 2)
+
+    def test_severity_breakdown_covers_every_level(self):
+        self._make_screening()
+
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        breakdown = response.data['severity_breakdown']
+        self.assertEqual(
+            set(breakdown), {'LOW', 'MODERATE', 'HIGH', 'UNKNOWN'},
+        )
+        self.assertEqual(breakdown['HIGH'], 1)
+        self.assertEqual(breakdown['LOW'], 0)
+
+    def test_totals_and_trend(self):
+        self._make_screening()
+        self._make_screening()
+        self._make_consultation('Mange')
+
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.data['totals']['screenings'], 2)
+        self.assertEqual(response.data['totals']['confirmed_diagnoses'], 1)
+        self.assertEqual(len(response.data['trend']), 12)
+        self.assertEqual(response.data['trend'][-1]['count'], 2)
+
+    def test_clinic_filter_scopes_both_sections(self):
+        self._make_appointment()
+        self._make_screening()
+
+        outsider = self._make_user('never@sample.com', UserRole.OWNER, 'Never', 'Seen')
+        outsider_owner = OwnerProfile.objects.create(usr_id=outsider)
+        outsider_pet = Pet.objects.create(
+            own_id=outsider_owner, brd_id=self.breed, pet_name='Ghost', pet_sex=Sex.MALE,
+        )
+        self._make_screening(pet=outsider_pet)
+
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(
+            url, {'clinic_id': str(self.clinic.cln_id)}, **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.data['totals']['screenings'], 1)
+        self.assertEqual(response.data['screenings_by_disease'][0]['count'], 1)
+
+    def test_rejects_unknown_clinic(self):
+        url = self._url('super-admin-analytics-diseases')
+        response = self.client.get(
+            url, {'clinic_id': '00000000-0000-0000-0000-000000000000'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

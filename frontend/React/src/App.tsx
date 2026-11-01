@@ -22,6 +22,9 @@ const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages
 const AnalyticsPage = lazy(() => import('./features/super-admin/analytics/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
 const AdminsPage = lazy(() => import('./features/super-admin/admins/pages/AdminsPage').then(m => ({ default: m.AdminsPage })))
 const AuditLogsPage = lazy(() => import('./features/super-admin/audit-logs/pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })))
+const OwnersPage = lazy(() => import('./features/super-admin/owners/pages/OwnersPage').then(m => ({ default: m.OwnersPage })))
+const VaccinationsPage = lazy(() => import('./features/super-admin/vaccinations/pages/VaccinationsPage').then(m => ({ default: m.VaccinationsPage })))
+const ReportsPage = lazy(() => import('./features/super-admin/reports/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ClinicAdminLayout = lazy(() => import('./features/clinic-admin/components/ClinicAdminLayout').then(m => ({ default: m.ClinicAdminLayout })))
 const ReceptionistLayout = lazy(() => import('./features/receptionist/components/ReceptionistLayout').then(m => ({ default: m.ReceptionistLayout })))
 const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -124,6 +127,30 @@ function App() {
               </ProtectedRoute>
             }
             path="/super-admin/audit-logs"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <OwnersPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/owners"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <VaccinationsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/vaccinations"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/reports"
           />
           <Route
   path="/clinic"

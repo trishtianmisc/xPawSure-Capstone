@@ -1,6 +1,7 @@
 from django.urls import path
 
 from super_admin.views import (
+    AccuracyReportView,
     AllClinicAdminsView,
     AuditLogListView as SuperAdminAuditLogListView,
     ClinicAdminActionView,
@@ -10,7 +11,11 @@ from super_admin.views import (
     ClinicOwnersListView,
     ClinicPetsListView,
     ClinicStaffListView,
+    DiseaseReportView,
     PlatformAnalyticsView,
+    SuperAdminOwnerDetailView,
+    SuperAdminOwnerListView,
+    SuperAdminVaccinationListView,
 )
 
 urlpatterns = [
@@ -18,6 +23,31 @@ urlpatterns = [
         'super-admin/analytics/overview/',
         PlatformAnalyticsView.as_view(),
         name='super-admin-analytics-overview',
+    ),
+    path(
+        'super-admin/analytics/accuracy/',
+        AccuracyReportView.as_view(),
+        name='super-admin-analytics-accuracy',
+    ),
+    path(
+        'super-admin/analytics/diseases/',
+        DiseaseReportView.as_view(),
+        name='super-admin-analytics-diseases',
+    ),
+    path(
+        'super-admin/owners/',
+        SuperAdminOwnerListView.as_view(),
+        name='super-admin-owners',
+    ),
+    path(
+        'super-admin/owners/<uuid:own_id>/',
+        SuperAdminOwnerDetailView.as_view(),
+        name='super-admin-owner-detail',
+    ),
+    path(
+        'super-admin/vaccinations/',
+        SuperAdminVaccinationListView.as_view(),
+        name='super-admin-vaccinations',
     ),
     path(
         'super-admin/clinics/<uuid:clinic_id>/overview/',

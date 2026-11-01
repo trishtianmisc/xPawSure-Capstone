@@ -5,9 +5,10 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import transaction
 from django.db.models import Count, Q, Sum
-from django.db.models.functions import TruncMonth
+from django.db.models.functions import Lower, TruncMonth, Trim
 from django.utils import timezone
 
+from ai_screenings.models import AiScreening, DiseaseSeverity
 from appointments.models import Appointment, AppointmentStatus
 from audit_log.models import AuditAction, AuditLog
 from audit_log.services import AuditService
@@ -52,7 +53,7 @@ def _monthly_series(queryset, date_field: str) -> list[dict]:
         queryset.filter(**{f'{date_field}__gte': start})
         .annotate(month=TruncMonth(date_field))
         .values('month')
-        .annotate(count=Count('pk'))
+        .annotate(count=Count('pk', distinct=True))
         .order_by('month')
     )
     by_month = {row['month'].strftime('%Y-%m'): row['count'] for row in rows if row['month']}
@@ -525,6 +526,8 @@ def _paginate(queryset, page: int, page_size: int, serializer: str) -> dict:
         AuditLogListSerializer,
         OwnerListSerializer,
         PetListSerializer,
+        SuperAdminOwnerListSerializer,
+        VaccinationListSerializer,
     )
 
     serializers = {
@@ -532,6 +535,8 @@ def _paginate(queryset, page: int, page_size: int, serializer: str) -> dict:
         'owner': OwnerListSerializer,
         'pet': PetListSerializer,
         'appointment': AppointmentListSerializer,
+        'owner_sa': SuperAdminOwnerListSerializer,
+        'vaccination': VaccinationListSerializer,
     }
 
     total = queryset.count()
@@ -547,3 +552,367 @@ def _paginate(queryset, page: int, page_size: int, serializer: str) -> dict:
         'total_pages': (total + page_size - 1) // page_size,
         'results': serializers[serializer](results, many=True).data,
     }
+
+
+class SuperAdminOwnerService:
+    """Cross-clinic pet owner contact management for the Super Admin.
+
+    Owners have no clinic FK; they are linked to clinics through their pets'
+    appointments. Every write is audit-logged because it can affect multiple
+    clinics at once.
+    """
+
+    @staticmethod
+    def list_owners(clinic_id: str | None = None, search: str = '', page: int = 1, page_size: int = 20) -> dict:
+        queryset = OwnerProfile.objects.select_related('usr_id')
+
+        if clinic_id:
+            queryset = queryset.filter(
+                pets__appointments__cln_id_id=clinic_id,
+                pets__appointments__apt_deleted_at__isnull=True,
+            ).distinct()
+
+        if search:
+            queryset = queryset.filter(
+                Q(usr_id__usr_first_name__icontains=search)
+                | Q(usr_id__usr_last_name__icontains=search)
+                | Q(usr_id__usr_email__icontains=search)
+                | Q(usr_id__usr_phone__icontains=search)
+            )
+
+        queryset = queryset.order_by('usr_id__usr_first_name', 'usr_id__usr_last_name')
+        return _paginate(queryset, page, page_size, serializer='owner_sa')
+
+    @staticmethod
+    def get_owner(own_id) -> OwnerProfile | None:
+        try:
+            return OwnerProfile.objects.select_related('usr_id').get(own_id=own_id)
+        except OwnerProfile.DoesNotExist:
+            return None
+
+    @staticmethod
+    def linked_clinics(owner: OwnerProfile) -> list[Clinic]:
+        clinic_ids = (
+            Appointment.objects.filter(pet_id__own_id=owner, apt_deleted_at__isnull=True)
+            .values_list('cln_id_id', flat=True)
+            .distinct()
+        )
+        return list(
+            Clinic.objects.filter(cln_id__in=clinic_ids, cln_deleted_at__isnull=True)
+            .order_by('cln_name')
+        )
+
+    @staticmethod
+    def pet_count(owner: OwnerProfile) -> int:
+        return owner.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True).count()
+
+    @staticmethod
+    def update_contact(
+        owner: OwnerProfile,
+        data: dict,
+        user_id: str | None = None,
+        ip_address: str | None = None,
+    ) -> OwnerProfile:
+        """Update owner contact info only (name/phone on User, address on profile).
+
+        Email and role are deliberately not editable here: the email is the
+        login identity and the role is fixed at registration.
+        """
+        user = owner.usr_id
+        old_values = {
+            'first_name': user.usr_first_name,
+            'last_name': user.usr_last_name,
+            'phone': user.usr_phone,
+            'address': owner.own_address,
+        }
+
+        user.usr_first_name = data['first_name']
+        user.usr_last_name = data['last_name']
+        if 'phone' in data:
+            user.usr_phone = data['phone'] or None
+        user.save(update_fields=['usr_first_name', 'usr_last_name', 'usr_phone', 'usr_updated_at'])
+
+        if 'address' in data:
+            owner.own_address = data['address'] or None
+            owner.save(update_fields=['own_address', 'own_updated_at'])
+
+        new_values = {
+            'first_name': user.usr_first_name,
+            'last_name': user.usr_last_name,
+            'phone': user.usr_phone,
+            'address': owner.own_address,
+        }
+        _audit(
+            user_id=user_id,
+            action=AuditAction.UPDATE,
+            module='owners',
+            table_name='OWNER_PROFILE',
+            record_id=str(owner.own_id),
+            description=f'Owner contact updated: {user.usr_email}',
+            old_values=old_values,
+            new_values=new_values,
+            ip_address=ip_address,
+        )
+        return owner
+
+
+class VaccinationReadService:
+    """Read-only cross-clinic vaccination listing. No writes by design —
+    vaccination records are medical history and stay immutable."""
+
+    @staticmethod
+    def list_vaccinations(
+        clinic_id: str | None = None,
+        search: str = '',
+        date_from=None,
+        date_to=None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> dict:
+        queryset = VaccinationRecord.objects.select_related(
+            'pet_id__own_id__usr_id', 'stf_id__usr_id', 'con_id',
+        )
+
+        if clinic_id:
+            queryset = queryset.filter(
+                Q(stf_id__cln_id=clinic_id)
+                | Q(con_id__apt_id__cln_id=clinic_id)
+                | Q(pet_id__appointments__cln_id_id=clinic_id),
+            ).distinct()
+
+        if search:
+            queryset = queryset.filter(
+                Q(vac_name__icontains=search)
+                | Q(pet_id__pet_name__icontains=search)
+                | Q(pet_id__own_id__usr_id__usr_first_name__icontains=search)
+                | Q(pet_id__own_id__usr_id__usr_last_name__icontains=search)
+            )
+
+        if date_from:
+            queryset = queryset.filter(vac_date_given__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(vac_date_given__lte=date_to)
+
+        queryset = queryset.order_by('-vac_date_given', '-vac_created_at')
+        return _paginate(queryset, page, page_size, serializer='vaccination')
+
+
+def _pct(correct: int, compared: int) -> float | None:
+    if compared <= 0:
+        return None
+    return round(correct * 100.0 / compared, 1)
+
+
+class AccuracyReportService:
+    """Preliminary accuracy of the on-device classifier vs. the veterinarian's
+    confirmed diagnosis.
+
+    Aggregates `ais_is_correct`, which the consultations post_save signal
+    records after each consultation via `record_comparison`. This is
+    historical, after-the-fact analytics only — it never fuses the classifier
+    and Claude review outputs, and agreement is not treated as confirmation.
+    """
+
+    @staticmethod
+    def get_report(
+        clinic_id: str | None = None,
+        model_version: str = '',
+        date_from=None,
+        date_to=None,
+    ) -> dict:
+        queryset = AiScreening.objects.all()
+
+        if clinic_id:
+            queryset = queryset.filter(
+                pet_id__appointments__cln_id_id=clinic_id,
+                pet_id__appointments__apt_deleted_at__isnull=True,
+            )
+        if model_version:
+            queryset = queryset.filter(ais_model_version__iexact=model_version.strip())
+        if date_from:
+            queryset = queryset.filter(ais_created_at__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(ais_created_at__lte=date_to)
+
+        compared_qs = queryset.filter(ais_compared_at__isnull=False)
+
+        total = queryset.distinct().count()
+        compared = compared_qs.distinct().count()
+        correct = compared_qs.filter(ais_is_correct=True).distinct().count()
+
+        def grouped(keys: list[str], rename: dict[str, str]) -> list[dict]:
+            rows = (
+                compared_qs.values(*keys)
+                .annotate(
+                    compared=Count('ais_id', distinct=True),
+                    correct=Count('ais_id', filter=Q(ais_is_correct=True), distinct=True),
+                )
+                .order_by(*keys)
+            )
+            out = []
+            for row in rows:
+                item = {rename.get(key, key): value for key, value in row.items()}
+                item['accuracy_percent'] = _pct(item['correct'], item['compared'])
+                out.append(item)
+            return out
+
+        by_model_version = grouped(
+            ['ais_model_version'], {'ais_model_version': 'model_version'},
+        )
+        by_disease = grouped(
+            ['dis_id__dis_name'], {'dis_id__dis_name': 'disease'},
+        )
+
+        by_clinic = []
+        clinic_rows = (
+            compared_qs.values('pet_id__appointments__cln_id_id')
+            .annotate(
+                compared=Count('ais_id', distinct=True),
+                correct=Count('ais_id', filter=Q(ais_is_correct=True), distinct=True),
+            )
+        )
+        clinic_names = {
+            str(clin.cln_id): clin.cln_name
+            for clin in Clinic.objects.filter(cln_deleted_at__isnull=True)
+        }
+        for row in clinic_rows:
+            clinic_pk = row.get('pet_id__appointments__cln_id_id')
+            if clinic_pk is None:
+                continue
+            by_clinic.append({
+                'clinic_id': str(clinic_pk),
+                'clinic_name': clinic_names.get(str(clinic_pk), 'Unknown clinic'),
+                'compared': row['compared'],
+                'correct': row['correct'],
+                'accuracy_percent': _pct(row['correct'], row['compared']),
+            })
+        by_clinic.sort(key=lambda r: (-r['compared'], r['clinic_name']))
+
+        trend = _monthly_series(compared_qs, 'ais_compared_at')
+        trend_counts = {
+            row['month'].strftime('%Y-%m'): row
+            for row in (
+                compared_qs.annotate(month=TruncMonth('ais_compared_at'))
+                .values('month')
+                .annotate(
+                    compared=Count('ais_id', distinct=True),
+                    correct=Count('ais_id', filter=Q(ais_is_correct=True), distinct=True),
+                )
+            )
+            if row['month']
+        }
+        trend_out = []
+        for point in trend:
+            counts = trend_counts.get(point['month'], {'compared': 0, 'correct': 0})
+            trend_out.append({
+                'month': point['month'],
+                'compared': counts['compared'],
+                'correct': counts['correct'],
+            })
+
+        # Meta.ordering would otherwise add AIS_CREATED_AT to the
+        # SELECT DISTINCT, defeating deduplication.
+        model_versions = sorted(
+            queryset.order_by().values_list('ais_model_version', flat=True).distinct()
+        )
+
+        return {
+            'generated_at': timezone.now().isoformat(),
+            'filters': {
+                'clinic_id': str(clinic_id) if clinic_id else None,
+                'model_version': model_version or None,
+                'date_from': date_from.isoformat() if date_from else None,
+                'date_to': date_to.isoformat() if date_to else None,
+            },
+            'summary': {
+                'total_screenings': total,
+                'compared': compared,
+                'correct': correct,
+                'incorrect': compared - correct,
+                'awaiting_comparison': max(total - compared, 0),
+                'accuracy_percent': _pct(correct, compared),
+            },
+            'model_versions': model_versions,
+            'by_model_version': by_model_version,
+            'by_disease': by_disease,
+            'by_clinic': by_clinic,
+            'trend': trend_out,
+        }
+
+
+class DiseaseReportService:
+    """Cross-clinic disease distribution: AI screening predictions (structured
+    FK with severity) plus confirmed diagnoses from consultations (free text,
+    grouped case-insensitively)."""
+
+    @staticmethod
+    def get_report(clinic_id: str | None = None, date_from=None, date_to=None) -> dict:
+        screenings = AiScreening.objects.all()
+        consultations = Consultation.objects.filter(
+            con_specific_disease__isnull=False,
+        ).exclude(con_specific_disease='')
+
+        if clinic_id:
+            screenings = screenings.filter(
+                pet_id__appointments__cln_id_id=clinic_id,
+                pet_id__appointments__apt_deleted_at__isnull=True,
+            )
+            consultations = consultations.filter(apt_id__cln_id=clinic_id)
+
+        if date_from:
+            screenings = screenings.filter(ais_created_at__gte=date_from)
+            consultations = consultations.filter(con_created_at__gte=date_from)
+        if date_to:
+            screenings = screenings.filter(ais_created_at__lte=date_to)
+            consultations = consultations.filter(con_created_at__lte=date_to)
+
+        screenings_by_disease = [
+            {
+                'disease': row['dis_id__dis_name'],
+                'severity': row['dis_id__dis_severity'],
+                'count': row['count'],
+            }
+            for row in (
+                screenings.values('dis_id__dis_name', 'dis_id__dis_severity')
+                .annotate(count=Count('ais_id', distinct=True))
+                .order_by('-count', 'dis_id__dis_name')
+            )
+        ]
+
+        confirmed_by_disease = [
+            {'disease': row['disease_key'], 'count': row['count']}
+            for row in (
+                consultations.annotate(disease_key=Lower(Trim('con_specific_disease')))
+                .values('disease_key')
+                .annotate(count=Count('con_id', distinct=True))
+                .order_by('-count', 'disease_key')[:20]
+            )
+        ]
+
+        severity_breakdown = {
+            severity.value: 0 for severity in DiseaseSeverity
+        }
+        for row in (
+            screenings.values('dis_id__dis_severity')
+            .annotate(count=Count('ais_id', distinct=True))
+        ):
+            severity_breakdown[row['dis_id__dis_severity']] = row['count']
+
+        trend = _monthly_series(screenings, 'ais_created_at')
+
+        return {
+            'generated_at': timezone.now().isoformat(),
+            'filters': {
+                'clinic_id': str(clinic_id) if clinic_id else None,
+                'date_from': date_from.isoformat() if date_from else None,
+                'date_to': date_to.isoformat() if date_to else None,
+            },
+            'totals': {
+                'screenings': screenings.distinct().count(),
+                'confirmed_diagnoses': consultations.distinct().count(),
+            },
+            'screenings_by_disease': screenings_by_disease,
+            'confirmed_by_disease': confirmed_by_disease,
+            'severity_breakdown': severity_breakdown,
+            'trend': trend,
+        }
