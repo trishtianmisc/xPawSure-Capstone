@@ -688,7 +688,14 @@ Query parameters:
   invalid date.
 
 Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed },
-today_consultations: [ ...appointment summaries ] }`.
+today_consultations: [ ...appointment summaries ] }`. All three stats are scoped to the
+calendar month of the `date` query parameter (they reset on the 1st of each month):
+`consultations_this_month` is the monthly total (confirmed, checked-in, in-progress, and
+completed appointments scheduled within that month, so
+`consultations_this_month == pending + completed`), `pending` counts the not-completed
+portion (confirmed, checked-in, in-progress; labeled "Upcoming" in the UI), and
+`completed` counts completed appointments. Unconfirmed (PENDING), cancelled, and no-show
+appointments are excluded from all three.
 
 ---
 

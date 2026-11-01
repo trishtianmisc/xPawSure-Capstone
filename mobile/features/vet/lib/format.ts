@@ -30,3 +30,14 @@ export function ageFromBirthDate(birthDate?: string | null): string {
   if (years < 1) return '<1 yr'
   return `${years} yr${years === 1 ? '' : 's'}`
 }
+
+const POSITION_LABELS: Record<string, string> = {
+  CLINIC_ADMIN: 'Clinic Admin',
+  VETERINARIAN: 'Veterinarian',
+  RECEPTIONIST: 'Receptionist',
+}
+
+export function formatPosition(position?: string | null): string {
+  if (!position) return 'N/A'
+  return POSITION_LABELS[position] ?? position
+}

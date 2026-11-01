@@ -10,7 +10,7 @@ import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointmen
 import { formatAppointmentStatus, formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
 import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'
 
-const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED']
+const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED', 'CANCELLED']
 
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
   PENDING: { bg: '#FDEBD0', text: '#E67E22' },
@@ -47,6 +47,11 @@ export default function VetConsultationListScreen() {
         .filter((a) => localDateStr(new Date(a.apt_scheduled_at)) > todayStr && !INACTIVE.includes(a.apt_status))
         .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
     }
+    if (activeTab === 'CANCELLED') {
+      return appointments
+        .filter((a) => INACTIVE.includes(a.apt_status))
+        .sort((a, b) => b.apt_scheduled_at.localeCompare(a.apt_scheduled_at))
+    }
     return appointments
       .filter((a) => a.apt_status === 'COMPLETED')
       .sort((a, b) => b.apt_scheduled_at.localeCompare(a.apt_scheduled_at))
@@ -76,7 +81,12 @@ export default function VetConsultationListScreen() {
               onPress={() => setActiveTab(tab)}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
             >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+              <Text
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+                style={[styles.tabText, activeTab === tab && styles.tabTextActive]}
+              >
                 {tab.charAt(0) + tab.slice(1).toLowerCase()}
               </Text>
             </Pressable>
@@ -138,10 +148,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   title: { ...font.extrabold, color: colors.text, fontSize: 22, marginBottom: 16 },
 
-  tabRow: { flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 20 },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 8 },
+  tabRow: { flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 4, marginBottom: 20, gap: 2 },
+  tab: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8 },
   tabActive: { backgroundColor: colors.surface },
-  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  tabText: { ...font.semibold, color: colors.textSecondary, fontSize: 12 },
   tabTextActive: { color: colors.text },
 
   loading: { marginVertical: 40 },

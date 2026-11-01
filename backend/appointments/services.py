@@ -1011,17 +1011,16 @@ class DashboardService:
 
 class VetDashboardService:
 
-    ACTIVE_TODAY_STATUSES = (
+    UPCOMING_STATUSES = (
         AppointmentStatus.CONFIRMED,
         AppointmentStatus.CHECKED_IN,
         AppointmentStatus.IN_PROGRESS,
+    )
+    MONTH_TOTAL_STATUSES = (
+        *UPCOMING_STATUSES,
         AppointmentStatus.COMPLETED,
     )
-    PENDING_STATUSES = (
-        AppointmentStatus.CONFIRMED,
-        AppointmentStatus.CHECKED_IN,
-        AppointmentStatus.IN_PROGRESS,
-    )
+    ACTIVE_TODAY_STATUSES = MONTH_TOTAL_STATUSES
 
     @staticmethod
     def _vet_appointments(stf_id):
@@ -1042,15 +1041,19 @@ class VetDashboardService:
 
         return {
             'consultations_this_month': qs.filter(
-                apt_status=AppointmentStatus.COMPLETED,
+                apt_status__in=VetDashboardService.MONTH_TOTAL_STATUSES,
                 apt_scheduled_at__date__gte=month_start,
                 apt_scheduled_at__date__lte=month_end,
             ).count(),
             'pending': qs.filter(
-                apt_status__in=VetDashboardService.PENDING_STATUSES,
+                apt_status__in=VetDashboardService.UPCOMING_STATUSES,
+                apt_scheduled_at__date__gte=month_start,
+                apt_scheduled_at__date__lte=month_end,
             ).count(),
             'completed': qs.filter(
                 apt_status=AppointmentStatus.COMPLETED,
+                apt_scheduled_at__date__gte=month_start,
+                apt_scheduled_at__date__lte=month_end,
             ).count(),
         }
 
