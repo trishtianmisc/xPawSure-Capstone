@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
-import { formatDateTime } from '../../../../utils/format'
+import { CLINIC_TIME_ZONE, formatDateTime } from '../../../../utils/format'
+import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { ChartSkeleton } from '../../dashboard/components/Charts/AppointmentsByMonthChart'
 import type { ChartDataPoint } from '../../dashboard/types/dashboard.types'
@@ -37,11 +39,32 @@ function labelize(value: string): string {
 }
 
 export function ClinicAdminAppointmentsPage() {
-  const [vetId, setVetId] = useState('')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const navigate = useNavigate()
+  // Filters initialize from the URL so deep links (e.g. from Reports &
+  // Analytics) pre-filter the list; changes are written back with replace so
+  // filter tweaks never stack up history entries.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [vetId, setVetId] = useState(() => searchParams.get('vet_id') ?? '')
+  const [dateFrom, setDateFrom] = useState(() => searchParams.get('date_from') ?? '')
+  const [dateTo, setDateTo] = useState(() => searchParams.get('date_to') ?? '')
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? '')
   const [page, setPage] = useState(1)
+
+  function syncParams(
+    patch: { vet_id?: string; date_from?: string; date_to?: string; status?: string },
+  ) {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value)
+          else next.delete(key)
+        }
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const params = useMemo(
     () => ({
@@ -50,7 +73,7 @@ export function ClinicAdminAppointmentsPage() {
       date_to: dateTo || undefined,
       status: statusFilter || undefined,
       page,
-      page_size: 20,
+      page_size: 10,
     }),
     [vetId, dateFrom, dateTo, statusFilter, page],
   )
@@ -58,9 +81,15 @@ export function ClinicAdminAppointmentsPage() {
   const appointments = useClinicAppointments(params)
   const volume = useAppointmentVolume()
   const vets = useVeterinarians()
+  const settings = useClinicSettings()
 
   const { data, isLoading, error, refetch, isFetching } = appointments
   const hasActiveFilters = Boolean(vetId || dateFrom || dateTo || statusFilter)
+  const displayTimeZone =
+    settings.data?.timezone ?? (settings.isError ? CLINIC_TIME_ZONE : undefined)
+
+  const startItem = data ? (data.page - 1) * data.page_size + 1 : 0
+  const endItem = data ? Math.min(data.page * data.page_size, data.total) : 0
 
   const volumeData: ChartDataPoint[] = (volume.data ?? []).map((point) => ({
     label: new Date(`${point.date}T00:00:00`).toLocaleDateString('en-US', {
@@ -76,6 +105,7 @@ export function ClinicAdminAppointmentsPage() {
     setDateTo('')
     setStatusFilter('')
     setPage(1)
+    setSearchParams({}, { replace: true })
   }
 
   return (
@@ -122,7 +152,11 @@ export function ClinicAdminAppointmentsPage() {
               className={`${INPUT_CLASSES} w-56 shrink-0`}
               value={vetId}
               disabled={vets.isLoading}
-              onChange={(e) => { setVetId(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setVetId(e.target.value)
+                setPage(1)
+                syncParams({ vet_id: e.target.value })
+              }}
               aria-label="Filter by veterinarian"
             >
               <option value="">
@@ -139,21 +173,33 @@ export function ClinicAdminAppointmentsPage() {
               className={`${INPUT_CLASSES} w-44 shrink-0`}
               type="date"
               value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setDateFrom(e.target.value)
+                setPage(1)
+                syncParams({ date_from: e.target.value })
+              }}
               aria-label="Filter from date"
             />
             <input
               className={`${INPUT_CLASSES} w-44 shrink-0`}
               type="date"
               value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setDateTo(e.target.value)
+                setPage(1)
+                syncParams({ date_to: e.target.value })
+              }}
               aria-label="Filter to date"
             />
 
             <select
               className={`${INPUT_CLASSES} shrink-0`}
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+              onChange={(e) => {
+                setStatusFilter(e.target.value)
+                setPage(1)
+                syncParams({ status: e.target.value })
+              }}
               aria-label="Filter by status"
             >
               {STATUS_FILTERS.map((f) => (
@@ -210,11 +256,19 @@ export function ClinicAdminAppointmentsPage() {
                     <th className="px-5 py-4 font-semibold">Date &amp; Time</th>
                     <th className="px-5 py-4 font-semibold">Type</th>
                     <th className="px-5 py-4 font-semibold">Status</th>
+                    <th className="px-5 py-4 font-semibold">Action</th>
+                    <th className="px-5 py-4 text-right font-semibold">
+                      <span className="sr-only">View</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
                   {data.results.map((apt) => (
-                    <tr key={apt.apt_id}>
+                    <tr
+                      key={apt.apt_id}
+                      className="cursor-pointer transition hover:bg-amber-50/50 dark:hover:bg-amber-900/10"
+                      onClick={() => navigate(`/clinic/appointments/${apt.apt_id}`)}
+                    >
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {apt.owner_name ?? '—'}
                       </td>
@@ -239,13 +293,33 @@ export function ClinicAdminAppointmentsPage() {
                         {apt.vet_name ?? 'Unassigned'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {formatDateTime(apt.apt_scheduled_at)}
+                        {displayTimeZone ? formatDateTime(apt.apt_scheduled_at, displayTimeZone) : '—'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {labelize(apt.apt_type)}
                       </td>
                       <td className="px-5 py-4">
                         <AppointmentStatusBadge status={apt.apt_status} />
+                      </td>
+                      <td
+                        className="px-5 py-4 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Link
+                          to={`/clinic/appointments/${apt.apt_id}`}
+                          aria-label={`View appointment for ${apt.pet_name}`}
+                          title="View details"
+                          className="inline-flex size-8 items-center justify-center rounded-lg text-stone-400 transition hover:bg-stone-100 hover:text-stone-700 dark:text-stone-500 dark:hover:bg-stone-700 dark:hover:text-stone-200"
+                        >
+                          <svg className="size-5 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                            <path
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                              d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z"
+                            />
+                          </svg>
+                        </Link>
                       </td>
                     </tr>
                   ))}
@@ -265,10 +339,10 @@ export function ClinicAdminAppointmentsPage() {
             </div>
           )}
 
-          {data && data.total_pages > 1 && (
-            <div className="flex items-center justify-between border-t border-stone-100 px-5 py-4 dark:border-stone-700">
+          {data && data.results.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 px-5 py-4 dark:border-stone-700">
               <span className="text-sm text-stone-500 dark:text-stone-400">
-                Page {data.page} of {data.total_pages} ({data.total} total)
+                Showing {startItem}&ndash;{endItem} of {data.total} appointments
               </span>
               <div className="flex gap-2">
                 <Button

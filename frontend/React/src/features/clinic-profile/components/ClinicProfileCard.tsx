@@ -72,7 +72,7 @@ export function ClinicProfileCard({
 
         <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
           <div className="py-4 sm:py-5">
-            <InfoRow label="Name" value={profile.name} />
+            <InfoRow label="Clinic Name" value={profile.name} />
           </div>
           <div className="py-4 sm:py-5">
             <InfoRow label="Email" value={profile.email || '—'} />

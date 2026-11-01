@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
+from clinics.geocoding import geocode_address
 from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings, ClinicStatus
 from clinics.tasks import send_clinic_welcome_email
 from core.storage_service import SupabaseStorageService
@@ -40,10 +41,24 @@ def _audit(**kwargs):
         logger.warning('Audit log failed (non-fatal): %s', e)
 
 
+def _coordinates_for_address(address: str | None) -> dict:
+    if not address or not address.strip():
+        return {'cln_latitude': None, 'cln_longitude': None}
+
+    coordinates = geocode_address(address)
+    if coordinates is None:
+        return {'cln_latitude': None, 'cln_longitude': None}
+    latitude, longitude = coordinates
+    return {'cln_latitude': latitude, 'cln_longitude': longitude}
+
+
 class ClinicService:
 
     @staticmethod
     def create(data: dict, user_id: str | None = None, ip_address: str | None = None) -> Clinic:
+        clinic_address = data.get('cln_address') or None
+        coordinates = _coordinates_for_address(clinic_address)
+
         with transaction.atomic():
             clinic_name = data['cln_name']
             clinic_email = data.get('cln_email') or None
@@ -52,8 +67,9 @@ class ClinicService:
                 cln_name=clinic_name,
                 cln_email=clinic_email,
                 cln_phone=data.get('cln_phone') or None,
-                cln_address=data.get('cln_address') or None,
+                cln_address=clinic_address,
                 cln_license_no=data.get('cln_license_no') or None,
+                **coordinates,
             )
 
             admin_email = clinic_email or f'admin@{clinic_name.lower().replace(" ", "")}.com'
@@ -124,6 +140,9 @@ class ClinicService:
             'address': clinic.cln_address,
             'license_number': clinic.cln_license_no,
         }
+
+        if 'cln_address' in data and data['cln_address'] != clinic.cln_address:
+            data = {**data, **_coordinates_for_address(data.get('cln_address'))}
 
         changed = False
         for field, value in data.items():
@@ -249,6 +268,10 @@ class ClinicProfileService:
             'cln_address': 'address',
         }
 
+        new_address = data.get('address')
+        address_changed = new_address is not None and new_address != clinic.cln_address
+        coordinates = _coordinates_for_address(new_address) if address_changed else None
+
         for field, key in field_map.items():
             old_val = getattr(clinic, field)
             new_val = data.get(key)
@@ -256,6 +279,20 @@ class ClinicProfileService:
                 old_values[key] = str(old_val) if old_val is not None else None
                 new_values[key] = str(new_val) if new_val is not None else None
                 setattr(clinic, field, new_val)
+
+        if address_changed and coordinates is not None:
+            clinic.cln_latitude = coordinates['cln_latitude']
+            clinic.cln_longitude = coordinates['cln_longitude']
+            new_values['latitude'] = (
+                float(coordinates['cln_latitude'])
+                if coordinates['cln_latitude'] is not None
+                else None
+            )
+            new_values['longitude'] = (
+                float(coordinates['cln_longitude'])
+                if coordinates['cln_longitude'] is not None
+                else None
+            )
 
         if new_values:
             clinic.save()
@@ -278,12 +315,10 @@ class ClinicProfileService:
         settings_obj, _ = ClinicSettings.objects.get_or_create(
             cln_id=clinic,
             defaults={
-                'cls_opening_time': '09:00',
-                'cls_closing_time': '17:00',
                 'cls_appointment_duration': 30,
                 'cls_max_appointments_per_day': 50,
                 'cls_allow_owner_booking': True,
-                'cls_timezone': 'UTC',
+                'cls_timezone': 'Asia/Manila',
             },
         )
         return settings_obj
@@ -298,20 +333,18 @@ class ClinicProfileService:
         settings_obj = ClinicProfileService.get_settings(clinic)
 
         old_values = {
-            'cls_opening_time': str(settings_obj.cls_opening_time),
-            'cls_closing_time': str(settings_obj.cls_closing_time),
             'cls_appointment_duration': settings_obj.cls_appointment_duration,
             'cls_max_appointments_per_day': settings_obj.cls_max_appointments_per_day,
             'cls_allow_owner_booking': settings_obj.cls_allow_owner_booking,
+            'cls_timezone': settings_obj.cls_timezone,
             'cls_consultation_fee': str(settings_obj.cls_consultation_fee),
         }
 
         field_map = {
-            'cls_opening_time': 'cls_opening_time',
-            'cls_closing_time': 'cls_closing_time',
             'cls_appointment_duration': 'cls_appointment_duration',
             'cls_max_appointments_per_day': 'cls_max_appointments_per_day',
             'cls_allow_owner_booking': 'cls_allow_owner_booking',
+            'cls_timezone': 'cls_timezone',
             'cls_consultation_fee': 'cls_consultation_fee',
         }
 
@@ -456,6 +489,8 @@ class ClinicProfileService:
             raise ValueError('Duplicate days in payload.')
         if set(incoming_days) != VALID_DAYS:
             raise ValueError('Missing or invalid days in payload.')
+        if all(day.get('is_closed', True) for day in data):
+            raise ValueError('At least one day must be open.')
 
         with transaction.atomic():
             for day_data in data:

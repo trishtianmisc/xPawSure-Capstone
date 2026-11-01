@@ -382,11 +382,15 @@ Clinic-scoped patient directory behind the sidebar "Patients" tab.
 Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
 
 - Default: only active pets with at least one non-deleted appointment at the
-  receptionist's own clinic. A pet becomes a clinic patient once an appointment
-  exists there.
+  receptionist's own clinic whose status is not `CANCELLED` or `NO_SHOW`. A pet
+  becomes a clinic patient once it has a non-cancelled, non-no-show appointment
+  there; a pet whose only appointments were cancelled or no-show is not listed.
 - `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
-  Used by the booking form so walk-in owners can be booked; after the booking the
-  pet appears in the clinic's Patients tab.
+  Used by the booking form so walk-in owners can be booked; after a non-cancelled
+  booking the pet appears in the clinic's Patients tab.
+- Detail and history endpoints still require only a non-deleted appointment at
+  the clinic, so a pet removed from the directory by the rule above remains
+  reachable by direct link (read-only access is unchanged).
 - Invalid `page` / `page_size` values fall back to defaults (never a 500).
 
 ## POST /api/receptionist/pets/
@@ -468,6 +472,180 @@ Requires authentication. Receptionist.
 
 ---
 
+# 4B. Clinic Admin Patient Endpoints (Web)
+
+Read-only. Requires authentication as Clinic Admin. Other roles receive `403`;
+all unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) receive `403`.
+
+A patient is the canonical clinic patient definition: an active, non-deleted pet
+with a non-deleted appointment at the caller's clinic whose status is not
+`CANCELLED` or `NO_SHOW`. This is the same definition used by the clinic admin
+"Total Patients" KPI and the receptionist Patients directory.
+
+## GET /api/clinic/patients/
+
+Query parameters:
+
+- `search`: pet name, owner first/last name, phone, or email
+- `breed`: breed UUID
+- `vaccination_status`: `up_to_date`, `due_soon`, `overdue`, or `none_recorded`
+- `has_no_shows`: `true`/`1`/`yes`
+- `sort`: `name`, `last_visit`, or `no_shows`
+- `order`: `asc` or `desc`
+- `page`, `page_size` (default `20`, maximum `100`)
+
+Invalid `breed` or `vaccination_status` returns `400`.
+
+Response:
+
+```json
+{
+  "total": 12,
+  "total_patients": 48,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 3,
+  "results": [
+    {
+      "id": "uuid",
+      "name": "Bella",
+      "profile_picture": null,
+      "breed": "Shih Tzu",
+      "sex": "FEMALE",
+      "age": 3,
+      "owner": {
+        "name": "Maria Santos",
+        "phone": "09171234567",
+        "email": "maria@example.com"
+      },
+      "last_visit_date": "2026-10-01",
+      "next_appointment_date": "2026-10-29",
+      "total_appointments": 4,
+      "no_show_count": 1,
+      "cancelled_count": 2,
+      "vaccination_status": "overdue"
+    }
+  ]
+}
+```
+
+Notes:
+
+- `total_patients` is the unfiltered canonical clinic patient count; `total` is
+  the filtered count.
+- `last_visit_date` is the latest past, non-cancelled/non-no-show appointment.
+- `next_appointment_date` is the earliest `PENDING`/`CONFIRMED` appointment at or
+  after the current time.
+- Counts include all non-deleted clinic appointments, including cancelled and
+  no-show appointments.
+- Dates are clinic-local calendar dates; the clinic timezone is used to compute
+  age and "today".
+
+## GET /api/clinic/patients/{id}/
+
+Returns one clinic patient. Pets outside the clinic or pets that are not clinic
+patients return `404`.
+
+Response:
+
+```json
+{
+  "id": "uuid",
+  "name": "Bella",
+  "profile_picture": null,
+  "breed": "Shih Tzu",
+  "sex": "FEMALE",
+  "age": 3,
+  "date_of_birth": "2023-02-01",
+  "weight": "6.50",
+  "color": "Cream",
+  "registered_at": "2024-01-15T02:30:00Z",
+  "owner": {
+    "name": "Maria Santos",
+    "phone": "09171234567",
+    "email": "maria@example.com"
+  },
+  "summary": {
+    "consultations": 3,
+    "vaccinations": 4,
+    "ai_screenings": 5
+  },
+  "vaccination_status": "overdue",
+  "vaccinations": [
+    {
+      "name": "Rabies",
+      "date_given": "2026-01-05",
+      "next_due": "2027-01-05"
+    }
+  ],
+  "appointments": [
+    {
+      "apt_id": "uuid",
+      "apt_scheduled_at": "2026-10-02T01:00:00Z",
+      "apt_type": "CONSULTATION",
+      "apt_status": "COMPLETED",
+      "vet_name": "Dr. Reyes",
+      "apt_cancellation_reason": null
+    }
+  ]
+}
+```
+
+Scoping and privacy:
+
+- Consultation summary and appointment history are clinic-scoped.
+- Vaccinations and AI screening counts are pet-level, including records created
+  outside the clinic.
+- Appointment history is newest first and limited to 50 records.
+- `apt_cancellation_reason` is returned only for `CANCELLED` appointments.
+- The response never exposes QR codes, microchips, diagnoses, prescriptions,
+  consultation notes, treatment details, screening results/images, or
+  appointment reasons.
+
+## GET /api/clinic/patients/{id}/appointments/
+
+Paginated appointment history for one clinic patient. The detail endpoint
+above embeds the same rows as a flat array capped at 50; this endpoint is
+the paged source of truth for the history table (no 50-row cap).
+
+Query parameters:
+
+- `page` (default `1`), `page_size` (default `10`, maximum `100`); invalid or
+  out-of-range values are clamped, never a `400`.
+
+Response 200:
+
+```json
+{
+  "total": 25,
+  "page": 2,
+  "page_size": 10,
+  "total_pages": 3,
+  "results": [
+    {
+      "apt_id": "uuid",
+      "apt_scheduled_at": "2026-10-02T01:00:00Z",
+      "apt_type": "CONSULTATION",
+      "apt_status": "COMPLETED",
+      "vet_name": "Dr. Reyes",
+      "apt_cancellation_reason": null
+    }
+  ]
+}
+```
+
+Notes:
+
+- Same envelope shape as every other list endpoint (`staff`, `clinic/patients`,
+  `appointments`, ...), so list pages share one Previous/Next pagination
+  pattern.
+- Clinic-scoped and newest first (`-apt_scheduled_at`), identical scoping to
+  the detail payload: this clinic only, non-deleted appointments only.
+- Pets outside the clinic or pets that are not clinic patients return `404`.
+- Clinic Admin read-only: any write method returns `403`.
+
+---
+
 # 5. Appointment Endpoints
 
 ## GET /api/appointments/
@@ -483,8 +661,8 @@ Clinic staff: Returns clinic appointments (clinic-scoped).
 Query parameters:
 
 - date (single day, `YYYY-MM-DD`), status, vet_id, pet_id, search, page, page_size
-- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local [Asia/Manila]
-  calendar days; used by Clinic Admin date-range filtering). `400` if a value is not
+- date_from, date_to (`YYYY-MM-DD`, inclusive range on clinic-local calendar days
+  in the clinic's configured timezone; used by Clinic Admin date-range filtering). `400` if a value is not
   a valid date or if `date_from` is after `date_to`.
 - overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
   with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
@@ -497,17 +675,27 @@ Notes:
 
 ---
 
-## GET /api/appointments/dashboard/stats/
+## GET /api/dashboard/stats/
 
-Requires authentication. Receptionist dashboard summary.
+Requires authentication. Receptionist or Clinic Admin dashboard summary
+(read-only).
 
-Response: `today` (Asia/Manila-day status counts), `total_owners`, `total_pets`,
+Response: `today` (clinic-local-day status counts), `total_owners`, `total_pets`,
 `recent_appointments`, `needs_attention` (the count of past-due appointments
 still awaiting action), and `review_pending` (all open `REVIEW` follow-ups in
 the clinic). `review_pending` drives the receptionist dashboard's "needs
 review" card. `today.pending` counts only upcoming `PENDING` appointments;
 past-due ones surface through `needs_attention` instead of double-counting in
 Pending/Confirmed.
+
+`total_pets` is the canonical clinic-patient count: distinct active,
+non-deleted pets with at least one non-deleted appointment at the clinic whose
+status is not `CANCELLED` or `NO_SHOW`. `total_owners` is the number of owners
+of those pets. A pet that never booked at the clinic is not counted; repeated
+visits count once; a pet whose only appointments were cancelled or no-show does
+not count. The clinic admin "Total Patients" KPI, the receptionist
+`GET /api/receptionist/pets/` directory, and the future clinic admin Patients
+page must all use this definition.
 
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
@@ -574,14 +762,35 @@ Request (owner):
 
 Request (receptionist) is the same payload minus `screening_id`.
 
+Slot validation: the slot's day must be open in `CLINIC_OPERATING_HOURS`, and the
+slot must fall inside that day's opening/closing times. A closed day returns
+`{ "detail": "The clinic is closed on this day." }`; outside hours returns
+`{ "detail": "This slot is outside the clinic operating hours." }`.
+
 ---
 
 ## GET /api/appointments/{id}/
 
-Requires authentication.
+Requires authentication. Receptionist, veterinarian (own appointments only), or
+Clinic Admin (read-only). Appointments outside the caller's clinic return `404`.
 
 Owner: own pets' appointments only; `REVIEW` follow-ups return `404`. Clinic
 staff: appointments within their own clinic, otherwise `404`.
+
+Clinic Admin receives a narrower, read-only summary for oversight: no
+consultation, prescription, or other clinical records, and no owner contact
+details. Beyond the shared appointment fields it adds:
+
+- `created_by_role`: `RECEPTIONIST` or `OWNER` (null for legacy rows with no
+  recorded creator).
+- `status_change`: who set the current status, and when -
+  `{ changed_at, changed_by, changed_by_role, source }`. `source` is `STAFF`
+  for audited staff transitions, `SYSTEM` for the past-due auto-close (it runs
+  without a user and is attributed by fallback), `UNKNOWN` otherwise; all
+  fields are null when no status has been set yet (e.g. `PENDING`).
+- `screening`: narrower AI summary exposing the final condition only, with
+  `vet_diagnosis` and `reviewed_at` (the veterinarian's recorded outcome).
+  `null` when no screening is linked. No clinical notes are exposed.
 
 ---
 
@@ -617,14 +826,16 @@ This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
 
 ## PATCH /api/appointments/{id}/
 
-Requires authentication. Receptionist or clinic admin.
+Requires authentication. Receptionist.
 
-Update appointment status. Clinic staff can only update appointments within their own
-clinic, otherwise `404`. Veterinarians cannot change status directly: a veterinarian
-`PATCH` returns `403`. Veterinarians submit reschedule or cancellation requests through
-the endpoints in section 5A instead.
+Update appointment status. Clinic Admin cannot write appointments: a Clinic
+Admin `PATCH` returns `403` (their access to this endpoint is read-only).
+Appointments outside the caller's clinic return `404`. Veterinarians cannot
+change status directly: a veterinarian `PATCH` returns `403`. Veterinarians
+submit reschedule or cancellation requests through the endpoints in section
+5A instead.
 
-Time-based rules (Asia/Manila "now"):
+Time-based rules (clinic timezone "now"):
 
 - Confirming a `PENDING` appointment whose scheduled time has passed returns `400`:
   `{ "detail": "Cannot confirm an appointment that has already passed." }`
@@ -661,14 +872,14 @@ Daily appointment counts for the Clinic Admin oversight trend chart.
 Query parameters:
 
 - date_from, date_to (`YYYY-MM-DD`, optional), vet_id, status
-- Default window: last 30 clinic-local (Asia/Manila) days ending today.
+- Default window: last 30 clinic-local days ending today.
 - Same `400` validation rules as `GET /api/appointments/` for the date params.
 
 Response:
 
 { "results": [ { "date": "2026-10-01", "count": 3 }, { "date": "2026-10-02", "count": 0 } ] }
 
-Days are bucketed on Asia/Manila calendar boundaries and zero-filled across the
+Days are bucketed on clinic timezone calendar boundaries and zero-filled across the
 window so chart timelines have no gaps.
 
 ---
@@ -930,6 +1141,38 @@ Response (200):
 
 `PUT` accepts the same fields; `consultation_fee` is optional (omitting it keeps
 the stored value) and must be between 0 and 1000000 with at most 2 decimals.
+
+---
+
+# 5C. Owner Clinic Discovery (Mobile)
+
+Requires authentication with the `OWNER` role.
+
+## GET /api/owner/clinics/
+
+Returns clinics that are `ACTIVE`, not deleted, and have owner booking enabled.
+The response is a JSON array ordered by clinic name:
+
+```json
+[
+  {
+    "cln_id": "5e0f5d8e-8e5d-4f0e-9d6a-6d4d7a3a1f0e",
+    "cln_name": "Happy Paws Clinic",
+    "cln_address": "123 Main Street, Manila",
+    "cln_phone": "09171234567",
+    "cln_logo_url": null,
+    "consultation_fee": 500,
+    "cln_latitude": 14.599512,
+    "cln_longitude": 120.984222
+  }
+]
+```
+
+`cln_latitude` and `cln_longitude` are numbers when the clinic address has been
+geocoded, or `null` when no map location is available yet. A clinic without
+coordinates remains in the list and is still bookable; the mobile app simply
+does not render a pin for it. This endpoint only reads cached coordinates and
+never calls the geocoding provider.
 
 ---
 
@@ -1629,8 +1872,16 @@ logs the API key or image bytes.
 Requires authentication (Clinic Admin). Clinic is resolved from the
 authenticated staff profile; other roles get 403.
 
-Screenings are scoped to pets that have an appointment at the clinic
-(non-deleted appointments).
+Screenings are scoped to pets that have a non-deleted appointment at the
+authenticated admin's clinic (any appointment status). A pet treated at multiple
+clinics therefore appears in each clinic's stats.
+
+`screenings_pending_review` is derived, not read from `ais_status`: it counts
+screenings whose `ais_status` is `PENDING_REVIEW` **and** `ais_compared_at` is
+null. The status field is not transitioned after comparison in production, so
+reviewed screenings are identified by `ais_compared_at` (the appointment detail
+page uses the same rule). `screenings_by_disease` counts all screenings,
+reviewed or not.
 
 Response `200`:
 
@@ -1680,7 +1931,78 @@ Requires authentication.
 
 ---
 
+# 9A. Clinic Profile Endpoints (Clinic Admin)
+
+Requires authentication. Clinic Admin (own clinic) or Super Admin.
+
+## GET /api/clinic/profile/
+
+Returns the clinic profile: name, address, contact details, and logo URL.
+
+## PUT /api/clinic/profile/
+
+Updates the clinic profile. Accepts the same fields as the response.
+
+## POST /api/clinic/logo/
+
+Multipart upload for the clinic logo (`logo` field). Replaces the existing logo.
+
+## GET /api/clinic/settings/
+
+Returns `appointment_duration`, `max_appointments_per_day`,
+`allow_owner_booking`, and `timezone` (IANA name). `opening_time` and
+`closing_time` are no longer part of this response; per-day hours live in
+`/api/clinic/operating-hours/`.
+
+## PUT /api/clinic/settings/
+
+Updates clinic settings. `timezone` must be a valid IANA timezone (validated
+with `zoneinfo`), for example `Asia/Manila`. Sending the removed
+`opening_time` or `closing_time` fields returns `400` with a message pointing to
+`/api/clinic/operating-hours/`.
+
+Changing `timezone` does not shift existing slots or appointments; it changes
+how clinic-local days/times are interpreted and displayed from then on.
+
+## GET /api/clinic/operating-hours/
+
+Returns the seven weekday rows ordered Monday to Sunday:
+
+```json
+{
+  "results": [
+    {
+      "day_of_week": "MON",
+      "day_index": 0,
+      "is_closed": false,
+      "opening_time": "09:00",
+      "closing_time": "17:00"
+    }
+  ]
+}
+```
+
+## PUT /api/clinic/operating-hours/
+
+Replaces all seven weekday rows. Each row uses the shape above. Times are
+required for open days; closed days may send `null`. At least one day must be
+open, otherwise the API returns `400`
+`{ "detail": "At least one day must be open." }`. For open days, closing time
+must be after opening time.
+
+These per-day rows are the single source of truth for slot generation and
+booking validation. Slots are not generated on closed days, and bookings must
+fall within the selected day's opening/closing times.
+
+---
+
 # 10. Clinic Endpoints (Super Admin)
+
+Clinic responses include the read-only `latitude` and `longitude` fields. They
+are resolved from `address` by the backend and are not writable. Creating a
+clinic with an address or changing that address triggers a best-effort
+geocoding lookup; a lookup failure leaves both fields `null` and does not block
+the clinic write.
 
 ## GET /api/clinics/
 
@@ -1895,3 +2217,219 @@ Marks all of the caller's unread notifications as read.
 Response:
 
 { "detail": "All notifications marked as read." }
+
+---
+
+# 15. Clinic Admin Reports Endpoints (Web)
+
+All five endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+Any write method returns `403`; unauthenticated requests return `401`. The
+clinic scope always comes from the caller's own staff profile, never from the
+request, so one clinic's admin cannot read another clinic's numbers.
+
+Reports are strictly read-only: they never run past-due reconciliation
+(BUSINESS_RULES section 23), so a stale PENDING appointment counts as
+not-completed until the next dashboard or appointment-list reconciliation.
+
+## Shared query parameters (all optional)
+
+- `date_from`, `date_to` — `YYYY-MM-DD`, clinic-local calendar days.
+  Omitting both defaults to the last 30 clinic-local days ending today;
+  omitting one end fills only that end.
+- `vet_id` — a `stf_id`. Malformed UUID returns `400 {"detail": "Invalid 'vet_id'."}`;
+  an id outside the caller's clinic returns
+  `400 {"detail": "'vet_id' does not belong to this clinic."}` (no data leak).
+
+Validation errors (all `400` with `{"detail": "..."}`):
+
+- `Invalid 'date_from'; expected YYYY-MM-DD.` (same for `date_to`)
+- `'date_from' cannot be after 'date_to'.`
+- `'date_from' and 'date_to' must span at most 366 days.`
+
+Comparison period (`previous` in responses) is the equal-length window
+immediately before the requested one: Oct 1-8 compares against Sep 23-30,
+never against "last month".
+
+Rate denominators: `completion_rate` and `no_show_rate` use elapsed,
+non-cancelled appointments in the window (scheduled time already passed) as
+the denominator; `cancellation_rate` uses all appointments in the window.
+Rates are rounded to one decimal. An empty denominator yields `0`, never an
+error.
+
+## GET /api/reports/summary/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "total_appointments": 10,
+  "completion_rate": 33.3,
+  "no_show_rate": 50.0,
+  "cancellation_rate": 40.0,
+  "new_patients": 1,
+  "previous": {
+    "total_appointments": 0,
+    "completion_rate": 0.0,
+    "no_show_rate": 0.0,
+    "cancellation_rate": 0.0,
+    "new_patients": 0
+  }
+}
+```
+
+`new_patients` counts pets whose first qualifying (non-cancelled, non-no-show,
+non-deleted) appointment at this clinic falls inside the window. It is always
+clinic-wide, even when `vet_id` is supplied; the UI labels it "(all vets)"
+in that case.
+
+## GET /api/reports/appointments/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "series": [
+    { "date": "2026-10-20", "count": 4 },
+    { "date": "2026-10-21", "count": 2 }
+  ],
+  "by_status": [
+    { "status": "PENDING", "count": 0 },
+    { "status": "CONFIRMED", "count": 0 },
+    { "status": "CHECKED_IN", "count": 0 },
+    { "status": "IN_PROGRESS", "count": 1 },
+    { "status": "COMPLETED", "count": 2 },
+    { "status": "CANCELLED", "count": 4 },
+    { "status": "NO_SHOW", "count": 3 }
+  ]
+}
+```
+
+`series` is zero-filled for every day in the window and bucketed by
+clinic-local calendar day. `by_status` always returns all seven statuses
+(zero-filled) so the chart legend stays stable between periods.
+
+## GET /api/reports/vet-workload/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "results": [
+    {
+      "vet_id": "01520dfe-3ba0-41a3-a7c0-d5dda3889ebb",
+      "vet_name": "Hey Sister",
+      "total": 10,
+      "completed": 2,
+      "no_shows": 3,
+      "avg_per_day": 1.7
+    }
+  ],
+  "days": 6
+}
+```
+
+`avg_per_day` divides each vet's totals by `days`, the number of clinic
+**open days** (`ClinicOperatingHours`, `is_closed = false`) inside the window,
+falling back to the calendar-day count when the clinic has no open hours
+configured. With `vet_id` supplied the list contains at most that vet.
+
+## GET /api/reports/screenings/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "by_condition": [
+    { "disease": "Bacterial", "count": 11 },
+    { "disease": "Mange", "count": 11 }
+  ],
+  "avg_confidence": 82.8,
+  "reviewed": 1,
+  "pending_review": 36,
+  "vet_confirmed": 1,
+  "vet_changed": 0
+}
+```
+
+Scoping notes:
+
+- Clinic scope uses a pet-level semi-join (the pet has any non-deleted
+  appointment at this clinic), so a screening still counts even when it was
+  not attached to a booking. One row per screening regardless of how many
+  appointments the pet has.
+- With `vet_id` supplied, only screenings referenced by an appointment of
+  that vet (in this clinic) are counted; unbooked screenings drop out.
+  Clinic-wide figures include screenings not linked to a booking — the UI
+  shows this caveat next to the filter.
+- `ais_confidence` is stored as a 0-100 percentage and returned as-is;
+  `avg_confidence` is `0.0` when there are no screenings.
+- "Reviewed" is derived: `ais_compared_at` is set or the status moved off
+  `PENDING_REVIEW`. `vet_confirmed` / `vet_changed` come from
+  `ais_is_correct` on reviewed rows (true / false / null = not yet judged).
+
+## GET /api/reports/patients/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "total": 42,
+  "by_breed": [
+    { "breed": "Shih Tzu", "count": 11 },
+    { "breed": "Unknown", "count": 4 }
+  ],
+  "by_sex": [
+    { "sex": "MALE", "count": 22 },
+    { "sex": "FEMALE", "count": 20 }
+  ],
+  "age_buckets": [
+    { "bucket": "<1 yr", "count": 6 },
+    { "bucket": "1–6 yrs", "count": 25 },
+    { "bucket": "7+ yrs", "count": 11 },
+    { "bucket": "Unknown", "count": 0 }
+  ]
+}
+```
+
+Scoping notes:
+
+- `total` counts distinct pets with at least one qualifying appointment
+  (non-deleted, never CANCELLED/NO_SHOW) scheduled inside the window at this
+  clinic — the canonical patient rule — restricted to active, non-deleted
+  pets. A pet with several visits in the window still counts once.
+- `by_sex` always returns both sexes and `age_buckets` all four buckets
+  (zero-filled) so the card layout stays stable between periods. Breed rows
+  appear only when present, sorted by count (ties broken by name); pets with
+  no breed are reported as `Unknown`.
+- Age is measured in whole clinic-local years against today: `<1 yr`
+  (under 1 year), `1–6 yrs`, `7+ yrs`; pets without `pet_birth_date`
+  land in `Unknown`.
+- `vet_id` is accepted and validated like every other report but does not
+  narrow these demographics (they describe the clinic's patients, not one
+  vet's); the UI shows the "(all vets)" caveat next to the filter.
+
+Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
+`/clinic/reports`). Exports are client-side: one multi-section CSV covering
+every loaded panel (KPIs, status breakdown, daily series, workload,
+screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
+plus a
+print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
+the UI as `vet_confirmed / (vet_confirmed + vet_changed)` (null when nothing
+is judged → shown as "—"); its previous-period baseline is fetched with a
+second call to this endpoint using the previous window, since the payload has
+no `previous` block. The appointments chart supports a client-side
+daily/weekly/monthly granularity toggle (calendar-aligned buckets), and the
+status legend / workload rows deep-link to
+`/clinic/appointments?status&vet_id&date_from&date_to` — the appointments page
+initializes its filters from those URL params (changes written with
+`replace`).

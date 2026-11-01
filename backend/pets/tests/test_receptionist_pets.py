@@ -138,6 +138,50 @@ class ReceptionistPetListTests(ReceptionistPetBase):
         self.assertEqual(response.data['page'], 1)
         self.assertEqual(response.data['page_size'], 20)
 
+    def test_cancelled_and_no_show_only_pets_are_not_listed(self):
+        cancelled_pet = Pet.objects.create(
+            own_id=self.owner, pet_name='Cancelled Only', pet_sex=Sex.FEMALE,
+        )
+        no_show_pet = Pet.objects.create(
+            own_id=self.owner, pet_name='No Show Only', pet_sex=Sex.FEMALE,
+        )
+        self._appointment(cancelled_pet, AppointmentStatus.CANCELLED)
+        self._appointment(no_show_pet, AppointmentStatus.NO_SHOW)
+
+        response = self.client.get(
+            '/api/receptionist/pets/', **self._auth(REC_A_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        names = [pet['name'] for pet in response.data['results']]
+        self.assertEqual(names, ['Rex'])
+        self.assertEqual(response.data['total'], 1)
+
+    def test_pet_with_cancelled_and_confirmed_appointments_is_listed_once(self):
+        mixed_pet = Pet.objects.create(
+            own_id=self.owner, pet_name='Mixed History', pet_sex=Sex.FEMALE,
+        )
+        self._appointment(mixed_pet, AppointmentStatus.CANCELLED)
+        self._appointment(mixed_pet, AppointmentStatus.CONFIRMED)
+
+        response = self.client.get(
+            '/api/receptionist/pets/', **self._auth(REC_A_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        names = sorted(pet['name'] for pet in response.data['results'])
+        self.assertEqual(names, ['Mixed History', 'Rex'])
+        self.assertEqual(response.data['total'], 2)
+
+    def _appointment(self, pet, status):
+        return Appointment.objects.create(
+            pet_id=pet,
+            cln_id=self.clinic_a,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=status,
+            apt_scheduled_at=timezone.now(),
+        )
+
 
 class ReceptionistPetDetailTests(ReceptionistPetBase):
 

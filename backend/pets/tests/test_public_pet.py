@@ -66,6 +66,45 @@ class PublicPetServiceTest(TestCase):
         self.assertEqual(PublicPetService.age_years(years_ago(today, 1) + timedelta(days=1)), 0)
         self.assertIsNone(PublicPetService.age_years(None))
 
+    def test_age_years_uses_provided_today(self):
+        birth_date = date(2024, 10, 23)
+        self.assertEqual(
+            PublicPetService.age_years(birth_date, date(2026, 10, 22)),
+            1,
+        )
+        self.assertEqual(
+            PublicPetService.age_years(birth_date, date(2026, 10, 23)),
+            2,
+        )
+
+    def test_overall_vaccination_status(self):
+        today = date.today()
+        self.assertEqual(
+            PublicPetService.overall_vaccination_status([], today),
+            'none_recorded',
+        )
+        self.assertEqual(
+            PublicPetService.overall_vaccination_status(
+                [today + timedelta(days=60), None],
+                today,
+            ),
+            'up_to_date',
+        )
+        self.assertEqual(
+            PublicPetService.overall_vaccination_status(
+                [today + timedelta(days=60), today + timedelta(days=10)],
+                today,
+            ),
+            'due_soon',
+        )
+        self.assertEqual(
+            PublicPetService.overall_vaccination_status(
+                [today + timedelta(days=10), today - timedelta(days=1)],
+                today,
+            ),
+            'overdue',
+        )
+
 
 class PublicPetAPITest(TestCase):
 

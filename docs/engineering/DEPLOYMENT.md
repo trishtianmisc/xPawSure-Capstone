@@ -105,6 +105,9 @@ Set these in **Render → your service → Environment**. Never commit real valu
 | `SUPABASE_STORAGE_BUCKET_QR_CODES` | `qr-codes` |
 | `SUPABASE_STORAGE_BUCKET_OWNER_IMAGES` | `owner-images` |
 | `SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES` | `clinic-images` |
+| `NOMINATIM_BASE_URL` | `https://nominatim.openstreetmap.org` |
+| `NOMINATIM_USER_AGENT` | Identifying app/contact string required by Nominatim's usage policy |
+| `NOMINATIM_TIMEOUT` | `10` (seconds per geocoding request) |
 | `EMAIL_BACKEND` | `core.backends.brevo.BrevoEmailBackend` |
 | `BREVO_API_KEY` | Brevo API key (**secret**) |
 | `DEFAULT_FROM_EMAIL` | Verified Brevo sender address |
@@ -123,6 +126,11 @@ Notes:
 - HTTPS hardening is enabled automatically when `DEBUG=False`: Django redirects
   plain HTTP and sends HSTS for one year. Override `SECURE_SSL_REDIRECT` or
   `SECURE_HSTS_SECONDS` only if you have a specific reason.
+- Clinic geocoding uses the free OpenStreetMap Nominatim service. It needs no
+  API key, but `NOMINATIM_USER_AGENT` must identify the application and a contact
+  URL or email. The backend enforces Nominatim's one-request-per-second limit.
+  After deploying, run `python manage.py geocode_clinics` once to backfill
+  coordinates for clinics that already have addresses.
 - `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, and `EMAIL_HOST_PASSWORD` are
   **not needed in production**; the Brevo backend ignores them. Keep them in
   your local `.env` for Gmail.

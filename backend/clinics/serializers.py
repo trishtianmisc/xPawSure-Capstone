@@ -1,4 +1,5 @@
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings as django_settings
 from rest_framework import serializers
@@ -27,6 +28,8 @@ class ClinicSerializer(serializers.ModelSerializer):
     address = serializers.CharField(
         source='cln_address', required=False, allow_blank=True, allow_null=True,
     )
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(
         source='cln_license_no', required=False, allow_blank=True, allow_null=True,
     )
@@ -37,7 +40,7 @@ class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = [
-            'id', 'name', 'email', 'phone', 'address',
+            'id', 'name', 'email', 'phone', 'address', 'latitude', 'longitude',
             'license_number', 'status', 'created_at', 'updated_at',
         ]
 
@@ -84,6 +87,8 @@ class ClinicProfileSerializer(serializers.Serializer):
     email = serializers.EmailField(source='cln_email', required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(source='cln_phone', required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(source='cln_address', required=False, allow_blank=True, allow_null=True)
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(source='cln_license_no', read_only=True)
     status = serializers.CharField(source='cln_status', read_only=True)
     logo_url = serializers.SerializerMethodField()
@@ -125,8 +130,6 @@ class ClinicProfileUpdateSerializer(serializers.Serializer):
 
 
 class ClinicSettingsSerializer(serializers.Serializer):
-    opening_time = serializers.TimeField(source='cls_opening_time')
-    closing_time = serializers.TimeField(source='cls_closing_time')
     appointment_duration = serializers.IntegerField(source='cls_appointment_duration')
     max_appointments_per_day = serializers.IntegerField(source='cls_max_appointments_per_day')
     allow_owner_booking = serializers.BooleanField(source='cls_allow_owner_booking')
@@ -138,9 +141,33 @@ class ClinicSettingsSerializer(serializers.Serializer):
         required=False, min_value=0,
         coerce_to_string=False,
     )
-    timezone = serializers.CharField(source='cls_timezone', read_only=True)
+    timezone = serializers.CharField(source='cls_timezone', max_length=50)
     created_at = serializers.DateTimeField(source='cls_created_at', read_only=True)
     updated_at = serializers.DateTimeField(source='cls_updated_at', read_only=True)
+
+    _REMOVED_FIELDS = ('opening_time', 'closing_time')
+
+    def to_internal_value(self, data):
+        errors = {
+            field: (
+                'Global opening/closing times are no longer supported. '
+                'Configure them per day via /api/clinic/operating-hours/.'
+            )
+            for field in self._REMOVED_FIELDS
+            if field in data
+        }
+        if errors:
+            raise serializers.ValidationError(errors)
+        return super().to_internal_value(data)
+
+    def validate_timezone(self, value):
+        try:
+            ZoneInfo(value)
+        except (ValueError, TypeError, ZoneInfoNotFoundError):
+            raise serializers.ValidationError(
+                'Enter a valid IANA timezone (for example, Asia/Manila).',
+            )
+        return value
 
     def validate_appointment_duration(self, value):
         if value <= 0:
@@ -155,15 +182,6 @@ class ClinicSettingsSerializer(serializers.Serializer):
         if value > 500:
             raise serializers.ValidationError('Must be 500 or less.')
         return value
-
-    def validate(self, attrs):
-        opening = attrs.get('cls_opening_time')
-        closing = attrs.get('cls_closing_time')
-        if opening and closing and opening >= closing:
-            raise serializers.ValidationError(
-                {'closing_time': 'Must be after opening time.'},
-            )
-        return attrs
 
 
 class LogoUploadSerializer(serializers.Serializer):

@@ -1,14 +1,27 @@
-from io import BytesIO
+from decimal import Decimal
+from io import BytesIO, StringIO
+from unittest.mock import patch
+
+import requests
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from clinics.models import Clinic, ClinicSettings, ClinicStatus
+from clinics.geocoding import geocode_address
+from clinics.models import (
+    Clinic,
+    ClinicOperatingHours,
+    ClinicSettings,
+    ClinicStatus,
+)
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
+@override_settings(NOMINATIM_USER_AGENT='')
 class ClinicAPITestCase(APITestCase):
 
     def setUp(self):
@@ -106,6 +119,193 @@ class ClinicCreateTests(ClinicAPITestCase):
             **self._auth_header(self.super_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+@override_settings(NOMINATIM_USER_AGENT='XPawSure/1.0 (test)')
+class GeocodingServiceTests(SimpleTestCase):
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_returns_coordinates(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [
+            {'lat': '14.599512', 'lon': '120.984222'},
+        ]
+
+        result = geocode_address('123 Main Street, Manila')
+
+        self.assertEqual(
+            result,
+            (Decimal('14.599512'), Decimal('120.984222')),
+        )
+        mock_throttle.assert_called_once()
+        _, kwargs = mock_get.call_args
+        self.assertEqual(kwargs['params']['format'], 'jsonv2')
+        self.assertEqual(kwargs['params']['countrycodes'], 'ph')
+        self.assertIn('XPawSure/1.0', kwargs['headers']['User-Agent'])
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_empty_result_returns_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = []
+
+        self.assertIsNone(geocode_address('Unknown Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_http_error_returns_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 429
+
+        self.assertIsNone(geocode_address('Rate Limited Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_timeout_returns_none(self, mock_get, mock_throttle):
+        mock_get.side_effect = requests.Timeout('timed out')
+
+        self.assertIsNone(geocode_address('Slow Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_invalid_coordinates_return_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [
+            {'lat': 'not-a-latitude', 'lon': '120.984222'},
+        ]
+
+        self.assertIsNone(geocode_address('Invalid Address'))
+
+    @patch('clinics.geocoding.requests.get')
+    def test_skips_without_user_agent(self, mock_get):
+        with self.settings(NOMINATIM_USER_AGENT=''):
+            self.assertIsNone(geocode_address('123 Main Street, Manila'))
+
+        mock_get.assert_not_called()
+
+    @patch('clinics.geocoding.requests.get')
+    def test_skips_blank_address(self, mock_get):
+        self.assertIsNone(geocode_address('   '))
+        mock_get.assert_not_called()
+
+
+class ClinicGeocodingTests(ClinicAPITestCase):
+
+    @patch('clinics.services.geocode_address')
+    def test_create_clinic_stores_coordinates(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self._create_clinic('Geocoded Clinic')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['latitude'], 14.599512)
+        self.assertEqual(response.data['longitude'], 120.984222)
+        clinic = Clinic.objects.get(cln_name='Geocoded Clinic')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once()
+
+    @patch('clinics.services.geocode_address')
+    def test_create_clinic_without_address_skips_geocoding(self, mock_geocode):
+        response = self.client.post(
+            self.list_url,
+            {'name': 'No Address Clinic'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response.data['latitude'])
+        self.assertIsNone(response.data['longitude'])
+        mock_geocode.assert_not_called()
+
+    @patch('clinics.services.geocode_address')
+    def test_geocoding_failure_still_creates_clinic(self, mock_geocode):
+        mock_geocode.return_value = None
+
+        response = self._create_clinic('Unmapped Clinic')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response.data['latitude'])
+        self.assertIsNone(response.data['longitude'])
+
+    @patch('clinics.services.geocode_address')
+    def test_update_address_regeocodes_clinic(self, mock_geocode):
+        clinic = Clinic.objects.create(
+            cln_name='Address Update Clinic',
+            cln_address='Old Address',
+        )
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self.client.put(
+            self._detail_url(clinic.cln_id),
+            {'name': clinic.cln_name, 'address': 'New Address'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        clinic.refresh_from_db()
+        self.assertEqual(clinic.cln_address, 'New Address')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once_with('New Address')
+
+    @patch('clinics.services.geocode_address')
+    def test_update_without_address_change_skips_geocoding(self, mock_geocode):
+        clinic = Clinic.objects.create(
+            cln_name='No Address Change Clinic',
+            cln_address='Same Address',
+        )
+
+        response = self.client.put(
+            self._detail_url(clinic.cln_id),
+            {'name': 'Renamed Clinic'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_geocode.assert_not_called()
+
+
+@override_settings(NOMINATIM_USER_AGENT='XPawSure/1.0 (test)')
+class GeocodeClinicsCommandTests(TestCase):
+
+    @patch('clinics.management.commands.geocode_clinics.geocode_address')
+    def test_backfills_missing_coordinates(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+        clinic = Clinic.objects.create(
+            cln_name='Backfill Clinic',
+            cln_address='123 Backfill Street, Manila',
+        )
+
+        call_command('geocode_clinics', stdout=StringIO())
+
+        clinic.refresh_from_db()
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once_with('123 Backfill Street, Manila')
+
+    @patch('clinics.management.commands.geocode_clinics.geocode_address')
+    def test_dry_run_does_not_call_geocoder(self, mock_geocode):
+        Clinic.objects.create(
+            cln_name='Dry Run Clinic',
+            cln_address='456 Dry Run Street, Manila',
+        )
+
+        call_command('geocode_clinics', '--dry-run', stdout=StringIO())
+
+        mock_geocode.assert_not_called()
 
 
 class ClinicListTests(ClinicAPITestCase):
@@ -483,12 +683,10 @@ class ClinicSettingsAutoCreationTests(ClinicAPITestCase):
 
         clinic = Clinic.objects.get(cln_name='Settings Test Clinic')
         settings_obj = ClinicSettings.objects.get(cln_id=clinic)
-        self.assertEqual(str(settings_obj.cls_opening_time), '09:00:00')
-        self.assertEqual(str(settings_obj.cls_closing_time), '17:00:00')
         self.assertEqual(settings_obj.cls_appointment_duration, 30)
         self.assertEqual(settings_obj.cls_max_appointments_per_day, 50)
         self.assertTrue(settings_obj.cls_allow_owner_booking)
-        self.assertEqual(settings_obj.cls_timezone, 'UTC')
+        self.assertEqual(settings_obj.cls_timezone, 'Asia/Manila')
 
 
 class ClinicProfileTests(ClinicAPITestCase):
@@ -540,6 +738,28 @@ class ClinicProfileTests(ClinicAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], 'Updated Profile Clinic')
         self.assertEqual(response.data['phone'], '09171234567')
+
+    @patch('clinics.services.geocode_address')
+    def test_update_profile_address_regeocodes(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self.client.put(
+            self.profile_url,
+            {'name': 'Profile Test Clinic', 'address': 'New Clinic Address'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['latitude'], 14.599512)
+        self.assertEqual(response.data['longitude'], 120.984222)
+        clinic = Clinic.objects.get(cln_name='Profile Test Clinic')
+        self.assertEqual(clinic.cln_address, 'New Clinic Address')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        mock_geocode.assert_called_once_with('New Clinic Address')
 
     def test_update_profile_invalid_phone(self):
         response = self.client.put(
@@ -604,54 +824,72 @@ class ClinicSettingsTests(ClinicAPITestCase):
             self.settings_url, **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn('opening_time', response.data)
-        self.assertIn('closing_time', response.data)
+        self.assertNotIn('opening_time', response.data)
+        self.assertNotIn('closing_time', response.data)
         self.assertIn('appointment_duration', response.data)
+        self.assertEqual(response.data['timezone'], 'Asia/Manila')
 
     def test_update_settings(self):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '08:00:00',
-                'closing_time': '18:00:00',
                 'appointment_duration': 45,
                 'max_appointments_per_day': 30,
                 'allow_owner_booking': False,
+                'timezone': 'America/New_York',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['opening_time'], '08:00:00')
-        self.assertEqual(response.data['closing_time'], '18:00:00')
+        self.assertNotIn('opening_time', response.data)
+        self.assertNotIn('closing_time', response.data)
+        self.assertEqual(response.data['timezone'], 'America/New_York')
         self.assertEqual(response.data['appointment_duration'], 45)
         self.assertEqual(response.data['max_appointments_per_day'], 30)
         self.assertFalse(response.data['allow_owner_booking'])
 
-    def test_update_settings_invalid_time_order(self):
-        response = self.client.put(
-            self.settings_url,
-            {
-                'opening_time': '18:00:00',
-                'closing_time': '08:00:00',
-                'appointment_duration': 30,
-                'max_appointments_per_day': 50,
-                'allow_owner_booking': True,
-            },
-            format='json',
-            **self._auth_header(self.clinic_admin),
-        )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
-    def test_update_settings_invalid_duration(self):
+    def test_update_settings_rejects_removed_global_fields(self):
         response = self.client.put(
             self.settings_url,
             {
                 'opening_time': '09:00:00',
                 'closing_time': '17:00:00',
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('opening_time', response.data)
+        self.assertIn('closing_time', response.data)
+
+    def test_update_settings_invalid_timezone(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Mars/Olympus_Mons',
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('timezone', response.data)
+
+    def test_update_settings_invalid_duration(self):
+        response = self.client.put(
+            self.settings_url,
+            {
                 'appointment_duration': 0,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
@@ -662,11 +900,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '09:00:00',
-                'closing_time': '17:00:00',
                 'appointment_duration': 30,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
             },
             format='json',
             **self._auth_header(self.super_admin),
@@ -679,11 +916,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         self.client.put(
             self.settings_url,
             {
-                'opening_time': '07:00:00',
-                'closing_time': '19:00:00',
                 'appointment_duration': 60,
                 'max_appointments_per_day': 100,
                 'allow_owner_booking': False,
+                'timezone': 'Asia/Tokyo',
             },
             format='json',
             **self._auth_header(self.clinic_admin),
@@ -693,6 +929,8 @@ class ClinicSettingsTests(ClinicAPITestCase):
             adl_module='CLINIC_SETTINGS',
         ).last()
         self.assertIsNotNone(audit)
+        self.assertEqual(audit.adl_old_values['cls_timezone'], 'Asia/Manila')
+        self.assertEqual(audit.adl_new_values['cls_timezone'], 'Asia/Tokyo')
 
     def test_get_settings_reports_default_consultation_fee(self):
         response = self.client.get(
@@ -706,11 +944,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '09:00:00',
-                'closing_time': '17:00:00',
                 'appointment_duration': 30,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
                 'consultation_fee': 500,
             },
             format='json',
@@ -728,11 +965,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         response = self.client.put(
             self.settings_url,
             {
-                'opening_time': '09:00:00',
-                'closing_time': '17:00:00',
                 'appointment_duration': 30,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
                 'consultation_fee': -100,
             },
             format='json',
@@ -742,11 +978,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
 
     def test_update_settings_keeps_fee_when_field_omitted(self):
         payload = {
-            'opening_time': '09:00:00',
-            'closing_time': '17:00:00',
             'appointment_duration': 30,
             'max_appointments_per_day': 50,
             'allow_owner_booking': True,
+            'timezone': 'Asia/Manila',
             'consultation_fee': 750,
         }
         first = self.client.put(
@@ -786,11 +1021,10 @@ class ClinicSettingsTests(ClinicAPITestCase):
         write = self.client.put(
             self.settings_url,
             {
-                'opening_time': '09:00:00',
-                'closing_time': '17:00:00',
                 'appointment_duration': 30,
                 'max_appointments_per_day': 50,
                 'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
                 'consultation_fee': 999,
             },
             format='json',
@@ -800,6 +1034,101 @@ class ClinicSettingsTests(ClinicAPITestCase):
         self.assertEqual(read.status_code, status.HTTP_200_OK)
         self.assertIn('consultation_fee', read.data)
         self.assertEqual(write.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class ClinicOperatingHoursTests(ClinicAPITestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.hours_url = reverse('clinic-operating-hours')
+
+        create_resp = self._create_clinic(
+            'Operating Hours Test', email='hours@test.com',
+        )
+        clinic = Clinic.objects.get(cln_id=create_resp.data['id'])
+
+        StaffProfile.objects.update_or_create(
+            usr_id=self.clinic_admin,
+            defaults={
+                'cln_id': clinic,
+                'stf_position': StaffPosition.CLINIC_ADMIN,
+            },
+        )
+
+    def _payload(self):
+        days = []
+        for day in ('MON', 'TUE', 'WED', 'THU', 'FRI'):
+            days.append({
+                'day_of_week': day,
+                'opening_time': '09:00:00',
+                'closing_time': '17:00:00',
+                'is_closed': False,
+            })
+        for day in ('SAT', 'SUN'):
+            days.append({
+                'day_of_week': day,
+                'opening_time': None,
+                'closing_time': None,
+                'is_closed': True,
+            })
+        return days
+
+    def test_get_operating_hours_returns_defaults(self):
+        response = self.client.get(
+            self.hours_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 7)
+        self.assertEqual(response.data[0]['day_of_week'], 'MON')
+        self.assertEqual(response.data[0]['opening_time'], '09:00:00')
+        self.assertTrue(response.data[5]['is_closed'])
+
+    def test_update_operating_hours(self):
+        payload = self._payload()
+        payload[0]['opening_time'] = '08:00:00'
+        payload[0]['closing_time'] = '16:00:00'
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data[0]['opening_time'], '08:00:00')
+        self.assertEqual(response.data[0]['closing_time'], '16:00:00')
+
+    def test_update_operating_hours_rejects_all_closed(self):
+        payload = [
+            {
+                'day_of_week': day,
+                'opening_time': None,
+                'closing_time': None,
+                'is_closed': True,
+            }
+            for day in ('MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN')
+        ]
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('At least one day must be open.', response.data['detail'])
+
+        monday = ClinicOperatingHours.objects.get(
+            cln_id=self.clinic_admin.staffprofile.cln_id,
+            day_of_week='MON',
+        )
+        self.assertEqual(str(monday.opening_time), '09:00:00')
+
+    def test_update_operating_hours_rejects_duplicate_days(self):
+        payload = self._payload()
+        payload[1]['day_of_week'] = 'MON'
+
+        response = self.client.put(
+            self.hours_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class ClinicLogoTests(ClinicAPITestCase):
