@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef } from 'react'
 import { AppState, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../src/components/AppHeader'
 import { useAuth } from '../../src/context/AuthContext'
@@ -13,6 +14,7 @@ export default function VetTabLayout() {
   const { colors } = useTheme()
   const { isLoading, isAuthenticated, user } = useAuth()
   const queryClient = useQueryClient()
+  const insets = useSafeAreaInsets()
   const appState = useRef(AppState.currentState)
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function VetTabLayout() {
         tabBarActiveTintColor: colors.tabActive,
         tabBarInactiveTintColor: colors.tabInactive,
         tabBarLabelStyle: { fontSize: 10, ...font.semibold },
-        tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 100, paddingTop: 8, paddingBottom: 50 },
+        tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.tabBorder, height: 64 + insets.bottom, paddingTop: 5 },
       }}>
         <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="consultations" options={{ title: 'Consultations', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={20} color={color} /> }} />

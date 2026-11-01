@@ -43,11 +43,9 @@ export default function VetHomeScreen() {
     status: apt.apt_status,
   }))
 
-  const today = new Date()
-  const dateStr = today.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
+  const monthStr = new Date().toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
   })
 
   return (
@@ -74,26 +72,26 @@ export default function VetHomeScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <MaterialCommunityIcons color={colors.primary} name="calendar-check" size={18} />
-            <Text style={styles.summaryTitle}>Today&apos;s Summary</Text>
+            <Text style={styles.summaryTitle}>Monthly Summary</Text>
           </View>
-          <Text style={styles.summaryDate}>{dateStr}</Text>
+          <Text style={styles.summaryDate}>{monthStr}</Text>
           {isLoading ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
           ) : isError || !stats ? (
-            <Text style={styles.emptyText}>Unable to load today&apos;s summary.</Text>
+            <Text style={styles.emptyText}>Unable to load monthly summary.</Text>
           ) : (
             <View style={styles.statsRow}>
               <View style={[styles.statBox, { backgroundColor: '#EBF5FB' }]}>
                 <Text style={[styles.statValue, { color: '#2E86C1' }]}>{stats.consultations_this_month}</Text>
                 <Text style={styles.statLabel}>Consultations</Text>
               </View>
+              <View style={[styles.statBox, { backgroundColor: '#FDEBD0' }]}>
+                <Text style={[styles.statValue, { color: '#E67E22' }]}>{stats.pending}</Text>
+                <Text style={styles.statLabel}>Upcoming</Text>
+              </View>
               <View style={[styles.statBox, { backgroundColor: '#D5F5E3' }]}>
                 <Text style={[styles.statValue, { color: '#27AE60' }]}>{stats.completed}</Text>
                 <Text style={styles.statLabel}>Completed</Text>
-              </View>
-              <View style={[styles.statBox, { backgroundColor: '#FDEBD0' }]}>
-                <Text style={[styles.statValue, { color: '#E67E22' }]}>{stats.pending}</Text>
-                <Text style={styles.statLabel}>Remaining</Text>
               </View>
             </View>
           )}
@@ -129,7 +127,7 @@ export default function VetHomeScreen() {
                   </View>
                   <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
                   {item.ai_screening_tag && (
-                    <Text style={styles.scheduleAiTag}>AI: {item.ai_screening_tag}</Text>
+                    <Text style={styles.scheduleAiTag}>AI Screening Result: {item.ai_screening_tag}</Text>
                   )}
                 </View>
                 <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
