@@ -1,6 +1,6 @@
 import { useAuth } from '../../../auth/context/AuthContext'
-import { useDashboard } from '../hooks/useDashboard'
-import { StatCard, StatCardSkeleton } from '../components/StatCard'
+import { useClinicDashboardStats, useDashboard, useScreeningStats } from '../hooks/useDashboard'
+import { StatCard, StatCardError, StatCardSkeleton } from '../components/StatCard'
 import { useStaffStats } from '../../../staff/hooks/useStaffStats'
 import { RecentActivity } from '../components/RecentActivity'
 import { PageHero } from '../../../receptionist/components/PageHero'
@@ -11,6 +11,7 @@ import { Button } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
 import { useAppointmentVolume } from '../../appointments/hooks/useAppointments'
 import { aggregateVolumeByMonth } from '../../appointments/utils/volume'
+import { useReportVetWorkload } from '../../reports/hooks/useReports'
 
 function rollingWindowStart(): string {
   const now = new Date()
@@ -22,8 +23,11 @@ function rollingWindowStart(): string {
 export function DashboardPage() {
   const { user } = useAuth()
   const { data, error } = useDashboard()
+  const clinicStats = useClinicDashboardStats()
+  const screeningStats = useScreeningStats()
   const { data: staffStats, isLoading: staffStatsLoading } = useStaffStats()
   const volume = useAppointmentVolume({ date_from: rollingWindowStart() })
+  const vetWorkload = useReportVetWorkload({})
   const appointmentsByMonth = aggregateVolumeByMonth(volume.data ?? [])
   const thisMonthCount = appointmentsByMonth[appointmentsByMonth.length - 1]?.value
   const lastMonthCount = appointmentsByMonth[appointmentsByMonth.length - 2]?.value
@@ -85,11 +89,16 @@ export function DashboardPage() {
                 label="Total Staff"
                 value={staffStats?.total || 0}
               />
-              <StatCard
-                icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
-                label="Total Patients"
-                value={data.stats.total_pets}
-              />
+              {clinicStats.error ? (
+                <StatCardError label="Total Patients" />
+              ) : (
+                <StatCard
+                  icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
+                  label="Total Patients"
+                  value={clinicStats.data?.total_pets ?? '—'}
+                  hint="Active pets with a qualifying visit at this clinic"
+                />
+              )}
               <StatCard
                 icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
                 label="Appointments This Month"
@@ -105,12 +114,16 @@ export function DashboardPage() {
                     : undefined
                 }
               />
-              <StatCard
-                icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
-                label="Screenings Awaiting Review"
-                value={data.stats.screenings_pending_review}
-                hint="Reviewed by veterinarians"
-              />
+              {screeningStats.error ? (
+                <StatCardError label="Screenings Awaiting Review" />
+              ) : (
+                <StatCard
+                  icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
+                  label="Screenings Awaiting Review"
+                  value={screeningStats.data?.screenings_pending_review ?? '—'}
+                  hint="Reviewed by veterinarians"
+                />
+              )}
             </section>
 
             <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -140,11 +153,67 @@ export function DashboardPage() {
               ) : (
                 <AppointmentsByMonthChart data={appointmentsByMonth} />
               )}
-              <ScreeningsByDiseaseChart data={data.charts.screenings_by_disease} />
+              {screeningStats.isLoading ? (
+                <ChartSkeleton />
+              ) : screeningStats.error ? (
+                <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+                  <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">
+                    AI Screenings by Disease
+                  </h3>
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {apiErrorMessage(screeningStats.error)}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      loading={screeningStats.isFetching}
+                      onClick={() => screeningStats.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <ScreeningsByDiseaseChart data={screeningStats.data?.screenings_by_disease ?? []} />
+              )}
             </section>
 
-            <section className="grid grid-cols-1 gap-6 ">
-              <VetWorkloadChart data={data.charts.vet_workload} />
+            <section className="grid grid-cols-1 gap-6">
+              {vetWorkload.isLoading ? (
+                <ChartSkeleton />
+              ) : vetWorkload.error ? (
+                <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+                  <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">
+                    Vet Workload Distribution
+                  </h3>
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-stone-500 dark:text-stone-400">
+                      {apiErrorMessage(vetWorkload.error)}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="mt-3"
+                      loading={vetWorkload.isFetching}
+                      onClick={() => vetWorkload.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <VetWorkloadChart
+                  data={(vetWorkload.data?.results ?? []).map((row) => ({
+                    label: row.vet_name,
+                    value: row.total,
+                  }))}
+                  subtitle="Last 30 days · appointments per vet"
+                />
+              )}
             </section>
 
 

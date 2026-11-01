@@ -4,12 +4,18 @@ import type { ChartDataPoint } from '../../types/dashboard.types'
 
 interface VetWorkloadChartProps {
   data: ChartDataPoint[]
+  subtitle?: string
 }
 
-export function VetWorkloadChart({ data }: VetWorkloadChartProps) {
+export function VetWorkloadChart({ data, subtitle }: VetWorkloadChartProps) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
-      <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">Vet Workload Distribution</h3>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-bold text-stone-700 dark:text-stone-300">Vet Workload Distribution</h3>
+        {subtitle && (
+          <span className="text-xs text-stone-400 dark:text-stone-500">{subtitle}</span>
+        )}
+      </div>
       {data.length === 0 ? (
         <p className="py-8 text-center text-sm text-stone-400 dark:text-stone-500">No workload data available.</p>
       ) : (

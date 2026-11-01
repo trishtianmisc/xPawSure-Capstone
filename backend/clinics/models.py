@@ -54,8 +54,6 @@ class ClinicSettings(models.Model):
     cln_id = models.OneToOneField(
         Clinic, on_delete=models.CASCADE, related_name='settings', db_column='CLN_ID',
     )
-    cls_opening_time = models.TimeField(default='09:00', db_column='CLS_OPENING_TIME')
-    cls_closing_time = models.TimeField(default='17:00', db_column='CLS_CLOSING_TIME')
     cls_appointment_duration = models.PositiveIntegerField(
         default=30, db_column='CLS_APPOINTMENT_DURATION',
     )
@@ -73,7 +71,7 @@ class ClinicSettings(models.Model):
         db_column='CLS_CONSULTATION_FEE',
     )
     cls_timezone = models.CharField(
-        max_length=50, default='UTC', db_column='CLS_TIMEZONE',
+        max_length=50, default='Asia/Manila', db_column='CLS_TIMEZONE',
     )
     cls_created_at = models.DateTimeField(auto_now_add=True, db_column='CLS_CREATED_AT')
     cls_updated_at = models.DateTimeField(auto_now=True, db_column='CLS_UPDATED_AT')

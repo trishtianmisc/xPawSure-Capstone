@@ -29,7 +29,8 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Management',
     items: [
       { label: 'Appointments', path: '/clinic/appointments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-      { label: 'Patients', path: '/clinic/pets', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z', disabled: true },
+      { label: 'Patients', path: '/clinic/patients', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
+      { label: 'Reports & Analytics', path: '/clinic/reports', icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z' },
     ],
   },
   {
@@ -71,10 +72,10 @@ export function ClinicAdminLayout() {
     .join(' / ') || 'Dashboard'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-stone-50 dark:bg-stone-950">
+    <div className="flex h-screen overflow-hidden bg-stone-50 print:h-auto print:overflow-visible dark:bg-stone-950">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
+        className={`print:hidden fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
           } ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
 
@@ -225,15 +226,15 @@ export function ClinicAdminLayout() {
       {/* Mobile overlay */}
       {isMobileNavOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/20 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/20 print:hidden lg:hidden"
           onClick={() => setIsMobileNavOpen(false)}
         />
       )}
 
       {/* Main content area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
         {/* Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900 sm:px-6">
+        <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 print:hidden dark:border-stone-800 dark:bg-stone-900 sm:px-6">
           <button
             className="grid size-10 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 lg:hidden"
             onClick={() => setIsMobileNavOpen((open) => !open)}
@@ -306,7 +307,7 @@ export function ClinicAdminLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto print:overflow-visible">
           <Outlet />
         </main>
       </div>

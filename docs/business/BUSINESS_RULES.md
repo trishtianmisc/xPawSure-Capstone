@@ -105,6 +105,7 @@ Clinic Admins can
 - Manage their clinic profile
 - Manage Veterinarian and Receptionist accounts for their own clinic
 - View clinic reports
+- View a read-only patient directory for their own clinic
 
 Clinic Admins cannot
 
@@ -112,6 +113,30 @@ Clinic Admins cannot
 - Manage users outside their own clinic
 - Modify historical medical records
 - Grant Super Admin privileges
+
+---
+
+# 6A. Clinic Admin Patient Directory Rules
+
+The Clinic Admin Patients page is a read-only oversight view.
+
+- It lists only patients of the Clinic Admin's own clinic, using the canonical
+  clinic patient definition: an active, non-deleted pet with a non-deleted
+  appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
+- Cancelled-only and no-show-only pets are excluded. The same definition drives
+  the "Total Patients" dashboard KPI.
+- Clinic Admins cannot create, edit, book, or delete patients or appointments
+  from this page. All write requests are rejected.
+- The overview may show owner contact details, visit/appointment dates,
+  vaccination status, and aggregate counts.
+- Consultation summary and appointment history are clinic-scoped. Vaccination
+  history and AI screening counts are pet-level because medical history follows
+  the pet.
+- The page must not expose QR codes, microchips, diagnoses, prescriptions,
+  consultation notes, treatment details, screening results/images, or
+  appointment reasons.
+- Cancellation reasons are shown only for cancelled appointments.
+- Ages and calendar dates are computed in the clinic's configured timezone.
 
 ---
 
@@ -146,9 +171,13 @@ Receptionists cannot
 - Access records outside their own clinic
 - Refund or void a payment that has already been paid
 
-Patient visibility: receptionists only see pets that have an appointment at their
-own clinic (the sidebar "Patients" tab). The Owners directory stays platform-wide;
-booking is done by first selecting an owner, then one of that owner's pets.
+Patient visibility: a pet is a clinic patient once it has a non-deleted
+appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
+Receptionists only see clinic patients in their own clinic (the sidebar
+"Patients" tab); cancelled-only and no-show-only pets are not listed. This is
+the same definition used by the clinic admin "Total Patients" KPI and the
+clinic admin Patients page. The Owners directory stays platform-wide; booking is
+done by first selecting an owner, then one of that owner's pets.
 
 ---
 
@@ -690,7 +719,15 @@ Bulk block operations skip BOOKED slots and return a count of skipped slots so t
 
 When an appointment is cancelled or marked no-show, the slot automatically returns to AVAILABLE status.
 
-Slot generation uses ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+Slot generation uses per-day ClinicOperatingHours (opening/closing times) and ClinicSettings.cls_appointment_duration (default 30 minutes).
+
+Closed days generate no slots. Slots on an open day must fall inside that day's opening/closing times, and bookings outside those hours are rejected.
+
+`ClinicSettings.cls_timezone` (default `Asia/Manila`) defines the clinic-local day for slot generation, booking validation, appointment date filters, dashboard counts, and past-due calculations. Times are stored in UTC and converted using the clinic timezone.
+
+Changing the clinic timezone does not shift existing slots or appointments; it only changes how clinic-local days and times are interpreted from then on.
+
+Operating hours are saved per weekday. At least one day must stay open; saving all seven days as closed is rejected.
 
 The mobile app's booking flow queries slots with status = AVAILABLE. Blocked slots are not visible to owners.
 

@@ -118,6 +118,28 @@ class ScreeningSummarySerializer(serializers.ModelSerializer):
         return _absolute_url(self.context.get('request'), image.asi_url)
 
 
+class ClinicAdminScreeningSummarySerializer(serializers.ModelSerializer):
+    """Narrower read for Clinic Admin oversight: adds the review outcome
+    (final condition only) without exposing clinical notes."""
+
+    disease = serializers.CharField(source='dis_id.dis_name', read_only=True)
+    vet_diagnosis = serializers.CharField(
+        source='ais_compared_diagnosis', read_only=True, allow_null=True,
+    )
+    reviewed_at = serializers.DateTimeField(
+        source='ais_compared_at', read_only=True, allow_null=True,
+    )
+
+    class Meta:
+        model = AiScreening
+        fields = [
+            'ais_id', 'disease', 'ais_confidence', 'ais_model_version',
+            'ais_status', 'ais_source', 'ais_is_correct', 'ais_created_at',
+            'vet_diagnosis', 'reviewed_at',
+        ]
+        read_only_fields = fields
+
+
 class CreateScreeningSerializer(serializers.Serializer):
     MAX_SYMPTOM_ROWS = 12
     MAX_SYMPTOM_TEXT_LENGTH = 300
