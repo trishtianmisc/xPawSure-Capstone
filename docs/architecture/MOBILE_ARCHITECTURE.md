@@ -97,38 +97,150 @@ Owners may view and edit their pets' information after registration.
 
 The core feature of the mobile application.
 
-The owner captures or selects a photo of their dog's skin condition.
+The owner captures or selects exactly one photo of their dog's skin condition.
+The app prepares one 512 px JPEG and sends it first to the backend
+image-validation gate.
 
-The application sends the image to TensorFlow Lite for on-device inference.
+Backend image validation (Anthropic):
 
-The AI model identifies possible skin conditions and returns:
+- Runs before the on-device classifier
+- Returns `image_suitability`, `screening_eligibility`, a screening message,
+  visible features, image-quality observations, condition assessment, and a
+  veterinary recommendation
+- Never returns a confidence percentage or a diagnosis
+- Rejects blurred, non-dog, healthy-looking, wound/injury, and ambiguous images
+  without forcing a disease category
 
-- Predicted condition
-- Confidence score (percentage)
-- Top N predictions
-- Model version
+On-device classifier (TensorFlow.js):
 
-The user may then optionally book a veterinary appointment.
+- Runs only when the gate returns `SUITABLE` and `ELIGIBLE`
+- Returns the predicted condition, confidence score, top N predictions, and
+  model version
 
-The screening result is uploaded to the backend after the user provides consent.
+Both results are displayed separately. The backend still records its
+deterministic cross-analysis for audit and history — the fresh result screen
+does not display it, while a stored screening's read-only details screen shows
+the recorded summary. Agreement is not confirmation.
+
+When the classifier reports `DISEASE_DETECTED`, the owner may answer a
+supplementary symptom questionnaire (adaptive question order; answers may
+influence which questions are asked next, but never the result). The result
+screen presents:
+
+- **AI Preliminary Screening Result** — the raw on-device prediction as the
+  sole primary result, with its top-3 confidence list
+- **Symptom Summary · Supplementary** — the plain questionnaire answers,
+  labeled as context that does not change the AI prediction
+- **Independent Review** — the Claude image-validation findings, shown
+  separately
+
+Saving persists the raw AI prediction and confidence plus the display-only
+`symptom_answers` rows (shown on the result and details screens); the stored
+answers are never read back into the AI path.
+
+If the gate rejects the photo, the UI shows the explanation and an option to
+upload another image; no prediction is shown. If the gate fails, the classifier
+is not run and a retry/error message is shown. If the classifier fails after
+approval, no prediction is fabricated and the Claude findings remain visible.
+The user may then book a veterinary appointment; saving uploads the single image
+and both outputs after consent.
 
 ---
 
 ## Appointment Booking
 
-Owners may book appointments at a veterinary clinic.
+Owners may book consultations at a veterinary clinic. Booking is **scan-only**:
+the Book Appointment action exists solely on the fresh scan result screen, so a
+saved skin screening is always attached (`pet_id` + `screening_id`). Past
+screenings are read-only logs — their details screen never starts a booking,
+and no other screen offers a booking button.
 
-Appointment booking requires:
+The wizard runs five steps (the payment step is skipped when the clinic
+charges no fee):
 
-- Clinic selection
-- Preferred date and time
-- Reason for visit
+1. Choose a clinic
+2. Choose a veterinarian (every active vet at the clinic; availability is
+   resolved per date later)
+3. Select a schedule (date strip plus the chosen veterinarian's free slots)
+4. Appointment details (summary plus optional reason; owner appointments are
+   always `CONSULTATION` — there is no type picker)
+5. Payment (only when the clinic charges a consultation fee)
 
-The backend checks availability and confirms.
+If the chosen clinic already has a live appointment (pending, confirmed,
+checked in, or in progress) for the same pet, the wizard shows a confirm
+dialog the owner can override. Other clinics and terminal statuses
+(completed, cancelled, no-show) never warn. This guardrail is client-side
+only — the booking API itself stays permissive.
+
+Step 1 shows a map of all bookable clinics above the scrollable clinic list.
+Coordinates come from `GET /api/owner/clinics/` (`cln_latitude` /
+`cln_longitude`), geocoded once by the backend; clinics without a location stay
+selectable in the list but have no pin. Tapping a pin runs the same selection
+path as tapping the list row. The map is a Leaflet + OpenStreetMap page rendered
+inside `react-native-webview`, chosen because it runs in **Expo Go with no
+development build and no API key** — `react-native-maps` would require both, so
+it is deliberately avoided. The component renders nothing when no clinic has
+coordinates, so the list always works even offline or without geocoding.
+
+The booking wizard shows the clinic's `consultation_fee` (from
+`GET /api/owner/clinics/`). When it is greater than `0` the final step is
+payment:
+
+1. The owner picks GCash or Card and taps **Pay & Book**.
+2. `POST /api/payments/checkout/` returns the payment with a `checkout_url`.
+3. The app opens `checkout_url` with `Linking.openURL` (external browser — no
+   extra dependency) and polls `GET /api/payments/{pay_id}/` every 2 seconds
+   while it is `PENDING`.
+4. Once it is `PAID`, the app posts `POST /api/owner/appointments/` with the
+   same `pay_id`.
+
+A fee of `0` means no payment step exists at all, and the booking posts
+exactly as before.
+
+The backend decides payment rules; the app branches on the error `code`, never
+on the message text:
+
+| Code | Meaning | App behaviour |
+|------|---------|---------------|
+| `PAYMENT_NOT_REQUIRED` | Clinic fee is `0` | Book without `pay_id` |
+| `PAYMENT_REQUIRED` | No (or unpaid) `pay_id` | Show the payment step |
+| `PAYMENT_EXPIRED` | Checkout window closed | Offer "Pay again" (new checkout) |
+| `SLOT_UNAVAILABLE` | Slot taken while paying | Re-pick the slot and book **with the same `pay_id`** — a paid payment funds the next slot |
+| `METHOD_NOT_ALLOWED` | e.g. cash chosen by an owner | Offer GCash / Card only |
+| `PROVIDER_ERROR` | Gateway unreachable | Retry; nothing was stored |
+| `SCREENING_REQUIRED` | Missing (or invalid) `screening_id` | Send the owner back to the skin scanner — booking only exists downstream of a scan |
+
+The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
+`PAYMENT_EXPIRED`) when a payment settles or lapses.
 
 Owners may view upcoming appointments.
 
+The appointment details screen presents the record formally: a status banner
+with a per-status explanation, the schedule (date block, time, clinic,
+veterinarian, type), the patient, the visit reason, the linked skin scan
+(with a shortcut to its full screening log), and the consultation-fee payment
+receipt (amount, method, status, reference). Cancelling optionally captures an
+owner-stated reason, which the record then displays.
+
 Owners may cancel appointments.
+
+---
+
+## Payments (Receipts)
+
+`GET /api/owner/payments/` lists the owner's own payments with the same
+envelope as the staff list: `{ total, page, page_size, total_pages, results }`.
+
+Filters: `status`, `method`, `reference`, `appointment`, `date_from`,
+`date_to`, `page`, `page_size`.
+
+`?status=PENDING` is how an abandoned checkout is found again and resumed.
+
+Screen: `app/(owner)/payments/` — reached from the Appointments header
+(receipt icon) or from a `PAYMENT_*` notification; it is registered as a hidden
+tab (`href: null`).
+
+Refunds and cancellations of settled payments are out of scope until phase 3.
 
 ---
 
@@ -163,9 +275,16 @@ Veterinarians have read-only access to:
 
 **Schedule** — view their daily/weekly appointment schedule.
 
-**Appointments** — view appointment list and details (pet, owner, reason, status).
+**Appointments** — view appointment list and details (pet, owner, reason, status). Tapping an appointment from Home or Schedule opens its detail.
 
-**Consultations** — view consultation records associated with their appointments.
+**Consultations** — view consultation and prescription records associated with completed appointments.
+
+Completed appointment details include read-only consultation and prescription records from the appointment detail response.
+
+Veterinarian mobile lists and schedules exclude `PENDING` owner bookings and
+the internal `REVIEW`/`CONFIRMATION` follow-up states; clinic staff manage
+those through the web receptionist workflow. Owner mobile lists hide `REVIEW`
+and show `CONFIRMATION` read-only as "Awaiting payment".
 
 Veterinarians cannot register owners, manage pets, perform AI screening, or book appointments through the mobile app.
 
@@ -197,7 +316,7 @@ Service layer:
 
 API Client (Axios or Fetch)
 
-TensorFlow Lite Integration
+On-device TensorFlow.js Inference
 
 ---
 
@@ -242,13 +361,19 @@ Root
 
     │       ├── CaptureImage
 
-    │       ├── ScreeningResult
+    │       └── ScreeningResult
 
-    │       └── BookAppointment
+    ├── Screenings (Stack)
+
+    │   ├── ScreeningHistory
+
+    │   └── ScreeningDetails
 
     ├── Appointments (Stack)
 
     │   ├── AppointmentList
+
+    │   ├── BookAppointment
 
     │   └── AppointmentDetail
 
@@ -305,37 +430,59 @@ Root
 
 # 7. AI Integration
 
-TensorFlow Lite is integrated into the mobile application.
+TensorFlow.js runs the bundled EfficientNetB0 classifier on the device.
 
-Inference pipeline:
+Screening pipeline:
 
-User captures image
-
-↓
-
-Image preprocessing (resize, normalize)
+User captures exactly one image
 
 ↓
 
-TensorFlow Lite interpreter
+Prepare one 512 px JPEG
 
 ↓
 
-Post-processing (softmax, threshold)
+Send the same JPEG to `POST /api/owner/screenings/vision-analysis/`
 
 ↓
 
-Display result to user
+Claude image-validation gate
 
 ↓
 
-User consent to upload
+If `SUITABLE` + `ELIGIBLE`:
+
+Image preprocessing (resize to 224 × 224, normalize)
 
 ↓
 
-Upload to backend
+TensorFlow.js Layers model
 
-The model file is bundled with the application and updated through app store releases.
+↓
+
+Post-processing (softmax, thresholds)
+
+↓
+
+Display on-device result
+
+↓ (DISEASE_DETECTED only)
+
+Supplementary questionnaire (adaptive order) → answers shown on the result
+screen and details screen as a symptom summary, stored only as display rows
+(`symptom_answers`); they never modify the displayed or saved prediction
+
+The app displays the review separately. Cross-analysis is not displayed on the
+mobile result screen.
+
+The model file is bundled with the application and updated through app store
+releases. The classifier itself works offline, but image screening now requires
+the backend gate before it runs. The review requires network access and may
+return `NOT_CONFIGURED`, `TIMEOUT`, `RATE_LIMITED`, `QUOTA_EXHAUSTED`,
+`MALFORMED_RESPONSE`, or `PROVIDER_ERROR`. A review failure or non-eligible
+decision stops the classifier and shows a retry/error or gate explanation. No
+score averaging or combined disease probability is performed — neither between
+the AI outputs nor between the classifier output and questionnaire answers.
 
 ---
 
@@ -367,9 +514,11 @@ PUT  /api/pets/{id}/               Update pet
 
 DELETE /api/pets/{id}/             Delete pet
 
-GET  /api/screenings/              List screenings
+GET  /api/owner/screenings/        List screenings
 
-POST /api/screenings/              Upload screening result
+POST /api/owner/screenings/        Save screening (multipart image + classifier output + signed eligible review token)
+
+POST /api/owner/screenings/vision-analysis/  Image-validation gate (multipart image; no persistence)
 
 GET  /api/appointments/            List appointments
 

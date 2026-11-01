@@ -156,6 +156,7 @@ Receptionists can
 - Register pets
 - Schedule appointments
 - Check patients in
+- Collect the consultation fee (GCash, card) and record cash payments
 
 Receptionists may perform these actions only for their own clinic.
 
@@ -168,6 +169,7 @@ Receptionists cannot
 - Run AI screening
 - Manage user accounts
 - Access records outside their own clinic
+- Refund or void a payment that has already been paid
 
 Patient visibility: a pet is a clinic patient once it has a non-deleted
 appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
@@ -225,6 +227,7 @@ Owners may:
 - View vaccination history
 - Add, edit, and delete their own self-reported vaccination records
 - View AI screening history
+- Pay the clinic's consultation fee and then book an appointment
 
 Owners cannot:
 
@@ -234,6 +237,8 @@ Owners cannot:
 - Modify veterinarian-issued vaccination records
 - Access other owners' data
 - Register a clinic
+- Record cash payments (cash is settled at the clinic counter)
+- Book an appointment without paying when the clinic charges a consultation fee
 
 ---
 
@@ -283,9 +288,17 @@ Appointments must have
 
 Statuses
 
+Review
+
+Confirmation (Awaiting Payment)
+
 Pending
 
 Confirmed
+
+Checked In
+
+In Progress
 
 Completed
 
@@ -299,11 +312,33 @@ Completed appointments cannot be edited except by a Super Admin.
 
 ---
 
+# Payment Rules
+
+Payment comes before the appointment when the clinic charges a consultation fee.
+
+- The fee is set by the Clinic Admin in Clinic Settings
+  (`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`).
+- A fee of `0` means no payment is required and booking works unchanged.
+- When the fee is greater than `0`, an appointment cannot exist without a `PAID`
+  payment attached to it. This applies to receptionist bookings and owner bookings.
+- A payment covers exactly one appointment and belongs to exactly one clinic and
+  one owner.
+- Amount, currency, and method are fixed when the checkout is created; clients
+  never send an amount.
+- Owners pay online (`GCASH` or `CARD`). Cash is recorded by clinic staff at the
+  counter and is never available to owners.
+- Unpaid checkouts can be cancelled (`VOID`). Settled payments are never edited
+  or deleted; refunds are a separate, audited operation.
+- Payment history is visible to the clinic's Receptionists and Clinic Admin, and
+  to the owner who paid.
+
+---
+
 # 13. Consultation Rules
 
 A consultation requires:
 
-- A completed appointment
+- An appointment that is in progress (`IN_PROGRESS`)
 - A veterinarian
 
 A consultation contains
@@ -317,6 +352,31 @@ A consultation contains
 - Notes
 
 Each consultation belongs to exactly one appointment.
+
+The veterinarian may recommend a follow-up consultation with a preferred
+follow-up date. The date is required when follow-up is requested, must be after
+the appointment date, and cannot be in the past. The recommendation is stored
+on the consultation while the source appointment is `IN_PROGRESS`; no follow-up
+appointment exists yet.
+
+When the source appointment is marked `COMPLETED`, the system creates one
+linked `FOLLOW_UP` appointment in `REVIEW` status for the same pet, clinic, and
+veterinarian. Completing the source appointment makes the consultation
+read-only, so the recommendation cannot be changed afterward. If the source
+appointment is cancelled before completion, no follow-up appointment is
+created.
+
+A receptionist schedules the follow-up by choosing a future available slot for
+the assigned veterinarian. This books the slot and sets the appointment to
+`CONFIRMATION` (displayed as `AWAITING PAYMENT`). `CONFIRMATION` is not final
+confirmation; owner acceptance/payment is a separate deferred step.
+
+If a `CONFIRMATION` appointment is not paid before its scheduled time, it is
+cancelled with reason "Payment not completed before appointment time" and the
+slot returns to `AVAILABLE`.
+
+Cancelling a `REVIEW` follow-up is an internal action and does not notify the
+owner because the appointment was never visible to them.
 
 Consultations become permanent medical records.
 
@@ -336,7 +396,11 @@ If the veterinarian changes the diagnosis after reviewing the AI result, the vet
 
 # 15. AI Screening Rules
 
-AI screening is optional.
+AI screening is optional for owners.
+
+When image screening is used, the Claude image-validation gate is mandatory. The
+on-device classifier runs only when the gate returns `SUITABLE` and `ELIGIBLE`.
+A failed or rejected gate must not silently bypass validation.
 
 AI screening can be initiated by:
 
@@ -353,16 +417,35 @@ A consultation may have
 - One screening
 - Multiple screenings
 
-Each screening records
+Each screening uses exactly one image and records
 
-- Prediction
-- Confidence
+- Prediction and confidence
 - Model version
-- Image
+- That single image
+- Optional independent review status, model, structured result, latency, and
+  token usage
+- Deterministic cross-analysis status and summary
 - Timestamp
 
+Both AI outputs remain independent. They are never averaged, fused, or combined
+into one disease probability. `COMPATIBLE` means agreement only, not
+confirmation.
+
 Screenings are created only from on-device AI results (`source: DEVICE`).
-Mock or server-fabricated screenings are rejected.
+Mock or server-fabricated screenings are rejected. A screening can be saved
+only after the image-validation gate approved the photo (suitable and eligible)
+and the on-device classifier produced the prediction. If the review fails or
+does not approve the photo, no screening record is created; the failure state
+is shown to the owner without inventing findings.
+
+The AI prediction is the sole primary result. The questionnaire is
+supplementary: its answers may influence adaptive question selection only and
+are never merged into, or allowed to modify, the displayed or saved prediction
+and confidence. Display-ready answer rows are persisted with the screening
+(`symptom_answers`: at most 12 `{question, answer}` rows, each string at most
+300 characters) only so the result and details screens can show the summary;
+stored answers are never read by or fed into prediction, confidence, ranking,
+review, or booking logic.
 
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
@@ -444,19 +527,23 @@ Owner-reported vaccination records may be deleted by their owner; every create, 
 
 ## Owner-Initiated Screening
 
-Capture Image (Mobile)
+Capture Exactly One Image (Mobile)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Owner
+Run Independent Image Review (Backend, Optional)
 
 ↓
 
-Upload Result to Backend
+Display Both Results Separately
+
+↓
+
+Upload Single Image and Both Outputs to Backend
 
 ↓
 
@@ -464,15 +551,19 @@ Veterinarian Reviews During Next Consultation
 
 ## Veterinarian-Initiated Screening
 
-Capture Image (Mobile or Upload)
+Capture Exactly One Image (Mobile or Upload)
 
 ↓
 
-Run TensorFlow Lite
+Run TensorFlow.js Classifier On-Device
 
 ↓
 
-Display Prediction to Veterinarian
+Run Independent Image Review (Backend, Optional)
+
+↓
+
+Display Both Results Separately to Veterinarian
 
 ↓
 
@@ -532,6 +623,11 @@ Consultation Completed
 
 Owner bookings are created PENDING and await clinic confirmation.
 Receptionist desk bookings are created CONFIRMED.
+
+Follow-up recommendations create a REVIEW appointment when the source
+appointment is completed. Scheduling its slot moves it to CONFIRMATION
+(AWAITING PAYMENT), then to PENDING once owner payment handling is implemented.
+Phase 1 stops at CONFIRMATION.
 
 ---
 

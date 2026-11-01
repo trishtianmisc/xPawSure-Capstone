@@ -77,6 +77,8 @@ export interface VetConsultationInfo {
   specific_disease: string | null
   treatment: string | null
   notes: string | null
+  follow_up_required: boolean
+  follow_up_target_date: string | null
   created_at: string
 }
 
@@ -109,6 +111,8 @@ export interface ConsultationFormValues {
   diagnosis: string
   specific_disease: string
   notes: string
+  follow_up_required: boolean
+  follow_up_target_date: string | null
 }
 
 export interface PrescriptionItemFormValues {

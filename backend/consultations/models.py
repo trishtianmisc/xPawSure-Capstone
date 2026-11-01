@@ -26,6 +26,8 @@ class Consultation(models.Model):
     con_specific_disease = models.TextField(null=True, blank=True, db_column='CON_SPECIFIC_DISEASE')
     con_treatment = models.TextField(null=True, blank=True, db_column='CON_TREATMENT')
     con_notes = models.TextField(null=True, blank=True, db_column='CON_NOTES')
+    con_follow_up_required = models.BooleanField(default=False, db_column='CON_FOLLOW_UP_REQUIRED')
+    con_follow_up_target_date = models.DateField(null=True, blank=True, db_column='CON_FOLLOW_UP_TARGET_DATE')
     con_created_at = models.DateTimeField(auto_now_add=True, db_column='CON_CREATED_AT')
     con_updated_at = models.DateTimeField(auto_now=True, db_column='CON_UPDATED_AT')
 

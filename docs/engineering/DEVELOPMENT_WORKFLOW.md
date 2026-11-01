@@ -379,7 +379,7 @@ Testing
 
 ☐ Camera
 
-☐ TensorFlow Lite
+☐ TensorFlow.js
 
 ☐ Upload
 

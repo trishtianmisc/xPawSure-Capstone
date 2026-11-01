@@ -16,7 +16,7 @@
 | PetSex | MALE, FEMALE |
 | PetStatus | ACTIVE, DECEASED, MISSING, ADOPTED, ARCHIVED |
 | PetImageType | PROFILE, MEDICAL, AI_SCREENING, FOLLOW_UP, OTHER |
-| AppointmentStatus | PENDING, CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW |
+| AppointmentStatus | REVIEW, CONFIRMATION, PENDING, CONFIRMED, CHECKED_IN, IN_PROGRESS, COMPLETED, CANCELLED, NO_SHOW |
 | AppointmentType | CONSULTATION, FOLLOW_UP, VACCINATION, AI_REVIEW, EMERGENCY |
 | DiagnosisStatus | PRELIMINARY, CONFIRMED, CHRONIC, RESOLVED |
 | AttachmentType | IMAGE, PDF, XRAY, LAB_RESULT, DOCUMENT, OTHER |
@@ -25,7 +25,7 @@
 | DiseaseSeverity | LOW, MODERATE, HIGH, UNKNOWN |
 | AIScreeningStatus | PENDING_REVIEW, REVIEWED, CONFIRMED, DISMISSED |
 | AIImageType | ORIGINAL, CROPPED, PREPROCESSED, ANNOTATED |
-| NotificationType | APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, SYSTEM |
+| NotificationType | APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM |
 | AuditAction | CREATE, UPDATE, DELETE, LOGIN, LOGOUT, REGISTER, PASSWORD_CHANGE, PASSWORD_RESET, AI_SCREENING, BOOK_APPOINTMENT, EXPORT_REPORT |
 
 ---
@@ -81,6 +81,7 @@
 | CLINIC_SETTINGS | CLS_MAX_APPOINTMENTS_PER_DAY | Maximum appointments per day | INT | NULL |
 | CLINIC_SETTINGS | CLS_ALLOW_OWNER_BOOKING | Allow owners to self-book | BOOLEAN | NULL |
 | CLINIC_SETTINGS | CLS_TIMEZONE | IANA timezone used for clinic-local days/times | VARCHAR | NOT NULL |
+| CLINIC_SETTINGS | CLS_CONSULTATION_FEE | Consultation fee charged before booking (0 = free) | DECIMAL | NOT NULL |
 | CLINIC_SETTINGS | CLS_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | CLINIC_SETTINGS | CLS_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 
@@ -194,6 +195,7 @@
 | APPOINTMENT | APT_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 | APPOINTMENT | APT_DELETED_AT | Soft delete timestamp | TIMESTAMP | NULL |
+| APPOINTMENT | APT_SOURCE_CONSULTATION | Source consultation for a linked follow-up appointment (unique) | UUID | NULL |
 
 ---
 
@@ -214,6 +216,8 @@
 | CONSULTATION | CON_DIAGNOSIS_STATUS | Diagnosis status (DiagnosisStatus enum) | ENUM | NULL |
 | CONSULTATION | CON_TREATMENT | Treatment description | TEXT | NULL |
 | CONSULTATION | CON_NOTES | Additional notes | TEXT | NULL |
+| CONSULTATION | CON_FOLLOW_UP_REQUIRED | Whether the veterinarian recommends a follow-up consultation | BOOLEAN | NOT NULL |
+| CONSULTATION | CON_FOLLOW_UP_TARGET_DATE | Preferred follow-up date recommended by the veterinarian | DATE | NULL |
 | CONSULTATION | CON_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | CONSULTATION | CON_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 
@@ -316,16 +320,28 @@
 |-------|------------|-------------|-----------|---------------------|
 | AI_SCREENING | AIS_ID | Screening ID (PK) | UUID | NOT NULL |
 | AI_SCREENING | PET_ID | Pet ID (FK → PET) | UUID | NOT NULL |
-| AI_SCREENING | USR_ID | User who initiated screening (FK → USER) | UUID | NOT NULL |
+| AI_SCREENING | DIS_ID | Predicted disease (FK → DISEASE) | UUID | NOT NULL |
+| AI_SCREENING | USR_ID | User who initiated screening (FK → USER) | UUID | NULL |
 | AI_SCREENING | CON_ID | Consultation ID (FK → CONSULTATION) | UUID | NULL |
-| AI_SCREENING | AIS_PRIMARY_DISEASE_ID | Primary predicted disease (FK → DISEASE) | UUID | NOT NULL |
-| AI_SCREENING | AIS_PRIMARY_CONFIDENCE | Confidence score (0-100) | DECIMAL | NULL |
-| AI_SCREENING | AIS_TOP_PREDICTIONS | All prediction results (JSON array) | JSONB | NULL | 
-| AI_SCREENING | AIS_MODEL_VERSION | TFLite model version used | VARCHAR | NULL |
+| AI_SCREENING | AIS_CONFIDENCE | On-device confidence score (0-100) | DECIMAL | NOT NULL |
+| AI_SCREENING | AIS_MODEL_VERSION | On-device model version used | VARCHAR | NOT NULL |
 | AI_SCREENING | AIS_INFERENCE_TIME_MS | Inference time in milliseconds | INT | NULL |
 | AI_SCREENING | AIS_DEVICE | Device used for inference | VARCHAR | NULL |
-| AI_SCREENING | AIS_STATUS | Screening status (AIScreeningStatus enum) | ENUM | NULL |
-| AI_SCREENING | AIS_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_STATUS | Screening status (AIScreeningStatus enum) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_SOURCE | Screening source (`DEVICE`) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_IS_CORRECT | Post-consultation AI-vs-vet verdict | BOOLEAN | NULL |
+| AI_SCREENING | AIS_COMPARED_DIAGNOSIS | Diagnosis used for the verdict | TEXT | NULL |
+| AI_SCREENING | AIS_COMPARED_AT | Verdict timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_CLAUDE_STATUS | Second review status (ClaudeAnalysisStatus enum) | ENUM | NOT NULL |
+| AI_SCREENING | AIS_CLAUDE_MODEL | Anthropic model ID used for the review | VARCHAR | NULL |
+| AI_SCREENING | AIS_CLAUDE_RESULT | Structured non-diagnostic findings | JSONB | NULL |
+| AI_SCREENING | AIS_CLAUDE_ANALYZED_AT | Review completion timestamp | TIMESTAMP | NULL |
+| AI_SCREENING | AIS_CLAUDE_LATENCY_MS | Review latency in milliseconds | INT | NULL |
+| AI_SCREENING | AIS_CLAUDE_INPUT_TOKENS | Anthropic input tokens | INT | NULL |
+| AI_SCREENING | AIS_CLAUDE_OUTPUT_TOKENS | Anthropic output tokens | INT | NULL |
+| AI_SCREENING | AIS_CROSS_ANALYSIS_STATUS | Deterministic comparison result | ENUM | NOT NULL |
+| AI_SCREENING | AIS_CROSS_ANALYSIS_SUMMARY | Human-readable comparison summary | TEXT | NULL |
+| AI_SCREENING | AIS_CREATED_AT | Record creation timestamp | TIMESTAMP | NOT NULL |
 
 ---
 
@@ -334,10 +350,13 @@
 | Table | Field Name | Description | Data type | Null Characteristic |
 |-------|------------|-------------|-----------|---------------------|
 | AI_SCREENING_IMAGE | ASI_ID | Image ID (PK) | UUID | NOT NULL |
-| AI_SCREENING_IMAGE | AIS_ID | Screening ID (FK → AI_SCREENING) | UUID | NOT NULL |
-| AI_SCREENING_IMAGE | ASI_IMAGE_URL | Image URL | TEXT | NOT NULL |
-| AI_SCREENING_IMAGE | ASI_IMAGE_TYPE | Image type (AIImageType enum) | ENUM | NULL |
-| AI_SCREENING_IMAGE | ASI_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| AI_SCREENING_IMAGE | AIS_ID | Screening ID (FK → AI_SCREENING, one-to-one) | UUID | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_URL | Image URL | TEXT | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_STORAGE_PATH | Storage object path | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_CONTENT_TYPE | Validated MIME type | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_SIZE_BYTES | Validated file size in bytes | INT | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_SHA256 | SHA-256 bound to the review token | VARCHAR | NOT NULL |
+| AI_SCREENING_IMAGE | ASI_CREATED_AT | Record creation timestamp | TIMESTAMP | NOT NULL |
 
 ---
 
@@ -374,3 +393,43 @@
 | AUDIT_LOG | ADL_IP_ADDRESS | Client IP address | VARCHAR | NULL |
 | AUDIT_LOG | ADL_DEVICE | Client device info | VARCHAR | NULL |
 | AUDIT_LOG | ADL_CREATED_AT | Action timestamp | TIMESTAMP | NULL |
+
+---
+
+## PAYMENT
+
+| Table | Field Name | Description | Data type | Null Characteristic |
+|-------|------------|-------------|-----------|---------------------|
+| PAYMENT | PAY_ID | Payment ID (PK) | UUID | NOT NULL |
+| PAYMENT | PAY_REFERENCE | Human-readable receipt number (XPS-YYYYMMDD-XXXXXX) | VARCHAR | NOT NULL |
+| PAYMENT | CLN_ID | Clinic ID (FK → CLINIC) | UUID | NOT NULL |
+| PAYMENT | OWN_ID | Owner ID (FK → OWNER_PROFILE) | UUID | NOT NULL |
+| PAYMENT | APT_ID | Appointment this payment paid for (FK → APPOINTMENT, one-to-one) | UUID | NULL |
+| PAYMENT | PAY_AMOUNT | Amount collected | DECIMAL | NOT NULL |
+| PAYMENT | PAY_CURRENCY | ISO currency code | VARCHAR | NOT NULL |
+| PAYMENT | PAY_METHOD | GCASH / CARD / CASH | VARCHAR | NOT NULL |
+| PAYMENT | PAY_STATUS | PENDING / PAID / FAILED / EXPIRED / REFUNDED / VOID | VARCHAR | NOT NULL |
+| PAYMENT | PAY_PROVIDER | MOCK / PAYMONGO / CASH | VARCHAR | NOT NULL |
+| PAYMENT | PAY_PROVIDER_REF | Provider session or intent reference | VARCHAR | NULL |
+| PAYMENT | PAY_CHECKOUT_URL | Hosted checkout URL handed to the payer | TEXT | NULL |
+| PAYMENT | PAY_EXPIRES_AT | Checkout window deadline | TIMESTAMP | NULL |
+| PAYMENT | PAY_PAID_AT | Settlement timestamp | TIMESTAMP | NULL |
+| PAYMENT | PAY_FAILURE_REASON | Why the attempt did not settle | TEXT | NULL |
+| PAYMENT | PAY_METADATA | Snapshot of the booking context (pet, slot, type) | JSONB | NOT NULL |
+| PAYMENT | PAY_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
+| PAYMENT | PAY_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
+
+---
+
+## PAYMENT_EVENT
+
+| Table | Field Name | Description | Data type | Null Characteristic |
+|-------|------------|-------------|-----------|---------------------|
+| PAYMENT_EVENT | EVT_ID | Event ID (PK) | UUID | NOT NULL |
+| PAYMENT_EVENT | PAY_ID | Payment ID (FK → PAYMENT) | UUID | NOT NULL |
+| PAYMENT_EVENT | EVT_TYPE | CREATED / PAID / FAILED / EXPIRED / VOID / REFUNDED / LINKED | VARCHAR | NOT NULL |
+| PAYMENT_EVENT | EVT_PAYLOAD | Provider payload snapshot | JSONB | NOT NULL |
+| PAYMENT_EVENT | EVT_CREATED_AT | Event timestamp | TIMESTAMP | NULL |
+
+Unique constraint: `(PAY_ID, EVT_TYPE)` — one transition per payment per type,
+so a retried webhook cannot apply the same change twice.

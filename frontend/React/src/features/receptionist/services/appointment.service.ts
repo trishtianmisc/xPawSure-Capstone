@@ -45,3 +45,13 @@ export async function updateAppointmentStatus(
   const { data } = await http.patch(`/appointments/${aptId}/`, payload)
   return data
 }
+
+export async function confirmFollowUp(
+  aptId: string,
+  slotId: string,
+): Promise<AppointmentDetail> {
+  const { data } = await http.post(`/appointments/${aptId}/confirm-follow-up/`, {
+    slot_id: slotId,
+  })
+  return data
+}

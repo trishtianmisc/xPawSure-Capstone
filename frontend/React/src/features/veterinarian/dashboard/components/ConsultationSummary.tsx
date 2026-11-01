@@ -1,4 +1,5 @@
 import type { VetConsultationInfo } from '../types/dashboard.types'
+import { formatDate } from '../../../../utils/format'
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
   return (
@@ -22,6 +23,20 @@ export function ConsultationSummary({ consultation }: { consultation: VetConsult
         <Row label="Chief complaint" value={consultation.chief_complaint} />
         <Row label="Observations" value={consultation.objective} />
         <Row label="Notes" value={consultation.notes} />
+        <Row
+          label="Follow-up"
+          value={consultation.follow_up_required ? 'Needed' : 'Not needed'}
+        />
+        {consultation.follow_up_required && (
+          <Row
+            label="Preferred follow-up"
+            value={formatDate(
+              consultation.follow_up_target_date
+                ? `${consultation.follow_up_target_date}T00:00:00`
+                : null,
+            )}
+          />
+        )}
         <Row label="Veterinarian" value={consultation.veterinarian} />
       </dl>
     </div>

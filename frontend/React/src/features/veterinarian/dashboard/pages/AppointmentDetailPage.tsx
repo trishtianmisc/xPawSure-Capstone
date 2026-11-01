@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
+import { PageHero } from '../../../receptionist/components/PageHero'
 import { ConsultationSummary } from '../components/ConsultationSummary'
 import { PrescriptionSummary } from '../components/PrescriptionSummary'
 import {
@@ -9,27 +11,6 @@ import {
   useRequestReschedule,
   useStartConsultation,
 } from '../hooks/useVetAppointments'
-import type { AppointmentStatus } from '../types/dashboard.types'
-
-const STATUS_STYLES: Record<AppointmentStatus, string> = {
-  PENDING: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  CONFIRMED: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  CHECKED_IN: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-  IN_PROGRESS: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  COMPLETED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  NO_SHOW: 'bg-stone-200 text-stone-600 dark:bg-stone-700 dark:text-stone-300',
-}
-
-const STATUS_LABELS: Record<AppointmentStatus, string> = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  CHECKED_IN: 'Checked In',
-  IN_PROGRESS: 'In Progress',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-  NO_SHOW: 'No Show',
-}
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso).toLocaleDateString([], {
@@ -67,7 +48,7 @@ export function AppointmentDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="mx-auto max-w-4xl animate-pulse space-y-4">
+      <div className="mx-auto max-w-4xl animate-pulse space-y-4 p-6">
         <div className="h-6 w-48 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-24 rounded-md bg-stone-200 dark:bg-stone-700" />
         <div className="h-64 rounded-md bg-stone-200 dark:bg-stone-700" />
@@ -77,13 +58,13 @@ export function AppointmentDetailPage() {
 
   if (error || !appointment) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
+      <div className="flex min-h-[50vh] items-center justify-center p-6">
         <div className="text-center">
           <h2 className="text-lg font-bold text-stone-900 dark:text-stone-100">
             Appointment not found
           </h2>
           <button
-            className="mt-4 rounded-md bg-amber-900 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-950"
+            className="mt-4 rounded-md bg-amber-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
             onClick={() => navigate('/veterinarian/dashboard')}
             type="button"
           >
@@ -158,55 +139,64 @@ export function AppointmentDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl">
-      <button
-        className="mb-4 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
-        onClick={() => navigate(-1)}
-        type="button"
-      >
-        &lt; Appointment Details
-      </button>
+    <div className="p-6">
+      <div className="mx-auto max-w-7xl">
+        <button
+          className="mb-4 text-sm font-semibold text-stone-600 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+          onClick={() => navigate(-1)}
+          type="button"
+        >
+          &lt; Appointment Details
+        </button>
 
-      {/* Pet header */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="grid size-16 shrink-0 place-items-center rounded-full bg-stone-200 dark:bg-stone-700">
-          <svg className="size-7 text-stone-400" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
-          </svg>
-        </div>
-        <div>
-          <h1 className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">
-            {appointment.pet_name}
-          </h1>
-          <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-            {appointment.pet_breed ?? '—'} | {ageFromBirthDate(appointment.pet_birth_date)} |{' '}
-            {appointment.pet_sex === 'MALE' ? 'Male' : appointment.pet_sex === 'FEMALE' ? 'Female' : '—'}
-          </p>
-        </div>
-      </div>
-
-      {/* Appointment */}
-      <div className="mb-5 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-        <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-          Appointment
-        </h2>
-        <dl className="space-y-3">
-          <div className="flex items-center justify-between">
-            <dt className="text-sm text-stone-500 dark:text-stone-400">Date &amp; Time</dt>
-            <dd className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {formatDateTime(appointment.apt_scheduled_at)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt className="text-sm text-stone-500 dark:text-stone-400">Status</dt>
-            <dd>
-              <span
-                className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_STYLES[appointment.apt_status]}`}
-              >
-                {STATUS_LABELS[appointment.apt_status]}
+        <div className="mb-6">
+          <PageHero
+            title={appointment.pet_name}
+            subtitle={`${appointment.pet_breed ?? '—'} | ${ageFromBirthDate(appointment.pet_birth_date)} | ${
+              appointment.pet_sex === 'MALE' ? 'Male' : appointment.pet_sex === 'FEMALE' ? 'Female' : '—'
+            }`}
+            avatar={
+              <span className="inline-flex size-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/20">
+                <svg className="size-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
+                </svg>
               </span>
-            </dd>
-          </div>
+            }
+            meta={
+              <>
+                {appointment.clinic_name && (
+                  <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
+                    {appointment.clinic_name}
+                  </span>
+                )}
+                {appointment.vet_name && (
+                  <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
+                    {appointment.vet_name}
+                  </span>
+                )}
+              </>
+            }
+          />
+        </div>
+
+        {/* Appointment */}
+        <div className="mb-5 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
+          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+            Appointment
+          </h2>
+          <dl className="space-y-3">
+            <div className="flex items-center justify-between">
+              <dt className="text-sm text-stone-500 dark:text-stone-400">Date &amp; Time</dt>
+              <dd className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                {formatDateTime(appointment.apt_scheduled_at)}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between">
+              <dt className="text-sm text-stone-500 dark:text-stone-400">Status</dt>
+              <dd>
+                <AppointmentStatusBadge status={appointment.apt_status} />
+              </dd>
+            </div>
           <div className="flex items-center justify-between">
             <dt className="text-sm text-stone-500 dark:text-stone-400">Ref. No</dt>
             <dd className="text-sm text-stone-400 dark:text-stone-500">Not yet added</dd>
@@ -311,7 +301,7 @@ export function AppointmentDetailPage() {
         )}
         {canStart && (
           <button
-            className="w-56 rounded-md bg-amber-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-950 disabled:opacity-50"
+            className="w-56 rounded-md bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
             disabled={startConsultation.isPending}
             onClick={handleStart}
             type="button"
@@ -321,7 +311,7 @@ export function AppointmentDetailPage() {
         )}
         {canEditConsultation && (
           <button
-            className="w-56 rounded-md border border-amber-800 px-5 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            className="w-56 rounded-md border border-amber-700 px-5 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
             onClick={() => navigate(`/veterinarian/consultations/${appointment.apt_id}`)}
             type="button"
           >
@@ -438,6 +428,7 @@ export function AppointmentDetailPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

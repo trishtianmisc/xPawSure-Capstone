@@ -306,8 +306,12 @@ export default function PetProfileScreen() {
             <ScreeningRow
               key={screening.ais_id}
               screening={screening}
-              onPress={() => router.push('/(owner)/screenings')}
-              onBook={() => router.push('/(owner)/appointments/book')}
+              onPress={() =>
+                router.push({
+                  pathname: '/(owner)/screenings/[id]',
+                  params: { id: screening.ais_id },
+                })
+              }
             />
           ))}
         </PetRecordSection>

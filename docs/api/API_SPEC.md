@@ -653,7 +653,9 @@ Notes:
 Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
 `GET /api/owner/appointments/`.
 
-Owner: Returns own pets' appointments.
+Owner: Returns own pets' appointments. `REVIEW` follow-ups are hidden from
+owners until the receptionist schedules them. `CONFIRMATION` appointments are
+visible read-only and displayed as `AWAITING PAYMENT`.
 Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
@@ -679,10 +681,12 @@ Requires authentication. Receptionist or Clinic Admin dashboard summary
 (read-only).
 
 Response: `today` (clinic-local-day status counts), `total_owners`, `total_pets`,
-`recent_appointments`, and `needs_attention` — the count of past-due
-appointments still awaiting action. `today.pending` counts only upcoming
-`PENDING` appointments; past-due ones surface through `needs_attention`
-instead of double-counting in Pending/Confirmed.
+`recent_appointments`, `needs_attention` (the count of past-due appointments
+still awaiting action), and `review_pending` (all open `REVIEW` follow-ups in
+the clinic). `review_pending` drives the receptionist dashboard's "needs
+review" card. `today.pending` counts only upcoming `PENDING` appointments;
+past-due ones surface through `needs_attention` instead of double-counting in
+Pending/Confirmed.
 
 `total_pets` is the canonical clinic-patient count: distinct active,
 non-deleted pets with at least one non-deleted appointment at the clinic whose
@@ -695,10 +699,11 @@ page must all use this definition.
 
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
-for the requesting clinic before returning. It cancels past-due `PENDING`
-appointments (reason "Not confirmed in time") and marks `CONFIRMED`
-appointments more than 60 minutes past (`NO_SHOW_GRACE_MINUTES`) as
-`NO_SHOW`. The work is idempotent, clinic-scoped, and row-locked
+for the requesting clinic before returning. It cancels past-due
+`CONFIRMATION` appointments (reason "Payment not completed before appointment
+time") and releases their slots, cancels past-due `PENDING` appointments
+(reason "Not confirmed in time"), and marks `CONFIRMED` appointments more than
+60 minutes past (`NO_SHOW_GRACE_MINUTES`) as `NO_SHOW`. The work is idempotent, clinic-scoped, and row-locked
 (`select_for_update`), so no scheduler, Celery worker, or beat process is
 required. Because the refresh runs first, past-due `PENDING` rows are already
 `CANCELLED` and expired `CONFIRMED` rows are already `NO_SHOW` when the
@@ -722,9 +727,27 @@ the API responds `403` with:
 
 Receptionist bookings are not gated by screenings.
 
+Payment rule: when `CLINIC_SETTINGS.CLS_CONSULTATION_FEE` is greater than `0`, a
+paid payment is required before the appointment exists (`pay_id` below). With a fee
+of `0` the field is ignored and booking behaves exactly as before. See section 5B.
+
+When payment is required but `pay_id` is missing, not `PAID`, already used, or does
+not belong to this clinic/owner, the API responds `400` with:
+
+{
+  "detail": "This clinic requires payment before an appointment can be booked.",
+  "code": "PAYMENT_REQUIRED",
+  "amount": 500.0,
+  "currency": "PHP"
+}
+
+`code` is `PAYMENT_INVALID` instead when a `pay_id` was supplied but cannot be used.
+
 Initial status: owner bookings start as `PENDING` (awaiting clinic confirmation; owner
 notified with `APPOINTMENT_CREATED`). Receptionist desk bookings start as `CONFIRMED`
-(owner notified with `APPOINTMENT_CONFIRMED`).
+(owner notified with `APPOINTMENT_CONFIRMED`). Follow-up appointments created from
+a consultation recommendation start as `REVIEW` and are not directly creatable
+through this endpoint.
 
 Request (owner):
 
@@ -733,8 +756,11 @@ Request (owner):
   "slot_id": "uuid",
   "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
   "reason": "string (optional)",
-  "screening_id": "uuid (required for owner bookings)"
+  "screening_id": "uuid (required for owner bookings)",
+  "pay_id": "uuid (required when the clinic charges a fee)"
 }
+
+Request (receptionist) is the same payload minus `screening_id`.
 
 Slot validation: the slot's day must be open in `CLINIC_OPERATING_HOURS`, and the
 slot must fall inside that day's opening/closing times. A closed day returns
@@ -747,6 +773,9 @@ slot must fall inside that day's opening/closing times. A closed day returns
 
 Requires authentication. Receptionist, veterinarian (own appointments only), or
 Clinic Admin (read-only). Appointments outside the caller's clinic return `404`.
+
+Owner: own pets' appointments only; `REVIEW` follow-ups return `404`. Clinic
+staff: appointments within their own clinic, otherwise `404`.
 
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
@@ -762,6 +791,36 @@ details. Beyond the shared appointment fields it adds:
 - `screening`: narrower AI summary exposing the final condition only, with
   `vet_diagnosis` and `reviewed_at` (the veterinarian's recorded outcome).
   `null` when no screening is linked. No clinical notes are exposed.
+
+---
+
+## POST /api/appointments/{id}/confirm-follow-up/
+
+Requires authentication. Receptionist only.
+
+Schedules a `REVIEW` follow-up appointment and moves it to `CONFIRMATION`
+(displayed as `AWAITING PAYMENT`). The slot must be future, available, in the
+same clinic, and assigned to the follow-up's veterinarian. The slot becomes
+`BOOKED` and `apt_scheduled_at` becomes the slot start time.
+
+Request:
+
+{
+  "slot_id": "uuid"
+}
+
+Responses:
+
+- 200: updated appointment object
+- 400: appointment is not `REVIEW`, is not a `FOLLOW_UP`, has no veterinarian,
+  or `slot_id` is missing/invalid
+- 403: caller is not a receptionist or belongs to another clinic
+- 404: unknown appointment
+- 409: slot is unknown, blocked/taken/past, or belongs to another
+  veterinarian/clinic
+
+This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
+`PATCH` cannot make that transition.
 
 ---
 
@@ -788,6 +847,13 @@ Time-based rules (clinic timezone "now"):
   auto-close (`AppointmentService.close_past_due`) and the UI's Check In
   action.
 - Invalid status transitions still return `400` as before.
+- `REVIEW` and `CONFIRMATION` may only transition to `CANCELLED` through this
+  endpoint. Scheduling a `REVIEW` follow-up uses the dedicated confirm endpoint.
+- Marking an appointment `COMPLETED` creates its consultation's linked
+  `FOLLOW_UP` appointment in `REVIEW` status when follow-up was requested.
+  Cancelling the source appointment before completion creates no follow-up.
+  If a linked follow-up was already processed under the previous behavior, it
+  is left untouched.
 
 ---
 
@@ -891,6 +957,215 @@ Responses:
 - 403: appointment belongs to another veterinarian, or caller is not a veterinarian
 - 404: unknown appointment
 - 409: appointment is not `CONFIRMED`
+
+---
+
+# 5B. Payment Endpoints
+
+Payments gate booking: the consultation fee is configured per clinic
+(`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`, default `0.00`). A fee of `0` disables
+the gate entirely.
+
+Providers: `PAYMENT_MODE=mock` (default, signed checkout page in the web app) or
+`PAYMENT_MODE=paymongo` (hosted checkout + webhook). See `docs/database/PAYMENT.md`.
+
+The amount is also exposed before checkout so the booking flow can show it:
+`GET /api/owner/clinics/` returns `consultation_fee` per clinic (owners), and
+`GET /api/clinic/settings/` returns it for staff.
+
+When a payment settles or a checkout lapses the owner receives an in-app
+notification (`PAYMENT_COMPLETED` / `PAYMENT_EXPIRED`, `ntf_reference_table`
+`PAYMENT`) — the mobile app does not have to poll to learn the outcome.
+
+Payment object:
+
+{
+  "pay_id": "uuid",
+  "reference_no": "XPS-20261026-A1B2C3",
+  "clinic_id": "uuid",
+  "owner_id": "uuid",
+  "owner_name": "Olivia Owner",
+  "appointment_id": null,
+  "pet_name": "Rex",
+  "amount": 500.0,
+  "currency": "PHP",
+  "method": "GCASH | CARD | CASH",
+  "status": "PENDING | PAID | FAILED | EXPIRED | REFUNDED | VOID",
+  "provider": "MOCK | PAYMONGO | CASH",
+  "checkout_url": "https://…/payments/mock/XPS-…?token=…",
+  "expires_at": "2026-10-26T12:34:56Z",
+  "paid_at": null,
+  "failure_reason": null,
+  "created_at": "…",
+  "updated_at": "…"
+}
+
+---
+
+## POST /api/payments/checkout/
+
+Requires authentication. Receptionist, clinic admin, or owner.
+
+Creates the payment for a booking. The slot must still be `AVAILABLE`; owners
+pay only for their own pets and must pass the `screening_id` their booking will
+use. Amount always comes from the clinic's consultation fee.
+
+Allowed methods: staff `GCASH | CARD | CASH`, owners `GCASH | CARD` only.
+`CASH` is stored as `PAID` immediately (recorded at the counter); the other
+methods return a `checkout_url`.
+
+Request:
+
+{
+  "pet_id": "uuid",
+  "slot_id": "uuid",
+  "apt_type": "CONSULTATION | FOLLOW_UP | VACCINATION | AI_REVIEW | EMERGENCY",
+  "method": "GCASH | CARD | CASH",
+  "reason": "string (optional)",
+  "screening_id": "uuid (owner bookings only)"
+}
+
+Responses:
+
+- 201: payment object
+- 400 `PAYMENT_NOT_REQUIRED`: the clinic fee is `0`
+- 400 `METHOD_NOT_ALLOWED`: method not available for this role
+- 400 `SCREENING_REQUIRED`: owner checkout without a screening
+- 403 `BOOKING_NOT_ALLOWED`: clinic has disabled owner booking
+- 404 `PET_NOT_FOUND` / `SLOT_NOT_FOUND`
+- 409 `SLOT_UNAVAILABLE`: slot was taken between lookup and write
+- 502 `PROVIDER_ERROR`: gateway unreachable (nothing is stored)
+
+---
+
+## GET /api/payments/
+
+Requires authentication. Receptionist or clinic admin. Scoped to the caller's
+clinic; owners get `403`.
+
+Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
+`date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
+
+Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+
+---
+
+## GET /api/owner/payments/
+
+Requires authentication. Owner only — clinic staff get `403`. Same query params
+and response envelope as `GET /api/payments/`, scoped to the caller's own
+payments.
+
+`?status=PENDING` is how the mobile app finds a checkout that was abandoned
+mid-payment and offers "resume payment".
+
+---
+
+## GET /api/payments/{id}/
+
+Requires authentication. Owners read their own payments, clinic staff read their
+clinic's payments, otherwise `404`.
+
+---
+
+## POST /api/payments/{id}/cancel/
+
+Requires authentication. Same access rule as the detail endpoint.
+
+Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
+`409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
+
+---
+
+## GET /api/payments/mock/{reference}/?token=…
+
+No authentication: the signed `token` from `checkout_url` is the credential.
+
+Returns the payment so a checkout page can poll until it is `PAID`, `FAILED`, or
+`EXPIRED`. An invalid or stale token returns
+`403 { "code": "INVALID_TOKEN" }`.
+
+---
+
+## POST /api/payments/mock/{reference}/confirm/
+
+No authentication (signed token only). Drives the mock checkout:
+
+{ "token": "…", "outcome": "success | decline | expire" }
+
+Responses: `200` payment object · `400 PAYMENT_EXPIRED` · `409 PAYMENT_PROCESSED`
+(already confirmed) · `403 INVALID_TOKEN`.
+
+---
+
+## POST /api/payments/webhooks/paymongo/
+
+PayMongo callback (no session auth). Requires `PAYMONGO_WEBHOOK_SECRET`; verifies
+`Paymongo-Signature` (`t`, `te`, `li` parts; `HMAC-SHA256(secret, "{t}.{raw_body}")`,
+constant-time compare) before touching data.
+
+Handles `checkout_session.payment.paid`, `checkout_session.payment.failed`, and
+`checkout_session.expired`, matched on `reference_number`. Replays are no-ops.
+
+Responses: `200 { "received": true }` · `403 INVALID_SIGNATURE` ·
+`400 INVALID_PAYLOAD` · `503 WEBHOOK_NOT_CONFIGURED`.
+
+---
+
+## GET /api/clinic/settings/
+
+Requires authentication. Clinic admin or receptionist (read-only for
+receptionists — only clinic admins may `PUT`).
+
+`consultation_fee` is the amount the payment module charges. A value of `0`
+means no payment is required and `pay_id` is ignored by the booking endpoints.
+
+Response (200):
+
+{
+  "opening_time": "09:00:00",
+  "closing_time": "17:00:00",
+  "appointment_duration": 30,
+  "max_appointments_per_day": 50,
+  "allow_owner_booking": true,
+  "consultation_fee": 500,
+  "timezone": "Asia/Manila"
+}
+
+`PUT` accepts the same fields; `consultation_fee` is optional (omitting it keeps
+the stored value) and must be between 0 and 1000000 with at most 2 decimals.
+
+---
+
+# 5C. Owner Clinic Discovery (Mobile)
+
+Requires authentication with the `OWNER` role.
+
+## GET /api/owner/clinics/
+
+Returns clinics that are `ACTIVE`, not deleted, and have owner booking enabled.
+The response is a JSON array ordered by clinic name:
+
+```json
+[
+  {
+    "cln_id": "5e0f5d8e-8e5d-4f0e-9d6a-6d4d7a3a1f0e",
+    "cln_name": "Happy Paws Clinic",
+    "cln_address": "123 Main Street, Manila",
+    "cln_phone": "09171234567",
+    "cln_logo_url": null,
+    "consultation_fee": 500,
+    "cln_latitude": 14.599512,
+    "cln_longitude": 120.984222
+  }
+]
+```
+
+`cln_latitude` and `cln_longitude` are numbers when the clinic address has been
+geocoded, or `null` when no map location is available yet. A clinic without
+coordinates remains in the list and is still bookable; the mobile app simply
+does not render a pin for it. This endpoint only reads cached coordinates and
+never calls the geocoding provider.
 
 ---
 
@@ -1082,9 +1357,12 @@ Query params:
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
-specific_disease, treatment, notes, created_at }
+specific_disease, treatment, notes, follow_up_required,
+follow_up_target_date, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
+`follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
+when no follow-up is requested.
 
 ---
 
@@ -1114,15 +1392,28 @@ Request body:
 - specific_disease (optional): string, a more specific disease/subtype for the
   diagnosis (stored as null when blank)
 - notes (optional): string
+- follow_up_required (optional): boolean, defaults to `false`
+- follow_up_target_date (optional): date (`YYYY-MM-DD`), required when
+  `follow_up_required` is `true`; must be after the appointment date and cannot
+  be in the past (Asia/Manila). Stored as `null` when follow-up is not
+  requested.
 
 Responses:
 
 - 201: Consultation object as above
-- 400: blank diagnosis, or the caller has no staff profile
+- 400: blank diagnosis, invalid or missing follow-up date, or the caller has no
+  staff profile
 - 403: appointment belongs to another veterinarian, or caller is not a
   veterinarian
 - 404: unknown appointment
 - 409: appointment is not `IN_PROGRESS`, or a consultation already exists
+
+When `follow_up_required` is `true`, the recommendation is stored on the
+consultation, but no appointment is created yet. When the source appointment is
+marked `COMPLETED`, the system creates one linked `FOLLOW_UP` appointment in
+`REVIEW` status for the same pet, clinic, and veterinarian. Its initial
+`apt_scheduled_at` is the preferred date at midnight Asia/Manila; the
+receptionist replaces it with an actual slot time.
 
 Diagnosis date is not stored on the consultation; the appointment's
 `apt_checked_in_at` records when the patient arrived.
@@ -1139,10 +1430,19 @@ Replaces the consultation fields while the appointment is still
 
 Request body: same fields as POST, except `appointment_id`.
 
+Omitted follow-up fields keep their stored values. Setting
+`follow_up_required` to `false` clears `follow_up_target_date`.
+
+The recommendation is stored on the consultation while the source appointment
+is `IN_PROGRESS`; no follow-up appointment exists until the source appointment
+is marked `COMPLETED`. Completing the source appointment makes the consultation
+read-only, so any later update returns `409`.
+
 Responses:
 
 - 200: Consultation object as above
-- 400: blank diagnosis, or the caller has no staff profile
+- 400: blank diagnosis, invalid or missing follow-up date, or the caller has no
+  staff profile
 - 403: consultation belongs to another veterinarian, or caller is not a
   veterinarian
 - 404: unknown consultation
@@ -1316,6 +1616,25 @@ All screenings are created from **on-device AI results** (`source: "DEVICE"`).
 Server-side mock screenings no longer exist; older `MOCK` rows were deleted
 by migration `ai_screenings.0003`.
 
+A screening uses exactly one image. The mobile app prepares one 512 px JPEG and
+first sends it to the Anthropic image-validation gate. Only when Claude marks
+the image suitable and eligible does the same image run through the on-device
+EfficientNetB0 classifier. The two results are stored separately and are never
+averaged into a combined probability.
+
+The `prediction` and `confidence` fields are the raw on-device classifier
+output — the sole primary result. The questionnaire's display-ready answer rows
+are sent in the optional `symptom_answers` field (JSON array of at most 12
+`{question, answer}` rows, each string at most 300 characters) and stored only
+as supplementary display context; no other questionnaire state is ever part of
+a request or stored field, and `symptom_answers` can never influence the AI
+outputs.
+
+Owner write endpoints are rate limited (`VISION_ANALYSIS_THROTTLE_RATE`,
+`SCREENING_CREATE_THROTTLE_RATE`). Image uploads are capped by
+`SCREENING_IMAGE_MAX_BYTES` and validated by MIME type, file signature, and
+pixel count.
+
 ## GET /api/owner/screenings/
 
 Requires authentication (Owner role).
@@ -1342,13 +1661,49 @@ Response:
       "disease": "Fungal",
       "disease_code": "FUNGAL",
       "ais_confidence": "87.40",
-      "ais_model_version": "tflite-skin-1.0.0",
+      "ais_model_version": "2.0.0",
       "ais_inference_time_ms": 412,
       "ais_device": "android",
       "ais_status": "PENDING_REVIEW",
       "ais_source": "DEVICE",
       "ais_is_correct": null,
-      "ais_created_at": "..."
+      "ais_created_at": "...",
+      "is_booked": false,
+      "symptom_answers": [
+        { "question": "Where is the affected area?", "answer": "Back, Ears" }
+      ],
+      "image": {
+        "url": "https://.../screening.jpg",
+        "content_type": "image/jpeg",
+        "size_bytes": 48123,
+        "sha256": "hex digest",
+        "created_at": "..."
+      },
+      "claude": {
+        "status": "OK",
+        "model": "claude-sonnet-4-6",
+        "result": {
+          "image_suitability": "SUITABLE",
+          "screening_eligibility": "ELIGIBLE",
+          "screening_message": "The photo is clear enough and shows a pattern that can be assessed by the on-device screening model.",
+          "visible_features": ["Red patches", "Thinning hair around the muzzle"],
+          "image_quality": { "adequate": true, "observations": ["..."] },
+          "condition_assessment": {
+            "closest_match": "FUNGAL",
+            "other_possibilities": ["BACTERIAL"],
+            "unclear": false,
+            "rationale": "..."
+          },
+          "vet_recommendation": "..."
+        },
+        "analyzed_at": "...",
+        "latency_ms": 2400,
+        "usage": { "input_tokens": 1500, "output_tokens": 420 }
+      },
+      "cross_analysis": {
+        "status": "COMPATIBLE",
+        "summary": "Both analyses pointed to Fungal. This agreement does not confirm a diagnosis; a veterinarian should examine the skin."
+      }
     }
   ]
 }
@@ -1357,38 +1712,151 @@ Response:
 the linked appointment; it then becomes `true`/`false` (see verdict rules
 below).
 
+`is_booked` is `true` while a non-cancelled appointment was booked from the
+screening; cancelling that appointment returns it to `false`.
+
+`symptom_answers` is the stored questionnaire summary, returned as display
+context only. It is `null` when the screening was saved without answers or
+predates the column; stored rows never influence prediction, confidence,
+review, or booking.
+
+Historical image-less screenings return `image: null`, `claude.status:
+"NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
+
 ---
 
 ## POST /api/owner/screenings/
 
 Requires authentication (Owner role). Pet must belong to the owner and be active (404 otherwise).
 
-Uploads an on-device TFLite inference result. `source` must be `DEVICE`
-(any other value returns 400). `prediction` (disease code or name, resolved
-against DISEASE) and `model_version` are required; missing values return 400.
+Creates one screening from an on-device inference result. The current flow uses
+`multipart/form-data`; a legacy JSON request without an image is still accepted
+for backward compatibility.
 
-Request:
+Multipart fields:
 
-{
-  "pet_id": "uuid",
-  "source": "DEVICE",
-  "prediction": "string (required)",
-  "confidence": "number 0-100 (required)",
-  "model_version": "string (required)",
-  "inference_time_ms": "integer (optional)",
-  "device": "string (optional)"
-}
+| Field | Required | Notes |
+|-------|----------|-------|
+| `pet_id` | yes | Must belong to the owner |
+| `source` | yes | `DEVICE` only |
+| `prediction` | yes | Disease code or name, resolved against DISEASE |
+| `confidence` | yes | Number 0-100 |
+| `model_version` | yes | On-device model version |
+| `inference_time_ms` | no | Integer |
+| `device` | no | e.g. `android`, `ios` |
+| `image` | yes for validated screening | Exactly one file under this field |
+| `claude_token` | yes with image | Signed token from the vision-analysis endpoint |
+| `symptom_answers` | no | JSON string of an array of up to 12 `{"question","answer"}` rows (each string ≤ 300 chars). Display-only; multipart sends the JSON string, plain JSON requests may send the array itself |
+
+Rules:
+
+- Exactly one file may be uploaded. Multiple files, unexpected field names, or
+  an array under `image` return `400`.
+- `symptom_answers` must be a list of at most 12 objects with exactly the
+  `question` and `answer` keys, both strings of at most 300 characters.
+  Anything else (non-list, extra keys, non-string or oversized values, or
+  malformed JSON in multipart) returns `400` with a field-level error. The
+  stored rows are supplementary display data and can never modify the
+  persisted prediction, confidence, status, review outputs, or booking.
+- The file must be a valid JPEG, PNG, or WebP whose declared MIME type matches
+  its decoded format. Empty, oversized, or invalid files return `400`.
+- An uploaded image requires a signed validation token. The image SHA-256 must
+  match the token. Invalid, expired, or mismatched tokens return `400`.
+- The token must represent a completed `OK` review with
+  `image_suitability: "SUITABLE"` and `screening_eligibility: "ELIGIBLE"`.
+  Failed or non-eligible validations return `400`; no classifier result is
+  saved.
+- The image is stored once, after the screening row is created. If storage
+  fails, the row is rolled back and `502` is returned.
+- Reusing a token with a different image or user is rejected.
+- A legacy JSON request without an image remains accepted for backward
+  compatibility and creates a screening with `claude.status:
+  "NOT_REQUESTED"`.
 
 Response `201` with the screening object (see GET above).
 
 Business rules:
 
 - Only veterinarians may later change `ais_status` (vet review UI is future work).
-- AI predictions are immutable after creation.
+- AI predictions and both review outputs are immutable after creation.
 - When a consultation for the linked appointment is saved with a diagnosis,
   the backend compares it (normalized substring match of the disease name in
   the diagnosis) and stores `ais_is_correct`, `ais_compared_diagnosis`,
   `ais_compared_at`, plus the `con_id` link, for ML training/retraining sets.
+
+---
+
+## POST /api/owner/screenings/vision-analysis/
+
+Requires authentication (Owner role). Runs the Anthropic image-validation gate
+before any on-device screening. Nothing is persisted.
+
+Request (`multipart/form-data`):
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `image` | yes | Exactly one JPEG, PNG, or WebP |
+
+Response `200`:
+
+{
+  "status": "OK",
+  "model": "claude-sonnet-4-6",
+  "analyzed_at": "...",
+  "latency_ms": 2400,
+  "usage": { "input_tokens": 1500, "output_tokens": 420 },
+  "result": {
+    "image_suitability": "POOR_QUALITY",
+    "screening_eligibility": "NOT_ELIGIBLE",
+    "screening_message": "The photo is too blurred or poorly lit for screening. Please upload a clearer, well-lit photo.",
+    "visible_features": ["The image is blurred"],
+    "image_quality": { "adequate": false, "observations": ["..."] },
+    "condition_assessment": {
+      "closest_match": "UNCLEAR",
+      "other_possibilities": [],
+      "unclear": true,
+      "rationale": "..."
+    },
+    "vet_recommendation": "..."
+  },
+  "detail": "Image review completed.",
+  "token": "signed-token"
+}
+
+`image_suitability` values:
+
+- `SUITABLE` (clear enough and potentially a supported canine skin disease)
+- `POOR_QUALITY` (blurred or poorly lit)
+- `NOT_DOG_SKIN` (no dog or no canine skin is visible; shown as `Not a Skin Image`)
+- `NO_VISIBLE_LESIONS` (canine skin is visible and appears normal; shown as
+  `Skin Appears Healthy` with a does-not-rule-out-disease caveat)
+- `WOUND_OR_INJURY` (more consistent with a wound or injury; shown as
+  `Possible Wound or Injury`, never as healthy skin)
+- `UNCERTAIN` (cannot be confidently assessed)
+
+Only `SUITABLE` may pair with `screening_eligibility: "ELIGIBLE"`. Every other
+suitability value is `NOT_ELIGIBLE`; the mobile app must not run the classifier
+and the final create endpoint rejects the token.
+
+Status values:
+
+- `OK`
+- `NOT_CONFIGURED` (missing `ANTHROPIC_API_KEY`)
+- `TIMEOUT`
+- `RATE_LIMITED`
+- `QUOTA_EXHAUSTED`
+- `MALFORMED_RESPONSE`
+- `PROVIDER_ERROR`
+
+A failed review still returns a signed token, but the final create endpoint
+rejects it. The mobile app shows a retry/error message and does not run the
+classifier. The token expires after `SCREENING_CLAUDE_TOKEN_MAX_AGE` seconds
+and is bound to the owner and the image SHA-256.
+
+Claude findings are non-diagnostic: no confidence percentages, certainty
+claims, or treatment plans. Claude must not force a disease category for a
+healthy-looking, wounded, unsuitable, or ambiguous image. The endpoint never
+logs the API key or image bytes.
 
 ---
 
@@ -1522,6 +1990,12 @@ fall within the selected day's opening/closing times.
 ---
 
 # 10. Clinic Endpoints (Super Admin)
+
+Clinic responses include the read-only `latitude` and `longitude` fields. They
+are resolved from `address` by the backend and are not writable. Creating a
+clinic with an address or changing that address triggers a best-effort
+geocoding lookup; a lookup failure leaves both fields `null` and does not block
+the clinic write.
 
 ## GET /api/clinics/
 
@@ -1687,7 +2161,7 @@ Users can only read or modify their own notifications (foreign ids return 404).
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
-AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, SYSTEM.
+AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
 
 ## GET /api/notifications/
 

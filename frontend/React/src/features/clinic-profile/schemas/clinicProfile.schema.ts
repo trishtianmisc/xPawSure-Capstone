@@ -31,6 +31,13 @@ export const settingsSchema = z.object({
     .int('Must be a whole number.')
     .min(1, 'Must be greater than 0.')
     .max(500, 'Must be 500 or less.'),
+  consultation_fee: z
+    .number({ error: 'Must be a number.' })
+    .min(0, 'Cannot be negative.')
+    .max(1000000, 'Must be 1,000,000 or less.')
+    .refine((value) => Number(value.toFixed(2)) === value, {
+      message: 'Use at most 2 decimal places.',
+    }),
   allow_owner_booking: z.boolean(),
   timezone: z
     .string()

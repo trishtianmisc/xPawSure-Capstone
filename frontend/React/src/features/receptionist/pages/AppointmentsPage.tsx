@@ -11,6 +11,8 @@ import { apiErrorMessage } from '../../../utils/error'
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All statuses' },
+  { value: 'REVIEW', label: 'Needs Review' },
+  { value: 'CONFIRMATION', label: 'Awaiting Payment' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'CONFIRMED', label: 'Confirmed' },
   { value: 'CHECKED_IN', label: 'Checked In' },
@@ -34,7 +36,9 @@ export function AppointmentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const attentionActive = searchParams.get('attention') === '1'
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams.get('status') ?? '',
+  )
   const [dateFilter, setDateFilter] = useState('')
   const [page, setPage] = useState(1)
 

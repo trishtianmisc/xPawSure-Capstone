@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from django.db import models
+from django.db import models, transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -10,6 +10,7 @@ from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
     ClinicAdminAppointmentDetailSerializer,
+    ConfirmFollowUpSerializer,
     CreateAppointmentSerializer,
     GenerateSlotsSerializer,
     VetSlotSerializer,
@@ -21,6 +22,7 @@ from appointments.services import (
     VetSlotService,
 )
 from core.permissions import HasRole, IsClinicAdmin, IsReceptionist
+from payments.services import PaymentError, PaymentService
 from users.models import UserRole
 
 
@@ -214,15 +216,39 @@ class AppointmentListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Expiry is committed before the gate opens: the gate lives in a
+        # transaction that rolls back whenever payment is refused.
+        PaymentService.expire_due_checkout(serializer.validated_data.get('pay_id'))
+
         try:
-            appointment = AppointmentService.create_appointment(
-                clinic_id=staff.cln_id_id,
-                pet_id=serializer.validated_data['pet_id'],
-                slot_id=serializer.validated_data['slot_id'],
-                apt_type=serializer.validated_data['apt_type'],
-                reason=serializer.validated_data.get('reason', ''),
-                created_by=request.user.usr_id,
-                initial_status=AppointmentStatus.CONFIRMED,
+            # The payment row is locked here and released only when the
+            # appointment commits, so one payment can never book twice.
+            with transaction.atomic():
+                payment = PaymentService.lock_for_booking(
+                    clinic_id=staff.cln_id_id,
+                    pet_id=serializer.validated_data['pet_id'],
+                    pay_id=serializer.validated_data.get('pay_id'),
+                )
+                appointment = AppointmentService.create_appointment(
+                    clinic_id=staff.cln_id_id,
+                    pet_id=serializer.validated_data['pet_id'],
+                    slot_id=serializer.validated_data['slot_id'],
+                    apt_type=serializer.validated_data['apt_type'],
+                    reason=serializer.validated_data.get('reason', ''),
+                    created_by=request.user.usr_id,
+                    initial_status=AppointmentStatus.CONFIRMED,
+                )
+                if payment is not None:
+                    PaymentService.attach(
+                        payment=payment,
+                        appointment=appointment,
+                        actor_user_id=request.user.usr_id,
+                        ip_address=request.META.get('REMOTE_ADDR'),
+                    )
+        except PaymentError as e:
+            return Response(
+                e.as_dict(),
+                status=e.status_code,
             )
         except SlotUnavailableError as e:
             return Response(
@@ -417,6 +443,54 @@ class AppointmentDetailView(APIView):
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
+
+
+class ConfirmFollowUpView(APIView):
+    permission_classes = [IsReceptionist]
+
+    def post(self, request, apt_id):
+        from users.models import StaffProfile
+
+        serializer = ConfirmFollowUpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            staff = StaffProfile.objects.get(usr_id=request.user)
+        except StaffProfile.DoesNotExist:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = AppointmentService.confirm_follow_up(
+                apt_id=apt_id,
+                clinic_id=staff.cln_id_id,
+                slot_id=serializer.validated_data['slot_id'],
+                user_id=request.user.usr_id,
+            )
+        except PermissionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        except ValueError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        except InvalidTransitionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except SlotUnavailableError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(AppointmentDetailSerializer(appointment).data)
 
 
 class ScheduleView(APIView):

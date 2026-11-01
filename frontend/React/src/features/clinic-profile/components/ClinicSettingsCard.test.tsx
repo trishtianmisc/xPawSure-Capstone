@@ -8,6 +8,7 @@ const settings: ClinicSettings = {
   max_appointments_per_day: 20,
   allow_owner_booking: true,
   timezone: 'Asia/Manila',
+  consultation_fee: 0,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 }

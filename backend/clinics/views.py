@@ -17,7 +17,8 @@ from clinics.serializers import (
     LogoUploadSerializer,
 )
 from clinics.services import ClinicProfileService, ClinicService
-from core.permissions import IsClinicAdmin, IsSuperAdmin
+from core.permissions import HasRole, IsClinicAdmin, IsSuperAdmin
+from users.models import UserRole
 
 
 class ClinicListCreateView(APIView):
@@ -197,6 +198,13 @@ class ClinicProfileView(APIView):
 
 class ClinicSettingsView(APIView):
     permission_classes = [IsClinicAdmin]
+
+    def get_permissions(self):
+        # Receptionists read the settings too: booking needs to know whether
+        # the clinic charges a consultation fee before payment is attempted.
+        if self.request.method == 'GET':
+            return [HasRole(UserRole.CLINIC_ADMIN, UserRole.RECEPTIONIST)()]
+        return [IsClinicAdmin()]
 
     def _get_clinic(self, request):
         return request.user.staffprofile.cln_id

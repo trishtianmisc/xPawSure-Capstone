@@ -5,6 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
+from appointments.services import CLINIC_TIMEZONE
 from clinics.models import Clinic
 from consultations.models import Consultation
 from owners.models import OwnerProfile
@@ -540,6 +541,11 @@ class VetAppointmentRequestTests(VetDashboardBase):
 
 class VetConsultationSaveTests(VetDashboardBase):
 
+    def _appointment_day(self, appointment):
+        return timezone.localtime(
+            appointment.apt_scheduled_at, CLINIC_TIMEZONE,
+        ).date()
+
     def _payload(self, appointment, **overrides):
         payload = {
             'appointment_id': str(appointment.apt_id),
@@ -618,6 +624,149 @@ class VetConsultationSaveTests(VetDashboardBase):
         self.assertIsNone(response.data['specific_disease'])
         consultation = Consultation.objects.get(apt_id=appointment)
         self.assertIsNone(consultation.con_specific_disease)
+
+    def test_follow_up_defaults_to_not_required(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+
+        response = self._post(self._payload(appointment))
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertFalse(response.data['follow_up_required'])
+        self.assertIsNone(response.data['follow_up_target_date'])
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertFalse(consultation.con_follow_up_required)
+        self.assertIsNone(consultation.con_follow_up_target_date)
+
+    def test_vet_creates_consultation_with_follow_up(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        target_date = self._appointment_day(appointment) + timedelta(days=2)
+
+        response = self._post(self._payload(
+            appointment,
+            follow_up_required=True,
+            follow_up_target_date=target_date.isoformat(),
+        ))
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(response.data['follow_up_required'])
+        self.assertEqual(
+            response.data['follow_up_target_date'], target_date.isoformat(),
+        )
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertTrue(consultation.con_follow_up_required)
+        self.assertEqual(consultation.con_follow_up_target_date, target_date)
+        self.assertFalse(
+            Appointment.objects.filter(
+                apt_source_consultation=consultation,
+            ).exists(),
+        )
+
+    def test_follow_up_requires_target_date(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+
+        response = self._post(
+            self._payload(appointment, follow_up_required=True),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Consultation.objects.filter(apt_id=appointment).exists())
+
+    def test_follow_up_target_must_be_after_appointment_date(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        target_date = self._appointment_day(appointment)
+
+        response = self._post(self._payload(
+            appointment,
+            follow_up_required=True,
+            follow_up_target_date=target_date.isoformat(),
+        ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Consultation.objects.filter(apt_id=appointment).exists())
+
+    def test_follow_up_target_cannot_be_in_the_past(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        target_date = timezone.localdate(timezone=CLINIC_TIMEZONE) - timedelta(days=1)
+
+        response = self._post(self._payload(
+            appointment,
+            follow_up_required=True,
+            follow_up_target_date=target_date.isoformat(),
+        ))
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Consultation.objects.filter(apt_id=appointment).exists())
+
+    def test_vet_updates_follow_up(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        created = self._post(self._payload(appointment))
+        target_date = self._appointment_day(appointment) + timedelta(days=3)
+
+        response = self._put(
+            created.data['id'],
+            self._payload(
+                appointment,
+                follow_up_required=True,
+                follow_up_target_date=target_date.isoformat(),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['follow_up_required'])
+        self.assertEqual(
+            response.data['follow_up_target_date'], target_date.isoformat(),
+        )
+
+    def test_disabling_follow_up_clears_target_date(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        target_date = self._appointment_day(appointment) + timedelta(days=3)
+        created = self._post(self._payload(
+            appointment,
+            follow_up_required=True,
+            follow_up_target_date=target_date.isoformat(),
+        ))
+
+        response = self._put(
+            created.data['id'],
+            self._payload(appointment, follow_up_required=False),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data['follow_up_required'])
+        self.assertIsNone(response.data['follow_up_target_date'])
+        consultation = Consultation.objects.get(apt_id=appointment)
+        self.assertIsNone(consultation.con_follow_up_target_date)
+
+    def test_update_rejects_invalid_follow_up_date(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        created = self._post(self._payload(appointment))
+
+        response = self._put(
+            created.data['id'],
+            self._payload(
+                appointment,
+                follow_up_required=True,
+                follow_up_target_date=self._appointment_day(appointment).isoformat(),
+            ),
+        )
+
+        self.assertEqual(response.status_code, 400)
 
     def test_cannot_save_before_start(self):
         appointment = self._make_appointment(

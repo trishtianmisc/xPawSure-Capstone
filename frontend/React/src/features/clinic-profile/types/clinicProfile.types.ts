@@ -15,6 +15,7 @@ export interface ClinicSettings {
   appointment_duration: number
   max_appointments_per_day: number
   allow_owner_booking: boolean
+  consultation_fee: number
   timezone: string
   created_at: string
   updated_at: string
@@ -32,6 +33,7 @@ export interface UpdateSettingsPayload {
   max_appointments_per_day: number
   allow_owner_booking: boolean
   timezone: string
+  consultation_fee?: number
 }
 
 export type DayOfWeek = 'MON' | 'TUE' | 'WED' | 'THU' | 'FRI' | 'SAT' | 'SUN'

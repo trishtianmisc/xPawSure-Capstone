@@ -2,8 +2,6 @@ import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
 import {
-  ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -17,14 +15,20 @@ import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
 import type { Prediction } from '../../../../ai/types/ai.types'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
-import { refinePredictions } from '../../../../ai/decisionTree/engine'
-import type { Answers } from '../../../../ai/decisionTree/types'
-import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import { REFINEMENT_METHOD } from '../../../../ai/decisionTree/bayesian.config'
+import { ADAPTIVE_CONFIG } from '../../../../ai/decisionTree/adaptive.config'
+import {
+  commitAdaptiveAnswer,
+  evaluateStopping,
+  resolveQuestionnaireMode,
+  selectNextQuestion,
+} from '../../../../ai/decisionTree/adaptive'
+import type { Answers, StoppingDecision } from '../../../../ai/decisionTree/types'
+import { buildResultNavigationParams } from '../../../../features/screening/resultNavigationParams'
 
 export default function AdjustScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
-  const createScreening = useCreateScreening()
   const params = useLocalSearchParams<{
     predictions: string
     petId: string
@@ -32,12 +36,20 @@ export default function AdjustScreen() {
     imageUri?: string
     modelVersion?: string
     inferenceTimeMs?: string
-    imageReports?: string
+    claude?: string
+    claudeRequestFailed?: string
+    deviceFailed?: string
+    classifierSkipped?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
 
   const questions = KNOWLEDGE.questions
   const total = questions.length
+  const mode = useMemo(() => resolveQuestionnaireMode(REFINEMENT_METHOD), [])
+  const questionById = useMemo(
+    () => new Map(questions.map((question) => [question.id, question])),
+    [questions],
+  )
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -47,20 +59,47 @@ export default function AdjustScreen() {
     }
   }, [params.predictions])
 
-  const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<Answers>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [askedIds, setAskedIds] = useState<string[]>([])
+  const [cursor, setCursor] = useState(0)
+  const [drafts, setDrafts] = useState<Answers>({})
 
   const hasResult = predictions.length > 0
 
-  const question = questions[step]
-  const selected = answers[question.id] ?? []
-  const isLast = step === total - 1
-  const canProceed = selected.length > 0
+  const question = useMemo(() => {
+    if (cursor < askedIds.length) {
+      return questionById.get(askedIds[cursor]) ?? null
+    }
+    return selectNextQuestion(predictions, answers, askedIds, KNOWLEDGE, mode)
+  }, [answers, askedIds, cursor, mode, predictions, questionById])
+
+  const selected = question ? drafts[question.id] ?? answers[question.id] ?? [] : []
+  const isLast = questions.every(
+    (item) => item.id === question?.id || askedIds.includes(item.id),
+  )
+  const canProceed = Boolean(question) && selected.length > 0
+  const pendingDecision = useMemo(() => {
+    if (!question || selected.length === 0) return null
+    const committed = commitAdaptiveAnswer(
+      { answers, askedQuestionIds: askedIds },
+      question.id,
+      selected,
+    )
+    return evaluateStopping(
+      predictions,
+      committed.answers,
+      committed.askedQuestionIds,
+      KNOWLEDGE,
+      ADAPTIVE_CONFIG,
+      mode.earlyStopping,
+    )
+  }, [answers, askedIds, mode.earlyStopping, predictions, question, selected])
+  const willStop = pendingDecision?.shouldStop === true
 
   const selectOption = (optionId: string) => {
-    setAnswers((prev) => {
-      const current = prev[question.id] ?? []
+    if (!question) return
+    setDrafts((prev) => {
+      const current = prev[question.id] ?? answers[question.id] ?? []
       if (question.multi) {
         const next = current.includes(optionId)
           ? current.filter((id) => id !== optionId)
@@ -71,59 +110,67 @@ export default function AdjustScreen() {
     })
   }
 
-  const finish = async () => {
-    if (isSubmitting) return
-    setIsSubmitting(true)
-
-    const refined = refinePredictions(predictions, answers, KNOWLEDGE)
-
-    let alreadySaved = false
-    try {
-      await createScreening.mutateAsync({
-        pet_id: params.petId,
-        source: 'DEVICE',
-        prediction: refined.refinedTop.disease,
-        confidence: Math.round(refined.refinedTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
-        device: Platform.OS,
-      })
-      alreadySaved = true
-    } catch {
-      // Auto-save failed — the result screen's Save&Book will retry.
-    }
-
+  const finish = (
+    finalAnswers: Answers,
+    _finalAskedIds: readonly string[],
+    decision: StoppingDecision,
+  ) => {
+    // Nothing is uploaded here. The result screen lets the owner choose
+    // "Save Result" or "Book an Appointment"; both persist on demand.
+    // The questionnaire answers travel as supplementary display context
+    // only — the AI prediction vector is forwarded untouched, and no
+    // questionnaire-derived value is ever sent to the result screen.
     router.replace({
       pathname: '/(owner)/pets/screening/result',
-      params: {
-        imageUri: params.imageUri ?? '',
-        petId: params.petId,
-        petName: params.petName,
-        predictions: params.predictions,
-        modelVersion: params.modelVersion ?? '',
-        inferenceTimeMs: params.inferenceTimeMs ?? '0',
-        state: 'DISEASE_DETECTED',
-        stateMessage: '',
-        refined: JSON.stringify(refined.refined),
-        changed: refined.changed ? 'true' : 'false',
-        alreadySaved: alreadySaved ? 'true' : 'false',
-        imageReports: params.imageReports ?? '',
-      },
+      params: buildResultNavigationParams(
+        {
+          predictions: params.predictions,
+          petId: params.petId,
+          petName: params.petName,
+          imageUri: params.imageUri,
+          modelVersion: params.modelVersion,
+          inferenceTimeMs: params.inferenceTimeMs,
+          claude: params.claude,
+          claudeRequestFailed: params.claudeRequestFailed,
+          deviceFailed: params.deviceFailed,
+          classifierSkipped: params.classifierSkipped,
+        },
+        finalAnswers,
+        decision,
+      ),
     })
   }
 
   const goNext = () => {
-    if (!canProceed || isSubmitting) return
-    if (!isLast) {
-      setStep(step + 1)
-    } else {
-      void finish()
+    if (!question || !canProceed) return
+
+    const committed = commitAdaptiveAnswer(
+      { answers, askedQuestionIds: askedIds },
+      question.id,
+      selected,
+    )
+    const decision = evaluateStopping(
+      predictions,
+      committed.answers,
+      committed.askedQuestionIds,
+      KNOWLEDGE,
+      ADAPTIVE_CONFIG,
+      mode.earlyStopping,
+    )
+
+    if (decision.shouldStop) {
+      finish(committed.answers, committed.askedQuestionIds, decision)
+      return
     }
+
+    setAnswers(committed.answers)
+    setAskedIds(committed.askedQuestionIds)
+    setCursor(cursor + 1)
   }
 
   const goBack = () => {
-    if (step > 0) {
-      setStep(step - 1)
+    if (cursor > 0) {
+      setCursor(cursor - 1)
     } else {
       router.back()
     }
@@ -153,7 +200,21 @@ export default function AdjustScreen() {
     )
   }
 
-  const progressPct = Math.round(((step + 1) / total) * 100)
+  if (!question) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
+        {header}
+        <View style={styles.emptyCard}>
+          <MaterialCommunityIcons color={colors.textMuted} name="check-circle-outline" size={32} />
+          <Text style={styles.emptyTitle}>Questionnaire complete</Text>
+          <Text style={styles.emptyText}>All available questions have been answered.</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  const progressPct = Math.round(((cursor + 1) / total) * 100)
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -162,7 +223,7 @@ export default function AdjustScreen() {
 
       <View style={styles.progressSection}>
         <Text style={styles.progressLabel}>
-          Question {step + 1} of {total}
+          Question {cursor + 1} of {total}
         </Text>
         <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
           <View style={[styles.progressFill, { width: `${progressPct}%` }]} />
@@ -181,6 +242,8 @@ export default function AdjustScreen() {
             return (
               <Pressable
                 key={option.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => selectOption(option.id)}
                 style={[styles.option, isSelected && styles.optionActive]}
               >
@@ -208,16 +271,11 @@ export default function AdjustScreen() {
       <View style={styles.bottomBar}>
         <Pressable
           onPress={goNext}
-          disabled={!canProceed || isSubmitting}
-          style={[
-            styles.actionBtn,
-            styles.primaryBtn,
-            (!canProceed || isSubmitting) && styles.actionBtnDisabled,
-          ]}
+          disabled={!canProceed}
+          style={[styles.actionBtn, styles.primaryBtn, !canProceed && styles.actionBtnDisabled]}
         >
-          {isSubmitting && <ActivityIndicator color="#FFF" size="small" />}
           <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-            {isSubmitting ? 'Saving...' : isLast ? 'See Suggestions' : 'Next'}
+            {isLast || willStop ? 'See Results' : 'Next'}
           </Text>
         </Pressable>
       </View>
@@ -288,58 +346,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   optionText: { ...font.medium, color: colors.text, flex: 1, fontSize: 14, lineHeight: 19 },
   optionTextActive: { ...font.bold },
 
-  imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
-  thumbnail: { borderRadius: 14, height: 56, width: 56 },
-  thumbnailPlaceholder: {
-    alignItems: 'center',
-    backgroundColor: colors.iconBg,
-    borderRadius: 14,
-    height: 56,
-    justifyContent: 'center',
-    width: 56,
-  },
-  imageInfo: { flex: 1 },
-  petName: { ...font.bold, color: colors.text, fontSize: 16 },
-  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
-
-  verdictCard: {
-    alignItems: 'flex-start',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-    padding: 16,
-  },
-  verdictText: { ...font.regular, color: colors.text, flex: 1, fontSize: 13, lineHeight: 19 },
-
-  breakdownCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 16,
-    padding: 18,
-  },
-  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
-  barRow: { gap: 6, marginBottom: 14 },
-  barLabelRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  barLabel: { ...font.medium, color: '#A0A0A0', flex: 1, fontSize: 13 },
-  barPct: { ...font.semibold, color: '#A0A0A0', fontSize: 13, marginLeft: 8, minWidth: 36, textAlign: 'right' },
-  barTrack: { borderRadius: 4, height: 8, overflow: 'hidden', width: '100%' },
-  barFill: { borderRadius: 4, height: '100%' },
-
-  infoCard: {
-    alignItems: 'flex-start',
-    borderRadius: 12,
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  infoText: { ...font.regular, color: colors.textMuted, flex: 1, fontSize: 12, lineHeight: 17 },
-
   emptyCard: { alignItems: 'center', flex: 1, gap: 8, justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { ...font.bold, color: colors.text, fontSize: 16 },
   emptyText: { ...font.regular, color: colors.textMuted, fontSize: 13, textAlign: 'center' },
@@ -368,6 +374,5 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534' },
-  secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
   actionBtnText: { ...font.bold, fontSize: 14 },
 })

@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 
 from django.db import models
 
@@ -20,6 +21,12 @@ class Clinic(models.Model):
     )
     cln_phone = models.CharField(max_length=20, null=True, blank=True, db_column='CLN_PHONE')
     cln_address = models.TextField(null=True, blank=True, db_column='CLN_ADDRESS')
+    cln_latitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, db_column='CLN_LATITUDE',
+    )
+    cln_longitude = models.DecimalField(
+        max_digits=9, decimal_places=6, null=True, blank=True, db_column='CLN_LONGITUDE',
+    )
     cln_logo_url = models.TextField(null=True, blank=True, db_column='CLN_LOGO_URL')
     cln_license_no = models.CharField(
         max_length=100, null=True, blank=True, db_column='CLN_LICENSE_NO',
@@ -55,6 +62,13 @@ class ClinicSettings(models.Model):
     )
     cls_allow_owner_booking = models.BooleanField(
         default=True, db_column='CLS_ALLOW_OWNER_BOOKING',
+    )
+    # Amount a client pays to book a consultation at this clinic. The default
+    # of 0 keeps the pay-before-booking gate open for clinics that have not
+    # configured a fee yet.
+    cls_consultation_fee = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('0.00'),
+        db_column='CLS_CONSULTATION_FEE',
     )
     cls_timezone = models.CharField(
         max_length=50, default='Asia/Manila', db_column='CLS_TIMEZONE',

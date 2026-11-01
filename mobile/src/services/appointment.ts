@@ -13,8 +13,12 @@ export async function getOwnerClinics(): Promise<OwnerClinic[]> {
   return data
 }
 
-export async function getOwnerVets(clinicId: string, date: string): Promise<OwnerVet[]> {
-  const { data } = await http.get('/owner/vets/', { params: { clinic_id: clinicId, date } })
+export async function getOwnerVets(clinicId: string, date?: string): Promise<OwnerVet[]> {
+  // Without a date the backend returns every active vet at the clinic —
+  // the booking wizard picks the veterinarian before the schedule.
+  const { data } = await http.get('/owner/vets/', {
+    params: { clinic_id: clinicId, ...(date ? { date } : {}) },
+  })
   return data
 }
 

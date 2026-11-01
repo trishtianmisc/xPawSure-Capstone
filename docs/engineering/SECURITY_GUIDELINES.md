@@ -161,7 +161,7 @@ Store uploads in Supabase Storage, outside the application source code.
 
 # 10. AI Model Security
 
-The TensorFlow Lite model must:
+The TensorFlow.js model must:
 
 - Be read-only
 - Be versioned
@@ -173,7 +173,10 @@ Users must not modify:
 - Model weights
 - Metadata
 
-Inference occurs only on the mobile device.
+Classifier inference occurs only on the mobile device. The Anthropic
+image-validation gate is an external, non-diagnostic service that runs before
+the classifier; it must never be presented as classifier output or as a
+diagnosis. API keys and image bytes must never be logged.
 
 ---
 

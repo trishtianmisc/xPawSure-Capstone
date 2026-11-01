@@ -28,6 +28,8 @@ class ClinicSerializer(serializers.ModelSerializer):
     address = serializers.CharField(
         source='cln_address', required=False, allow_blank=True, allow_null=True,
     )
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(
         source='cln_license_no', required=False, allow_blank=True, allow_null=True,
     )
@@ -38,7 +40,7 @@ class ClinicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clinic
         fields = [
-            'id', 'name', 'email', 'phone', 'address',
+            'id', 'name', 'email', 'phone', 'address', 'latitude', 'longitude',
             'license_number', 'status', 'created_at', 'updated_at',
         ]
 
@@ -85,6 +87,8 @@ class ClinicProfileSerializer(serializers.Serializer):
     email = serializers.EmailField(source='cln_email', required=False, allow_blank=True, allow_null=True)
     phone = serializers.CharField(source='cln_phone', required=False, allow_blank=True, allow_null=True)
     address = serializers.CharField(source='cln_address', required=False, allow_blank=True, allow_null=True)
+    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
+    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
     license_number = serializers.CharField(source='cln_license_no', read_only=True)
     status = serializers.CharField(source='cln_status', read_only=True)
     logo_url = serializers.SerializerMethodField()
@@ -129,6 +133,14 @@ class ClinicSettingsSerializer(serializers.Serializer):
     appointment_duration = serializers.IntegerField(source='cls_appointment_duration')
     max_appointments_per_day = serializers.IntegerField(source='cls_max_appointments_per_day')
     allow_owner_booking = serializers.BooleanField(source='cls_allow_owner_booking')
+    # Optional so an older client that PUTs the other settings unchanged
+    # cannot wipe the fee; omitting it keeps the stored value.
+    consultation_fee = serializers.DecimalField(
+        source='cls_consultation_fee',
+        max_digits=10, decimal_places=2,
+        required=False, min_value=0,
+        coerce_to_string=False,
+    )
     timezone = serializers.CharField(source='cls_timezone', max_length=50)
     created_at = serializers.DateTimeField(source='cls_created_at', read_only=True)
     updated_at = serializers.DateTimeField(source='cls_updated_at', read_only=True)

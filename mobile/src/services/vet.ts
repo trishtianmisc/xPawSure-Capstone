@@ -1,4 +1,4 @@
-import type { VetAppointment, VetDashboardData } from '../../features/vet/types'
+import type { VetAppointment, VetAppointmentDetail, VetDashboardData } from '../../features/vet/types'
 import { http } from './http'
 
 export async function getVetDashboard(date?: string): Promise<VetDashboardData> {
@@ -19,8 +19,8 @@ export async function getVetAppointments(range: {
   return Array.isArray(data) ? data : data.results
 }
 
-export async function getVetAppointment(aptId: string): Promise<VetAppointment> {
-  const { data } = await http.get<VetAppointment>(`/appointments/${aptId}/`)
+export async function getVetAppointment(aptId: string): Promise<VetAppointmentDetail> {
+  const { data } = await http.get<VetAppointmentDetail>(`/appointments/${aptId}/`)
   return data
 }
 

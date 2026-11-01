@@ -166,7 +166,7 @@ If applicable:
 
 ☐ Secure storage used where appropriate
 
-☐ TensorFlow Lite integration completed
+☐ TensorFlow.js integration completed
 
 ☐ Upload workflow tested
 
@@ -182,11 +182,11 @@ If applicable:
 
 If applicable:
 
-☐ Image validation
+☐ Image validation (exactly one image)
 
 ☐ Image preprocessing
 
-☐ TensorFlow Lite inference
+☐ TensorFlow.js inference
 
 ☐ Confidence calculation
 
@@ -194,9 +194,13 @@ If applicable:
 
 ☐ Prediction uploaded
 
+☐ Independent review failure handled without hiding the on-device result
+
+☐ Classifier and review outputs remain independent
+
 ☐ AI limitations respected
 
-☐ No backend inference introduced
+☐ No backend classifier inference introduced
 
 ---
 

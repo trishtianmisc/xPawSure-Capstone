@@ -164,6 +164,17 @@ class OwnerDiscoveryTests(OwnerBookingBase):
         names = [c['cln_name'] for c in response.data]
         self.assertIn('Happy Paws Clinic', names)
 
+    def test_clinic_list_includes_coordinates(self):
+        self.clinic.cln_latitude = '14.599512'
+        self.clinic.cln_longitude = '120.984222'
+        self.clinic.save(update_fields=['cln_latitude', 'cln_longitude'])
+
+        response = self.client.get('/api/owner/clinics/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200)
+        clinic = next(c for c in response.data if c['cln_id'] == str(self.clinic.cln_id))
+        self.assertEqual(clinic['cln_latitude'], 14.599512)
+        self.assertEqual(clinic['cln_longitude'], 120.984222)
+
     def test_clinic_list_excludes_booking_disabled_clinic(self):
         disabled = Clinic.objects.create(cln_name='No Booking Clinic')
         ClinicSettings.objects.create(
@@ -205,6 +216,33 @@ class OwnerDiscoveryTests(OwnerBookingBase):
             **self._auth(OWNER_EMAIL),
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_vet_list_without_date_returns_all_clinic_vets(self):
+        # The booking wizard chooses the veterinarian before the schedule,
+        # so an undated request lists every active vet with no slot count.
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id)},
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['stf_id'], str(self.vet.stf_id))
+        self.assertIsNone(response.data[0]['available_count'])
+
+    def test_vet_list_still_requires_clinic_id(self):
+        response = self.client.get('/api/owner/vets/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['detail'], 'clinic_id is required.')
+
+    def test_vet_list_rejects_malformed_date(self):
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id), 'date': 'not-a-date'},
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data['detail'], 'Invalid date format. Use YYYY-MM-DD.')
 
     def test_slots_list_returns_available_slots(self):
         slots = self._get_slots()

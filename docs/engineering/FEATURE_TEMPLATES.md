@@ -371,7 +371,7 @@ Keep screens focused on presentation.
 
 ---
 
-# 18. TensorFlow Lite Service Template
+# 18. TensorFlow.js Service Template
 
 ```ts
 loadModel()

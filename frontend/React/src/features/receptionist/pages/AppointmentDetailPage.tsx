@@ -2,7 +2,10 @@ import { useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
 import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAppointments'
+import { usePaymentsByAppointment } from '../../payments/hooks/usePayments'
+import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { FollowUpReviewCard } from '../components/FollowUpReviewCard'
 import { formatDateLong, formatDateTime, formatPhone, formatTime } from '../../../utils/format'
 
 function labelize(value: string): string {
@@ -47,6 +50,8 @@ export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: appointment, isLoading, error } = useAppointmentDetail(id ?? '')
+  const { data: payments, isLoading: paymentsLoading } = usePaymentsByAppointment(id ?? '')
+  const payment = payments?.results?.[0]
   const updateStatus = useUpdateAppointmentStatus()
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -110,6 +115,8 @@ export function AppointmentDetailPage() {
   const canComplete =
     appointment.apt_status === 'CHECKED_IN' || appointment.apt_status === 'IN_PROGRESS'
   const canCancel =
+    appointment.apt_status === 'REVIEW' ||
+    appointment.apt_status === 'CONFIRMATION' ||
     appointment.apt_status === 'PENDING' ||
     appointment.apt_status === 'CONFIRMED' ||
     appointment.apt_status === 'CHECKED_IN'
@@ -117,6 +124,18 @@ export function AppointmentDetailPage() {
 
   const aptId = appointment.apt_id
   const petSubtitle = appointment.pet_breed ?? labelize(appointment.pet_sex)
+  const paymentLabel =
+    appointment.apt_status === 'CONFIRMATION'
+      ? 'Awaiting Payment'
+      : appointment.apt_status === 'REVIEW'
+        ? 'Not Yet Scheduled'
+        : 'Payment Verified'
+  const paymentClasses =
+    appointment.apt_status === 'CONFIRMATION'
+      ? 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
+      : appointment.apt_status === 'REVIEW'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
 
   return (
     <div className="p-6">
@@ -180,6 +199,8 @@ export function AppointmentDetailPage() {
 
       
 
+      <FollowUpReviewCard appointment={appointment} />
+
       {/* Appointment Details */}
       <section>
         <SectionHeader>Appointment Details</SectionHeader>
@@ -205,19 +226,43 @@ export function AppointmentDetailPage() {
               <DetailCell label="Reason" value={appointment.apt_reason} />
             </div>
           )}
-          <div className={ROW_CLASS}>
+          <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
             <DetailCell
               label="Payment"
               value={
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
-                  <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Payment Verified
-                </span>
+                paymentsLoading ? (
+                  <span className="text-stone-400">Loading…</span>
+                ) : payment ? (
+                  <PaymentStatusBadge status={payment.status} />
+                ) : (
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${paymentClasses}`}>
+                    <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {paymentLabel}
+                  </span>
+                )
               }
+              className={FIRST_CELL_CLASS}
+            />
+            <DetailCell
+              label="Receipt"
+              value={payment ? `${payment.reference_no} · ${payment.method}` : '—'}
             />
           </div>
+          {payment && (
+            <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
+              <DetailCell
+                label="Amount"
+                value={`₱${Number(payment.amount).toFixed(2)}`}
+                className={FIRST_CELL_CLASS}
+              />
+              <DetailCell
+                label="Paid at"
+                value={payment.paid_at ? formatDateTime(payment.paid_at) : '—'}
+              />
+            </div>
+          )}
           {appointment.apt_checked_in_at && (
             <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
               <DetailCell

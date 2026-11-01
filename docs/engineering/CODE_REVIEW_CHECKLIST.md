@@ -82,7 +82,7 @@ Mobile
 
 ☐ Screen remains thin
 
-☐ TensorFlow Lite isolated in services
+☐ TensorFlow.js isolated in services
 
 ---
 
@@ -242,7 +242,7 @@ Verify:
 
 Verify:
 
-☐ TensorFlow Lite loads correctly
+☐ TensorFlow.js loads correctly
 
 ☐ Preprocessing matches training
 
@@ -250,7 +250,11 @@ Verify:
 
 ☐ Model version stored
 
-☐ Backend does not perform inference
+☐ Backend does not run the classifier
+
+☐ Classifier and review outputs are never averaged or fused
+
+☐ Review findings are never presented as a diagnosis
 
 ☐ Veterinarian remains decision-maker
 

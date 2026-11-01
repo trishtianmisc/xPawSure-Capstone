@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { apiErrorMessage } from './error'
+import { apiErrorCode, apiErrorMessage } from './error'
 
 function axiosLikeError(status: number, data: unknown): Error {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -62,5 +62,27 @@ describe('apiErrorMessage', () => {
     expect(apiErrorMessage(undefined)).toBe('An unexpected error occurred.')
     expect(apiErrorMessage('boom')).toBe('An unexpected error occurred.')
     expect(apiErrorMessage(400)).toBe('An unexpected error occurred.')
+  })
+})
+
+describe('apiErrorCode', () => {
+  it('returns the code from a payment-style error body', () => {
+    const error = axiosLikeError(400, {
+      detail: 'This clinic requires payment before an appointment can be booked.',
+      code: 'PAYMENT_REQUIRED',
+      amount: 500,
+      currency: 'PHP',
+    })
+    expect(apiErrorCode(error)).toBe('PAYMENT_REQUIRED')
+  })
+
+  it('returns undefined when the body has no code', () => {
+    expect(apiErrorCode(axiosLikeError(400, { detail: 'Bad request' }))).toBeUndefined()
+  })
+
+  it('returns undefined for non-Error values and missing responses', () => {
+    expect(apiErrorCode(null)).toBeUndefined()
+    expect(apiErrorCode(new Error('Network Error'))).toBeUndefined()
+    expect(apiErrorCode(axiosLikeError(400, 'plain text'))).toBeUndefined()
   })
 })

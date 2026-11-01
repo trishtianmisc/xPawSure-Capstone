@@ -8,6 +8,10 @@ export function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
+export function formatAppointmentStatus(status: string): string {
+  return status.replace(/_/g, ' ')
+}
+
 export function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',

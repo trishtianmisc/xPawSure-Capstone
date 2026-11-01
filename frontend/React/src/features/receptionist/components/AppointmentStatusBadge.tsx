@@ -1,6 +1,14 @@
 import type { AppointmentStatus } from '../types/receptionist.types'
 
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: string }> = {
+  REVIEW: {
+    label: 'Needs Review',
+    className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
+  },
+  CONFIRMATION: {
+    label: 'Awaiting Payment',
+    className: 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/30 dark:text-fuchsia-400',
+  },
   PENDING: {
     label: 'Pending',
     className: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',

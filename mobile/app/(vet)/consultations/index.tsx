@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
+import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
-import { formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
+import { formatAppointmentStatus, formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
 import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'
 
 const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED']
@@ -28,7 +30,9 @@ export default function VetConsultationListScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const [activeTab, setActiveTab] = useState<ConsultationTab>('TODAY')
 
-  const { data, isLoading, isError } = useVetAppointments({})
+  const { data, isLoading, isError, refetch } = useVetAppointments({})
+  const { refreshing, onRefresh } = usePullToRefresh(refetch)
+  useRefreshVetOnFocus('appointments')
   const appointments = data ?? []
   const todayStr = localDateStr()
 
@@ -51,7 +55,18 @@ export default function VetConsultationListScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.title}>Consultations</Text>
 
         <View style={styles.tabRow}>
@@ -94,7 +109,9 @@ export default function VetConsultationListScreen() {
                     </Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>{item.apt_status}</Text>
+                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                      {formatAppointmentStatus(item.apt_status)}
+                    </Text>
                   </View>
                 </View>
                 <View style={styles.cardInfo}>

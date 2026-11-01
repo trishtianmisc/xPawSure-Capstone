@@ -1,6 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import status
 from rest_framework.response import Response
@@ -24,6 +25,7 @@ from appointments.services import (
 from clinics.models import Clinic, ClinicSettings
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
+from payments.services import PaymentError, PaymentService
 from pets.models import Pet
 from users.models import StaffPosition, StaffProfile
 
@@ -71,18 +73,23 @@ class OwnerVetListView(APIView):
         clinic_id = _parse_uuid(request.query_params.get('clinic_id'))
         date_str = request.query_params.get('date')
 
-        if not clinic_id or not date_str:
+        if not clinic_id:
             return Response(
-                {'detail': 'clinic_id and date are required.'},
+                {'detail': 'clinic_id is required.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        date = _parse_date(date_str)
-        if not date:
-            return Response(
-                {'detail': 'Invalid date format. Use YYYY-MM-DD.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # The date is optional: the owner booking wizard picks the
+        # veterinarian before the schedule, so the undated list returns
+        # every active vet and availability is resolved per date later.
+        date = None
+        if date_str:
+            date = _parse_date(date_str)
+            if not date:
+                return Response(
+                    {'detail': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         clinic = Clinic.objects.filter(
             cln_id=clinic_id,
@@ -101,6 +108,17 @@ class OwnerVetListView(APIView):
                 {'detail': 'This clinic does not accept online bookings.'},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        if date is None:
+            return Response([
+                {
+                    'stf_id': str(vet.stf_id),
+                    'full_name': f'{vet.usr_id.usr_first_name} {vet.usr_id.usr_last_name}',
+                    'email': vet.usr_id.usr_email,
+                    'available_count': None,
+                }
+                for vet in VetSlotService.get_clinic_vets(clinic_id=clinic_id)
+            ])
 
         vets = VetSlotService.get_vets_for_date(clinic_id=clinic_id, date=date)
 
@@ -178,6 +196,8 @@ class OwnerAppointmentListCreateView(APIView):
         qs = Appointment.objects.filter(
             pet_id__own_id=owner_profile,
             apt_deleted_at__isnull=True,
+        ).exclude(
+            apt_status=AppointmentStatus.REVIEW,
         ).select_related(
             'pet_id', 'pet_id__brd_id', 'stf_id__usr_id', 'cln_id',
         )
@@ -256,15 +276,39 @@ class OwnerAppointmentListCreateView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Expiry is committed before the gate opens: the gate lives in a
+        # transaction that rolls back whenever payment is refused.
+        PaymentService.expire_due_checkout(validated.get('pay_id'))
+
         try:
-            appointment = AppointmentService.create_appointment(
-                clinic_id=slot.cln_id_id,
-                pet_id=pet.pet_id,
-                slot_id=slot.vsl_id,
-                apt_type=validated['apt_type'],
-                reason=validated.get('reason', ''),
-                created_by=request.user.usr_id,
-                screening=screening,
+            # Same gate as the receptionist flow: the payment is locked and
+            # attached inside the transaction that creates the appointment.
+            with transaction.atomic():
+                payment = PaymentService.lock_for_booking(
+                    clinic_id=slot.cln_id_id,
+                    pet_id=pet.pet_id,
+                    pay_id=validated.get('pay_id'),
+                )
+                appointment = AppointmentService.create_appointment(
+                    clinic_id=slot.cln_id_id,
+                    pet_id=pet.pet_id,
+                    slot_id=slot.vsl_id,
+                    apt_type=validated['apt_type'],
+                    reason=validated.get('reason', ''),
+                    created_by=request.user.usr_id,
+                    screening=screening,
+                )
+                if payment is not None:
+                    PaymentService.attach(
+                        payment=payment,
+                        appointment=appointment,
+                        actor_user_id=request.user.usr_id,
+                        ip_address=request.META.get('REMOTE_ADDR'),
+                    )
+        except PaymentError as e:
+            return Response(
+                e.as_dict(),
+                status=e.status_code,
             )
         except SlotUnavailableError as e:
             return Response(
@@ -297,6 +341,7 @@ class OwnerAppointmentDetailView(APIView):
             not appointment
             or appointment.apt_deleted_at is not None
             or appointment.pet_id.own_id_id != owner_profile.own_id
+            or appointment.apt_status == AppointmentStatus.REVIEW
         ):
             return Response(
                 {'detail': 'Appointment not found.'},

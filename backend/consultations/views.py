@@ -11,7 +11,11 @@ from consultations.serializers import (
     ConsultationResponseSerializer,
     ConsultationUpdateSerializer,
 )
-from consultations.services import ConsultationService, ConsultationStateError
+from consultations.services import (
+    ConsultationService,
+    ConsultationStateError,
+    ConsultationValidationError,
+)
 from core.permissions import IsOwner, IsVeterinarian
 from owners.models import OwnerProfile
 from users.models import StaffProfile
@@ -78,6 +82,8 @@ class ConsultationListView(APIView):
             )
         except PermissionError as e:
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ConsultationValidationError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except ConsultationStateError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
 
@@ -141,6 +147,8 @@ class ConsultationDetailView(APIView):
             )
         except PermissionError as e:
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+        except ConsultationValidationError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except ConsultationStateError as e:
             return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
 

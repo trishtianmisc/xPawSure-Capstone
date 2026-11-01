@@ -57,10 +57,15 @@ No Consultation can exist without an Appointment.
 | APT_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | APT_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 | APT_DELETED_AT | TIMESTAMP | NULL |
+| APT_SOURCE_CONSULTATION | UUID | FK to CONSULTATION, UNIQUE, NULLABLE |
 
 ---
 
 # Appointment Status
+
+REVIEW
+
+CONFIRMATION (Awaiting Payment)
 
 PENDING
 
@@ -97,6 +102,25 @@ Cancelled appointments never create Consultations.
 No Show appointments never create Consultations.
 
 Soft Delete is supported.
+
+A follow-up recommendation is stored on the consultation while the source
+appointment is `IN_PROGRESS`. When the source appointment is marked
+`COMPLETED`, the system creates one linked `FOLLOW_UP` appointment in `REVIEW`
+status. The appointment keeps a single `APT_SOURCE_CONSULTATION` link so the
+recommendation cannot create duplicates. Completing the source appointment
+makes the consultation read-only, so the recommendation cannot be changed
+afterward. If the source appointment is cancelled before completion, no
+follow-up appointment is created.
+
+A receptionist schedules a `REVIEW` follow-up by selecting an available slot
+for the assigned veterinarian. This books the slot and sets the appointment to
+`CONFIRMATION` (shown as `AWAITING PAYMENT`). `CONFIRMATION` is not final
+confirmation; owner payment/acceptance is handled separately. If payment is not
+completed before the scheduled time, the appointment is cancelled and the slot
+is released.
+
+The veterinarian cannot change the linked recommendation after the source
+appointment is completed.
 
 ---
 
@@ -164,6 +188,18 @@ APPOINTMENT
 
 CONSULTATION
 
+CONSULTATION
+
+0
+
+↓
+
+1
+
+↓
+
+FOLLOW_UP APPOINTMENT (APT_SOURCE_CONSULTATION)
+
 ---
 
 # Appointment Workflow
@@ -206,6 +242,36 @@ Completed
 
 # Appointment Lifecycle
 
+Follow-Up Flow
+
+REVIEW
+
+↓
+
+CONFIRMATION (AWAITING PAYMENT)
+
+↓
+
+PENDING
+
+↓
+
+CONFIRMED
+
+↓
+
+CHECKED_IN
+
+↓
+
+IN_PROGRESS
+
+↓
+
+COMPLETED
+
+Standard Flow
+
 PENDING
 
 ↓
@@ -226,7 +292,7 @@ COMPLETED
 
 Alternative Flow
 
-PENDING
+REVIEW / CONFIRMATION / PENDING
 
 ↓
 
@@ -240,15 +306,20 @@ CONFIRMED
 
 NO_SHOW
 
+Phase 1 implements through `CONFIRMATION`. Owner acceptance, payment, and the
+later transitions are deferred.
+
 ---
 
 # Appointment Creation
 
 Appointments may be created by:
 
-• OWNER (Mobile Application)
+- OWNER (Mobile Application)
 
-• RECEPTIONIST (Web Application)
+- RECEPTIONIST (Web Application)
+
+- VETERINARIAN (Follow-up recommendation from a consultation)
 
 The creator is stored in:
 
@@ -256,9 +327,18 @@ APT_CREATED_BY
 
 Initial status:
 
-• OWNER → PENDING (awaiting clinic confirmation)
+- OWNER -> PENDING (awaiting clinic confirmation)
 
-• RECEPTIONIST → CONFIRMED
+- RECEPTIONIST -> CONFIRMED
+
+- VETERINARIAN (follow-up recommendation) -> REVIEW
+
+A veterinarian follow-up recommendation is stored on the consultation while
+the source appointment is `IN_PROGRESS`. Completing the source appointment
+creates a linked `FOLLOW_UP` appointment in `REVIEW` status. The preferred
+follow-up date is stored as the initial scheduled date at midnight Asia/Manila;
+the receptionist replaces it with the selected slot's actual start time when
+confirming.
 
 ---
 
@@ -287,6 +367,14 @@ Appointment date must not be in the past.
 Appointment time must be within clinic operating hours.
 
 Appointments cannot overlap for the same Veterinarian.
+
+A follow-up confirmation must use a future, available slot for the assigned
+veterinarian in the same clinic. Confirmation locks the appointment and slot
+row and fails if another appointment already holds the slot.
+
+A `CONFIRMATION` appointment whose scheduled time passes without payment is
+cancelled with reason "Payment not completed before appointment time", and its
+slot is released to `AVAILABLE`.
 
 Archived clinics cannot receive appointments.
 

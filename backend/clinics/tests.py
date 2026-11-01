@@ -1,10 +1,17 @@
-from io import BytesIO
+from decimal import Decimal
+from io import BytesIO, StringIO
+from unittest.mock import patch
+
+import requests
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from clinics.geocoding import geocode_address
 from clinics.models import (
     Clinic,
     ClinicOperatingHours,
@@ -14,6 +21,7 @@ from clinics.models import (
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
+@override_settings(NOMINATIM_USER_AGENT='')
 class ClinicAPITestCase(APITestCase):
 
     def setUp(self):
@@ -111,6 +119,193 @@ class ClinicCreateTests(ClinicAPITestCase):
             **self._auth_header(self.super_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+@override_settings(NOMINATIM_USER_AGENT='XPawSure/1.0 (test)')
+class GeocodingServiceTests(SimpleTestCase):
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_returns_coordinates(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [
+            {'lat': '14.599512', 'lon': '120.984222'},
+        ]
+
+        result = geocode_address('123 Main Street, Manila')
+
+        self.assertEqual(
+            result,
+            (Decimal('14.599512'), Decimal('120.984222')),
+        )
+        mock_throttle.assert_called_once()
+        _, kwargs = mock_get.call_args
+        self.assertEqual(kwargs['params']['format'], 'jsonv2')
+        self.assertEqual(kwargs['params']['countrycodes'], 'ph')
+        self.assertIn('XPawSure/1.0', kwargs['headers']['User-Agent'])
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_empty_result_returns_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = []
+
+        self.assertIsNone(geocode_address('Unknown Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_http_error_returns_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 429
+
+        self.assertIsNone(geocode_address('Rate Limited Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_timeout_returns_none(self, mock_get, mock_throttle):
+        mock_get.side_effect = requests.Timeout('timed out')
+
+        self.assertIsNone(geocode_address('Slow Address'))
+
+    @patch('clinics.geocoding._throttle_requests')
+    @patch('clinics.geocoding.requests.get')
+    def test_invalid_coordinates_return_none(self, mock_get, mock_throttle):
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = [
+            {'lat': 'not-a-latitude', 'lon': '120.984222'},
+        ]
+
+        self.assertIsNone(geocode_address('Invalid Address'))
+
+    @patch('clinics.geocoding.requests.get')
+    def test_skips_without_user_agent(self, mock_get):
+        with self.settings(NOMINATIM_USER_AGENT=''):
+            self.assertIsNone(geocode_address('123 Main Street, Manila'))
+
+        mock_get.assert_not_called()
+
+    @patch('clinics.geocoding.requests.get')
+    def test_skips_blank_address(self, mock_get):
+        self.assertIsNone(geocode_address('   '))
+        mock_get.assert_not_called()
+
+
+class ClinicGeocodingTests(ClinicAPITestCase):
+
+    @patch('clinics.services.geocode_address')
+    def test_create_clinic_stores_coordinates(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self._create_clinic('Geocoded Clinic')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['latitude'], 14.599512)
+        self.assertEqual(response.data['longitude'], 120.984222)
+        clinic = Clinic.objects.get(cln_name='Geocoded Clinic')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once()
+
+    @patch('clinics.services.geocode_address')
+    def test_create_clinic_without_address_skips_geocoding(self, mock_geocode):
+        response = self.client.post(
+            self.list_url,
+            {'name': 'No Address Clinic'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response.data['latitude'])
+        self.assertIsNone(response.data['longitude'])
+        mock_geocode.assert_not_called()
+
+    @patch('clinics.services.geocode_address')
+    def test_geocoding_failure_still_creates_clinic(self, mock_geocode):
+        mock_geocode.return_value = None
+
+        response = self._create_clinic('Unmapped Clinic')
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIsNone(response.data['latitude'])
+        self.assertIsNone(response.data['longitude'])
+
+    @patch('clinics.services.geocode_address')
+    def test_update_address_regeocodes_clinic(self, mock_geocode):
+        clinic = Clinic.objects.create(
+            cln_name='Address Update Clinic',
+            cln_address='Old Address',
+        )
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self.client.put(
+            self._detail_url(clinic.cln_id),
+            {'name': clinic.cln_name, 'address': 'New Address'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        clinic.refresh_from_db()
+        self.assertEqual(clinic.cln_address, 'New Address')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once_with('New Address')
+
+    @patch('clinics.services.geocode_address')
+    def test_update_without_address_change_skips_geocoding(self, mock_geocode):
+        clinic = Clinic.objects.create(
+            cln_name='No Address Change Clinic',
+            cln_address='Same Address',
+        )
+
+        response = self.client.put(
+            self._detail_url(clinic.cln_id),
+            {'name': 'Renamed Clinic'},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_geocode.assert_not_called()
+
+
+@override_settings(NOMINATIM_USER_AGENT='XPawSure/1.0 (test)')
+class GeocodeClinicsCommandTests(TestCase):
+
+    @patch('clinics.management.commands.geocode_clinics.geocode_address')
+    def test_backfills_missing_coordinates(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+        clinic = Clinic.objects.create(
+            cln_name='Backfill Clinic',
+            cln_address='123 Backfill Street, Manila',
+        )
+
+        call_command('geocode_clinics', stdout=StringIO())
+
+        clinic.refresh_from_db()
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_called_once_with('123 Backfill Street, Manila')
+
+    @patch('clinics.management.commands.geocode_clinics.geocode_address')
+    def test_dry_run_does_not_call_geocoder(self, mock_geocode):
+        Clinic.objects.create(
+            cln_name='Dry Run Clinic',
+            cln_address='456 Dry Run Street, Manila',
+        )
+
+        call_command('geocode_clinics', '--dry-run', stdout=StringIO())
+
+        mock_geocode.assert_not_called()
 
 
 class ClinicListTests(ClinicAPITestCase):
@@ -544,6 +739,28 @@ class ClinicProfileTests(ClinicAPITestCase):
         self.assertEqual(response.data['name'], 'Updated Profile Clinic')
         self.assertEqual(response.data['phone'], '09171234567')
 
+    @patch('clinics.services.geocode_address')
+    def test_update_profile_address_regeocodes(self, mock_geocode):
+        mock_geocode.return_value = (
+            Decimal('14.599512'),
+            Decimal('120.984222'),
+        )
+
+        response = self.client.put(
+            self.profile_url,
+            {'name': 'Profile Test Clinic', 'address': 'New Clinic Address'},
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['latitude'], 14.599512)
+        self.assertEqual(response.data['longitude'], 120.984222)
+        clinic = Clinic.objects.get(cln_name='Profile Test Clinic')
+        self.assertEqual(clinic.cln_address, 'New Clinic Address')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        mock_geocode.assert_called_once_with('New Clinic Address')
+
     def test_update_profile_invalid_phone(self):
         response = self.client.put(
             self.profile_url,
@@ -714,6 +931,109 @@ class ClinicSettingsTests(ClinicAPITestCase):
         self.assertIsNotNone(audit)
         self.assertEqual(audit.adl_old_values['cls_timezone'], 'Asia/Manila')
         self.assertEqual(audit.adl_new_values['cls_timezone'], 'Asia/Tokyo')
+
+    def test_get_settings_reports_default_consultation_fee(self):
+        response = self.client.get(
+            self.settings_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('consultation_fee', response.data)
+        self.assertEqual(response.data['consultation_fee'], 0)
+
+    def test_update_settings_saves_consultation_fee(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
+                'consultation_fee': 500,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['consultation_fee'], 500)
+        clinic = StaffProfile.objects.get(usr_id=self.clinic_admin).cln_id
+        self.assertEqual(
+            ClinicSettings.objects.get(cln_id=clinic).cls_consultation_fee,
+            500,
+        )
+
+    def test_update_settings_rejects_negative_consultation_fee(self):
+        response = self.client.put(
+            self.settings_url,
+            {
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
+                'consultation_fee': -100,
+            },
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_settings_keeps_fee_when_field_omitted(self):
+        payload = {
+            'appointment_duration': 30,
+            'max_appointments_per_day': 50,
+            'allow_owner_booking': True,
+            'timezone': 'Asia/Manila',
+            'consultation_fee': 750,
+        }
+        first = self.client.put(
+            self.settings_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+
+        payload.pop('consultation_fee')
+        second = self.client.put(
+            self.settings_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.data['consultation_fee'], 750)
+
+    def test_receptionist_can_read_settings_but_not_update(self):
+        receptionist = User.objects.create(
+            usr_email='desk@settings.test',
+            usr_first_name='Desk',
+            usr_last_name='User',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        receptionist.set_password(self.password)
+        receptionist.save()
+        clinic = StaffProfile.objects.get(usr_id=self.clinic_admin).cln_id
+        StaffProfile.objects.create(
+            usr_id=receptionist,
+            cln_id=clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        read = self.client.get(
+            self.settings_url, **self._auth_header(receptionist),
+        )
+        write = self.client.put(
+            self.settings_url,
+            {
+                'appointment_duration': 30,
+                'max_appointments_per_day': 50,
+                'allow_owner_booking': True,
+                'timezone': 'Asia/Manila',
+                'consultation_fee': 999,
+            },
+            format='json',
+            **self._auth_header(receptionist),
+        )
+
+        self.assertEqual(read.status_code, status.HTTP_200_OK)
+        self.assertIn('consultation_fee', read.data)
+        self.assertEqual(write.status_code, status.HTTP_403_FORBIDDEN)
 
 
 class ClinicOperatingHoursTests(ClinicAPITestCase):

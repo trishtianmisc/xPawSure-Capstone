@@ -18,6 +18,10 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     specific_disease = serializers.CharField(source='con_specific_disease', read_only=True, allow_null=True)
     treatment = serializers.CharField(source='con_treatment', read_only=True)
     notes = serializers.CharField(source='con_notes', read_only=True)
+    follow_up_required = serializers.BooleanField(source='con_follow_up_required', read_only=True)
+    follow_up_target_date = serializers.DateField(
+        source='con_follow_up_target_date', read_only=True, allow_null=True,
+    )
     created_at = serializers.DateTimeField(source='con_created_at', read_only=True)
 
     class Meta:
@@ -25,7 +29,8 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
             'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-            'diagnosis', 'specific_disease', 'treatment', 'notes', 'created_at',
+            'diagnosis', 'specific_disease', 'treatment', 'notes',
+            'follow_up_required', 'follow_up_target_date', 'created_at',
         ]
 
     def get_veterinarian(self, obj) -> str:
@@ -40,6 +45,8 @@ class ConsultationCreateSerializer(serializers.Serializer):
     diagnosis = serializers.CharField()
     specific_disease = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
     notes = serializers.CharField(required=False, allow_blank=True, default='')
+    follow_up_required = serializers.BooleanField(required=False, default=False)
+    follow_up_target_date = serializers.DateField(required=False, allow_null=True, default=None)
 
     def validate_diagnosis(self, value):
         value = value.strip()
@@ -54,6 +61,8 @@ class ConsultationUpdateSerializer(serializers.Serializer):
     diagnosis = serializers.CharField()
     specific_disease = serializers.CharField(required=False, allow_blank=True, allow_null=True, default='')
     notes = serializers.CharField(required=False, allow_blank=True, default='')
+    follow_up_required = serializers.BooleanField(required=False)
+    follow_up_target_date = serializers.DateField(required=False, allow_null=True)
 
     def validate_diagnosis(self, value):
         value = value.strip()

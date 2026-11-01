@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'notifications',
     'audit_log',
     'reports',
+    'payments',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -145,6 +146,43 @@ BREVO_API_URL = env('BREVO_API_URL', default='https://api.brevo.com/v3/smtp/emai
 
 FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:5173')
 
+# Payment gateway.
+#   mock     – built-in signed checkout page in the web app; needs no keys.
+#   paymongo – PayMongo hosted checkout (test or live keys).
+#   xendit   – Xendit hosted Payment Session (test or live keys).
+PAYMENT_MODE = env('PAYMENT_MODE', default='mock').lower()
+PAYMENT_CURRENCY = env('PAYMENT_CURRENCY', default='PHP')
+# How long a created checkout stays payable before it expires.
+PAYMENT_CHECKOUT_TTL_MINUTES = env.int('PAYMENT_CHECKOUT_TTL_MINUTES', default=30)
+PAYMONGO_SECRET_KEY = env('PAYMONGO_SECRET_KEY', default='')
+PAYMONGO_WEBHOOK_SECRET = env('PAYMONGO_WEBHOOK_SECRET', default='')
+PAYMONGO_API_URL = env('PAYMONGO_API_URL', default='https://api.paymongo.com')
+# Xendit: test keys are prefixed xnd_development_, live keys xnd_production_.
+# The callback token is the shared secret from Settings → Webhooks.
+XENDIT_SECRET_KEY = env('XENDIT_SECRET_KEY', default='')
+XENDIT_CALLBACK_TOKEN = env('XENDIT_CALLBACK_TOKEN', default='')
+XENDIT_API_URL = env('XENDIT_API_URL', default='https://api.xendit.co')
+XENDIT_COUNTRY = env('XENDIT_COUNTRY', default='PH')
+# Xendit rejects non-HTTPS return URLs, so the checkout redirects can need a
+# public base even when FRONTEND_URL is still http://localhost in development.
+XENDIT_RETURN_BASE_URL = env('XENDIT_RETURN_BASE_URL', default='') or FRONTEND_URL
+
+if PAYMENT_MODE not in ('mock', 'paymongo', 'xendit'):
+    raise ImproperlyConfigured(
+        'PAYMENT_MODE must be "mock", "paymongo" or "xendit", not '
+        f'{PAYMENT_MODE!r}.',
+    )
+if not DEBUG and PAYMENT_MODE == 'paymongo' and not PAYMONGO_WEBHOOK_SECRET:
+    raise ImproperlyConfigured(
+        'PAYMONGO_WEBHOOK_SECRET is required when PAYMENT_MODE=paymongo in '
+        'production; without it webhook payloads cannot be authenticated.',
+    )
+if not DEBUG and PAYMENT_MODE == 'xendit' and not XENDIT_CALLBACK_TOKEN:
+    raise ImproperlyConfigured(
+        'XENDIT_CALLBACK_TOKEN is required when PAYMENT_MODE=xendit in '
+        'production; without it webhook callbacks cannot be authenticated.',
+    )
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -183,6 +221,45 @@ SUPABASE_STORAGE_BUCKET_PET_IMAGES = env('SUPABASE_STORAGE_BUCKET_PET_IMAGES', d
 SUPABASE_STORAGE_BUCKET_QR_CODES = env('SUPABASE_STORAGE_BUCKET_QR_CODES', default='qr-codes')
 SUPABASE_STORAGE_BUCKET_OWNER_IMAGES = env('SUPABASE_STORAGE_BUCKET_OWNER_IMAGES', default='owner-images')
 SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES = env('SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES', default='clinic-images')
+SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES = env(
+    'SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES', default='screening-images',
+)
+
+# Claude Vision image review. Only the Django backend calls Anthropic; the
+# on-device EfficientNet classifier remains independent and never sends
+# predictions to Claude. Keep the API key in the environment and never log it.
+ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
+ANTHROPIC_API_URL = env('ANTHROPIC_API_URL', default='https://api.anthropic.com/v1/messages')
+ANTHROPIC_API_VERSION = env('ANTHROPIC_API_VERSION', default='2023-06-01')
+ANTHROPIC_MODEL = env('ANTHROPIC_MODEL', default='claude-sonnet-4-6')
+ANTHROPIC_MAX_TOKENS = env.int('ANTHROPIC_MAX_TOKENS', default=1500)
+ANTHROPIC_TIMEOUT_SECONDS = env.int('ANTHROPIC_TIMEOUT_SECONDS', default=30)
+
+# A screening uses exactly one image. The limit protects request bodies and
+# matches Anthropic's per-image limit; the mobile app sends a small JPEG.
+SCREENING_IMAGE_MAX_BYTES = env.int(
+    'SCREENING_IMAGE_MAX_BYTES', default=5 * 1024 * 1024,
+)
+SCREENING_IMAGE_ALLOWED_TYPES = ('image/jpeg', 'image/png', 'image/webp')
+# The signed token carries the Claude result from /vision-analysis/ to the
+# final screening creation. It is bound to the owner and image SHA-256.
+SCREENING_CLAUDE_TOKEN_MAX_AGE = env.int(
+    'SCREENING_CLAUDE_TOKEN_MAX_AGE', default=3600,
+)
+
+# Clinic geocoding. Uses OpenStreetMap's Nominatim service, which is free but
+# requires an identifying User-Agent and at most one request per second. The
+# app caches resolved coordinates in the CLINIC table and only calls Nominatim
+# when a clinic address is created or changed.
+NOMINATIM_BASE_URL = env(
+    'NOMINATIM_BASE_URL',
+    default='https://nominatim.openstreetmap.org',
+)
+NOMINATIM_USER_AGENT = env(
+    'NOMINATIM_USER_AGENT',
+    default='XPawSure/1.0 (+https://github.com/trishtianmisc/xPawSure-Capstone)',
+)
+NOMINATIM_TIMEOUT = env.int('NOMINATIM_TIMEOUT', default=10)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -261,6 +338,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'login': '30/min',
         'public_pet': '60/min',
+        'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='10/hour'),
+        'screening-create': env('SCREENING_CREATE_THROTTLE_RATE', default='30/hour'),
     },
 }
 

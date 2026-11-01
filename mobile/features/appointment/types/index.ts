@@ -1,6 +1,7 @@
 import type { ScreeningSummary } from '../../screening/types'
 
 export type AppointmentStatus =
+  | 'CONFIRMATION'
   | 'PENDING'
   | 'CONFIRMED'
   | 'CHECKED_IN'
@@ -55,13 +56,23 @@ export interface OwnerClinic {
   cln_address: string | null
   cln_phone: string | null
   cln_logo_url: string | null
+  /** Consultation fee in the clinic's currency; 0 means booking is free. */
+  consultation_fee: number
+  /**
+   * Map coordinates geocoded from the clinic address by the backend. Either
+   * both are set, or both are null when no location could be resolved — such a
+   * clinic stays selectable in the list but has no map pin.
+   */
+  cln_latitude: number | null
+  cln_longitude: number | null
 }
 
 export interface OwnerVet {
   stf_id: string
   full_name: string
   email: string | null
-  available_count: number
+  /** Null when the list was requested without a date (no per-day count). */
+  available_count: number | null
 }
 
 export interface OwnerSlot {
@@ -82,4 +93,6 @@ export interface BookAppointmentPayload {
   apt_type: AppointmentType
   reason?: string
   screening_id: string
+  /** Required once the clinic's consultation fee is greater than 0. */
+  pay_id?: string
 }

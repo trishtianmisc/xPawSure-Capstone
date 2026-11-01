@@ -2,6 +2,7 @@ import { useAppointments } from './useAppointments'
 import type { Appointment, AppointmentStatus } from '../types/receptionist.types'
 
 const UPCOMING_STATUSES: AppointmentStatus[] = [
+  'CONFIRMATION',
   'PENDING',
   'CONFIRMED',
   'CHECKED_IN',

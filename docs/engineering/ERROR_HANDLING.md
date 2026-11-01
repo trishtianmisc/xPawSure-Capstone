@@ -230,7 +230,7 @@ React Native applications should gracefully handle:
 - Camera permission denied
 - Offline mode
 - Upload failures
-- TensorFlow Lite loading failures
+- TensorFlow.js loading failures
 - Corrupted AI model
 - Invalid images
 
@@ -248,11 +248,15 @@ Possible AI errors:
 - Unsupported image format
 - Inference timeout
 - Prediction failure
+- Independent review `NOT_CONFIGURED`, `TIMEOUT`, `RATE_LIMITED`,
+  `QUOTA_EXHAUSTED`, `MALFORMED_RESPONSE`, or `PROVIDER_ERROR`
 
 Fallback behavior:
 
 - Notify the user
-- Log the error
+- Log the error without logging the API key or image bytes
+- Keep the other AI result visible when one component fails
+- Never fabricate a prediction or review finding
 - Allow manual consultation without AI
 
 AI failure must never block clinical workflows.

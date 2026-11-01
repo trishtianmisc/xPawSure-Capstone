@@ -1,27 +1,36 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ComponentProps } from 'react'
 import {
   ActivityIndicator,
   Image,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useTheme, type AppColors } from '../../../../src/context/ThemeContext'
 import { font } from '../../../../src/theme/typography'
-import type { ImageReport, Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
+import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
-import { usePet } from '../../../../features/pet/hooks/usePet'
+import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
+import { ClaudeReviewCard } from '../../../../features/screening/components/AnalysisCards'
+import { SymptomSummaryCard } from '../../../../features/screening/components/SymptomSummaryCard'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import { buildScreeningSavePayload } from '../../../../features/screening/savePayload'
+import type {
+  ClaudeAnalysisResponse,
+  ClaudeImageSuitability,
+} from '../../../../features/screening/types'
 
-const DISEASE_META: Record<string, { color: string; icon: string }> = {
+type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
+
+const DISEASE_META: Record<string, { color: string; icon: IconName }> = {
   ALLERGIC_DERMATITIS: { color: '#E67E22', icon: 'alert-circle-outline' },
   BACTERIAL: { color: '#C0392B', icon: 'bacteria-outline' },
   FUNGAL: { color: '#8E44AD', icon: 'flower-tulip-outline' },
@@ -29,11 +38,62 @@ const DISEASE_META: Record<string, { color: string; icon: string }> = {
   MANGE: { color: '#27AE60', icon: 'bug-outline' },
 }
 
-const STATE_META: Record<ScreeningResultState, { color: string; icon: string }> = {
+const STATE_META: Record<ScreeningResultState, { color: string; icon: IconName }> = {
   DISEASE_DETECTED: { color: '#C0392B', icon: 'medical-bag' },
   NOT_SKIN_IMAGE: { color: '#E67E22', icon: 'image-off-outline' },
   UNCERTAIN: { color: '#F39C12', icon: 'help-circle-outline' },
   INVALID_IMAGE: { color: '#E74C3C', icon: 'image-off-outline' },
+}
+
+const GATE_META: Record<
+  ClaudeImageSuitability,
+  { color: string; icon: IconName; title: string }
+> = {
+  SUITABLE: {
+    color: '#27AE60',
+    icon: 'check-circle-outline',
+    title: 'Image approved for screening',
+  },
+  POOR_QUALITY: {
+    color: '#E67E22',
+    icon: 'image-off-outline',
+    title: 'Photo Not Clear Enough',
+  },
+  NOT_DOG_SKIN: {
+    color: '#E67E22',
+    icon: 'image-off-outline',
+    title: 'Not a Skin Image',
+  },
+  NO_VISIBLE_LESIONS: {
+    color: '#27AE60',
+    icon: 'check-circle-outline',
+    title: 'Skin Appears Healthy',
+  },
+  WOUND_OR_INJURY: {
+    color: '#C0392B',
+    icon: 'medical-bag',
+    title: 'Possible Wound or Injury',
+  },
+  UNCERTAIN: {
+    color: '#F39C12',
+    icon: 'help-circle-outline',
+    title: 'Unable to Assess',
+  },
+}
+
+const RESULT_STATES = Object.keys(SCREENING_STATE_MESSAGES) as ScreeningResultState[]
+
+function parseClaude(value?: string): ClaudeAnalysisResponse | null {
+  if (!value) return null
+  try {
+    const parsed = JSON.parse(value) as Partial<ClaudeAnalysisResponse> | null
+    if (!parsed || typeof parsed !== 'object' || typeof parsed.status !== 'string') {
+      return null
+    }
+    return parsed as ClaudeAnalysisResponse
+  } catch {
+    return null
+  }
 }
 
 function ConfidenceBar({ label, confidence, isTop, color }: {
@@ -83,92 +143,162 @@ export default function ResultScreen() {
   const createScreening = useCreateScreening()
   const [saveError, setSaveError] = useState(false)
   const params = useLocalSearchParams<{
-    imageUri: string
-    petId: string
-    petName: string
-    predictions: string
-    modelVersion: string
-    inferenceTimeMs: string
-    state: ScreeningResultState
-    stateMessage: string
-    alreadySaved: string
-    refined?: string
-    changed?: string
-    imageReports?: string
+    imageUri?: string
+    petId?: string
+    petName?: string
+    predictions?: string
+    modelVersion?: string
+    inferenceTimeMs?: string
+    state?: string
+    stateMessage?: string
+    deviceFailed?: string
+    classifierSkipped?: string
+    claude?: string
+    claudeRequestFailed?: string
+    answers?: string
+    stoppingReason?: string
+    answeredCount?: string
+    totalQuestions?: string
+    alreadySaved?: string
   }>()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: pet } = usePet(
-    params.petId && params.petId !== 'unknown' ? params.petId : undefined,
-  )
 
-  const screeningState = (params.state as ScreeningResultState) || 'DISEASE_DETECTED'
-  const stateMessage = params.stateMessage || ''
+  const deviceFailed = params.deviceFailed === 'true'
+  const classifierSkipped = params.classifierSkipped === 'true'
+  const claudeRequestFailed = params.claudeRequestFailed === 'true'
+
+  const screeningState: ScreeningResultState | null = deviceFailed || classifierSkipped
+    ? null
+    : RESULT_STATES.includes(params.state as ScreeningResultState)
+      ? (params.state as ScreeningResultState)
+      : 'DISEASE_DETECTED'
 
   const predictions: Prediction[] = useMemo(() => {
     try {
-      return JSON.parse(params.predictions || '[]')
+      const parsed = JSON.parse(params.predictions || '[]')
+      return Array.isArray(parsed) ? (parsed as Prediction[]) : []
     } catch {
       return []
     }
   }, [params.predictions])
 
-  const refinedPredictions: Prediction[] | null = useMemo(() => {
+  // Supplementary questionnaire answers (display context only). These never
+  // alter the AI predictions, confidence, or the persisted screening record.
+  const questionnaireAnswers: Record<string, string[]> = useMemo(() => {
     try {
-      const parsed = params.refined ? JSON.parse(params.refined) : null
-      return Array.isArray(parsed) && parsed.length > 0 ? (parsed as Prediction[]) : null
+      const parsed = JSON.parse(params.answers || '{}')
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, string[]>)
+        : {}
     } catch {
-      return null
+      return {}
     }
-  }, [params.refined])
+  }, [params.answers])
 
-  const imageReports: ImageReport[] = useMemo(() => {
-    try {
-      const parsed = params.imageReports ? JSON.parse(params.imageReports) : null
-      return Array.isArray(parsed) ? (parsed as ImageReport[]) : []
-    } catch {
-      return []
+  const symptomRows = useMemo(() => {
+    const rows: { question: string; answer: string }[] = []
+    for (const question of KNOWLEDGE.questions) {
+      const selectedIds = questionnaireAnswers[question.id]
+      if (!Array.isArray(selectedIds) || selectedIds.length === 0) continue
+      const labels = selectedIds.map(
+        (id) => question.options.find((option) => option.id === id)?.label ?? id,
+      )
+      rows.push({ question: question.text, answer: labels.join(', ') })
     }
-  }, [params.imageReports])
+    return rows
+  }, [questionnaireAnswers])
 
-  const sorted = useMemo(() => [...predictions].sort((a, b) => b.confidence - a.confidence), [predictions])
-  const top = sorted[0]
-  const finalTop = refinedPredictions ? refinedPredictions[0] : top
-  const isChanged = params.changed === 'true'
-  const topMeta = finalTop ? DISEASE_META[finalTop.disease] ?? { color: colors.primary, icon: 'help-circle-outline' } : null
-  const confidencePct = finalTop ? Math.round(finalTop.confidence) : 0
-  const displayBars = refinedPredictions ? refinedPredictions.slice(0, 3) : sorted
+  const answeredCount = Number(params.answeredCount) || 0
+  const totalQuestions = Number(params.totalQuestions) || 0
+  const alreadySaved = params.alreadySaved === 'true'
+  // Tracks whether this result is already on the server, whether it arrived
+  // pre-saved from the questionnaire step or was saved from this screen.
+  const [saved, setSaved] = useState(alreadySaved)
+  // Id of the screening created from this screen; the booking wizard needs it.
+  const [savedId, setSavedId] = useState<string | null>(null)
 
-  const stateMeta = STATE_META[screeningState]
-  const stateConfig = SCREENING_STATE_MESSAGES[screeningState]
+  const claudeResponse = useMemo(() => parseClaude(params.claude), [params.claude])
+  const gateFindings = classifierSkipped ? claudeResponse?.result ?? null : null
+  const gateMeta = gateFindings ? GATE_META[gateFindings.image_suitability] : null
+  const sorted = useMemo(
+    () => [...predictions].sort((a, b) => b.confidence - a.confidence),
+    [predictions],
+  )
+  const top = sorted[0] ?? null
+  const topMeta = top
+    ? DISEASE_META[top.disease] ?? { color: colors.primary, icon: 'help-circle-outline' }
+    : null
+  const stateMeta = screeningState ? STATE_META[screeningState] : null
+  const stateConfig = screeningState ? SCREENING_STATE_MESSAGES[screeningState] : null
 
-  const canBook = screeningState === 'DISEASE_DETECTED' && !!finalTop && !!params.petId && params.petId !== 'unknown'
+  const hasValidPet = !!params.petId && params.petId !== 'unknown'
+  const canBook =
+    !deviceFailed &&
+    !classifierSkipped &&
+    screeningState === 'DISEASE_DETECTED' &&
+    !!top &&
+    hasValidPet &&
+    !!params.imageUri &&
+    !!claudeResponse?.token
 
-  const handleSaveAndBook = () => {
-    if (!canBook || !finalTop || createScreening.isPending) return
-    if (params.alreadySaved === 'true') {
-      router.replace('/(owner)/appointments/book')
+  /**
+   * Persist this screening. `onSaved` runs only after the server confirms and
+   * receives the created screening id, so callers can chain navigation without
+   * ever saving silently twice.
+   */
+  const saveScreening = (onSaved: (savedSid: string) => void) => {
+    if (!canBook || !params.petId || createScreening.isPending) return
+    if (saved) {
+      if (savedId) onSaved(savedId)
       return
     }
+    // Sole primary result: the persisted prediction and confidence come
+    // exclusively from the raw on-device AI output (`top`). Questionnaire
+    // answers are never part of the save payload.
+    if (!top) return
     setSaveError(false)
     createScreening.mutate(
-      {
-        pet_id: params.petId,
-        source: 'DEVICE',
-        prediction: finalTop.disease,
-        confidence: Math.round(finalTop.confidence),
-        model_version: params.modelVersion || 'unknown',
-        inference_time_ms: Number(params.inferenceTimeMs) || undefined,
+      buildScreeningSavePayload(top, {
+        petId: params.petId,
+        modelVersion: params.modelVersion,
+        inferenceTimeMs: params.inferenceTimeMs,
+        imageUri: params.imageUri,
+        claudeToken: claudeResponse?.token || undefined,
         device: Platform.OS,
-      },
+      }),
       {
-        onSuccess: () => {
-          router.replace('/(owner)/appointments/book')
+        onSuccess: (created) => {
+          setSaved(true)
+          setSavedId(created.ais_id)
+          onSaved(created.ais_id)
         },
         onError: () => {
           setSaveError(true)
         },
       },
     )
+  }
+
+  /** Save only: the owner keeps the result on screen with a saved confirmation. */
+  const handleSave = () => {
+    saveScreening(() => {})
+  }
+
+  /** Save when needed, then open the booking wizard with the scan attached. */
+  const handleBookAppointment = () => {
+    saveScreening((savedSid) => {
+      router.replace({
+        pathname: '/(owner)/appointments/book',
+        params: { petId: params.petId, screeningId: savedSid },
+      })
+    })
+  }
+
+  const scanAgain = () => {
+    router.replace({
+      pathname: '/(owner)/pets/screening',
+      params: { petId: params.petId, petName: params.petName },
+    })
   }
 
   return (
@@ -185,66 +315,99 @@ export default function ResultScreen() {
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.imageRow}>
-          {pet?.profile_picture ? (
-            <Image source={{ uri: pet.profile_picture }} style={styles.thumbnail} />
+          {params.imageUri ? (
+            <Image source={{ uri: params.imageUri }} style={styles.thumbnail} />
           ) : (
             <View style={styles.thumbnailPlaceholder}>
               <MaterialCommunityIcons color={colors.primary} name="paw" size={24} />
             </View>
           )}
           <View style={styles.imageInfo}>
-            <Text style={styles.petName}>{params.petName}</Text>
+            <Text style={styles.petName}>{params.petName || 'Your pet'}</Text>
             <Text style={styles.timestamp}>
-              {imageReports.length > 0
-                ? `${imageReports.filter((r) => r.status === 'ok').length}/${imageReports.length} photos used`
-                : 'Just now'}
+              {classifierSkipped
+                ? 'One photo · image validation only'
+                : deviceFailed
+                  ? 'One photo · image validation, classifier unavailable'
+                  : 'One photo · image validation and on-device model'}
             </Text>
           </View>
         </View>
 
-        {imageReports.length > 0 && (
-          <View style={styles.reportStrip}>
-            {imageReports.map((report, i) => (
-              <View key={`${report.uri}-${i}`} style={styles.reportItem}>
-                <Image source={{ uri: report.uri }} style={[styles.reportThumb, report.status !== 'ok' && styles.reportThumbFailed]} />
-                <View style={[styles.reportBadge, report.status === 'ok' ? styles.reportBadgeOk : styles.reportBadgeFail]}>
-                  <MaterialCommunityIcons
-                    color="#FFF"
-                    name={report.status === 'ok' ? 'check' : 'close'}
-                    size={10}
-                  />
-                </View>
+        {classifierSkipped && gateFindings && gateMeta && (
+          <>
+            <Text style={styles.sectionLabel}>IMAGE VALIDATION</Text>
+            <View style={[styles.stateCard, { borderColor: gateMeta.color + '40' }]}>
+              <View style={[styles.stateIconCircle, { backgroundColor: gateMeta.color + '18' }]}>
+                <MaterialCommunityIcons color={gateMeta.color} name={gateMeta.icon} size={32} />
               </View>
-            ))}
+              <Text style={[styles.stateTitle, { color: gateMeta.color }]}>{gateMeta.title}</Text>
+              <Text style={styles.stateMessage}>{gateFindings.screening_message}</Text>
+              <Text style={styles.gateNote}>
+                No on-device disease prediction was produced for this photo.
+              </Text>
+            </View>
+          </>
+        )}
+
+        {classifierSkipped && !gateFindings && (
+          <>
+            <Text style={styles.sectionLabel}>IMAGE VALIDATION</Text>
+            <View style={[styles.stateCard, { borderColor: colors.error + '40' }]}>
+              <View style={[styles.stateIconCircle, { backgroundColor: colors.errorBg }]}>
+                <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={32} />
+              </View>
+              <Text style={[styles.stateTitle, { color: colors.error }]}>
+                Image validation unavailable
+              </Text>
+              <Text style={styles.stateMessage}>
+                No on-device disease prediction was produced. Please try another photo.
+              </Text>
+            </View>
+          </>
+        )}
+
+        {!classifierSkipped && (
+          <Text style={styles.sectionLabel}>AI Preliminary Screening Result</Text>
+        )}
+
+        {!classifierSkipped && deviceFailed && (
+          <View style={[styles.stateCard, { borderColor: colors.error + '40' }]}>
+            <View style={[styles.stateIconCircle, { backgroundColor: colors.errorBg }]}>
+              <MaterialCommunityIcons color={colors.error} name="cellphone-off" size={32} />
+            </View>
+            <Text style={[styles.stateTitle, { color: colors.error }]}>
+              On-device analysis unavailable
+            </Text>
+            <Text style={styles.stateMessage}>
+              No prediction was produced, so none is shown. The image review below is
+              displayed on its own and is not a diagnosis.
+            </Text>
           </View>
         )}
 
-        {screeningState === 'DISEASE_DETECTED' && finalTop && topMeta && (
+        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && top && topMeta && (
           <>
             <View style={[styles.topCard, { borderColor: topMeta.color + '30' }]}>
               <View style={[styles.topIconCircle, { backgroundColor: topMeta.color + '18' }]}>
-                <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon as any} size={28} />
+                <MaterialCommunityIcons color={topMeta.color} name={topMeta.icon} size={28} />
               </View>
-              <Text style={styles.topLabel}>{refinedPredictions ? 'Closest Match' : 'Predicted Condition'}</Text>
-              <Text style={[styles.topDisease, { color: topMeta.color }]}>{finalTop.label}</Text>
+              <Text style={styles.topLabel}>Predicted Condition</Text>
+              <Text style={[styles.topDisease, { color: topMeta.color }]}>{top.label}</Text>
               <View style={styles.confidenceBadge}>
-                <Text style={[styles.confidenceText, { color: topMeta.color }]}>{confidencePct}%</Text>
-                <Text style={styles.confidenceLabel}>confidence</Text>
-              </View>
-              {refinedPredictions && (
-                <Text style={styles.comparisonText}>
-                  {isChanged
-                    ? `Your answers shifted the result from the preliminary screen\u2019s ${top?.label}.`
-                    : 'Consistent with the preliminary AI screen.'}
+                <Text style={[styles.confidenceText, { color: topMeta.color }]}>
+                  {Math.round(top.confidence)}%
                 </Text>
-              )}
+                <Text style={styles.confidenceLabel}>model confidence</Text>
+              </View>
+              <Text style={styles.comparisonText}>
+                Raw output from the on-device model. It is not a diagnosis.
+              </Text>
             </View>
 
             <View style={styles.breakdownCard}>
-              <Text style={styles.breakdownTitle}>
-                {refinedPredictions ? 'Top 3 Suggestions' : 'All Predictions'}
-              </Text>
-              {displayBars.map((pred, i) => {
+              <Text style={styles.breakdownTitle}>Top 3 Predictions</Text>
+              {sorted.slice(0, 3).map((pred, i) => {
                 const meta = DISEASE_META[pred.disease] ?? { color: colors.primary }
                 return (
                   <ConfidenceBar
@@ -256,70 +419,114 @@ export default function ResultScreen() {
                   />
                 )
               })}
-              {refinedPredictions && (
-                <Text style={styles.moreCountText}>
-                  2 other conditions were also considered and scored lower.
-                </Text>
-              )}
             </View>
           </>
         )}
 
-        {(screeningState === 'NOT_SKIN_IMAGE' || screeningState === 'UNCERTAIN' || screeningState === 'INVALID_IMAGE') && (
+        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (
+          <SymptomSummaryCard
+            rows={symptomRows}
+            answeredCount={answeredCount}
+            totalQuestions={totalQuestions}
+          />
+        )}
+
+        {!deviceFailed && screeningState !== 'DISEASE_DETECTED' && stateMeta && stateConfig && (
           <View style={[styles.stateCard, { borderColor: stateMeta.color + '30' }]}>
             <View style={[styles.stateIconCircle, { backgroundColor: stateMeta.color + '18' }]}>
-              <MaterialCommunityIcons color={stateMeta.color} name={stateMeta.icon as any} size={32} />
+              <MaterialCommunityIcons color={stateMeta.color} name={stateMeta.icon} size={32} />
             </View>
             <Text style={[styles.stateTitle, { color: stateMeta.color }]}>{stateConfig.title}</Text>
-            <Text style={styles.stateMessage}>{stateMessage || stateConfig.message}</Text>
+            <Text style={styles.stateMessage}>
+              {params.stateMessage || stateConfig.message}
+            </Text>
           </View>
         )}
+
+        <Text style={styles.sectionLabel}>INDEPENDENT REVIEW</Text>
+        <ClaudeReviewCard response={claudeResponse} requestFailed={claudeRequestFailed} />
 
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
-            This is an AI-assisted screening and does not replace professional veterinary diagnosis.
-            Consult a vet for definitive results.
+            {classifierSkipped || deviceFailed
+              ? 'The image review was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
+              : 'AI-assisted screening is preliminary and does not replace professional veterinary diagnosis. The on-device AI result is the primary prediction. Questionnaire answers are supplementary and never modify the AI prediction or confidence. Consult a vet for definitive results.'}
           </Text>
         </View>
 
         {canBook && (
           <Pressable
-            disabled={createScreening.isPending}
-            onPress={handleSaveAndBook}
-            style={[styles.actionBtn, styles.primaryBtn, createScreening.isPending && styles.actionBtnDisabled]}
+            accessibilityLabel="Save this screening result"
+            disabled={saved || createScreening.isPending}
+            onPress={handleSave}
+            style={[
+              styles.actionBtn,
+              styles.primaryBtn,
+              (saved || createScreening.isPending) && styles.actionBtnDisabled,
+            ]}
           >
             {createScreening.isPending ? (
               <ActivityIndicator color="#FFF" size="small" />
             ) : (
-              <MaterialCommunityIcons color="#FFF" name="calendar-plus" size={16} />
+              <MaterialCommunityIcons
+                color="#FFF"
+                name={saved ? 'check-circle-outline' : 'content-save-outline'}
+                size={16}
+              />
             )}
             <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-              {createScreening.isPending ? 'Saving...' : 'Book Appointment'}
+              {createScreening.isPending ? 'Saving...' : saved ? 'Saved' : 'Save Result'}
+            </Text>
+          </Pressable>
+        )}
+
+        {canBook && saved && (
+          <View style={styles.savedRow}>
+            <MaterialCommunityIcons color="#27AE60" name="check-circle" size={16} />
+            <Text style={styles.savedText}>
+              Saved to your pet&apos;s records. You can book now or later.
+            </Text>
+          </View>
+        )}
+
+        {canBook && (
+          <Pressable
+            accessibilityLabel="Book an appointment"
+            disabled={createScreening.isPending}
+            onPress={handleBookAppointment}
+            style={[
+              styles.actionBtn,
+              styles.secondaryBtn,
+              styles.bookBtn,
+              { borderColor: colors.border },
+              createScreening.isPending && styles.actionBtnDisabled,
+            ]}
+          >
+            <MaterialCommunityIcons color={colors.primary} name="calendar-plus" size={16} />
+            <Text style={[styles.actionBtnText, { color: colors.primary }]}>
+              Book an Appointment
             </Text>
           </Pressable>
         )}
 
         {saveError && (
           <View style={styles.saveErrorRow}>
-            <MaterialCommunityIcons color="#C0392B" name="alert-circle-outline" size={16} />
-            <Text style={styles.saveErrorText}>
-              Couldn&apos;t save the scan. Check your connection and try again.
+            <MaterialCommunityIcons color={colors.error} name="alert-circle-outline" size={16} />
+            <Text style={[styles.saveErrorText, { color: colors.error }]}>
+              Couldn&apos;t save the screening. Check your connection and try again.
             </Text>
           </View>
         )}
 
         <Pressable
-          onPress={() =>
-            router.replace({
-              pathname: '/(owner)/pets/screening',
-              params: { petId: params.petId, petName: params.petName },
-            })
-          }
+          onPress={scanAgain}
           style={[styles.actionBtn, styles.secondaryBtn, styles.scanAgainBtn, { borderColor: colors.border }]}
         >
           <MaterialCommunityIcons color={colors.primary} name="camera" size={16} />
-          <Text style={[styles.actionBtnText, { color: colors.primary }]}>Scan Again</Text>
+          <Text style={[styles.actionBtnText, { color: colors.primary }]}>
+            {classifierSkipped ? 'Choose Another Photo' : 'Scan Again'}
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -328,38 +535,37 @@ export default function ResultScreen() {
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
-  header: { height: 50, marginHorizontal: 10, marginBottom: 8, marginTop: -10 },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
   headerBack: {
     alignItems: 'center',
-    height: 50,
+    borderRadius: 20,
+    height: 40,
     justifyContent: 'center',
-    width: 50,
-    marginTop: 20,
-  }, 
-  headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -40, marginLeft: 50 },
-  headerRight: { width: 20 },
+    width: 40,
+  },
+  headerTitle: { ...font.extrabold, color: colors.text, flex: 1, fontSize: 20 },
+  headerRight: { width: 40 },
 
+  content: { paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 },
 
-  content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 },
+  sectionLabel: {
+    ...font.bold,
+    color: colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.5,
+    marginBottom: 10,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
 
   imageRow: { alignItems: 'center', flexDirection: 'row', gap: 14, marginBottom: 20 },
   thumbnail: { borderRadius: 14, height: 56, width: 56 },
-  reportStrip: { flexDirection: 'row', gap: 10, marginBottom: 20, marginTop: -8 },
-  reportItem: { position: 'relative' },
-  reportThumb: { borderRadius: 12, height: 56, width: 56 },
-  reportThumbFailed: { opacity: 0.4 },
-  reportBadge: {
-    alignItems: 'center',
-    borderRadius: 9,
-    bottom: -4,
-    height: 18,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: -4,
-    width: 18,
-  },
-  reportBadgeOk: { backgroundColor: '#27AE60' },
-  reportBadgeFail: { backgroundColor: '#C0392B' },
   thumbnailPlaceholder: {
     alignItems: 'center',
     backgroundColor: colors.surfaceAlt,
@@ -370,7 +576,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   imageInfo: { flex: 1 },
   petName: { ...font.bold, color: colors.text, fontSize: 16 },
-  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  timestamp: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 2 },
 
   topCard: {
     alignItems: 'center',
@@ -405,6 +611,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginBottom: 16,
     padding: 18,
   },
+  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
   comparisonText: {
     color: colors.textMuted,
     fontSize: 12,
@@ -413,28 +620,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
-  moreCountText: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginTop: 2,
-  },
-  breakdownTitle: { ...font.bold, color: colors.text, fontSize: 15, marginBottom: 16 },
-
-  narrowBtn: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderColor: colors.border,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'center',
-    marginBottom: 16,
-    paddingVertical: 12,
-  },
-  narrowBtnText: { ...font.bold, fontSize: 13 },
-
   stateCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,
@@ -463,6 +648,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 10,
     textAlign: 'center',
   },
+  gateNote: {
+    ...font.semibold,
+    color: colors.textSecondary,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 10,
+    textAlign: 'center',
+  },
 
   infoCard: {
     alignItems: 'flex-start',
@@ -486,13 +679,14 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   actionBtnDisabled: { opacity: 0.6 },
   primaryBtn: { backgroundColor: '#B96534', marginTop: 16 },
   secondaryBtn: { backgroundColor: colors.surface, borderWidth: 1.5 },
+  bookBtn: { marginTop: 12 },
   scanAgainBtn: { marginTop: 12 },
   actionBtnText: { ...font.bold, fontSize: 14 },
 
-  saveErrorRow: {
+  savedRow: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderColor: '#C0392B',
+    borderColor: '#27AE60',
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: 'row',
@@ -501,5 +695,19 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
-  saveErrorText: { ...font.semibold, color: '#C0392B', flex: 1, fontSize: 12, lineHeight: 17 },
+  savedText: { ...font.semibold, color: colors.textSecondary, flex: 1, fontSize: 12, lineHeight: 17 },
+
+  saveErrorRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.error,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  saveErrorText: { ...font.semibold, flex: 1, fontSize: 12, lineHeight: 17 },
 })

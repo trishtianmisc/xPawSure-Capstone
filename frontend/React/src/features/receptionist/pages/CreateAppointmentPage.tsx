@@ -1,18 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
+import { useCancelPayment, useCreateCheckout, usePayment } from '../../payments/hooks/usePayments'
+import type { Payment, PaymentMethod } from '../../payments/types/payment.types'
+import { apiErrorCode } from '../../../utils/error'
 import { useCreateAppointment } from '../hooks/useAppointments'
 import { useAvailableSlots, useVetsForDate } from '../hooks/useAvailableSlots'
+import { useClinicSettings } from '../hooks/useClinicSettings'
 import { useOwners } from '../hooks/useOwners'
 import { usePets } from '../hooks/usePets'
 import { createAppointmentSchema, type CreateAppointmentForm } from '../schemas/receptionist.schema'
 import type { VetSlot } from '../types/receptionist.types'
 
+const METHOD_OPTIONS: { value: PaymentMethod; label: string; hint: string }[] = [
+  { value: 'GCASH', label: 'GCash', hint: 'Owner pays on the checkout page' },
+  { value: 'CARD', label: 'Card', hint: 'Owner pays on the checkout page' },
+  { value: 'CASH', label: 'Cash', hint: 'Recorded now, settled at the counter' },
+]
+
+function isSettledWithoutPayment(status: Payment['status']): boolean {
+  return status === 'FAILED' || status === 'EXPIRED' || status === 'VOID'
+}
+
 export function CreateAppointmentPage() {
   const navigate = useNavigate()
   const createAppointment = useCreateAppointment()
+  const checkout = useCreateCheckout()
+  const { data: clinicSettings, isError: settingsFailed } = useClinicSettings()
 
   const [selectedDate, setSelectedDate] = useState('')
   const [selectedVet, setSelectedVet] = useState('')
@@ -20,6 +36,19 @@ export function CreateAppointmentPage() {
   const [ownerSearch, setOwnerSearch] = useState('')
   const [selectedOwnerId, setSelectedOwnerId] = useState('')
   const [petSearch, setPetSearch] = useState('')
+  const [method, setMethod] = useState<PaymentMethod>('GCASH')
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
+  const [submittedForm, setSubmittedForm] = useState<CreateAppointmentForm | null>(null)
+  const bookingStarted = useRef(false)
+
+  // Clinic settings decide whether payment is part of this booking at all.
+  const fee = clinicSettings ? Number(clinicSettings.consultation_fee ?? 0) : undefined
+  const requiresPayment = fee !== undefined && fee > 0
+
+  const { data: pendingPayment } = usePayment(pendingPaymentId ?? '', {
+    enabled: !!pendingPaymentId,
+  })
+  const cancelPayment = useCancelPayment()
 
   const { data: vets, isLoading: vetsLoading } = useVetsForDate(selectedDate)
   const { data: slots, isLoading: slotsLoading } = useAvailableSlots(selectedVet, selectedDate)
@@ -41,6 +70,10 @@ export function CreateAppointmentPage() {
     setSelectedOwnerId(value)
     setPetSearch('')
     setValue('pet_id', '')
+    // A payment belongs to one owner, so a pending checkout for the previous
+    // owner can no longer pay for this booking.
+    setPendingPaymentId(null)
+    bookingStarted.current = false
   }
 
   const { register, handleSubmit, setValue, formState: { errors } } = useForm<CreateAppointmentForm>({
@@ -50,12 +83,83 @@ export function CreateAppointmentPage() {
     },
   })
 
-  function onSubmit(data: CreateAppointmentForm) {
+  function book(data: CreateAppointmentForm, payId?: string | null) {
     if (!selectedSlot) return
     createAppointment.mutate(
-      { ...data, slot_id: selectedSlot.vsl_id },
+      { ...data, slot_id: selectedSlot.vsl_id, pay_id: payId ?? undefined },
       { onSuccess: (result) => navigate(`/receptionist/appointments/${result.apt_id}`) },
     )
+  }
+
+  function onSubmit(data: CreateAppointmentForm) {
+    if (!selectedSlot) return
+    setSubmittedForm(data)
+
+    if (pendingPayment?.status === 'PAID') {
+      // Already settled for this session — just create the appointment.
+      book(data, pendingPayment.pay_id)
+      return
+    }
+    if (pendingPayment?.status === 'PENDING') {
+      // The checkout panel is waiting for the gateway.
+      return
+    }
+    if (fee === undefined) {
+      // Settings still loading; the submit button is disabled meanwhile.
+      return
+    }
+    if (fee <= 0) {
+      book(data)
+      return
+    }
+
+    checkout.mutate(
+      {
+        pet_id: data.pet_id,
+        slot_id: selectedSlot.vsl_id,
+        apt_type: data.apt_type,
+        method,
+        reason: data.reason ?? '',
+      },
+      {
+        onSuccess: (payment) => {
+          if (payment.status === 'PAID') {
+            book(data, payment.pay_id)
+            return
+          }
+          setPendingPaymentId(payment.pay_id)
+        },
+        onError: (error) => {
+          // A clinic with no fee answers here; book without a payment then.
+          if (apiErrorCode(error) === 'PAYMENT_NOT_REQUIRED') {
+            book(data)
+          }
+        },
+      },
+    )
+  }
+
+  // The mock checkout page confirms the payment in another tab; this picks the
+  // result up and finishes the booking exactly once.
+  useEffect(() => {
+    if (pendingPayment?.status !== 'PAID') return
+    if (bookingStarted.current) return
+    if (!submittedForm) return
+    bookingStarted.current = true
+    book(submittedForm, pendingPayment.pay_id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPayment?.status, pendingPayment?.pay_id, submittedForm])
+
+  function resetPendingPayment() {
+    setPendingPaymentId(null)
+    bookingStarted.current = false
+  }
+
+  function handleDiscardCheckout() {
+    if (pendingPaymentId) {
+      cancelPayment.mutate(pendingPaymentId)
+    }
+    resetPendingPayment()
   }
 
   const today = new Date().toISOString().split('T')[0]
@@ -217,6 +321,116 @@ export function CreateAppointmentPage() {
           </div>
         </div>
 
+        {/* Step 5: Payment (only when the clinic charges a fee) */}
+        {requiresPayment && (
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+            <h2 className="mb-1 text-lg font-semibold text-stone-900 dark:text-stone-100">
+              5. Payment
+            </h2>
+            <p className="mb-4 text-sm text-stone-500 dark:text-stone-400">
+              ₱{fee?.toFixed(2)} consultation fee. The appointment is created only after the
+              payment settles.
+            </p>
+
+            {!pendingPayment && (
+              <div className="space-y-2">
+                {METHOD_OPTIONS.map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
+                      method === option.value
+                        ? 'border-amber-500 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20'
+                        : 'border-stone-200 hover:bg-stone-50 dark:border-stone-700 dark:hover:bg-stone-800'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="payment_method"
+                      checked={method === option.value}
+                      onChange={() => setMethod(option.value)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-stone-800 dark:text-stone-100">
+                        {option.label}
+                      </span>
+                      <span className="block text-xs text-stone-500 dark:text-stone-400">
+                        {option.hint}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {pendingPayment?.status === 'PENDING' && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-900/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
+                      Checkout {pendingPayment.reference_no} created
+                    </p>
+                    <p className="mt-1 text-xs text-amber-800 dark:text-amber-400">
+                      Waiting for ₱{Number(pendingPayment.amount).toFixed(2)} via{' '}
+                      {pendingPayment.method}. The booking finishes automatically once it pays.
+                    </p>
+                  </div>
+                  <span className="mt-1 size-4 shrink-0 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      pendingPayment.checkout_url &&
+                      window.open(pendingPayment.checkout_url, '_blank', 'noopener')
+                    }
+                    className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-800"
+                  >
+                    Open checkout page
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDiscardCheckout}
+                    className="rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-600 hover:bg-white dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+                  >
+                    Discard checkout
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {pendingPayment?.status === 'PAID' && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+                Payment received — creating the appointment…
+              </div>
+            )}
+
+            {pendingPayment && isSettledWithoutPayment(pendingPayment.status) && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+                <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                  {pendingPayment.failure_reason ?? 'The payment did not go through.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDiscardCheckout}
+                  className="mt-3 rounded-lg border border-stone-300 px-3 py-1.5 text-xs font-medium text-stone-700 hover:bg-white dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+                >
+                  Start over
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Settings decide whether payment is part of the booking, so a failed
+            load has to be visible instead of silently blocking the button. */}
+        {settingsFailed && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            Clinic settings could not be loaded, so booking is paused. Refresh the page to try
+            again.
+          </div>
+        )}
+
         {/* Submit */}
         <div className="flex justify-end gap-3">
           <button
@@ -228,10 +442,24 @@ export function CreateAppointmentPage() {
           </button>
           <button
             type="submit"
-            disabled={!selectedSlot || createAppointment.isPending}
+            disabled={
+              !selectedSlot ||
+              fee === undefined ||
+              checkout.isPending ||
+              createAppointment.isPending ||
+              pendingPayment?.status === 'PENDING'
+            }
             className="rounded-lg bg-amber-700 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-800 disabled:opacity-50"
           >
-            {createAppointment.isPending ? 'Booking...' : 'Book Appointment'}
+            {pendingPayment?.status === 'PENDING'
+              ? 'Waiting for payment…'
+              : checkout.isPending
+                ? 'Starting checkout…'
+                : createAppointment.isPending
+                  ? 'Booking...'
+                  : requiresPayment
+                    ? 'Pay & Book'
+                    : 'Book Appointment'}
           </button>
         </div>
       </form>

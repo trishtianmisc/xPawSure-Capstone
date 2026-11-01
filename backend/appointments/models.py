@@ -12,6 +12,8 @@ class AppointmentType(models.TextChoices):
 
 
 class AppointmentStatus(models.TextChoices):
+    REVIEW = 'REVIEW', 'Review'
+    CONFIRMATION = 'CONFIRMATION', 'Confirmation'
     PENDING = 'PENDING', 'Pending'
     CONFIRMED = 'CONFIRMED', 'Confirmed'
     CHECKED_IN = 'CHECKED_IN', 'Checked In'
@@ -47,6 +49,14 @@ class Appointment(models.Model):
     apt_deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, db_column='APT_DELETED_AT')
     apt_created_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, related_name='created_appointments', db_column='APT_CREATED_BY')
     apt_screening = models.ForeignKey('ai_screenings.AiScreening', on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments', db_column='APT_SCREENING_ID')
+    apt_source_consultation = models.OneToOneField(
+        'consultations.Consultation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='follow_up_appointment',
+        db_column='APT_SOURCE_CONSULTATION',
+    )
 
     class Meta:
         managed = True

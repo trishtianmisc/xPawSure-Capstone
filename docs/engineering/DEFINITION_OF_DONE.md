@@ -156,7 +156,7 @@ If mobile changes exist:
 
 If AI features exist:
 
-☐ TensorFlow Lite loads correctly
+☐ TensorFlow.js loads correctly
 
 ☐ Image preprocessing verified
 
@@ -168,7 +168,11 @@ If AI features exist:
 
 ☐ Upload successful
 
-☐ No backend inference introduced
+☐ No backend classifier inference introduced
+
+☐ Independent review failure handled without hiding the on-device result
+
+☐ Classifier and review outputs are never averaged or fused
 
 ☐ Veterinarian remains decision-maker
 
