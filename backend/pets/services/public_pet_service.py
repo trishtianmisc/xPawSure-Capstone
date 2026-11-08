@@ -14,6 +14,18 @@ STATUS_NO_DUE_DATE = 'NO_DUE_DATE'
 
 STATUS_CHOICES = [STATUS_OVERDUE, STATUS_DUE_SOON, STATUS_CURRENT, STATUS_NO_DUE_DATE]
 
+OVERALL_UP_TO_DATE = 'up_to_date'
+OVERALL_DUE_SOON = 'due_soon'
+OVERALL_OVERDUE = 'overdue'
+OVERALL_NONE_RECORDED = 'none_recorded'
+
+OVERALL_STATUS_CHOICES = [
+    OVERALL_UP_TO_DATE,
+    OVERALL_DUE_SOON,
+    OVERALL_OVERDUE,
+    OVERALL_NONE_RECORDED,
+]
+
 _STATUS_PRIORITY = {
     STATUS_OVERDUE: 0,
     STATUS_DUE_SOON: 1,
@@ -59,13 +71,31 @@ class PublicPetService:
         return STATUS_CURRENT
 
     @staticmethod
-    def age_years(birth_date: date | None) -> int | None:
+    def age_years(birth_date: date | None, today: date | None = None) -> int | None:
         if birth_date is None:
             return None
-        today = timezone.localdate()
+        today = today or timezone.localdate()
         return today.year - birth_date.year - (
             (today.month, today.day) < (birth_date.month, birth_date.day)
         )
+
+    @staticmethod
+    def overall_vaccination_status(
+        next_due_dates: list[date | None],
+        today: date | None = None,
+    ) -> str:
+        if not next_due_dates:
+            return OVERALL_NONE_RECORDED
+
+        statuses = {
+            PublicPetService.vaccination_status(next_due, today)
+            for next_due in next_due_dates
+        }
+        if STATUS_OVERDUE in statuses:
+            return OVERALL_OVERDUE
+        if STATUS_DUE_SOON in statuses:
+            return OVERALL_DUE_SOON
+        return OVERALL_UP_TO_DATE
 
     @staticmethod
     def vaccination_alerts(pet: Pet) -> list[dict]:

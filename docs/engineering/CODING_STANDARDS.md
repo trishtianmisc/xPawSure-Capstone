@@ -429,13 +429,13 @@ Example Response
 # 18. Reports
 
 ```
-GET /reports/dashboard
+GET /reports/summary
 
 GET /reports/appointments
 
-GET /reports/patients
+GET /reports/vet-workload
 
-GET /reports/vaccinations
+GET /reports/screenings
 ```
 
 Reports are read-only.

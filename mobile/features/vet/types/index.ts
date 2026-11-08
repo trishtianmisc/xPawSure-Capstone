@@ -7,7 +7,7 @@ export type AppointmentStatus =
   | 'CANCELLED'
   | 'NO_SHOW'
 
-export type ConsultationTab = 'TODAY' | 'UPCOMING' | 'COMPLETED'
+export type ConsultationTab = 'TODAY' | 'UPCOMING' | 'COMPLETED' | 'CANCELLED'
 
 export interface VetScreeningSummary {
   ais_id: string

@@ -118,6 +118,13 @@ class VetDashboardStatsTests(VetDashboardBase):
     def test_stats_counts_are_scoped_to_vet(self):
         today = timezone.localdate()
 
+        # Keep the future appointment inside the current month so the
+        # month-scoped pending count stays stable when run on month end.
+        next_day = today + timedelta(days=1)
+        if next_day.month != today.month:
+            next_day = today
+        future_9am = self._aware(next_day, time(9, 0))
+
         self._make_appointment(
             self.vet, AppointmentStatus.COMPLETED, self.today_9am,
         )
@@ -127,7 +134,7 @@ class VetDashboardStatsTests(VetDashboardBase):
             self._aware(today - timedelta(days=40), time(9, 0)),
         )
         self._make_appointment(
-            self.vet, AppointmentStatus.CONFIRMED, self.tomorrow_9am,
+            self.vet, AppointmentStatus.CONFIRMED, future_9am,
         )
         self._make_appointment(
             self.vet, AppointmentStatus.CHECKED_IN, self.today_1pm,
@@ -150,9 +157,78 @@ class VetDashboardStatsTests(VetDashboardBase):
         self.assertEqual(response.data['clinic_name'], 'Happy Paws Clinic')
 
         stats = response.data['stats']
-        self.assertEqual(stats['consultations_this_month'], 1)
+        self.assertEqual(stats['consultations_this_month'], 4)
         self.assertEqual(stats['pending'], 3)
-        self.assertEqual(stats['completed'], 2)
+        self.assertEqual(stats['completed'], 1)
+        self.assertEqual(
+            stats['consultations_this_month'],
+            stats['pending'] + stats['completed'],
+        )
+
+    def test_stats_reset_each_month(self):
+        today = timezone.localdate()
+        prev_month_last_day = today.replace(day=1) - timedelta(days=1)
+
+        self._make_appointment(
+            self.vet,
+            AppointmentStatus.COMPLETED,
+            self._aware(prev_month_last_day, time(9, 0)),
+        )
+        self._make_appointment(
+            self.vet,
+            AppointmentStatus.CONFIRMED,
+            self._aware(prev_month_last_day, time(10, 0)),
+        )
+
+        self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CHECKED_IN, self.today_1pm,
+        )
+
+        response = self.client.get(
+            '/api/veterinarian/dashboard/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        stats = response.data['stats']
+        self.assertEqual(stats['consultations_this_month'], 2)
+        self.assertEqual(stats['completed'], 1)
+        self.assertEqual(stats['pending'], 1)
+
+    def test_stats_exclude_unconfirmed_and_inactive_statuses(self):
+        self._make_appointment(
+            self.vet, AppointmentStatus.PENDING, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CANCELLED, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.NO_SHOW, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_1pm,
+        )
+
+        response = self.client.get(
+            '/api/veterinarian/dashboard/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        stats = response.data['stats']
+        self.assertEqual(stats['consultations_this_month'], 2)
+        self.assertEqual(stats['pending'], 1)
+        self.assertEqual(stats['completed'], 1)
+        self.assertEqual(
+            stats['consultations_this_month'],
+            stats['pending'] + stats['completed'],
+        )
 
     def test_today_consultations_exclude_pending_and_other_vets(self):
         confirmed = self._make_appointment(

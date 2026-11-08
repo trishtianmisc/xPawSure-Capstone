@@ -78,3 +78,41 @@ input {
 .animate-slide-in {
   animation: slide-in 0.25s ease-out;
 }
+
+/* Print: the reports page swaps its screen layout for the off-screen
+   PrintableReport document (print-report/print-section classes). */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* Progress bars, badges, chart legends, and the amber letterhead rule
+     must keep their colors on paper. */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Reused report widgets read as document sections, not cards. */
+  .print-report .rounded-xl {
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Never split a section across a page (browser still breaks a section
+     taller than one page, as expected). */
+  .print-section {
+    break-inside: avoid;
+  }
+}

@@ -1,17 +1,16 @@
-export interface DashboardStats {
-  total_veterinarians: number
+export interface ClinicDashboardStats {
   total_pets: number
+  total_owners: number
+}
+
+export interface ScreeningStats {
   screenings_pending_review: number
+  screenings_by_disease: ChartDataPoint[]
 }
 
 export interface ChartDataPoint {
   label: string
   value: number
-}
-
-export interface DashboardCharts {
-  screenings_by_disease: ChartDataPoint[]
-  vet_workload: ChartDataPoint[]
 }
 
 export type RecentCategory = 'staff' | 'clinic' | 'cancellation'
@@ -25,7 +24,5 @@ export interface RecentItem {
 }
 
 export interface DashboardData {
-  stats: DashboardStats
-  charts: DashboardCharts
   recent: RecentItem[]
 }

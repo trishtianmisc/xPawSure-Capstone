@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
 import { apiErrorMessage } from '../../../utils/error'
+import { formatClockTime } from '../../../utils/format'
 import type { SlotStatus } from '../types/receptionist.types'
 
 function formatDate(date: Date): string {
@@ -66,7 +67,7 @@ function SlotCell({
         onClick={() => onToggleBlock?.(slot.vsl_id, slot.status)}
         className="group cursor-pointer border border-red-200 bg-red-50 px-2 py-3 text-center text-xs transition hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
       >
-        <div className="font-medium text-red-700 dark:text-red-300">{slot.vsl_start_time} - {slot.vsl_end_time}</div>
+        <div className="font-medium text-red-700 dark:text-red-300">{formatClockTime(slot.vsl_start_time)} - {formatClockTime(slot.vsl_end_time)}</div>
         <div className="mt-1 text-[10px] uppercase tracking-wide text-red-600 dark:text-red-400">Blocked</div>
         <div className="mt-1 text-[10px] text-red-500 opacity-0 transition group-hover:opacity-100 dark:text-red-400">
           Click to unblock
@@ -81,7 +82,7 @@ function SlotCell({
         onClick={() => onToggleBlock?.(slot.vsl_id, slot.status)}
         className="group cursor-pointer border border-green-200 bg-green-50 px-2 py-3 text-center text-xs transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30"
       >
-        <div className="font-medium text-green-700 dark:text-green-300">{slot.vsl_start_time} - {slot.vsl_end_time}</div>
+        <div className="font-medium text-green-700 dark:text-green-300">{formatClockTime(slot.vsl_start_time)} - {formatClockTime(slot.vsl_end_time)}</div>
         <div className="mt-1 text-[10px] uppercase tracking-wide text-green-600 dark:text-green-400">Available</div>
         <div className="mt-1 text-[10px] text-green-500 opacity-0 transition group-hover:opacity-100 dark:text-green-400">
           Click to block
@@ -95,7 +96,7 @@ function SlotCell({
       onClick={() => onAppointmentClick?.(slot.appointment!.apt_id)}
       className="cursor-pointer border border-blue-200 bg-blue-50 px-2 py-3 text-center text-xs transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30"
     >
-      <div className="font-medium text-blue-800 dark:text-blue-200">{slot.vsl_start_time} - {slot.vsl_end_time}</div>
+      <div className="font-medium text-blue-800 dark:text-blue-200">{formatClockTime(slot.vsl_start_time)} - {formatClockTime(slot.vsl_end_time)}</div>
       <div className="mt-1 font-semibold text-blue-900 dark:text-blue-100">{slot.appointment?.pet_name}</div>
       <div className="text-[10px] text-blue-600 dark:text-blue-400">{slot.appointment?.owner_name}</div>
     </td>
@@ -295,7 +296,7 @@ export function SchedulePage() {
               {timeSlots.map(time => (
                 <tr key={time}>
                   <td className="sticky left-0 z-10 border-b border-r border-stone-200 bg-stone-50 px-2 py-3 text-center text-xs font-medium text-stone-600 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400">
-                    {time}
+                    {formatClockTime(time)}
                   </td>
                   {dates.map(date =>
                     schedule.vets.map(vet => {

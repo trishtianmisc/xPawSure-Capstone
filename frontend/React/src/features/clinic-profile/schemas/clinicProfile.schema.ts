@@ -21,8 +21,6 @@ export const profileSchema = z.object({
 export type ProfileFormValues = z.infer<typeof profileSchema>
 
 export const settingsSchema = z.object({
-  opening_time: z.string().min(1, 'Opening time is required.'),
-  closing_time: z.string().min(1, 'Closing time is required.'),
   appointment_duration: z
     .number({ error: 'Must be a number.' })
     .int('Must be a whole number.')
@@ -41,9 +39,17 @@ export const settingsSchema = z.object({
       message: 'Use at most 2 decimal places.',
     }),
   allow_owner_booking: z.boolean(),
-}).refine(
-  (data) => data.opening_time < data.closing_time,
-  { message: 'Closing time must be after opening time.', path: ['closing_time'] },
-)
+  timezone: z
+    .string()
+    .min(1, 'Timezone is required.')
+    .refine((value) => {
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone: value })
+        return true
+      } catch {
+        return false
+      }
+    }, 'Select a valid timezone.'),
+})
 
 export type SettingsFormValues = z.infer<typeof settingsSchema>
