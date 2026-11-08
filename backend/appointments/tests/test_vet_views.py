@@ -4,6 +4,7 @@ import json
 from django.test import TestCase
 from django.utils import timezone
 
+from ai_screenings.models import AiScreening, Disease
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from appointments.services import CLINIC_TIMEZONE
 from clinics.models import Clinic
@@ -391,6 +392,87 @@ class VetAppointmentDetailTests(VetDashboardBase):
             **self._auth(RECEPTIONIST_EMAIL),
         )
         self.assertEqual(response.status_code, 200, response.data)
+
+
+class VetSymptomAnswersVisibilityTests(VetDashboardBase):
+    """Owner questionnaire answers reach vet/receptionist surfaces as
+    display-only context (symptom_answers) without changing AI fields."""
+
+    ROWS = [
+        {'question': 'Where is the affected area?', 'answer': 'Back, Ears'},
+        {'question': 'How long has it been present?', 'answer': 'More than 2 weeks'},
+    ]
+
+    def _make_screening(self, answers=None):
+        disease = Disease.objects.create(
+            dis_code='TESTDIS', dis_name='Test Disease',
+        )
+        return AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=disease,
+            ais_confidence=85,
+            ais_model_version='test-1.0.0',
+            ais_symptom_answers=answers,
+        )
+
+    def _appointment_with_screening(self, answers=None):
+        screening = self._make_screening(answers=answers)
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        appointment.apt_screening = screening
+        appointment.save()
+        return appointment, screening
+
+    def test_vet_appointment_detail_includes_symptom_answers(self):
+        appointment, _ = self._appointment_with_screening(answers=self.ROWS)
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['screening']['symptom_answers'], self.ROWS)
+
+    def test_vet_list_includes_symptom_answers(self):
+        self._appointment_with_screening(answers=self.ROWS)
+
+        response = self.client.get(
+            '/api/veterinarian/appointments/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['screening']['symptom_answers'], self.ROWS)
+
+    def test_screening_without_answers_returns_null(self):
+        appointment, _ = self._appointment_with_screening(answers=None)
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data['screening']['symptom_answers'])
+
+    def test_other_vet_cannot_see_answers(self):
+        appointment, _ = self._appointment_with_screening(answers=self.ROWS)
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(OTHER_VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_receptionist_detail_includes_symptom_answers(self):
+        appointment, _ = self._appointment_with_screening(answers=self.ROWS)
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['screening']['symptom_answers'], self.ROWS)
 
 
 class VetCancellationTests(VetDashboardBase):

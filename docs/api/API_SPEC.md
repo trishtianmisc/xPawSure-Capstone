@@ -613,6 +613,14 @@ Responses:
 This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
 `PATCH` cannot make that transition.
 
+When the appointment has a linked screening, the payload embeds a `screening`
+summary object (`ais_id`, `disease`, `ais_confidence`, `ais_model_version`,
+`ais_status`, `ais_source`, `ais_is_correct`, `ais_created_at`, `image_url`,
+`claude_status`, `cross_analysis_status`, and `symptom_answers`). The
+`symptom_answers` field carries the owner's questionnaire rows as display-only
+context for the treatment team and is `null` when absent; it can never
+influence the AI fields.
+
 ---
 
 ## PATCH /api/appointments/{id}/
@@ -697,7 +705,9 @@ today_consultations: [ ...appointment summaries ] }`.
 Query parameters: `start_date`, `end_date` (optional `YYYY-MM-DD`; `400` for invalid
 values or when `start_date` is after `end_date`). Returns the vet's own appointments as
 appointment summaries (each includes `apt_reschedule_request_reason` and
-`apt_cancellation_request_reason`).
+`apt_cancellation_request_reason`). Each summary embeds the same `screening`
+object as `GET /api/appointments/{id}/`, including the display-only
+`symptom_answers` rows.
 
 ---
 

@@ -13,6 +13,10 @@ interface SymptomSummaryCardProps {
   rows: SymptomRow[]
   answeredCount?: number
   totalQuestions?: number
+  /** Overrides the default owner-facing title (e.g. vet view wording). */
+  title?: string
+  /** Overrides the default owner-facing footnote. */
+  note?: string
 }
 
 /**
@@ -25,6 +29,8 @@ export function SymptomSummaryCard({
   rows,
   answeredCount,
   totalQuestions,
+  title,
+  note,
 }: SymptomSummaryCardProps) {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -40,7 +46,7 @@ export function SymptomSummaryCard({
     <>
       <Text style={styles.sectionLabel}>Symptom Summary · Supplementary</Text>
       <View style={styles.card}>
-        <Text style={styles.title}>Your questionnaire answers{count}</Text>
+        <Text style={styles.title}>{title ?? 'Your questionnaire answers'}{count}</Text>
         {rows.map((row) => (
           <View key={row.question} style={styles.row}>
             <Text style={styles.question}>{row.question}</Text>
@@ -48,8 +54,8 @@ export function SymptomSummaryCard({
           </View>
         ))}
         <Text style={styles.note}>
-          Supplementary context for your veterinarian. These answers do not change
-          the AI prediction or confidence shown above.
+          {note ??
+            'Supplementary context for your veterinarian. These answers do not change the AI prediction or confidence shown above.'}
         </Text>
       </View>
     </>

@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { PageHero } from '../../../receptionist/components/PageHero'
+import { SymptomAnswersList } from '../../../../components/SymptomAnswersList'
 import { ConsultationSummary } from '../components/ConsultationSummary'
 import { PrescriptionSummary } from '../components/PrescriptionSummary'
 import {
@@ -261,6 +262,7 @@ export function AppointmentDetailPage() {
               {appointment.screening.ais_model_version}
             </p>
           </div>
+          <SymptomAnswersList rows={appointment.screening.symptom_answers} />
         </div>
       )}
 

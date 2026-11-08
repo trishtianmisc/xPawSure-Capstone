@@ -254,7 +254,8 @@ export default function ResultScreen() {
     }
     // Sole primary result: the persisted prediction and confidence come
     // exclusively from the raw on-device AI output (`top`). Questionnaire
-    // answers are never part of the save payload.
+    // answers are persisted only as supplementary display rows
+    // (`symptom_answers`) and can never influence prediction or confidence.
     if (!top) return
     setSaveError(false)
     createScreening.mutate(
@@ -265,6 +266,7 @@ export default function ResultScreen() {
         imageUri: params.imageUri,
         claudeToken: claudeResponse?.token || undefined,
         device: Platform.OS,
+        symptomAnswers: symptomRows.length > 0 ? symptomRows : undefined,
       }),
       {
         onSuccess: (created) => {

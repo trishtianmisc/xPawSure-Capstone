@@ -5,6 +5,8 @@ import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, SafeAreaVie
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
+import { SymptomSummaryCard } from '../../../features/screening/components/SymptomSummaryCard'
 import { ConsultationSummary } from '../../../features/vet/components/ConsultationSummary'
 import { PrescriptionSummary } from '../../../features/vet/components/PrescriptionSummary'
 import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
@@ -189,6 +191,14 @@ export default function VetConsultationDetailScreen() {
                     {detail.screening.ais_model_version}
                   </Text>
                 </View>
+
+                <SymptomSummaryCard
+                  rows={detail.screening.symptom_answers ?? []}
+                  answeredCount={(detail.screening.symptom_answers ?? []).length}
+                  totalQuestions={KNOWLEDGE.questions.length}
+                  title="Owner's questionnaire answers"
+                  note="Supplementary context reported by the owner. These answers do not change the AI prediction or confidence."
+                />
               </>
             )}
 

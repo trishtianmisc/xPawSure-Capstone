@@ -418,6 +418,14 @@ and confidence. Display-ready answer rows are persisted with the screening
 stored answers are never read by or fed into prediction, confidence, ranking,
 review, or booking logic.
 
+The stored answer rows are visible to the pet's treatment team as supplementary
+display context: they are embedded as `symptom_answers` on the appointment
+payloads veterinarians and receptionists already use and rendered next to the
+AI screening result. Visibility follows existing appointment scoping —
+veterinarians only see their own appointments, receptionists only their
+clinic's — and receptionists may see the answers for booking/front-desk
+context. The answers remain display-only in those workflows too.
+
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
 
