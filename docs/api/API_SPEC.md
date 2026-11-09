@@ -1888,8 +1888,12 @@ logs the API key or image bytes.
 Requires authentication (Clinic Admin). Clinic is resolved from the
 authenticated staff profile; other roles get 403.
 
-Screenings are scoped to pets that have a non-deleted appointment at the
-authenticated admin's clinic (any appointment status). A pet treated at multiple
+Screenings are scoped to pets that are clinic patients under the canonical
+patient rule: at least one non-deleted appointment at the authenticated
+admin's clinic whose status is neither CANCELLED nor NO_SHOW (the same rule
+as the Patients directory). Pets whose only appointments here were cancelled
+or no-shows are excluded, and each screening is counted exactly once
+regardless of how many appointments its pet has. A pet treated at multiple
 clinics therefore appears in each clinic's stats.
 
 Optional query parameters `date_from` and `date_to` (`YYYY-MM-DD`) restrict
@@ -2387,14 +2391,17 @@ Response 200:
 
 Scoping notes:
 
-- Clinic scope uses a pet-level semi-join (the pet has any non-deleted
-  appointment at this clinic), so a screening still counts even when it was
-  not attached to a booking. One row per screening regardless of how many
-  appointments the pet has.
-- With `vet_id` supplied, only screenings referenced by an appointment of
-  that vet (in this clinic) are counted; unbooked screenings drop out.
-  Clinic-wide figures include screenings not linked to a booking — the UI
-  shows this caveat next to the filter.
+- Clinic scope uses a pet-level semi-join under the canonical patient rule
+  (the pet has at least one non-deleted appointment at this clinic whose
+  status is neither CANCELLED nor NO_SHOW), so a screening still counts even
+  when it was not attached to a booking — but never for pets whose only
+  appointments here were cancelled or no-shows. One row per screening
+  regardless of how many appointments the pet has.
+- With `vet_id` supplied, only screenings referenced by a qualifying
+  (non-cancelled, non-no-show) appointment of that vet (in this clinic) are
+  counted; unbooked screenings and cancelled bookings drop out. Clinic-wide
+  figures include screenings not linked to a booking — the UI shows this
+  caveat next to the filter.
 - `ais_confidence` is stored as a 0-100 percentage and returned as-is;
   `avg_confidence` is `0.0` when there are no screenings.
 - "Reviewed" is derived: `ais_compared_at` is set or the status moved off

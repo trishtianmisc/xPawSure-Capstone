@@ -682,6 +682,53 @@ class ReportScreeningsTests(ReportsBase):
         self.assertEqual(response.data['vet_confirmed'], 0)
         self.assertEqual(response.data['vet_changed'], 0)
 
+    def test_screenings_of_cancelled_only_and_no_show_only_pets_are_excluded(self):
+        # Zoe's only appointment at this clinic is CANCELLED (setUp).
+        self._screening(
+            datetime(2026, 10, 3, 10, 0, tzinfo=MNL),
+            pet=self.pet_cancelled_only,
+        )
+        no_show_pet = Pet.objects.create(
+            own_id=self.owner_profile, pet_name='Nona', pet_sex=Sex.FEMALE,
+        )
+        self._apt(
+            datetime(2026, 10, 3, 11, 0, tzinfo=MNL),
+            pet=no_show_pet, status=AppointmentStatus.NO_SHOW,
+        )
+        self._screening(
+            datetime(2026, 10, 3, 12, 0, tzinfo=MNL), pet=no_show_pet,
+        )
+
+        response = self._get('/api/reports/screenings/', **WINDOW)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['by_condition'], [])
+        self.assertEqual(response.data['reviewed'], 0)
+        self.assertEqual(response.data['pending_review'], 0)
+
+    def test_cancelled_booking_drops_screening_from_vet_filter(self):
+        screening = self._screening(datetime(2026, 10, 3, 10, 0, tzinfo=MNL))
+        appointment = self._apt(
+            datetime(2026, 10, 4, 15, 0, tzinfo=MNL),
+            vet=self.vet_a, status=AppointmentStatus.CANCELLED,
+        )
+        appointment.apt_screening = screening
+        appointment.save(update_fields=['apt_screening'])
+
+        # The pet still qualifies clinic-wide through its other visits.
+        unfiltered = self._get('/api/reports/screenings/', **WINDOW)
+        self.assertEqual(unfiltered.data['by_condition'][0]['count'], 1)
+
+        # A cancelled booking never attributes the screening to a vet.
+        filtered = self._get(
+            '/api/reports/screenings/',
+            vet_id=str(self.vet_a.stf_id), **WINDOW,
+        )
+        self.assertEqual(filtered.status_code, 200, filtered.data)
+        self.assertEqual(filtered.data['by_condition'], [])
+        self.assertEqual(filtered.data['reviewed'], 0)
+        self.assertEqual(filtered.data['pending_review'], 0)
+
 
 class ReportPatientsTests(ReportsBase):
 

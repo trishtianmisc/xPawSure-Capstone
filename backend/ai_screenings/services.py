@@ -189,12 +189,17 @@ class ScreeningService:
         from django.db.models import Count
         from django.utils import timezone
 
-        from appointments.services import get_clinic_timezone
+        from appointments.services import (
+            clinic_patient_appointment_exists,
+            get_clinic_timezone,
+        )
 
+        # Semi-join scope: pets that are clinic patients under the canonical
+        # rule (non-deleted, never CANCELLED/NO_SHOW). Never a fan-out join,
+        # so every screening is counted exactly once per clinic.
         clinic_screenings = AiScreening.objects.filter(
-            pet_id__appointments__cln_id_id=clinic_id,
-            pet_id__appointments__apt_deleted_at__isnull=True,
-        ).distinct()
+            clinic_patient_appointment_exists(clinic_id),
+        )
 
         # The status field is never transitioned after comparison; reviewed is
         # derived from ais_compared_at. Mirror the appointment detail badge:

@@ -11,6 +11,7 @@ from appointments.services import (
     DAY_MAP,
     NON_PATIENT_APPOINTMENT_STATUSES,
     AppointmentService,
+    clinic_patient_appointment_exists,
     get_clinic_timezone,
 )
 from clinics.models import ClinicOperatingHours
@@ -269,16 +270,11 @@ class ReportService:
     def get_screenings(clinic_id, date_from, date_to, vet_id=None):
         start, end_exclusive = day_bounds(clinic_id, date_from, date_to)
 
-        # Clinic scope: the pet has a non-deleted appointment here. EXISTS is
-        # a semi-join, so a pet with several appointments still contributes
-        # exactly one row per screening (no join duplication).
-        has_clinic_appointment = Exists(
-            Appointment.objects.filter(
-                pet_id=OuterRef('pet_id'),
-                cln_id_id=clinic_id,
-                apt_deleted_at__isnull=True,
-            )
-        )
+        # Clinic scope: the pet is a clinic patient under the canonical rule
+        # (non-deleted, never CANCELLED/NO_SHOW — same rule as the Patients
+        # directory and the dashboard screening stats). The semi-join keeps
+        # one row per screening no matter how many appointments the pet has.
+        has_clinic_appointment = clinic_patient_appointment_exists(clinic_id)
         qs = AiScreening.objects.filter(
             ais_created_at__gte=start,
             ais_created_at__lt=end_exclusive,
@@ -287,8 +283,10 @@ class ReportService:
         if vet_id:
             # Vet attribution goes through the appointment that references
             # THIS screening (set when an owner books with a screening
-            # attached). Unbooked screenings have no vet and therefore drop
-            # out of the filtered view; clinic-wide totals still include them.
+            # attached), and that booking must qualify like any other — a
+            # cancelled/no-show booking never attributes the screening.
+            # Unbooked screenings have no vet and therefore drop out of the
+            # filtered view; clinic-wide totals still include them.
             qs = qs.filter(
                 Exists(
                     Appointment.objects.filter(
@@ -296,6 +294,8 @@ class ReportService:
                         stf_id_id=vet_id,
                         cln_id_id=clinic_id,
                         apt_deleted_at__isnull=True,
+                    ).exclude(
+                        apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES,
                     )
                 )
             )
