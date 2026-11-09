@@ -2238,7 +2238,7 @@ Response:
 
 # 15. Clinic Admin Reports Endpoints (Web)
 
-All five endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+All six endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
 Any write method returns `403`; unauthenticated requests return `401`. The
 clinic scope always comes from the caller's own staff profile, never from the
 request, so one clinic's admin cannot read another clinic's numbers.
@@ -2436,7 +2436,7 @@ Scoping notes:
 
 Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
 `/clinic/reports`). Exports are client-side: one multi-section CSV covering
-every loaded panel (KPIs, status breakdown, daily series, workload,
+every loaded panel (KPIs, revenue, status breakdown, daily series, workload,
 screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
 plus a
 print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
@@ -2449,3 +2449,42 @@ status legend / workload rows deep-link to
 `/clinic/appointments?status&vet_id&date_from&date_to` — the appointments page
 initializes its filters from those URL params (changes written with
 `replace`).
+
+## GET /api/reports/revenue/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "revenue": "12345.60",
+  "currency": "PHP",
+  "payment_count": 42,
+  "previous_revenue": "11000.00",
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-30"
+}
+```
+
+Scoping notes:
+
+- Sums `PAYMENT.PAY_AMOUNT` for payments whose `PAY_STATUS` is `PAID` at the
+  caller's clinic (`PAYMENT.CLN_ID` — the clinic foreign key on the payment
+  itself, so payments not yet linked to an appointment still count) inside the
+  window `[date_from 00:00, date_to + 1 day 00:00)` in the clinic's timezone,
+  on `PAY_PAID_AT` (the moment the money was confirmed: cash recorded at
+  checkout, or the provider webhook/mocked confirmation). `PENDING`, `FAILED`,
+  `EXPIRED`, `REFUNDED`, and `VOID` never count; a payment collected but never
+  booked still counts.
+- `vet_id` narrows the sum to payments linked to that veterinarian's
+  appointments (`PAYMENT.APT_ID → APPOINTMENT.STF_ID`); payments without an
+  appointment link are excluded only under `vet_id`, never in the unfiltered
+  view. The UI states this caveat when a vet is selected.
+- `revenue` and `previous_revenue` are fixed two-decimal strings (never
+  floats) and `previous_revenue` covers the equal-length prior window used by
+  every other report. An empty window returns `"0.00"`, never `null`.
+  `currency` is the recorded payment currency (`PHP`). `payment_count` counts
+  the `PAID` payments summed — one payment per consultation-fee collection.
+- This endpoint is read-only and never triggers payment expiry or
+  reconciliation side effects.

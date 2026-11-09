@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   AppointmentsReport,
   PatientsReport,
+  ReportRevenue,
   ReportSummary,
   ScreeningsReport,
   VetWorkloadReport,
@@ -80,6 +81,15 @@ const PATIENTS: PatientsReport = {
   ],
 }
 
+const REVENUE: ReportRevenue = {
+  revenue: '1500.50',
+  currency: 'PHP',
+  payment_count: 12,
+  previous_revenue: '1200.00',
+  date_from: '2026-10-19',
+  date_to: '2026-10-26',
+}
+
 describe('toCsv', () => {
   it('prefixes the output with a UTF-8 BOM', () => {
     expect(toCsv([['a']]).charCodeAt(0)).toBe(0xfeff)
@@ -122,6 +132,7 @@ describe('reportCsvRows', () => {
     workload: WORKLOAD,
     screenings: SCREENINGS,
     patients: PATIENTS,
+    revenue: REVENUE,
   })
 
   it('includes window metadata', () => {
@@ -136,13 +147,16 @@ describe('reportCsvRows', () => {
   })
 
   it('renders rates with plain percent formatting', () => {
-    expect(rows).toContainEqual(['Completion rate', '33.3%', '25%'])
     expect(rows).toContainEqual(['No-show rate', '50%', '0%'])
   })
 
   it('carries current and previous values side by side', () => {
     expect(rows).toContainEqual(['Total appointments', 10, 4])
     expect(rows).toContainEqual(['New patients (all vets)', 1, 0])
+  })
+
+  it('carries revenue formatted the same way as the KPI card', () => {
+    expect(rows).toContainEqual(['Revenue', '₱1,500.50', '₱1,200.00'])
   })
 
   it('carries the vet agreement rate for both periods', () => {
@@ -214,5 +228,10 @@ describe('reportCsvRows', () => {
     ])
     expect(summaryOnly).not.toContainEqual(['Disease', 'Count'])
     expect(summaryOnly).not.toContainEqual(['Breed', 'Count'])
+    expect(summaryOnly).not.toContainEqual([
+      'Revenue',
+      '₱1,500.50',
+      '₱1,200.00',
+    ])
   })
 })

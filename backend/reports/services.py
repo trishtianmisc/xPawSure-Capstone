@@ -1,6 +1,8 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 
-from django.db.models import Avg, Count, Exists, Min, OuterRef, Q
+from django.conf import settings
+from django.db.models import Avg, Count, Exists, Min, OuterRef, Q, Sum
 from django.utils import timezone
 
 from ai_screenings.models import AiScreening, ScreeningStatus
@@ -12,6 +14,7 @@ from appointments.services import (
     get_clinic_timezone,
 )
 from clinics.models import ClinicOperatingHours
+from payments.models import Payment, PaymentStatus
 from pets.models import Pet, Sex
 from users.models import StaffProfile
 
@@ -389,6 +392,50 @@ class ReportService:
             'by_breed': by_breed,
             'by_sex': by_sex,
             'age_buckets': age_buckets,
+        }
+
+    @staticmethod
+    def get_revenue(clinic_id, date_from, date_to, vet_id=None):
+        """Sum of confirmed (PAID) consultation-fee payments in the window.
+
+        Scoped on PAYMENT's own clinic FK so a payment collected but never
+        linked to an appointment still counts; only vet_id joins through
+        APT_ID (payments without an appointment are excluded solely under
+        the vet filter). Windows are the same clinic-timezone aware
+        [start, end_exclusive) bounds as every other report, applied to
+        PAY_PAID_AT - never a bare __date lookup. Amounts are returned as
+        fixed two-decimal strings so no float ever touches them.
+        """
+        start, end_exclusive = day_bounds(clinic_id, date_from, date_to)
+        prev_from, prev_to = previous_window(date_from, date_to)
+        prev_start, prev_end_exclusive = day_bounds(
+            clinic_id, prev_from, prev_to,
+        )
+
+        def _window_sum(win_start, win_end):
+            payments = Payment.objects.filter(
+                cln_id_id=clinic_id,
+                pay_status=PaymentStatus.PAID,
+                pay_paid_at__gte=win_start,
+                pay_paid_at__lt=win_end,
+            )
+            if vet_id:
+                payments = payments.filter(apt_id__stf_id_id=vet_id)
+            return payments.aggregate(
+                total=Sum('pay_amount'),
+                count=Count('pay_id'),
+            )
+
+        current = _window_sum(start, end_exclusive)
+        previous = _window_sum(prev_start, prev_end_exclusive)
+
+        return {
+            'revenue': f"{current['total'] or Decimal('0'):.2f}",
+            'currency': settings.PAYMENT_CURRENCY,
+            'payment_count': current['count'] or 0,
+            'previous_revenue': f"{previous['total'] or Decimal('0'):.2f}",
+            'date_from': date_from.isoformat(),
+            'date_to': date_to.isoformat(),
         }
 
 
