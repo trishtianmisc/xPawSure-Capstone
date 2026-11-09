@@ -1004,7 +1004,8 @@ Payment object:
 
 ## POST /api/payments/checkout/
 
-Requires authentication. Receptionist, clinic admin, or owner.
+Requires authentication. Receptionist or owner — clinic admins get `403`
+(clinic admins read payments; only the counter and the payer record them).
 
 Creates the payment for a booking. The slot must still be `AVAILABLE`; owners
 pay only for their own pets and must pass the `screening_id` their booking will
@@ -1043,10 +1044,30 @@ Responses:
 Requires authentication. Receptionist or clinic admin. Scoped to the caller's
 clinic; owners get `403`.
 
-Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
-`date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
+Query params: `status`, `method`, `reference` (partial match on receipt
+number, owner first/last name, or pet name), `appointment` (uuid),
+`date_from`, `date_to` (creation date, UTC calendar days),
+`paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
+unpaid rows, so a range here reconciles with the revenue KPI for the same
+range), `page`, `page_size` (max 100).
 
-Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+`paid_from`/`paid_to` are inclusive clinic-local days (`[from 00:00, to+1
+00:00)` in the clinic's time zone). Validation: `400 VALIDATION_ERROR` when a
+date is malformed, `paid_from` is after `paid_to`, or the paid range exceeds
+366 days.
+
+Response (200):
+
+{ "total", "page", "page_size", "total_pages",
+  "summary": { "paid_total", "pending_total", "refunded_total", "payment_count" },
+  "results": [payment] }
+
+`summary` aggregates EVERY payment matching the filters (independent of
+`page`/`page_size`) with one conditional-sum query on the same queryset.
+Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
+(never netted against refunds) and honours the `paid_from`/`paid_to`
+payment-date window, so it equals the Reports revenue KPI for the same range.
+`payment_count` equals `total`.
 
 ---
 
@@ -1070,7 +1091,9 @@ clinic's payments, otherwise `404`.
 
 ## POST /api/payments/{id}/cancel/
 
-Requires authentication. Same access rule as the detail endpoint.
+Requires authentication. Receptionist or owner (the payer) — clinic admins get
+`403`: like checkout, cancelling is a counter/owner action even though clinic
+admins may read the payment.
 
 Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
 `409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).

@@ -43,8 +43,23 @@ export interface PaymentListParams {
   appointment?: string
   date_from?: string
   date_to?: string
+  /** Clinic-local calendar days on PAY_PAID_AT; excludes unpaid rows. */
+  paid_from?: string
+  paid_to?: string
   page?: number
   page_size?: number
+}
+
+/**
+ * Totals over EVERY payment matching the filters (not just the current
+ * page), as fixed two-decimal strings. `paid_total` follows the same
+ * PAID + paid-at rules as the Reports revenue KPI, so the two reconcile.
+ */
+export interface PaymentListSummary {
+  paid_total: string
+  pending_total: string
+  refunded_total: string
+  payment_count: number
 }
 
 export interface PaymentListResponse {
@@ -52,6 +67,7 @@ export interface PaymentListResponse {
   page: number
   page_size: number
   total_pages: number
+  summary: PaymentListSummary
   results: Payment[]
 }
 
