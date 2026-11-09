@@ -259,7 +259,11 @@ class ReportPermissionTests(ReportsBase):
             self.assertEqual(response.status_code, 403, endpoint)
 
     def test_other_clinic_admin_sees_only_their_own_data(self):
-        response = self._get('/api/reports/summary/', user=self.other_admin)
+        # Explicit window: the default resolves against today, which drifts
+        # away from the fixed fixture dates as time passes.
+        response = self._get(
+            '/api/reports/summary/', user=self.other_admin, **WINDOW,
+        )
         self.assertEqual(response.status_code, 200, response.data)
         # Their clinic has exactly its own appointment (Oct 3), never the
         # 8 appointments of Happy Paws.
@@ -449,14 +453,17 @@ class ReportAppointmentsTests(ReportsBase):
         )
         self.assertEqual(summary.data['total_appointments'], 1)
 
-    def test_status_breakdown_is_zero_filled_across_all_seven(self):
+    def test_status_breakdown_is_zero_filled_across_all_statuses(self):
         response = self._get('/api/reports/appointments/', **WINDOW)
         self.assertEqual(response.status_code, 200, response.data)
         by_status = {
             row['status']: row['count'] for row in response.data['by_status']
         }
-        self.assertEqual(len(by_status), 7)
+        # Every AppointmentStatus member appears exactly once, zero-filled.
+        self.assertEqual(len(by_status), len(AppointmentStatus.values))
         self.assertEqual(by_status, {
+            'REVIEW': 0,
+            'CONFIRMATION': 0,
             'PENDING': 1,
             'CONFIRMED': 0,
             'CHECKED_IN': 0,
