@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
@@ -18,6 +20,7 @@ OWNER_EMAIL = 'scanowner@example.com'
 OTHER_OWNER_EMAIL = 'scanother@example.com'
 RECEPTIONIST_EMAIL = 'scandesk@example.com'
 CLINIC_ADMIN_EMAIL = 'scanadmin@example.com'
+MNL = ZoneInfo('Asia/Manila')
 
 
 class OwnerScreeningBase(TestCase):
@@ -672,3 +675,70 @@ class ScreeningStatsTests(TestCase):
         self.assertEqual(response.data['screenings_pending_review'], 1)
         labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
         self.assertEqual(labels, {'Hotspot': 1})
+
+    def _backdate(self, screening, when):
+        AiScreening.objects.filter(pk=screening.pk).update(ais_created_at=when)
+
+    def test_by_disease_window_excludes_screenings_before_date_from(self):
+        older = AiScreening.objects.filter(
+            dis_id=self.mange,
+            ais_status=ScreeningStatus.PENDING_REVIEW,
+        ).first()
+        self._backdate(older, timezone.now() - timedelta(days=400))
+
+        # No params keeps the all-time counts, including the backdated row.
+        all_time = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+        self.assertEqual(all_time.status_code, 200, all_time.data)
+        labels = {row['label']: row['value'] for row in all_time.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 1})
+
+        date_from = timezone.localdate() - timedelta(days=30)
+        response = self.client.get(
+            f'/api/screenings/stats/?date_from={date_from.isoformat()}',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 1, 'Hotspot': 1})
+        # Pending review is a work queue: never windowed.
+        self.assertEqual(response.data['screenings_pending_review'], 2)
+
+    def test_by_disease_window_uses_clinic_local_days(self):
+        AiScreening.objects.all().update(
+            ais_created_at=datetime(2024, 1, 15, 12, 0, tzinfo=MNL),
+        )
+        boundary = self._make_screening(self.pet, self.mange, ScreeningStatus.REVIEWED)
+        self._backdate(boundary, datetime(2026, 11, 1, 0, 30, tzinfo=MNL))
+
+        inside = self.client.get(
+            '/api/screenings/stats/?date_from=2026-11-01&date_to=2026-11-01',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(inside.status_code, 200, inside.data)
+        labels = {row['label']: row['value'] for row in inside.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 1})
+        self.assertEqual(inside.data['screenings_pending_review'], 2)
+
+        outside = self.client.get(
+            '/api/screenings/stats/?date_from=2026-10-31&date_to=2026-10-31',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(outside.status_code, 200, outside.data)
+        self.assertEqual(outside.data['screenings_by_disease'], [])
+        self.assertEqual(outside.data['screenings_pending_review'], 2)
+
+    def test_stats_rejects_malformed_and_reversed_window(self):
+        malformed = self.client.get(
+            '/api/screenings/stats/?date_from=01-01-2026',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.data['code'], 'VALIDATION_ERROR')
+
+        reversed_range = self.client.get(
+            '/api/screenings/stats/?date_from=2026-01-31&date_to=2026-01-01',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(reversed_range.status_code, 400)
+        self.assertEqual(reversed_range.data['code'], 'VALIDATION_ERROR')

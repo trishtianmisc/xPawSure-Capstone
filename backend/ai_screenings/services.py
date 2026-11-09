@@ -183,8 +183,13 @@ class ScreeningService:
         screening.save(update_fields=['ais_is_correct', 'ais_compared_diagnosis', 'ais_compared_at', 'con_id'])
 
     @staticmethod
-    def get_stats(clinic_id) -> dict:
+    def get_stats(clinic_id, *, date_from=None, date_to=None) -> dict:
+        from datetime import datetime, time, timedelta
+
         from django.db.models import Count
+        from django.utils import timezone
+
+        from appointments.services import get_clinic_timezone
 
         clinic_screenings = AiScreening.objects.filter(
             pet_id__appointments__cln_id_id=clinic_id,
@@ -194,13 +199,28 @@ class ScreeningService:
         # The status field is never transitioned after comparison; reviewed is
         # derived from ais_compared_at. Mirror the appointment detail badge:
         # reviewed = compared_at set OR status != PENDING_REVIEW.
+        # Pending review is a work queue: always all-time, never windowed.
         pending = clinic_screenings.filter(
             ais_status=ScreeningStatus.PENDING_REVIEW,
             ais_compared_at__isnull=True,
         ).count()
 
+        # Only the by-disease breakdown honours the optional date window, in
+        # the clinic's local days (same rule as the reports endpoints).
+        by_disease_qs = clinic_screenings
+        if date_from or date_to:
+            tz = get_clinic_timezone(clinic_id)
+            if date_from:
+                start = timezone.make_aware(datetime.combine(date_from, time.min), tz)
+                by_disease_qs = by_disease_qs.filter(ais_created_at__gte=start)
+            if date_to:
+                end_exclusive = timezone.make_aware(
+                    datetime.combine(date_to + timedelta(days=1), time.min), tz,
+                )
+                by_disease_qs = by_disease_qs.filter(ais_created_at__lt=end_exclusive)
+
         by_disease = list(
-            clinic_screenings.values('dis_id__dis_name')
+            by_disease_qs.values('dis_id__dis_name')
             .annotate(value=Count('ais_id'))
             .order_by('-value')
             .values('dis_id__dis_name', 'value')

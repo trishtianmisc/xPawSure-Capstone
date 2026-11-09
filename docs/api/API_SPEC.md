@@ -1892,12 +1892,22 @@ Screenings are scoped to pets that have a non-deleted appointment at the
 authenticated admin's clinic (any appointment status). A pet treated at multiple
 clinics therefore appears in each clinic's stats.
 
+Optional query parameters `date_from` and `date_to` (`YYYY-MM-DD`) restrict
+`screenings_by_disease` to screenings created within that inclusive range,
+resolved in the clinic's local days (a screening at 00:30 clinic time belongs to
+that day). Either parameter may be sent alone to bound only that side. With no
+date parameters the response is all-time (previous behavior, unchanged).
+Malformed dates or `date_from` after `date_to` return `400` with
+`{"detail": "...", "code": "VALIDATION_ERROR"}`.
+
 `screenings_pending_review` is derived, not read from `ais_status`: it counts
 screenings whose `ais_status` is `PENDING_REVIEW` **and** `ais_compared_at` is
 null. The status field is not transitioned after comparison in production, so
 reviewed screenings are identified by `ais_compared_at` (the appointment detail
-page uses the same rule). `screenings_by_disease` counts all screenings,
-reviewed or not.
+page uses the same rule). Pending review is a work queue and is therefore never
+windowed: it always counts all screenings regardless of the date parameters.
+`screenings_by_disease` counts all screenings in the requested window, reviewed
+or not.
 
 Response `200`:
 
