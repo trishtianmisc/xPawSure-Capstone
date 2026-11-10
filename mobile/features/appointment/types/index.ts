@@ -37,6 +37,8 @@ export interface AppointmentDetail extends AppointmentListItem {
   pet_breed: string | null
   pet_sex: string
   clinic_name: string
+  /** The clinic's consultation fee; 0 means the visit is free. */
+  consultation_fee: number
   owner_phone: string | null
   apt_cancellation_reason: string | null
   apt_updated_at: string

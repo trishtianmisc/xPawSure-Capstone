@@ -27,6 +27,7 @@ from appointments.views_owner import (
     OwnerAppointmentListCreateView,
     OwnerAvailableSlotsView,
     OwnerClinicListView,
+    OwnerFollowUpCheckoutView,
     OwnerVetListView,
 )
 from owners.views import OwnerDetailView, OwnerListView
@@ -64,5 +65,6 @@ urlpatterns = [
     path('owner/slots/', OwnerAvailableSlotsView.as_view(), name='owner-available-slots'),
     path('owner/appointments/', OwnerAppointmentListCreateView.as_view(), name='owner-appointment-list-create'),
     path('owner/appointments/<uuid:apt_id>/', OwnerAppointmentDetailView.as_view(), name='owner-appointment-detail'),
+    path('owner/appointments/<uuid:apt_id>/checkout/', OwnerFollowUpCheckoutView.as_view(), name='owner-appointment-checkout'),
     path('owner/appointments/<uuid:apt_id>/cancel/', OwnerAppointmentCancelView.as_view(), name='owner-appointment-cancel'),
 ]

@@ -573,7 +573,9 @@ class AppointmentService:
     @transaction.atomic
     def confirm_follow_up(apt_id, clinic_id, slot_id, user_id):
         try:
-            appointment = Appointment.objects.select_for_update().get(
+            appointment = Appointment.objects.select_for_update().select_related(
+                'pet_id__own_id',
+            ).get(
                 apt_id=apt_id,
                 apt_deleted_at__isnull=True,
             )
@@ -621,8 +623,19 @@ class AppointmentService:
         if scheduled_at < datetime.now(CLINIC_TIMEZONE):
             raise SlotUnavailableError('This slot is in the past.')
 
+        # A free follow-up has nothing to wait for; confirming it immediately
+        # avoids a CONFIRMATION status that the owner cannot pay out of.
+        from payments.services import PaymentService
+
+        fee = PaymentService.get_fee(clinic_id)
+        new_status = (
+            AppointmentStatus.CONFIRMED
+            if fee <= 0
+            else AppointmentStatus.CONFIRMATION
+        )
+
         appointment.apt_scheduled_at = scheduled_at
-        appointment.apt_status = AppointmentStatus.CONFIRMATION
+        appointment.apt_status = new_status
         appointment.save(update_fields=[
             'apt_scheduled_at', 'apt_status', 'apt_updated_at',
         ])
@@ -640,15 +653,159 @@ class AppointmentService:
             table_name='APPOINTMENT',
             record_id=str(appointment.apt_id),
             description=(
-                'Follow-up appointment scheduled and set to confirmation; '
-                'awaiting owner payment.'
+                'Follow-up appointment scheduled and confirmed; the clinic '
+                'charges no consultation fee.'
+                if fee <= 0
+                else 'Follow-up appointment scheduled and set to confirmation; '
+                     'awaiting owner payment.'
             ),
             old_values={'apt_status': AppointmentStatus.REVIEW},
             new_values={
-                'apt_status': AppointmentStatus.CONFIRMATION,
+                'apt_status': new_status,
                 'apt_scheduled_at': scheduled_at.isoformat(),
                 'slot_id': str(slot.vsl_id),
             },
+        )
+
+        from notifications.models import NotificationType
+
+        owner_user_id = (
+            appointment.pet_id.own_id.usr_id_id
+            if appointment.pet_id and appointment.pet_id.own_id
+            else None
+        )
+        if fee <= 0:
+            _notify(
+                user_id=owner_user_id,
+                title='Follow-Up Confirmed',
+                message=(
+                    f'Your follow-up appointment for '
+                    f'{appointment.pet_id.pet_name} on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                    f'is confirmed.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ref_id=appointment.apt_id,
+            )
+        else:
+            _notify(
+                user_id=owner_user_id,
+                title='Follow-Up Scheduled',
+                message=(
+                    f'Your follow-up appointment for '
+                    f'{appointment.pet_id.pet_name} on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                    f'is reserved. Pay the consultation fee in the app to '
+                    f'confirm it.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CREATED,
+                ref_id=appointment.apt_id,
+            )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
+    def confirm_follow_up_payment(*, appointment, payment, user_id):
+        """Confirm a scheduled follow-up after its payment succeeds.
+
+        This transition is deliberately not part of ``VALID_TRANSITIONS``:
+        only the payment success path may move CONFIRMATION to CONFIRMED, so a
+        receptionist cannot bypass payment through the generic status endpoint.
+        """
+        try:
+            appointment = Appointment.objects.select_for_update().select_related(
+                'pet_id__own_id', 'cln_id',
+            ).get(
+                apt_id=appointment.apt_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise InvalidTransitionError('Appointment not found.')
+
+        from notifications.models import NotificationType
+        from payments.models import Payment, PaymentStatus
+        from payments.services import PaymentService
+
+        try:
+            payment = Payment.objects.select_for_update().get(pk=payment.pk)
+        except Payment.DoesNotExist:
+            raise InvalidTransitionError('Payment not found.')
+
+        if appointment.apt_type != AppointmentType.FOLLOW_UP:
+            raise InvalidTransitionError(
+                'Only follow-up appointments can be confirmed this way.',
+            )
+        if appointment.apt_status == AppointmentStatus.CONFIRMED:
+            return appointment
+        if appointment.apt_status != AppointmentStatus.CONFIRMATION:
+            raise InvalidTransitionError(
+                f'Cannot confirm a follow-up appointment from status '
+                f'{appointment.apt_status}.',
+            )
+        if appointment.apt_scheduled_at < datetime.now(
+            get_clinic_timezone(appointment.cln_id_id),
+        ):
+            raise InvalidTransitionError(
+                'Cannot confirm an appointment that has already passed.',
+            )
+        if payment.pay_status != PaymentStatus.PAID:
+            raise InvalidTransitionError(
+                'This appointment requires a completed payment.',
+            )
+        if payment.cln_id_id != appointment.cln_id_id:
+            raise InvalidTransitionError(
+                'This payment does not belong to the appointment clinic.',
+            )
+        if payment.own_id_id != appointment.pet_id.own_id_id:
+            raise InvalidTransitionError(
+                'This payment does not belong to the appointment owner.',
+            )
+        if payment.apt_id_id is not None and payment.apt_id_id != appointment.apt_id:
+            raise InvalidTransitionError(
+                'This payment has already been used for another appointment.',
+            )
+        if payment.pay_amount < PaymentService.get_fee(appointment.cln_id_id):
+            raise InvalidTransitionError(
+                'The payment does not cover the consultation fee.',
+            )
+
+        old_status = appointment.apt_status
+        appointment.apt_status = AppointmentStatus.CONFIRMED
+        appointment.save(update_fields=['apt_status', 'apt_updated_at'])
+
+        if payment.apt_id_id is None:
+            PaymentService.attach(
+                payment=payment,
+                appointment=appointment,
+                actor_user_id=user_id,
+            )
+
+        if user_id:
+            _audit(
+                user_id=str(user_id),
+                action=AuditAction.UPDATE,
+                module='appointments',
+                table_name='APPOINTMENT',
+                record_id=str(appointment.apt_id),
+                description=(
+                    'Follow-up payment received; status changed from '
+                    f'{old_status} to {AppointmentStatus.CONFIRMED}'
+                ),
+                old_values={'apt_status': old_status},
+                new_values={'apt_status': AppointmentStatus.CONFIRMED},
+            )
+
+        _notify(
+            user_id=appointment.pet_id.own_id.usr_id_id,
+            title='Follow-Up Confirmed',
+            message=(
+                f'Your follow-up appointment for {appointment.pet_id.pet_name} on '
+                f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M} '
+                f'is confirmed.'
+            ),
+            ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+            ref_id=appointment.apt_id,
         )
 
         return appointment
