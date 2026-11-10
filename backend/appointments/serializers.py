@@ -102,13 +102,21 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     pet_breed = serializers.SerializerMethodField()
     pet_sex = serializers.CharField(source='pet_id.pet_sex', read_only=True)
     pet_birth_date = serializers.DateField(source='pet_id.pet_birth_date', read_only=True)
+    pet_weight = serializers.DecimalField(
+        source='pet_id.pet_weight', max_digits=5, decimal_places=2, read_only=True
+    )
+    pet_color = serializers.CharField(source='pet_id.pet_color', read_only=True)
     owner_name = serializers.SerializerMethodField()
     owner_phone = serializers.SerializerMethodField()
     owner_email = serializers.SerializerMethodField()
+    owner_address = serializers.SerializerMethodField()
     vet_name = serializers.SerializerMethodField()
+    vet_license_number = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
     consultation_fee = serializers.SerializerMethodField()
+    clinic_address = serializers.CharField(source='cln_id.cln_address', read_only=True)
+    clinic_phone = serializers.CharField(source='cln_id.cln_phone', read_only=True)
     screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
     consultation = serializers.SerializerMethodField()
     prescription = serializers.SerializerMethodField()
@@ -117,9 +125,11 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         model = Appointment
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
-            'pet_birth_date',
-            'cln_id', 'clinic_name', 'consultation_fee', 'stf_id', 'vet_name',
-            'owner_name', 'owner_phone', 'owner_email', 'screening',
+            'pet_birth_date', 'pet_weight', 'pet_color',
+            'cln_id', 'clinic_name', 'consultation_fee',
+            'clinic_address', 'clinic_phone',
+            'stf_id', 'vet_name', 'vet_license_number',
+            'owner_name', 'owner_phone', 'owner_email', 'owner_address', 'screening',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name',
             'apt_checked_in_at', 'apt_completed_at',
@@ -170,9 +180,19 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             return obj.pet_id.own_id.usr_id.usr_email
         return None
 
+    def get_owner_address(self, obj):
+        if obj.pet_id and obj.pet_id.own_id:
+            return obj.pet_id.own_id.own_address
+        return None
+
     def get_vet_name(self, obj):
         if obj.stf_id and obj.stf_id.usr_id:
             return f'{obj.stf_id.usr_id.usr_first_name} {obj.stf_id.usr_id.usr_last_name}'
+        return None
+
+    def get_vet_license_number(self, obj):
+        if obj.stf_id:
+            return obj.stf_id.stf_license_number
         return None
 
     def get_created_by_name(self, obj):

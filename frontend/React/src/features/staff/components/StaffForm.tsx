@@ -117,7 +117,7 @@ export function StaffForm({ role, onSubmit, onCancel, isSubmitting, serverError 
               <input
                 {...register('license_number')}
                 className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 placeholder-stone-400 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                placeholder="LIC-001"
+                placeholder="0123456"
               />
               {errors.license_number && (
                 <p className="mt-1 text-xs text-red-600">{errors.license_number.message}</p>

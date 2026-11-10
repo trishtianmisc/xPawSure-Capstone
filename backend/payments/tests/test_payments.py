@@ -1,10 +1,12 @@
 import hashlib
 import hmac
 import json
-from datetime import timedelta
+import uuid
+from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 from django.test import override_settings
 from django.utils import timezone
@@ -20,12 +22,20 @@ from appointments.tests.test_owner_booking import (
 )
 from clinics.models import Clinic, ClinicSettings
 from notifications.models import Notification, NotificationType
-from payments.models import Payment, PaymentEvent, PaymentStatus
+from payments.models import (
+    Payment,
+    PaymentEvent,
+    PaymentMethod,
+    PaymentProvider,
+    PaymentStatus,
+)
 from payments.services import PaymentService
+from reports.services import ReportService
 from users.models import StaffPosition, StaffProfile, UserRole
 
 FEE = Decimal('500.00')
 WEBHOOK_SECRET = 'whsec_test_secret'
+MNL = ZoneInfo('Asia/Manila')
 
 
 @override_settings(PAYMENT_MODE='mock')
@@ -91,6 +101,23 @@ class PaymentTestBase(OwnerBookingBase):
         payment.refresh_from_db()
         self.assertEqual(payment.pay_status, PaymentStatus.PAID)
         return payment
+
+    def _make_payment(self, *, paid_at=None, pay_status=PaymentStatus.PAID,
+                      pet_name='Rexy', amount=FEE, method=PaymentMethod.CASH,
+                      clinic=None):
+        """A raw row with an exact PAY_PAID_AT; the mock checkout flow only
+        ever stamps "now", which cannot probe day boundaries."""
+        return Payment.objects.create(
+            pay_reference=f'XPS-READ-{uuid.uuid4().hex[:16]}',
+            cln_id=clinic or self.clinic,
+            own_id=self.owner,
+            pay_amount=amount,
+            pay_method=method,
+            pay_status=pay_status,
+            pay_provider=PaymentProvider.CASH,
+            pay_paid_at=paid_at,
+            pay_metadata={'pet_name': pet_name},
+        )
 
     def _book(self, pay_id=None, slot_id=None, email=RECEPTIONIST_EMAIL):
         payload = {
@@ -626,6 +653,295 @@ class PaymentReadTests(PaymentTestBase):
 
         self.assertEqual(response.data['total'], 1)
         self.assertEqual(response.data['results'][0]['pay_id'], str(payment.pay_id))
+
+    def test_paid_date_range_uses_clinic_local_days(self):
+        # 00:30 PHT on Nov 1 is 16:30 UTC on Oct 31: a UTC-day filter would
+        # file this payment under October and disagree with the revenue KPI.
+        self._make_payment(paid_at=datetime(2026, 11, 1, 0, 30, tzinfo=MNL))
+
+        in_nov = self.client.get(
+            '/api/payments/?paid_from=2026-11-01&paid_to=2026-11-01',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        in_oct = self.client.get(
+            '/api/payments/?paid_from=2026-10-31&paid_to=2026-10-31',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        self.assertEqual(in_nov.status_code, status.HTTP_200_OK, in_nov.data)
+        self.assertEqual(in_nov.data['total'], 1, in_nov.data)
+        self.assertEqual(in_oct.data['total'], 0, in_oct.data)
+
+    def test_paid_date_range_excludes_unpaid(self):
+        self._make_payment(paid_at=None, pay_status=PaymentStatus.PENDING)
+        self._make_payment(paid_at=timezone.now())
+
+        # A window comfortably around "now" (inside the 366-day cap).
+        today = timezone.localdate()
+        wide = self.client.get(
+            f'/api/payments/?paid_from={today - timedelta(days=30)}'
+            f'&paid_to={today + timedelta(days=30)}',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        unfiltered = self.client.get(
+            '/api/payments/', **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        # The pending row has no PAY_PAID_AT, so no paid window can hold it.
+        self.assertEqual(wide.status_code, status.HTTP_200_OK, wide.data)
+        self.assertEqual(wide.data['total'], 1, wide.data)
+        self.assertEqual(unfiltered.data['total'], 2, unfiltered.data)
+
+    def test_paid_date_range_rejects_reversed_and_overlong(self):
+        reversed_range = self.client.get(
+            '/api/payments/?paid_from=2026-11-02&paid_to=2026-11-01',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        # 2026-01-01 .. 2027-01-02 is 367 inclusive days.
+        overlong = self.client.get(
+            '/api/payments/?paid_from=2026-01-01&paid_to=2027-01-02',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        max_span = self.client.get(
+            '/api/payments/?paid_from=2026-01-01&paid_to=2027-01-01',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        self.assertEqual(reversed_range.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('paid_from cannot be after', reversed_range.data['detail'])
+        self.assertEqual(overlong.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('366', overlong.data['detail'])
+        # Exactly 366 inclusive days stays legal.
+        self.assertEqual(max_span.status_code, status.HTTP_200_OK, max_span.data)
+
+    def test_search_matches_reference_owner_and_pet_name(self):
+        payment = self._make_payment(paid_at=timezone.now(), pet_name='Rexy')
+
+        by_reference = self.client.get(
+            f'/api/payments/?reference={payment.pay_reference}',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        by_owner = self.client.get(
+            '/api/payments/?reference=Owner',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        by_pet = self.client.get(
+            '/api/payments/?reference=Rexy',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        for response in (by_reference, by_owner, by_pet):
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            self.assertEqual(response.data['total'], 1, response.data)
+            self.assertEqual(
+                response.data['results'][0]['pay_id'], str(payment.pay_id),
+            )
+
+
+class PaymentClinicAdminWriteTests(PaymentTestBase):
+    """Clinic admins read payments; recording and refunding stay with the
+    counter (receptionist) and the payer (owner)."""
+
+    def _clinic_admin_email(self):
+        user = self._create_user(
+            'admin@example.com', UserRole.CLINIC_ADMIN, 'Ada', 'Admin',
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+        return 'admin@example.com'
+
+    def test_clinic_admin_can_read_the_clinic_list(self):
+        self._pay()  # receptionist-recorded payment in this clinic
+        email = self._clinic_admin_email()
+
+        response = self.client.get('/api/payments/', **self._auth(email))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data['total'], 1, response.data)
+
+    def test_clinic_admin_cannot_record_payment(self):
+        email = self._clinic_admin_email()
+
+        response = self._checkout(self._checkout_payload(), email=email)
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_clinic_admin_cannot_patch_checkout(self):
+        email = self._clinic_admin_email()
+
+        response = self.client.patch(
+            '/api/payments/checkout/', {}, format='json', **self._auth(email),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_clinic_admin_cannot_cancel_payment(self):
+        payment = self._pay()
+        email = self._clinic_admin_email()
+
+        response = self.client.post(
+            f'/api/payments/{payment.pay_id}/cancel/',
+            format='json', **self._auth(email),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PAID)
+
+    def test_clinic_admin_cannot_patch_cancel(self):
+        payment = self._pay()
+        email = self._clinic_admin_email()
+
+        response = self.client.patch(
+            f'/api/payments/{payment.pay_id}/cancel/',
+            {}, format='json', **self._auth(email),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        payment.refresh_from_db()
+        self.assertEqual(payment.pay_status, PaymentStatus.PAID)
+
+
+class PaymentListSummaryTests(PaymentTestBase):
+    """The strip totals cover every matching row, not just the visible page,
+    and follow the same PAID + PAY_PAID_AT rules as Reports revenue."""
+
+    def _get(self, query=''):
+        response = self.client.get(
+            f'/api/payments/?{query}', **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data
+
+    def test_summary_ignores_pagination(self):
+        now = timezone.now()
+        self._make_payment(paid_at=now, amount=Decimal('500.00'))
+        self._make_payment(paid_at=now, amount=Decimal('300.00'))
+        self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+        )
+
+        first = self._get('page=1&page_size=1')
+        second = self._get('page=2&page_size=1')
+        unpaginated = self._get('page_size=20')
+
+        expected = {
+            'paid_total': '800.00',
+            'pending_total': '700.00',
+            'refunded_total': '0.00',
+            'payment_count': 3,
+        }
+        self.assertEqual(first['summary'], expected)
+        self.assertEqual(second['summary'], expected)
+        self.assertEqual(unpaginated['summary'], expected)
+        # The pages really do differ, so equal summaries prove independence.
+        self.assertEqual(len(first['results']), 1)
+        self.assertEqual(len(unpaginated['results']), 3)
+
+    def test_summary_respects_status_filter(self):
+        self._make_payment(paid_at=timezone.now(), amount=Decimal('500.00'))
+        self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+        )
+
+        data = self._get('status=PENDING')
+
+        self.assertEqual(data['summary']['paid_total'], '0.00')
+        self.assertEqual(data['summary']['pending_total'], '700.00')
+        self.assertEqual(data['summary']['payment_count'], 1)
+
+    def test_summary_respects_method_and_reference_filters(self):
+        self._make_payment(
+            paid_at=timezone.now(), amount=Decimal('500.00'),
+            method=PaymentMethod.CASH, pet_name='Rexy',
+        )
+        self._make_payment(
+            paid_at=timezone.now(), amount=Decimal('300.00'),
+            method=PaymentMethod.GCASH, pet_name='Milo',
+        )
+
+        by_method = self._get('method=CASH')
+        by_pet = self._get('reference=Milo')
+
+        self.assertEqual(by_method['summary']['paid_total'], '500.00')
+        self.assertEqual(by_method['summary']['payment_count'], 1)
+        self.assertEqual(by_pet['summary']['paid_total'], '300.00')
+        self.assertEqual(by_pet['summary']['payment_count'], 1)
+
+    def test_summary_paid_range_uses_clinic_local_days(self):
+        # 00:30 PHT on Nov 1 is 16:30 UTC on Oct 31.
+        self._make_payment(paid_at=datetime(2026, 11, 1, 0, 30, tzinfo=MNL))
+
+        in_nov = self._get('paid_from=2026-11-01&paid_to=2026-11-01')
+        in_oct = self._get('paid_from=2026-10-31&paid_to=2026-10-31')
+
+        self.assertEqual(in_nov['summary']['paid_total'], '500.00')
+        self.assertEqual(in_nov['summary']['payment_count'], 1)
+        self.assertEqual(in_oct['summary']['paid_total'], '0.00')
+        self.assertEqual(in_oct['summary']['payment_count'], 0)
+
+    def test_summary_keeps_paid_and_refunded_separate(self):
+        self._make_payment(paid_at=timezone.now(), amount=Decimal('100.00'))
+        self._make_payment(
+            paid_at=timezone.now(), pay_status=PaymentStatus.REFUNDED,
+            amount=Decimal('50.00'),
+        )
+
+        summary = self._get()['summary']
+
+        # No net revenue: refunded money is its own figure.
+        self.assertEqual(summary['paid_total'], '100.00')
+        self.assertEqual(summary['refunded_total'], '50.00')
+        self.assertEqual(summary['pending_total'], '0.00')
+
+    def test_summary_amounts_are_decimal_exact(self):
+        self._make_payment(paid_at=timezone.now(), amount=Decimal('1250.05'))
+        self._make_payment(paid_at=timezone.now(), amount=Decimal('0.10'))
+
+        summary = self._get()['summary']
+
+        self.assertEqual(summary['paid_total'], '1250.15')
+
+    def test_summary_is_clinic_scoped(self):
+        other_clinic = Clinic.objects.create(cln_name='Rival Clinic')
+        self._make_payment(paid_at=timezone.now(), amount=Decimal('500.00'))
+        self._make_payment(
+            paid_at=timezone.now(), amount=Decimal('999.00'),
+            clinic=other_clinic,
+        )
+
+        data = self._get()
+
+        self.assertEqual(data['summary']['paid_total'], '500.00')
+        self.assertEqual(data['summary']['payment_count'], 1)
+
+    def test_summary_paid_total_matches_reports_revenue(self):
+        # Anchor both windows to the payment's own Manila day so "now" near
+        # a UTC midnight cannot move the fixture out of range.
+        now = timezone.now()
+        mnl_day = now.astimezone(MNL).date()
+        self._make_payment(paid_at=now, amount=Decimal('1250.00'))  # in, PAID
+        self._make_payment(
+            paid_at=now, pay_status=PaymentStatus.REFUNDED,
+            amount=Decimal('500.00'),
+        )  # in window, not revenue
+        self._make_payment(
+            paid_at=now - timedelta(days=10), amount=Decimal('777.00'),
+        )  # PAID but outside the window
+        self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+        )  # never paid
+
+        data = self._get(f'paid_from={mnl_day}&paid_to={mnl_day}')
+        revenue = ReportService.get_revenue(self.clinic.pk, mnl_day, mnl_day)
+
+        self.assertEqual(data['summary']['paid_total'], '1250.00')
+        self.assertEqual(data['summary']['paid_total'], revenue['revenue'])
 
 
 class PaymentNotificationTests(PaymentTestBase):

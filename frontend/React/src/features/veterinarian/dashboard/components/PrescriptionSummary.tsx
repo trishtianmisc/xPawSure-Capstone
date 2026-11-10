@@ -5,12 +5,28 @@ function routeLabel(value: string): string {
   return ROUTE_OPTIONS.find((option) => option.value === value)?.label ?? value
 }
 
-export function PrescriptionSummary({ prescription }: { prescription: VetPrescriptionInfo }) {
+interface PrescriptionSummaryProps {
+  prescription: VetPrescriptionInfo
+  onPreview?: () => void
+}
+
+export function PrescriptionSummary({ prescription, onPreview }: PrescriptionSummaryProps) {
   return (
     <div className="mb-6 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-      <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-        Prescription
-      </h2>
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+          Prescription
+        </h2>
+        {onPreview && (
+          <button
+            className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-800"
+            onClick={onPreview}
+            type="button"
+          >
+            Preview PDF
+          </button>
+        )}
+      </div>
 
       {prescription.instructions && (
         <p className="mb-4 rounded-md border border-stone-200 bg-stone-50 p-3 text-sm text-stone-700 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300">

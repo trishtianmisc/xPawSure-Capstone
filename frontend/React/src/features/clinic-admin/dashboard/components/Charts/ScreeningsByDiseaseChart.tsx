@@ -6,12 +6,18 @@ const COLORS = ['#d97706', '#dc2626', '#2563eb', '#059669', '#6b7280']
 
 interface ScreeningsByDiseaseChartProps {
   data: ChartDataPoint[]
+  subtitle?: string
 }
 
-export function ScreeningsByDiseaseChart({ data }: ScreeningsByDiseaseChartProps) {
+export function ScreeningsByDiseaseChart({ data, subtitle }: ScreeningsByDiseaseChartProps) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
-      <h3 className="mb-4 text-sm font-bold text-stone-700 dark:text-stone-300">AI Screenings by Disease</h3>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h3 className="text-sm font-bold text-stone-700 dark:text-stone-300">AI Screenings by Disease</h3>
+        {subtitle && (
+          <span className="text-xs text-stone-400 dark:text-stone-500">{subtitle}</span>
+        )}
+      </div>
       {data.length === 0 ? (
         <p className="py-8 text-center text-sm text-stone-400 dark:text-stone-500">No screening data available.</p>
       ) : (

@@ -1,4 +1,4 @@
-import type { VetConsultationInfo } from '../types/dashboard.types'
+import type { ScreeningSummary, VetConsultationInfo } from '../types/dashboard.types'
 import { formatDate } from '../../../../utils/format'
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
@@ -12,7 +12,30 @@ function Row({ label, value }: { label: string; value: string | null | undefined
   )
 }
 
-export function ConsultationSummary({ consultation }: { consultation: VetConsultationInfo }) {
+function normalize(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function matchesAiScreening(
+  screening: ScreeningSummary | null | undefined,
+  diagnosis: string | null | undefined,
+): boolean {
+  if (!screening?.disease || !diagnosis?.trim()) return false
+  const disease = normalize(screening.disease)
+  const vet = normalize(diagnosis)
+  if (!disease || !vet) return false
+  return vet === disease || vet.includes(disease) || disease.includes(vet)
+}
+
+export function ConsultationSummary({
+  consultation,
+  screening,
+}: {
+  consultation: VetConsultationInfo
+  screening?: ScreeningSummary | null
+}) {
+  const aiMatch = matchesAiScreening(screening, consultation.diagnosis)
+
   return (
     <div className="mb-6 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
       <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
@@ -20,6 +43,24 @@ export function ConsultationSummary({ consultation }: { consultation: VetConsult
       </h2>
       <dl className="space-y-3">
         <Row label="Diagnosis" value={consultation.diagnosis} />
+        {screening && (
+          <div className="flex items-center justify-between gap-6">
+            <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">
+              Diagnosis Agreement
+            </dt>
+            <dd>
+              <span
+                className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                  aiMatch
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                    : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
+                }`}
+              >
+                {aiMatch ? 'Matched' : 'Not matched'}
+              </span>
+            </dd>
+          </div>
+        )}
         <Row label="Chief complaint" value={consultation.chief_complaint} />
         <Row label="Observations" value={consultation.objective} />
         <Row label="Notes" value={consultation.notes} />

@@ -38,6 +38,27 @@ function labelize(value: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
+function DateTimeSortIcon({ direction }: { direction: 'asc' | 'desc' }) {
+  return (
+    <svg className="inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        className={direction === 'asc' ? undefined : 'opacity-30'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"
+      />
+      <path
+        className={direction === 'desc' ? undefined : 'opacity-30'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
+      />
+    </svg>
+  )
+}
+
 export function ClinicAdminAppointmentsPage() {
   const navigate = useNavigate()
   // Filters initialize from the URL so deep links (e.g. from Reports &
@@ -49,6 +70,12 @@ export function ClinicAdminAppointmentsPage() {
   const [dateTo, setDateTo] = useState(() => searchParams.get('date_to') ?? '')
   const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') ?? '')
   const [page, setPage] = useState(1)
+  const [sort, setSort] = useState('-apt_scheduled_at')
+
+  const toggleDateTimeSort = () => {
+    setSort((current) => (current === '-apt_scheduled_at' ? 'apt_scheduled_at' : '-apt_scheduled_at'))
+    setPage(1)
+  }
 
   function syncParams(
     patch: { vet_id?: string; date_from?: string; date_to?: string; status?: string },
@@ -72,10 +99,11 @@ export function ClinicAdminAppointmentsPage() {
       date_from: dateFrom || undefined,
       date_to: dateTo || undefined,
       status: statusFilter || undefined,
+      sort,
       page,
       page_size: 10,
     }),
-    [vetId, dateFrom, dateTo, statusFilter, page],
+    [vetId, dateFrom, dateTo, statusFilter, sort, page],
   )
 
   const appointments = useClinicAppointments(params)
@@ -249,11 +277,20 @@ export function ClinicAdminAppointmentsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
+                  <tr className="border-b border-stone-100 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-700 dark:text-stone-400">
                     <th className="px-5 py-4 font-semibold">Owner</th>
                     <th className="px-5 py-4 font-semibold">Pet</th>
                     <th className="px-5 py-4 font-semibold">Veterinarian</th>
-                    <th className="px-5 py-4 font-semibold">Date &amp; Time</th>
+                    <th
+                      className="cursor-pointer select-none px-5 py-4 font-semibold"
+                      aria-sort={sort === 'apt_scheduled_at' ? 'ascending' : 'descending'}
+                      onClick={toggleDateTimeSort}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Date &amp; Time
+                        <DateTimeSortIcon direction={sort === 'apt_scheduled_at' ? 'asc' : 'desc'} />
+                      </span>
+                    </th>
                     <th className="px-5 py-4 font-semibold">Type</th>
                     <th className="px-5 py-4 font-semibold">Status</th>
                     <th className="px-5 py-4 font-semibold">Action</th>

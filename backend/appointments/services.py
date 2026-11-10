@@ -24,6 +24,14 @@ CLINIC_TIMEZONE = ZoneInfo('Asia/Manila')
 # mirrors this value when hiding the Check In action.
 NO_SHOW_GRACE_MINUTES = 60
 
+# Whitelisted `sort` values for GET /api/appointments/. The `-` prefix means
+# descending (newest first), which is the default and matches the model's
+# Meta ordering. apt_id breaks ties so pagination stays stable.
+_APPOINTMENT_SORT_FIELDS = {
+    'apt_scheduled_at': ('apt_scheduled_at', 'apt_id'),
+    '-apt_scheduled_at': ('-apt_scheduled_at', 'apt_id'),
+}
+
 
 def get_clinic_timezone(clinic_id):
     try:
@@ -51,19 +59,32 @@ def _clinic_day_bounds(day, tz=CLINIC_TIMEZONE):
 # A pet becomes a clinic patient once it has a non-deleted appointment at the
 # clinic that was not cancelled or marked as a no-show. This is the canonical
 # definition for the clinic admin KPI, the receptionist Patients directory,
-# and the future clinic admin Patients page.
+# the clinic admin Patients page, and the clinic's AI screening stats/reports.
 NON_PATIENT_APPOINTMENT_STATUSES = (
     AppointmentStatus.CANCELLED,
     AppointmentStatus.NO_SHOW,
 )
 
 
+def clinic_patient_appointment_exists(clinic_id):
+    """Canonical patient semi-join for row-scoped models (e.g. screenings).
+
+    Returns Exists() over OuterRef('pet_id'): the pet has at least one
+    non-deleted appointment at this clinic that was neither cancelled nor a
+    no-show. A semi-join never fans out, so counts and aggregates built on
+    it report every row exactly once.
+    """
+    return models.Exists(
+        Appointment.objects.filter(
+            pet_id=models.OuterRef('pet_id'),
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).exclude(apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
+    )
+
+
 def filter_clinic_patients(qs, clinic_id):
-    return qs.filter(
-        models.Q(appointments__cln_id_id=clinic_id)
-        & models.Q(appointments__apt_deleted_at__isnull=True)
-        & ~models.Q(appointments__apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
-    ).distinct()
+    return qs.filter(clinic_patient_appointment_exists(clinic_id)).distinct()
 
 
 class SlotUnavailableError(Exception):
@@ -1031,7 +1052,8 @@ class AppointmentService:
     @staticmethod
     def list_appointments(clinic_id, date=None, status=None, vet_id=None,
                           pet_id=None, search=None, date_from=None,
-                          date_to=None, page=1, page_size=20, overdue=False):
+                          date_to=None, page=1, page_size=20, overdue=False,
+                          sort=''):
         # Statuses shown in this list (and the overdue filter) must be
         # current, so refresh past-due appointments for this clinic first.
         _reconcile_past_due(clinic_id)
@@ -1079,6 +1101,12 @@ class AppointmentService:
                 | models.Q(apt_created_by__usr_first_name__icontains=search)
                 | models.Q(apt_created_by__usr_last_name__icontains=search)
             )
+
+        qs = qs.order_by(
+            *_APPOINTMENT_SORT_FIELDS.get(
+                sort, _APPOINTMENT_SORT_FIELDS['-apt_scheduled_at'],
+            )
+        )
 
         total = qs.count()
         start = (page - 1) * page_size

@@ -33,6 +33,28 @@ function ageFromBirthDate(birthDate: string | null): string {
   return `${years} yr${years === 1 ? '' : 's'}`
 }
 
+function ScreeningImage({ src, alt }: { src: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <div
+        aria-hidden="true"
+        className="size-28 shrink-0 rounded-xl bg-stone-300 dark:bg-stone-600"
+      />
+    )
+  }
+
+  return (
+    <img
+      alt={alt}
+      className="size-28 shrink-0 rounded-xl object-cover"
+      onError={() => setFailed(true)}
+      src={src}
+    />
+  )
+}
+
 export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -247,31 +269,40 @@ export function AppointmentDetailPage() {
           <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
             AI Screening
           </h2>
-          <div className="mb-4 h-20 rounded-md bg-stone-300 dark:bg-stone-600" />
-          <div className="rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900">
-            <p className="text-xs font-semibold text-stone-500 dark:text-stone-400">
-              Final Assessment
-            </p>
-            <p className="mt-1 text-sm font-bold text-amber-800 dark:text-amber-500">
-              {appointment.screening.disease}
-            </p>
-            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-              AI screening result ·{' '}
-              {Math.round(Number(appointment.screening.ais_confidence))}% confidence ·{' '}
-              {appointment.screening.ais_model_version}
-            </p>
+          <div className="flex items-start gap-4">
+            <ScreeningImage
+              alt={appointment.screening.disease}
+              src={appointment.screening.image_url ?? null}
+            />
+            <div className="min-w-0 flex-1 rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900">
+              <p className="text-xs font-semibold text-stone-500 dark:text-stone-400">
+                Final Assessment
+              </p>
+              <p className="mt-1 text-sm font-bold text-amber-800 dark:text-amber-500">
+                {appointment.screening.disease}
+              </p>
+              <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+                AI screening result ·{' '}
+                {Math.round(Number(appointment.screening.ais_confidence))}% confidence
+              </p>
+            </div>
           </div>
         </div>
       )}
 
       {/* Consultation */}
       {appointment.consultation && (
-        <ConsultationSummary consultation={appointment.consultation} />
+        <ConsultationSummary consultation={appointment.consultation} screening={appointment.screening} />
       )}
 
       {/* Prescription */}
       {appointment.prescription && (
-        <PrescriptionSummary prescription={appointment.prescription} />
+        <PrescriptionSummary
+          prescription={appointment.prescription}
+          onPreview={() =>
+            navigate(`/veterinarian/appointments/${appointment.apt_id}/prescription/preview`)
+          }
+        />
       )}
 
       {/* Actions */}

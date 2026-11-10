@@ -22,11 +22,25 @@ const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
   NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
 }
 
+const STAT_STYLES = {
+  light: {
+    consultations: { bg: '#E8F1FA', text: '#2C6CA8' },
+    upcoming: { bg: '#FCF0DB', text: '#B26B12' },
+    completed: { bg: '#E6F5EC', text: '#1E8750' },
+  },
+  dark: {
+    consultations: { bg: '#1A2A3A', text: '#8CBBEA' },
+    upcoming: { bg: '#332515', text: '#F0B45C' },
+    completed: { bg: '#16301F', text: '#74D69C' },
+  },
+} as const
+
 export default function VetHomeScreen() {
   const router = useRouter()
   const { user } = useAuth()
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
+  const statStyles = STAT_STYLES[isDark ? 'dark' : 'light']
   const { data, isLoading, isError, refetch } = useVetDashboard(localDateStr())
   const { refreshing, onRefresh } = usePullToRefresh(refetch)
   useRefreshVetOnFocus('dashboard')
@@ -39,7 +53,6 @@ export default function VetHomeScreen() {
     pet_name: apt.pet_name,
     breed: apt.pet_breed ?? apt.pet_species ?? '',
     owner_name: apt.owner_name ?? '',
-    ai_screening_tag: apt.screening ? apt.screening.disease : null,
     status: apt.apt_status,
   }))
 
@@ -81,17 +94,17 @@ export default function VetHomeScreen() {
             <Text style={styles.emptyText}>Unable to load monthly summary.</Text>
           ) : (
             <View style={styles.statsRow}>
-              <View style={[styles.statBox, { backgroundColor: '#EBF5FB' }]}>
-                <Text style={[styles.statValue, { color: '#2E86C1' }]}>{stats.consultations_this_month}</Text>
-                <Text style={styles.statLabel}>Consultations</Text>
+              <View style={[styles.statBox, { backgroundColor: statStyles.consultations.bg }]}>
+                <Text style={[styles.statValue, { color: statStyles.consultations.text }]}>{stats.consultations_this_month}</Text>
+                <Text style={[styles.statLabel, { color: statStyles.consultations.text }]}>Consultations</Text>
               </View>
-              <View style={[styles.statBox, { backgroundColor: '#FDEBD0' }]}>
-                <Text style={[styles.statValue, { color: '#E67E22' }]}>{stats.pending}</Text>
-                <Text style={styles.statLabel}>Upcoming</Text>
+              <View style={[styles.statBox, { backgroundColor: statStyles.upcoming.bg }]}>
+                <Text style={[styles.statValue, { color: statStyles.upcoming.text }]}>{stats.pending}</Text>
+                <Text style={[styles.statLabel, { color: statStyles.upcoming.text }]}>Upcoming</Text>
               </View>
-              <View style={[styles.statBox, { backgroundColor: '#D5F5E3' }]}>
-                <Text style={[styles.statValue, { color: '#27AE60' }]}>{stats.completed}</Text>
-                <Text style={styles.statLabel}>Completed</Text>
+              <View style={[styles.statBox, { backgroundColor: statStyles.completed.bg }]}>
+                <Text style={[styles.statValue, { color: statStyles.completed.text }]}>{stats.completed}</Text>
+                <Text style={[styles.statLabel, { color: statStyles.completed.text }]}>Completed</Text>
               </View>
             </View>
           )}
@@ -125,11 +138,8 @@ export default function VetHomeScreen() {
                     <Text style={styles.schedulePetName} numberOfLines={1}>{item.pet_name}</Text>
                     {!!item.breed && <Text style={styles.scheduleBreed} numberOfLines={1}> | {item.breed}</Text>}
                   </View>
-                  <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
-                  {item.ai_screening_tag && (
-                    <Text style={styles.scheduleAiTag}>AI Screening Result: {item.ai_screening_tag}</Text>
-                  )}
-                </View>
+                <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
+              </View>
                 <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
                   <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
                     {formatAppointmentStatus(item.status)}
@@ -158,7 +168,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   statsRow: { flexDirection: 'row', gap: 10 },
   statBox: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   statValue: { ...font.extrabold, fontSize: 24 },
-  statLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 11, marginTop: 4 },
+  statLabel: { ...font.semibold, fontSize: 11, marginTop: 4 },
 
   loading: { marginVertical: 20 },
 
@@ -169,13 +179,12 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   scheduleCardPressed: { opacity: 0.7 },
   scheduleTimeCol: { width: 70 },
   scheduleTime: { ...font.bold, color: colors.text, fontSize: 13 },
-  scheduleDivider: { width: 3, height: 40, backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12 },
+  scheduleDivider: { width: 3, alignSelf: 'stretch', backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12, marginVertical: 2 },
   scheduleInfoCol: { flex: 1 },
   schedulePetRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   schedulePetName: { ...font.bold, color: colors.text, fontSize: 15 },
   scheduleBreed: { ...font.regular, color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
   scheduleOwner: { ...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-  scheduleAiTag: { ...font.semibold, color: colors.primary, fontSize: 11, marginTop: 4 },
 
   statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },

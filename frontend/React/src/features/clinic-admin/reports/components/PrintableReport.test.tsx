@@ -5,6 +5,7 @@ import type { ClinicProfile } from '../../../clinic-profile/types/clinicProfile.
 import type {
   AppointmentsReport,
   PatientsReport,
+  ReportRevenue,
   ReportSummary,
   ScreeningsReport,
   VetWorkloadReport,
@@ -90,6 +91,15 @@ const patients: PatientsReport = {
   ],
 }
 
+const revenue: ReportRevenue = {
+  revenue: '8500.00',
+  currency: 'PHP',
+  payment_count: 9,
+  previous_revenue: '7000.00',
+  date_from: '2026-10-01',
+  date_to: '2026-10-07',
+}
+
 function renderReport(overrides: { vetSelected?: boolean } = {}) {
   return render(
     <PrintableReport
@@ -99,6 +109,7 @@ function renderReport(overrides: { vetSelected?: boolean } = {}) {
       workload={workload}
       screenings={screenings}
       patients={patients}
+      revenue={revenue}
       rangeLabel="Oct 1 – Oct 7, 2026"
       days={7}
       vetLabel={overrides.vetSelected ? 'Dr. Reyes' : 'All veterinarians'}
@@ -130,6 +141,9 @@ describe('PrintableReport', () => {
     expect(screen.getByText(/All figures below reflect only the filters/)).toBeInTheDocument()
 
     expect(screen.getByText('Key Metrics')).toBeInTheDocument()
+    expect(screen.getByText('Revenue')).toBeInTheDocument()
+    expect(screen.getByText('₱8,500.00')).toBeInTheDocument()
+    expect(screen.getByText('9 payments')).toBeInTheDocument()
     expect(screen.getByText('Appointments Over Time')).toBeInTheDocument()
     expect(screen.getByText('Status Breakdown')).toBeInTheDocument()
     expect(screen.getByText('Veterinarian Workload')).toBeInTheDocument()
