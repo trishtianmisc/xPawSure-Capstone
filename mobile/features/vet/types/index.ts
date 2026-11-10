@@ -17,6 +17,7 @@ export interface VetScreeningSummary {
   ais_status: string
   ais_source: string
   ais_created_at: string
+  image_url?: string | null
 }
 
 export interface VetAppointment {
