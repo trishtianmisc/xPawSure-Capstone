@@ -19,7 +19,7 @@ import { font } from '../../../../src/theme/typography'
 import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
-import { ClaudeReviewCard } from '../../../../features/screening/components/AnalysisCards'
+import { CareGuidelinesCard } from '../../../../features/screening/components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../../../../features/screening/components/SymptomSummaryCard'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 import { buildScreeningSavePayload } from '../../../../features/screening/savePayload'
@@ -165,7 +165,6 @@ export default function ResultScreen() {
 
   const deviceFailed = params.deviceFailed === 'true'
   const classifierSkipped = params.classifierSkipped === 'true'
-  const claudeRequestFailed = params.claudeRequestFailed === 'true'
 
   const screeningState: ScreeningResultState | null = deviceFailed || classifierSkipped
     ? null
@@ -382,8 +381,8 @@ export default function ResultScreen() {
               On-device analysis unavailable
             </Text>
             <Text style={styles.stateMessage}>
-              No prediction was produced, so none is shown. The image review below is
-              displayed on its own and is not a diagnosis.
+              No prediction was produced, so none is shown. The screening result is
+              not a diagnosis. Please consult a veterinarian.
             </Text>
           </View>
         )}
@@ -425,6 +424,10 @@ export default function ResultScreen() {
           </>
         )}
 
+        {!deviceFailed && (
+          <CareGuidelinesCard prediction={top?.disease ?? null} />
+        )}
+
         {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (
           <SymptomSummaryCard
             rows={symptomRows}
@@ -445,14 +448,11 @@ export default function ResultScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>INDEPENDENT REVIEW</Text>
-        <ClaudeReviewCard response={claudeResponse} requestFailed={claudeRequestFailed} />
-
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
             {classifierSkipped || deviceFailed
-              ? 'The image review was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
+              ? 'Image validation was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
               : 'AI-assisted screening is preliminary and does not replace professional veterinary diagnosis. The on-device AI result is the primary prediction. Questionnaire answers are supplementary and never modify the AI prediction or confidence. Consult a vet for definitive results.'}
           </Text>
         </View>

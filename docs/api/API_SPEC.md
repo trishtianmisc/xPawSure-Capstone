@@ -1737,6 +1737,11 @@ context only. It is `null` when the screening was saved without answers or
 predates the column; stored rows never influence prediction, confidence,
 review, or booking.
 
+`cross_analysis` is deterministic audit data computed at save time from the
+two independent outputs. The mobile app no longer renders it (the API field is
+retained for backward compatibility, audit, and future tooling); agreement is
+never treated as confirmation.
+
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
 

@@ -320,7 +320,7 @@ Eligible?
                     ↓
              Prediction + confidence
                     ↓
-        Display review and classifier result separately
+        Display classifier result + Care Guidelines card
                     ↓
         Save image + both outputs (on Save, or before booking)
                     ↓
@@ -331,6 +331,17 @@ Classifier inference occurs entirely on the mobile device. The backend
 image-validation review uses the same JPEG bytes but is an independent external
 analysis, not a second run of the classifier. The backend never runs the
 classifier.
+
+The review findings are no longer rendered as a separate card on the result or
+details screens, and cross-analysis is no longer rendered on any mobile screen.
+Both outputs are still requested, gated, saved, and recorded
+independently — only the display changed: the former review slot shows the
+sample Care Guidelines card (static mock content, pending veterinary review),
+selected solely by the primary raw AI predicted class and never able to modify
+the prediction, confidence, saved result, questionnaire answers, or booking
+eligibility. Gate outcome, eligibility, `claude_token` verification, and the
+stored cross-analysis record are unchanged and remain audit data exposed by the
+API. Agreement between outputs remains non-confirmation.
 
 After a `DISEASE_DETECTED` result, the app offers the supplementary symptom
 questionnaire (adaptive question order, early stopping). The on-device
