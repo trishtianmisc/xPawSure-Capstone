@@ -37,6 +37,14 @@
             "./assets/fonts/Poppins_800ExtraBold.ttf"
           ]
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "extra": {
