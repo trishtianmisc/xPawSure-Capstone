@@ -1,6 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
@@ -14,17 +14,16 @@ import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useConsultations } from '../hooks/useConsultations'
 import { usePrescriptions } from '../hooks/usePrescriptions'
 import { useVaccinations } from '../hooks/useVaccinations'
+import { consumeRequestedRecordsTab, type RecordsTab } from '../lib/recordNavigation'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-type Tab = 'consultations' | 'prescriptions' | 'vaccinations'
-
-const TABS: { value: Tab; label: string }[] = [
+const TABS: { value: RecordsTab; label: string }[] = [
   { value: 'consultations', label: 'Consults' },
   { value: 'prescriptions', label: 'Meds' },
   { value: 'vaccinations', label: 'Vaccines' },
 ]
 
-function parseTab(value: string | string[] | undefined): Tab | null {
+function parseTab(value: string | string[] | undefined): RecordsTab | null {
   if (value === 'consultations' || value === 'prescriptions' || value === 'vaccinations') {
     return value
   }
@@ -78,12 +77,22 @@ export default function RecordsScreen() {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const params = useLocalSearchParams<{ tab?: string }>()
-  const [tab, setTab] = useState<Tab>(() => parseTab(params.tab) ?? 'consultations')
+  const [tab, setTab] = useState<RecordsTab>(() => parseTab(params.tab) ?? 'consultations')
 
   useEffect(() => {
     const requested = parseTab(params.tab)
     if (requested) setTab(requested)
   }, [params.tab])
+
+  useFocusEffect(
+    useCallback(() => {
+      const requested = consumeRequestedRecordsTab()
+      if (requested) {
+        setTab(requested)
+        router.setParams({ tab: requested })
+      }
+    }, [router]),
+  )
 
   const consultations = useConsultations()
   const prescriptions = usePrescriptions()

@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { useMemo } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
@@ -7,6 +7,7 @@ import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
 import { usePrescription } from '../hooks/usePrescription'
+import { useRecordDetailBack } from '../lib/recordNavigation'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -38,19 +39,11 @@ function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
 }
 
 export default function PrescriptionDetailScreen() {
-  const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
   const { data: prescription, isLoading, isError, error } = usePrescription(id)
   const styles = useMemo(() => createStyles(colors), [colors])
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back()
-    } else {
-      router.replace('/(owner)/records')
-    }
-  }
+  const handleBack = useRecordDetailBack('prescriptions')
 
   const renderHeader = () => (
     <View style={styles.header}>
