@@ -27,6 +27,12 @@ export interface StaffStats {
   licenses_expiring_soon: number
 }
 
+export interface StaffActivity {
+  appointments_this_month: number
+  patients_seen_this_month: number
+  screenings_reviewed_this_month: number
+}
+
 export interface CreateStaffPayload {
   email: string
   first_name: string

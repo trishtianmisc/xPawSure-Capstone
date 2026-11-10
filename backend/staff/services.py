@@ -17,6 +17,12 @@ logger = logging.getLogger(__name__)
 
 _PHONE_RE = re.compile(r'^\+63\d{10}$')
 _NAME_RE = re.compile(r'^[A-Za-zÀ-ÿ\u00C0-\u024F]+([.\u0027\u2019 -][A-Za-zÀ-ÿ\u00C0-\u024F]+)*$')
+_LICENSE_RE = re.compile(r'^\d{7}$')
+
+_STAFF_SORT_FIELDS = {
+    'first_name': ('usr_id__usr_first_name', 'usr_id__usr_last_name'),
+    '-first_name': ('-usr_id__usr_first_name', '-usr_id__usr_last_name'),
+}
 
 
 def _normalize_name(value: str) -> str:
@@ -301,7 +307,112 @@ class StaffService:
         }
 
     @staticmethod
-    def list_staff(clinic_id: str, role: str | None = None, search: str = '', status: str | None = None, page: int = 1, page_size: int = 20) -> dict:
+    def get_activity(staff: StaffProfile) -> dict:
+        """Current-calendar-month activity counters for one staff member.
+
+        The window is the current month in the clinic's local timezone.
+        Appointments follow the canonical patient rule (never CANCELLED or
+        NO_SHOW); patients seen counts distinct pets with a COMPLETED visit
+        in the same window; screenings are credited to the vet through the
+        consultation recorded on the screening at review time
+        (record_comparison writes screening.con_id, and consultations are
+        restricted to the appointment's vet).
+        """
+        from datetime import datetime
+
+        from ai_screenings.models import AiScreening
+        from appointments.models import Appointment, AppointmentStatus
+        from appointments.services import NON_PATIENT_APPOINTMENT_STATUSES, get_clinic_timezone
+
+        tz = get_clinic_timezone(staff.cln_id_id)
+        start = datetime.now(tz).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # +32 days always lands past the current month, then day=1 snaps to
+        # the first day of the next month.
+        end = (start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        month_appointments = Appointment.objects.filter(
+            stf_id_id=staff.stf_id,
+            apt_deleted_at__isnull=True,
+            apt_scheduled_at__gte=start,
+            apt_scheduled_at__lt=end,
+        ).exclude(apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
+
+        appointments_this_month = month_appointments.count()
+        patients_seen = (
+            month_appointments.filter(apt_status=AppointmentStatus.COMPLETED)
+            .values('pet_id')
+            .distinct()
+            .count()
+        )
+
+        # Windowed on ais_compared_at (the review timestamp, written only by
+        # record_comparison). A NULL con_id means the review is not linked to
+        # a consultation, so no vet is credited.
+        screenings_reviewed = AiScreening.objects.filter(
+            ais_compared_at__gte=start,
+            ais_compared_at__lt=end,
+            con_id__stf_id_id=staff.stf_id,
+        ).count()
+
+        return {
+            'appointments_this_month': appointments_this_month,
+            'patients_seen_this_month': patients_seen,
+            'screenings_reviewed_this_month': screenings_reviewed,
+        }
+
+    @staticmethod
+    def get_activity(staff: StaffProfile) -> dict:
+        """Current-calendar-month activity counters for one staff member.
+
+        The window runs from the first of the month (clinic-local timezone)
+        to the first of the next month. Appointments follow the canonical
+        patient rule (never CANCELLED/NO_SHOW); patients seen counts the
+        distinct pets whose visit COMPLETED; screenings reviewed are credited
+        to the vet through the consultation recorded at review time.
+        """
+        from datetime import datetime
+
+        from ai_screenings.models import AiScreening
+        from appointments.models import Appointment, AppointmentStatus
+        from appointments.services import NON_PATIENT_APPOINTMENT_STATUSES, get_clinic_timezone
+
+        tz = get_clinic_timezone(staff.cln_id_id)
+        start = datetime.now(tz).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = (start + timedelta(days=32)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        month_appointments = Appointment.objects.filter(
+            stf_id_id=staff.stf_id,
+            apt_deleted_at__isnull=True,
+            apt_scheduled_at__gte=start,
+            apt_scheduled_at__lt=end,
+        ).exclude(apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES)
+
+        appointments_this_month = month_appointments.count()
+        patients_seen = (
+            month_appointments.filter(apt_status=AppointmentStatus.COMPLETED)
+            .values('pet_id')
+            .distinct()
+            .count()
+        )
+
+        # Reviews are only ever recorded through a consultation on the
+        # appointment that carries the screening (record_comparison writes
+        # screening.con_id), and consultations are restricted to the
+        # appointment's vet, so con_id points at the vet who reviewed.
+        screenings_reviewed = AiScreening.objects.filter(
+            ais_compared_at__gte=start,
+            ais_compared_at__lt=end,
+            con_id__stf_id_id=staff.stf_id,
+        ).count()
+
+        return {
+            'appointments_this_month': appointments_this_month,
+            'patients_seen_this_month': patients_seen,
+            'screenings_reviewed_this_month': screenings_reviewed,
+        }
+
+    @staticmethod
+    def list_staff(clinic_id: str, role: str | None = None, search: str = '', status: str | None = None, sort: str = '', page: int = 1, page_size: int = 20) -> dict:
         queryset = StaffProfile.objects.filter(
             cln_id=clinic_id,
             usr_id__usr_deleted_at__isnull=True,
@@ -330,7 +441,9 @@ class StaffService:
                 | Q(stf_license_number__icontains=search)
             )
 
-        queryset = queryset.order_by('usr_id__usr_first_name')
+        queryset = queryset.order_by(
+            *_STAFF_SORT_FIELDS.get(sort, _STAFF_SORT_FIELDS['first_name'])
+        )
 
         total = queryset.count()
         page = max(page, 1)
@@ -410,7 +523,9 @@ class StaffService:
                         errors_for_row.append('License expiration date must be in YYYY-MM-DD format.')
 
             if license_number:
-                if StaffProfile.objects.filter(
+                if not _LICENSE_RE.fullmatch(license_number):
+                    errors_for_row.append('License number must be exactly 7 digits.')
+                elif StaffProfile.objects.filter(
                     cln_id=clinic,
                     stf_license_number__iexact=license_number,
                     usr_id__usr_deleted_at__isnull=True,

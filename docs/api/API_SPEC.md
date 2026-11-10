@@ -667,6 +667,9 @@ Query parameters:
 - overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
   with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
   "Needs attention" indicator; additive, combines with the other filters.
+- sort: `apt_scheduled_at` (oldest first) or `-apt_scheduled_at` (newest first,
+  default). Unknown values fall back to the default. Ordering is applied in SQL
+  before pagination, with `apt_id` as a tie-breaker.
 
 Notes:
 
@@ -2194,6 +2197,11 @@ Clinic Admin.
 
 Returns staff members within the admin's own clinic.
 
+Query parameters: `page`, `page_size`, `role`, `search`, `status`, and `sort`.
+`sort` accepts `first_name` (default, A→Z) or `-first_name` (Z→A); unknown
+values fall back to the default ordering. Ordering happens in SQL before
+pagination.
+
 ## GET /api/veterinarians/
 
 Clinic Admin.
@@ -2210,14 +2218,56 @@ Clinic Admin.
 
 Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
 
+`license_number`, whenever provided, must be exactly 7 digits (e.g. `0123456`);
+letters, hyphens, and other lengths are rejected with a validation error. The
+rule applies to every staff write path: create, `PATCH /api/staff/{id}/`, and
+`POST /api/staff/bulk-upload/`. Veterinarians must also provide a license number
+and expiration date, as before.
+
 The `201` response includes `temp_password` exactly once (it is also emailed to
 the staff member via the welcome email). It is never returned again — the
 `reset-password` and `resend-welcome` actions deliver a new temporary password by
 email only.
 
 Related endpoints: `GET /api/staff/stats/`, `GET`/`PATCH /api/staff/{id}/`,
-`POST /api/staff/{id}/{action}/` (activate | deactivate | reset-password |
-resend-welcome), `POST /api/staff/bulk-upload/`.
+`GET /api/staff/{id}/activity/`, `POST /api/staff/{id}/{action}/`
+(activate | deactivate | reset-password | resend-welcome),
+`POST /api/staff/bulk-upload/`.
+
+## GET /api/staff/{staff_id}/activity/
+
+Clinic Admin.
+
+Returns the current-month activity counters for one staff member (the
+Activity Summary card, which the web app renders only for veterinarians).
+`staff_id` is the same id used by `GET /api/staff/{id}/`; staff from another
+clinic receive the usual `404`. Non-veterinarian staff return `0` for all
+three fields.
+
+The window is the current calendar month in the clinic's local timezone
+(`ClinicSettings.cls_timezone`, default `Asia/Manila`): the first of the
+month up to, but not including, the first of the next month.
+
+| Field | Definition |
+|---|---|
+| `appointments_this_month` | Non-deleted appointments assigned to this staff member scheduled inside the window, excluding `CANCELLED` and `NO_SHOW` (the canonical patient rule). |
+| `patients_seen_this_month` | Distinct pets with at least one `COMPLETED` appointment from the same filtered set; never greater than `appointments_this_month`. |
+| `screenings_reviewed_this_month` | Screenings whose review (`ais_compared_at`) falls inside the window and that are credited to this vet through the consultation recorded at review time (`con_id → Consultation.stf_id`). |
+
+Screening credit rule: a review is only ever recorded through a consultation
+on the booking that carries the screening (`record_comparison` writes
+`screening.con_id`), and consultations are restricted to the appointment's
+veterinarian — so the consultation's vet is the vet who reviewed. A screening
+never attached to a booking is never marked reviewed, and a review not linked
+to a consultation (`con_id` NULL) is not credited to any vet.
+
+```json
+{
+  "appointments_this_month": 12,
+  "patients_seen_this_month": 8,
+  "screenings_reviewed_this_month": 5
+}
+```
 
 ---
 

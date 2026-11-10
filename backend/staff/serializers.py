@@ -56,6 +56,8 @@ class CreateStaffSerializer(serializers.Serializer):
     def validate_license_number(self, value):
         if not value:
             return value
+        if not re.fullmatch(r'\d{7}', value):
+            raise serializers.ValidationError('License number must be exactly 7 digits.')
         clinic = self.context.get('clinic')
         if clinic and StaffProfile.objects.filter(
             cln_id=clinic,
@@ -169,6 +171,13 @@ class UpdateStaffSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 'Phone must be a valid Philippine number (e.g. 09171234567).'
             )
+
+    def validate_license_number(self, value):
+        if not value:
+            return value
+        if not re.fullmatch(r'\d{7}', value):
+            raise serializers.ValidationError('License number must be exactly 7 digits.')
+        return value
 
     def validate_license_expiration_date(self, value):
         if not value:

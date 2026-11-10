@@ -24,6 +24,14 @@ CLINIC_TIMEZONE = ZoneInfo('Asia/Manila')
 # mirrors this value when hiding the Check In action.
 NO_SHOW_GRACE_MINUTES = 60
 
+# Whitelisted `sort` values for GET /api/appointments/. The `-` prefix means
+# descending (newest first), which is the default and matches the model's
+# Meta ordering. apt_id breaks ties so pagination stays stable.
+_APPOINTMENT_SORT_FIELDS = {
+    'apt_scheduled_at': ('apt_scheduled_at', 'apt_id'),
+    '-apt_scheduled_at': ('-apt_scheduled_at', 'apt_id'),
+}
+
 
 def get_clinic_timezone(clinic_id):
     try:
@@ -887,7 +895,8 @@ class AppointmentService:
     @staticmethod
     def list_appointments(clinic_id, date=None, status=None, vet_id=None,
                           pet_id=None, search=None, date_from=None,
-                          date_to=None, page=1, page_size=20, overdue=False):
+                          date_to=None, page=1, page_size=20, overdue=False,
+                          sort=''):
         # Statuses shown in this list (and the overdue filter) must be
         # current, so refresh past-due appointments for this clinic first.
         _reconcile_past_due(clinic_id)
@@ -935,6 +944,12 @@ class AppointmentService:
                 | models.Q(apt_created_by__usr_first_name__icontains=search)
                 | models.Q(apt_created_by__usr_last_name__icontains=search)
             )
+
+        qs = qs.order_by(
+            *_APPOINTMENT_SORT_FIELDS.get(
+                sort, _APPOINTMENT_SORT_FIELDS['-apt_scheduled_at'],
+            )
+        )
 
         total = qs.count()
         start = (page - 1) * page_size
