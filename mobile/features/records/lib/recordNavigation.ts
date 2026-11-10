@@ -12,11 +12,16 @@ export function consumeRequestedRecordsTab(): RecordsTab | null {
   return tab
 }
 
-export function useRecordDetailBack(tab: RecordsTab): () => void {
+export function useRecordDetailBack(tab: RecordsTab, backHref?: string): () => void {
   const handleBack = useCallback(() => {
+    if (backHref) {
+      router.dismissTo(backHref)
+      return
+    }
+
     requestedTab = tab
     router.dismissTo('/(owner)/records')
-  }, [tab])
+  }, [tab, backHref])
 
   useFocusEffect(
     useCallback(() => {

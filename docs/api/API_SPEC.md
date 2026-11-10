@@ -1428,10 +1428,12 @@ Query params:
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
-specific_disease, treatment, notes, follow_up_required,
+specific_disease, prescription_id, treatment, notes, follow_up_required,
 follow_up_target_date, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
+`prescription_id` is the linked prescription UUID when one exists, otherwise
+`null`. A consultation has at most one prescription.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
 when no follow-up is requested.
 

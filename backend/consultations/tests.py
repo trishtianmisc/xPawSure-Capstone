@@ -8,6 +8,7 @@ from clinics.models import Clinic
 from consultations.models import Consultation
 from owners.models import OwnerProfile
 from pets.models import Breed, Pet, Sex
+from prescriptions.models import Prescription
 from users.models import StaffPosition, StaffProfile, User, UserRole
 
 PASSWORD = 'TestPass123!'
@@ -19,7 +20,7 @@ NO_PROFILE_EMAIL = 'connoprofile@example.com'
 LIST_FIELDS = {
     'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
     'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-    'diagnosis', 'specific_disease', 'treatment', 'notes',
+    'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
     'follow_up_required', 'follow_up_target_date', 'created_at',
 }
 
@@ -119,6 +120,7 @@ class ConsultationListTests(ConsultationBase):
         self.assertEqual(record['veterinarian'], 'Vera Vet')
         self.assertEqual(record['diagnosis'], 'Allergic dermatitis')
         self.assertEqual(record['treatment'], 'Antihistamine course')
+        self.assertIsNone(record['prescription_id'])
         self.assertFalse(record['follow_up_required'])
         self.assertIsNone(record['follow_up_target_date'])
 
@@ -160,6 +162,21 @@ class ConsultationListTests(ConsultationBase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_list_includes_linked_prescription_id(self):
+        prescription = Prescription.objects.create(
+            con_id=self.consultation,
+            stf_id=self.vet,
+        )
+
+        response = self.client.get('/api/consultations/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+
+        record = next(
+            item for item in response.data
+            if item['id'] == str(self.consultation.con_id)
+        )
+        self.assertEqual(record['prescription_id'], str(prescription.prs_id))
+
 
 class ConsultationDetailTests(ConsultationBase):
 
@@ -172,6 +189,20 @@ class ConsultationDetailTests(ConsultationBase):
         self.assertEqual(response.data['id'], str(self.consultation.con_id))
         self.assertEqual(response.data['diagnosis'], 'Allergic dermatitis')
         self.assertEqual(response.data['veterinarian'], 'Vera Vet')
+        self.assertIsNone(response.data['prescription_id'])
+
+    def test_owner_consultation_includes_linked_prescription_id(self):
+        prescription = Prescription.objects.create(
+            con_id=self.consultation,
+            stf_id=self.vet,
+        )
+
+        response = self.client.get(
+            f'/api/consultations/{self.consultation.con_id}/',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['prescription_id'], str(prescription.prs_id))
 
     def test_foreign_consultation_returns_404(self):
         response = self.client.get(

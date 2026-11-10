@@ -279,7 +279,7 @@ Owners may view their pets' medical history, including:
 
 Owners cannot edit consultation or prescription records.
 
-Consultation details show the veterinarian, consultation date, diagnosis, specific disease when recorded, chief complaint, clinical notes, and follow-up recommendation. Returning from a record detail opens the Records list on the matching record-type tab.
+Consultation details show the veterinarian, consultation date, diagnosis, specific disease when recorded, chief complaint, clinical notes, and follow-up recommendation. When the consultation has a linked prescription, a Prescription card opens that prescription; the prescription detail back action returns to the consultation. Otherwise, the card states that no prescription was issued. Returning from a record detail opened from the Records list opens the matching record-type tab.
 
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 

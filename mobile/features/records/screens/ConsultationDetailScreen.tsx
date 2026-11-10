@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams } from 'expo-router'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, type ComponentProps } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
@@ -82,6 +82,7 @@ function ClinicalSection({ icon, title, value }: ClinicalSectionProps) {
 
 export default function ConsultationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
+  const router = useRouter()
   const { colors } = useTheme()
   const { data: consultation, isLoading, isError, error } = useConsultation(id)
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -131,13 +132,10 @@ export default function ConsultationDetailScreen() {
 
   const clinicalSections = [
     makeSection('message-alert-outline', 'Chief complaint', consultation.chief_complaint),
-    makeSection('account-voice', 'Subjective', consultation.subjective),
     makeSection('clipboard-text-search-outline', 'Observations', consultation.objective),
-    makeSection('clipboard-pulse-outline', 'Assessment', consultation.assessment),
-    makeSection('format-list-checks', 'Plan', consultation.plan),
-    makeSection('medical-bag', 'Treatment', consultation.treatment),
     makeSection('note-text-outline', 'Notes', consultation.notes),
   ].filter((section): section is ClinicalSectionProps => section !== null)
+  const prescriptionId = consultation.prescription_id
 
   return (
     <View style={styles.screen}>
@@ -205,6 +203,53 @@ export default function ConsultationDetailScreen() {
             ))}
           </View>
         ) : null}
+
+        {prescriptionId ? (
+          <Pressable
+            accessibilityLabel="View prescription"
+            accessibilityRole="button"
+            onPress={() =>
+              router.push({
+                pathname: '/(owner)/records/prescriptions/[id]',
+                params: {
+                  id: prescriptionId,
+                  fromConsultation: consultation.id,
+                },
+              })
+            }
+            style={({ pressed }) => [
+              styles.prescriptionCard,
+              pressed && styles.prescriptionCardPressed,
+            ]}
+          >
+            <View style={styles.prescriptionIcon}>
+              <MaterialCommunityIcons color={colors.primary} name="pill" size={20} />
+            </View>
+            <View style={styles.prescriptionCopy}>
+              <Text style={styles.prescriptionTitle}>Prescription</Text>
+              <Text style={styles.prescriptionText}>
+                View the medications prescribed for this visit.
+              </Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={20} />
+          </Pressable>
+        ) : (
+          <View style={styles.prescriptionCard}>
+            <View style={styles.prescriptionIcon}>
+              <MaterialCommunityIcons
+                color={colors.textMuted}
+                name="file-document-outline"
+                size={20}
+              />
+            </View>
+            <View style={styles.prescriptionCopy}>
+              <Text style={styles.prescriptionTitle}>Prescription</Text>
+              <Text style={styles.prescriptionText}>
+                No prescription was issued for this consultation.
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View
           style={[styles.followUpCard, consultation.follow_up_required && styles.followUpCardActive]}
@@ -368,6 +413,34 @@ const createStyles = (colors: AppColors) =>
       color: colors.textSecondary,
       fontSize: 14,
       lineHeight: 21,
+    },
+    prescriptionCard: {
+      alignItems: 'center',
+      backgroundColor: colors.surfaceAlt,
+      borderColor: colors.border,
+      borderRadius: 16,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 12,
+      padding: 16,
+    },
+    prescriptionCardPressed: { opacity: 0.7 },
+    prescriptionIcon: {
+      alignItems: 'center',
+      backgroundColor: colors.iconBg,
+      borderRadius: 11,
+      height: 40,
+      justifyContent: 'center',
+      width: 40,
+    },
+    prescriptionCopy: { flex: 1 },
+    prescriptionTitle: { ...font.bold, color: colors.text, fontSize: 14 },
+    prescriptionText: {
+      ...font.regular,
+      color: colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 2,
     },
     followUpCard: {
       alignItems: 'center',

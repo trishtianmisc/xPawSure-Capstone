@@ -7,13 +7,10 @@ export interface ConsultationRecord {
   pet_name: string
   veterinarian: string
   chief_complaint: string | null
-  subjective: string | null
   objective: string | null
-  assessment: string | null
-  plan: string | null
   diagnosis: string
   specific_disease: string | null
-  treatment: string | null
+  prescription_id: string | null
   notes: string | null
   follow_up_required: boolean
   follow_up_target_date: string | null

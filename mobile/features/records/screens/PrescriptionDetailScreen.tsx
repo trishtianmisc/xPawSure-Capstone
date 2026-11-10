@@ -39,16 +39,22 @@ function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
 }
 
 export default function PrescriptionDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, fromConsultation } = useLocalSearchParams<{
+    id: string
+    fromConsultation?: string
+  }>()
   const { colors } = useTheme()
   const { data: prescription, isLoading, isError, error } = usePrescription(id)
   const styles = useMemo(() => createStyles(colors), [colors])
-  const handleBack = useRecordDetailBack('prescriptions')
+  const backHref = fromConsultation
+    ? `/(owner)/records/consultations/${fromConsultation}`
+    : undefined
+  const handleBack = useRecordDetailBack('prescriptions', backHref)
 
   const renderHeader = () => (
     <View style={styles.header}>
       <Pressable
-        accessibilityLabel="Go back"
+        accessibilityLabel={fromConsultation ? 'Back to consultation' : 'Go back'}
         accessibilityRole="button"
         hitSlop={8}
         onPress={handleBack}
