@@ -50,13 +50,10 @@ export function useFollowUpPayment({
   useEffect(() => {
     if (!isPaid) return
     // Payment success is also the moment the backend confirms the follow-up.
-    void queryClient.invalidateQueries({
-      queryKey: ['appointment', 'detail', appointmentId],
-    })
+    void queryClient.invalidateQueries({ queryKey: ['appointment'] })
     void queryClient.invalidateQueries({
       queryKey: ['payments', 'appointment', appointmentId],
     })
-    void queryClient.invalidateQueries({ queryKey: ['appointments'] })
   }, [appointmentId, isPaid, queryClient])
 
   async function openCheckout(url: string | null) {
