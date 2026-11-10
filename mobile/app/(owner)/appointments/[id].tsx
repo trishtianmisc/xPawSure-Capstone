@@ -7,10 +7,11 @@ import { useAppointment } from '../../../features/appointment/hooks/useAppointme
 import { useCancelAppointment } from '../../../features/appointment/hooks/useCancelAppointment'
 import { STATUS_PRESENTATION } from '../../../features/appointment/lib/statusPresentation'
 import type { AppointmentStatus } from '../../../features/appointment/types'
+import { FollowUpPaymentCard } from '../../../features/payment/components/FollowUpPaymentCard'
 import { formatMoney } from '../../../features/payment/lib/format'
 import { pickAppointmentPayment } from '../../../features/payment/lib/pickAppointmentPayment'
+import { PAYMENT_PRESENTATION } from '../../../features/payment/lib/presentation'
 import { useAppointmentPayment } from '../../../features/payment/hooks/useAppointmentPayment'
-import type { PaymentStatus } from '../../../features/payment/types'
 import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
@@ -18,19 +19,6 @@ import { font } from '../../../src/theme/typography'
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
 const CANCELLABLE_STATUSES: AppointmentStatus[] = ['PENDING', 'CONFIRMED']
-
-/** Receipt presentation for the payment card; mirrors the status palette. */
-const PAYMENT_PRESENTATION: Record<
-  PaymentStatus,
-  { label: string; bg: string; text: string }
-> = {
-  PENDING: { label: 'Pending', bg: '#FDEBD0', text: '#E67E22' },
-  PAID: { label: 'Paid', bg: '#D5F5E3', text: '#1E8449' },
-  FAILED: { label: 'Failed', bg: '#FADBD8', text: '#C0392B' },
-  EXPIRED: { label: 'Expired', bg: '#E5E7E9', text: '#566573' },
-  REFUNDED: { label: 'Refunded', bg: '#D6EAF8', text: '#2471A3' },
-  VOID: { label: 'Void', bg: '#E5E7E9', text: '#566573' },
-}
 
 /** 'CONSULTATION' → 'Consultation', 'MALE' → 'Male'. */
 function titleCase(value: string): string {
@@ -134,6 +122,11 @@ export default function AppointmentDetailScreen() {
   const canCancel = CANCELLABLE_STATUSES.includes(appointment.apt_status)
   const payment = paymentsData ? pickAppointmentPayment(paymentsData.results) : null
   const paymentPresentation = payment ? PAYMENT_PRESENTATION[payment.status] : null
+  // A paid follow-up becomes CONFIRMED, so this card is only for the window
+  // between the receptionist scheduling the slot and the owner paying for it.
+  const awaitingFollowUpPayment =
+    appointment.apt_type === 'FOLLOW_UP' &&
+    appointment.apt_status === 'CONFIRMATION'
 
   const scheduledDate = new Date(appointment.apt_scheduled_at)
   const weekday = scheduledDate.toLocaleDateString(undefined, { weekday: 'short' })
@@ -186,6 +179,15 @@ export default function AppointmentDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        {awaitingFollowUpPayment ? (
+          <FollowUpPaymentCard
+            appointmentId={appointment.apt_id}
+            fee={appointment.consultation_fee}
+            payment={payment}
+            scheduledAt={appointment.apt_scheduled_at}
+          />
+        ) : null}
 
         {/* Schedule */}
         <View style={styles.card}>
@@ -300,8 +302,8 @@ export default function AppointmentDetailScreen() {
           </View>
         ) : null}
 
-        {/* Payment */}
-        {payment && paymentPresentation ? (
+        {/* Payment receipt (the follow-up card owns the pay action above) */}
+        {!awaitingFollowUpPayment && payment && paymentPresentation ? (
           <View style={styles.card}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionLabel}>PAYMENT</Text>

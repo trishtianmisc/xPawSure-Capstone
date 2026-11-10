@@ -514,7 +514,10 @@ class AppointmentDetailTests(OversightBase):
         self.assertIsNone(response.data['created_by_name'])
 
     def test_status_change_attributed_to_staff(self):
-        apt = self._apt(datetime(2026, 10, 25, 9, 0, tzinfo=MNL))
+        future = (datetime.now(MNL) + timedelta(days=1)).replace(
+            hour=9, minute=0, second=0, microsecond=0,
+        )
+        apt = self._apt(future)
         AppointmentService.update_status(
             apt_id=apt.apt_id,
             new_status=AppointmentStatus.CONFIRMED,

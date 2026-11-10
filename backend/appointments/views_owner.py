@@ -25,6 +25,7 @@ from appointments.services import (
 from clinics.models import Clinic, ClinicSettings
 from core.permissions import IsOwner
 from owners.models import OwnerProfile
+from payments.serializers import PaymentSerializer
 from payments.services import PaymentError, PaymentService
 from pets.models import Pet
 from users.models import StaffPosition, StaffProfile
@@ -350,6 +351,57 @@ class OwnerAppointmentDetailView(APIView):
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
+
+
+class OwnerFollowUpCheckoutView(APIView):
+    """Create the owner's checkout for an already-scheduled follow-up."""
+
+    permission_classes = [IsOwner]
+
+    def post(self, request, apt_id):
+        owner_profile = _get_owner_profile(request.user)
+        if not owner_profile:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        appointment = AppointmentService.get_appointment_detail(apt_id)
+        if (
+            not appointment
+            or appointment.apt_deleted_at is not None
+            or appointment.pet_id.own_id_id != owner_profile.own_id
+        ):
+            return Response(
+                {'detail': 'Appointment not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        method = request.data.get('method')
+        if method not in PaymentService.OWNER_METHODS:
+            return Response(
+                {
+                    'detail': 'method must be GCASH or CARD.',
+                    'code': 'VALIDATION_ERROR',
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            payment = PaymentService.create_follow_up_checkout(
+                appointment=appointment,
+                owner=owner_profile,
+                method=method,
+                actor_user_id=request.user.usr_id,
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+        except PaymentError as exc:
+            return Response(exc.as_dict(), status=exc.status_code)
+
+        return Response(
+            PaymentSerializer(payment).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class OwnerAppointmentCancelView(APIView):

@@ -1,3 +1,4 @@
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from consultations.models import Consultation
@@ -16,6 +17,7 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     plan = serializers.CharField(source='con_plan', read_only=True)
     diagnosis = serializers.CharField(source='con_diagnosis', read_only=True)
     specific_disease = serializers.CharField(source='con_specific_disease', read_only=True, allow_null=True)
+    prescription_id = serializers.SerializerMethodField()
     treatment = serializers.CharField(source='con_treatment', read_only=True)
     notes = serializers.CharField(source='con_notes', read_only=True)
     follow_up_required = serializers.BooleanField(source='con_follow_up_required', read_only=True)
@@ -29,13 +31,20 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
             'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
-            'diagnosis', 'specific_disease', 'treatment', 'notes',
+            'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
             'follow_up_required', 'follow_up_target_date', 'created_at',
         ]
 
     def get_veterinarian(self, obj) -> str:
         user = obj.stf_id.usr_id
         return f'{user.usr_first_name} {user.usr_last_name}'.strip()
+
+    def get_prescription_id(self, obj) -> str | None:
+        try:
+            prescription = obj.prescription
+        except ObjectDoesNotExist:
+            return None
+        return str(prescription.prs_id)
 
 
 class ConsultationCreateSerializer(serializers.Serializer):

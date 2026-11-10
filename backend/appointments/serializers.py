@@ -114,6 +114,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     vet_license_number = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
+    consultation_fee = serializers.SerializerMethodField()
     clinic_address = serializers.CharField(source='cln_id.cln_address', read_only=True)
     clinic_phone = serializers.CharField(source='cln_id.cln_phone', read_only=True)
     screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
@@ -125,7 +126,8 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
             'pet_birth_date', 'pet_weight', 'pet_color',
-            'cln_id', 'clinic_name', 'clinic_address', 'clinic_phone',
+            'cln_id', 'clinic_name', 'consultation_fee',
+            'clinic_address', 'clinic_phone',
             'stf_id', 'vet_name', 'vet_license_number',
             'owner_name', 'owner_phone', 'owner_email', 'owner_address', 'screening',
             'apt_type', 'apt_status', 'apt_scheduled_at',
@@ -136,6 +138,12 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
         ]
+
+    def get_consultation_fee(self, obj):
+        settings_obj = getattr(obj.cln_id, 'settings', None)
+        if settings_obj is None:
+            return 0.0
+        return float(settings_obj.cls_consultation_fee or 0)
 
     def get_consultation(self, obj):
         try:

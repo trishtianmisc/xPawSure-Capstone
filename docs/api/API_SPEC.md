@@ -655,7 +655,8 @@ Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
 
 Owner: Returns own pets' appointments. `REVIEW` follow-ups are hidden from
 owners until the receptionist schedules them. `CONFIRMATION` appointments are
-visible read-only and displayed as `AWAITING PAYMENT`.
+visible and displayed as `AWAITING PAYMENT` with an in-app payment action (see
+`POST /api/owner/appointments/{id}/checkout/`).
 Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
@@ -780,6 +781,11 @@ Clinic Admin (read-only). Appointments outside the caller's clinic return `404`.
 Owner: own pets' appointments only; `REVIEW` follow-ups return `404`. Clinic
 staff: appointments within their own clinic, otherwise `404`.
 
+The owner detail response includes `consultation_fee`, the clinic's current fee,
+so the mobile follow-up pay card can show the amount before it creates a
+checkout. The value does not change an existing payment; the backend owns the
+amount charged.
+
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
 details. Beyond the shared appointment fields it adds:
@@ -801,10 +807,15 @@ details. Beyond the shared appointment fields it adds:
 
 Requires authentication. Receptionist only.
 
-Schedules a `REVIEW` follow-up appointment and moves it to `CONFIRMATION`
-(displayed as `AWAITING PAYMENT`). The slot must be future, available, in the
-same clinic, and assigned to the follow-up's veterinarian. The slot becomes
-`BOOKED` and `apt_scheduled_at` becomes the slot start time.
+Schedules a `REVIEW` follow-up appointment. When the clinic's consultation fee
+is greater than `0` it moves to `CONFIRMATION` (displayed as `AWAITING PAYMENT`)
+and the owner is notified with a payment prompt (`APPOINTMENT_CREATED`). When
+the fee is `0` it moves directly to `CONFIRMED` and the owner is notified with
+`APPOINTMENT_CONFIRMED`; no payment is created.
+
+The slot must be future, available, in the same clinic, and assigned to the
+follow-up's veterinarian. The slot becomes `BOOKED` and `apt_scheduled_at`
+becomes the slot start time.
 
 Request:
 
@@ -822,8 +833,51 @@ Responses:
 - 409: slot is unknown, blocked/taken/past, or belongs to another
   veterinarian/clinic
 
-This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
-`PATCH` cannot make that transition.
+This endpoint is the only way to perform `REVIEW -> CONFIRMATION` or
+`REVIEW -> CONFIRMED`. A generic `PATCH` cannot make either transition.
+
+---
+
+## POST /api/owner/appointments/{id}/checkout/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets. The appointment must be a `FOLLOW_UP` in `CONFIRMATION`, and its
+scheduled time must still be in the future.
+
+Starts or resumes the payment for a follow-up that is already scheduled. The
+slot is already `BOOKED`; this endpoint does not create an appointment or
+consume a slot.
+
+Request:
+
+{
+  "method": "GCASH | CARD"
+}
+
+The amount always comes from the clinic's consultation fee. A pending attempt
+is reused, so tapping Pay twice does not create duplicate payments. A failed,
+expired, or void attempt stays as history and a new attempt is created.
+
+`appointment_id` remains `null` on the payment until it is `PAID`; the intended
+appointment is tracked in `pay_metadata.appointment_id`. On successful payment
+the backend links `APT_ID`, moves the appointment to `CONFIRMED`, and notifies
+the owner (`APPOINTMENT_CONFIRMED`). If the appointment was cancelled or is
+already past due when payment settles, the payment stays recorded for manual
+reconciliation and the appointment is not changed.
+
+Responses:
+
+- 201: pending payment object with `checkout_url`
+- 400 `VALIDATION_ERROR` / `METHOD_NOT_ALLOWED`
+- 404 `APPOINTMENT_NOT_FOUND` / `PET_NOT_FOUND`
+- 409 `NOT_A_FOLLOW_UP` / `NOT_AWAITING_PAYMENT` / `APPOINTMENT_EXPIRED` /
+  `ALREADY_PAID` / `PAYMENT_NOT_REQUIRED`
+- 502 `PROVIDER_ERROR` · 503 `PROVIDER_NOT_CONFIGURED` / `PROVIDER_MISCONFIGURED`
+
+A pending checkout can be cancelled with `POST /api/payments/{id}/cancel/`.
+That voids the checkout only; the appointment stays `CONFIRMATION` until it is
+paid or auto-cancelled at the scheduled time. The owner cannot cancel a
+`CONFIRMATION` follow-up itself.
 
 ---
 
@@ -976,6 +1030,11 @@ Payments gate booking: the consultation fee is configured per clinic
 (`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`, default `0.00`). A fee of `0` disables
 the gate entirely.
 
+`POST /api/payments/checkout/` is for a new booking whose slot is still
+available. A follow-up whose slot is already booked uses
+`POST /api/owner/appointments/{id}/checkout/` instead. Zero-fee follow-ups are
+confirmed by the scheduling endpoint and never create a payment.
+
 Providers: `PAYMENT_MODE=mock` (default, signed checkout page in the web app) or
 `PAYMENT_MODE=paymongo` (hosted checkout + webhook). See `docs/database/PAYMENT.md`.
 
@@ -1089,6 +1148,11 @@ payments.
 
 `?status=PENDING` is how the mobile app finds a checkout that was abandoned
 mid-payment and offers "resume payment".
+
+`?appointment={id}` matches both the linked `PAID` payment and pending
+follow-up attempts whose `pay_metadata.appointment_id` equals the appointment.
+That lets the appointment detail screen resume a follow-up checkout before the
+payment is linked.
 
 ---
 
@@ -1390,10 +1454,12 @@ Query params:
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
-specific_disease, treatment, notes, follow_up_required,
+specific_disease, prescription_id, treatment, notes, follow_up_required,
 follow_up_target_date, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
+`prescription_id` is the linked prescription UUID when one exists, otherwise
+`null`. A consultation has at most one prescription.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
 when no follow-up is requested.
 

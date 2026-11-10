@@ -10,6 +10,7 @@ import { apiErrorMessage } from '../../../src/utils/error'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useDeleteVaccination } from '../hooks/useDeleteVaccination'
 import { useVaccination } from '../hooks/useVaccination'
+import { useRecordDetailBack } from '../lib/recordNavigation'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -54,20 +55,14 @@ export default function VaccinationDetailScreen() {
     setConfirmVisible(true)
   }
 
+  const handleBack = useRecordDetailBack('vaccinations')
+
   const handleConfirmDelete = () => {
     if (!vaccination) return
     deleteVaccination.mutate(vaccination.id, {
-      onSuccess: () => router.back(),
+      onSuccess: handleBack,
       onSettled: () => setConfirmVisible(false),
     })
-  }
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back()
-    } else {
-      router.replace('/(owner)/records')
-    }
   }
 
   const renderHeader = () => (
