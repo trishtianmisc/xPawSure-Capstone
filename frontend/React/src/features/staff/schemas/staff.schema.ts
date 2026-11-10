@@ -7,6 +7,23 @@ export const staffRoleSchema = z.enum(['VETERINARIAN', 'RECEPTIONIST'], {
 const phoneRegex = /^(09\d{9}|\+63\d{10})$/
 const nameRegex = /^[A-Za-zÀ-ÿ\u00C0-\u024F]+([.\u0027\u2019 -][A-Za-zÀ-ÿ\u00C0-\u024F]+)*$/
 const NAME_ERROR = 'Name may only contain letters, spaces, hyphens, apostrophes, and periods.'
+const licenseDigitsRegex = /^\d{7}$/
+const LICENSE_DIGITS_ERROR = 'License number must be exactly 7 digits.'
+const LICENSE_REQUIRED_ERROR = 'License number is required for veterinarians'
+
+const vetLicenseField = z
+  .string()
+  .trim()
+  .max(100)
+  .superRefine((val, ctx) => {
+    if (!val) {
+      ctx.addIssue({ code: 'custom', message: LICENSE_REQUIRED_ERROR })
+      return
+    }
+    if (!licenseDigitsRegex.test(val)) {
+      ctx.addIssue({ code: 'custom', message: LICENSE_DIGITS_ERROR })
+    }
+  })
 
 const nameField = z
   .string()
@@ -44,7 +61,7 @@ export const createVeterinarianSchema = z.object({
   last_name: nameField,
   phone: phoneField,
   role: z.literal('VETERINARIAN'),
-  license_number: z.string().trim().min(1, 'License number is required for veterinarians').max(100),
+  license_number: vetLicenseField,
       license_expiration_date: z.string().min(1, 'License expiration date is required').refine(
         (val) => {
           const d = new Date(val)
@@ -60,7 +77,12 @@ export const createReceptionistSchema = z.object({
   last_name: nameField,
   phone: phoneField,
   role: z.literal('RECEPTIONIST'),
-  license_number: z.string().optional().or(z.literal('')),
+  license_number: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(''))
+    .refine((val) => !val || licenseDigitsRegex.test(val), LICENSE_DIGITS_ERROR),
   license_expiration_date: licenseDateField,
 })
 
@@ -74,7 +96,7 @@ export function editStaffSchema(role: string) {
   if (role === 'VETERINARIAN') {
     return z.object({
       ...base,
-      license_number: z.string().trim().min(1, 'License number is required for veterinarians').max(100),
+      license_number: vetLicenseField,
   license_expiration_date: z.string().min(1, 'License expiration date is required').refine(
     (val) => {
       const d = new Date(val)
@@ -87,7 +109,13 @@ export function editStaffSchema(role: string) {
 
   return z.object({
     ...base,
-    license_number: z.string().max(100).optional().or(z.literal('')),
+    license_number: z
+      .string()
+      .trim()
+      .max(100)
+      .optional()
+      .or(z.literal(''))
+      .refine((val) => !val || licenseDigitsRegex.test(val), LICENSE_DIGITS_ERROR),
     license_expiration_date: licenseDateField,
   })
 }

@@ -4,6 +4,7 @@ import type {
   BulkUploadResponse,
   CreateStaffPayload,
   CreateStaffResponse,
+  StaffActivity,
   StaffListResponse,
   StaffMember,
   StaffStats,
@@ -14,6 +15,7 @@ export async function listStaff(params?: {
   role?: string
   search?: string
   status?: string
+  sort?: string
   page?: number
   page_size?: number
 }): Promise<StaffListResponse> {
@@ -77,6 +79,15 @@ export async function bulkUploadStaff(file: File): Promise<BulkUploadResponse> {
 export async function getStaffStats(): Promise<StaffStats> {
   try {
     const response = await http.get('/staff/stats/')
+    return response.data
+  } catch (error) {
+    throw new Error(apiErrorMessage(error), { cause: error })
+  }
+}
+
+export async function getStaffActivity(id: string): Promise<StaffActivity> {
+  try {
+    const response = await http.get(`/staff/${id}/activity/`)
     return response.data
   } catch (error) {
     throw new Error(apiErrorMessage(error), { cause: error })

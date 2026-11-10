@@ -158,6 +158,58 @@ class AppointmentListPermissionTests(OversightBase):
         self.assertEqual(response.status_code, 403)
 
 
+class AppointmentListSortTests(OversightBase):
+
+    def test_default_sort_is_newest_first(self):
+        response = self.client.get(
+            '/api/appointments/', page_size=100, **self._auth(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row['apt_id'] for row in response.data['results']],
+            [
+                str(self.apt_oct8.apt_id),
+                str(self.apt_oct3.apt_id),
+                str(self.apt_oct2.apt_id),
+                str(self.apt_oct1.apt_id),
+            ],
+        )
+
+    def test_sort_oldest_first(self):
+        response = self.client.get(
+            '/api/appointments/',
+            {'sort': 'apt_scheduled_at', 'page_size': 100},
+            **self._auth(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row['apt_id'] for row in response.data['results']],
+            [
+                str(self.apt_oct1.apt_id),
+                str(self.apt_oct2.apt_id),
+                str(self.apt_oct3.apt_id),
+                str(self.apt_oct8.apt_id),
+            ],
+        )
+
+    def test_unknown_sort_falls_back_to_default(self):
+        response = self.client.get(
+            '/api/appointments/',
+            {'sort': 'pet_name', 'page_size': 100},
+            **self._auth(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [row['apt_id'] for row in response.data['results']],
+            [
+                str(self.apt_oct8.apt_id),
+                str(self.apt_oct3.apt_id),
+                str(self.apt_oct2.apt_id),
+                str(self.apt_oct1.apt_id),
+            ],
+        )
+
+
 class AppointmentDateRangeTests(OversightBase):
 
     def test_date_range_filters_on_manila_days(self):

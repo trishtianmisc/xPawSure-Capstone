@@ -156,6 +156,7 @@ class AppointmentListCreateView(APIView):
         search = request.query_params.get('search')
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 20))
+        sort = request.query_params.get('sort', '').strip()
 
         date_from, date_from_error = _parse_date_param(
             request.query_params, 'date_from',
@@ -191,6 +192,7 @@ class AppointmentListCreateView(APIView):
             page=page,
             page_size=page_size,
             overdue=overdue,
+            sort=sort,
         )
 
         serializer = AppointmentListSerializer(data['results'], many=True)

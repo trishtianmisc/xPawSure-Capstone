@@ -165,12 +165,34 @@ function ActionsCell({
   )
 }
 
+function NameSortIcon({ direction }: { direction: 'asc' | 'desc' }) {
+  return (
+    <svg className="inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        className={direction === 'asc' ? undefined : 'opacity-30'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M4.5 10.5L12 3m0 0l7.5 7.5M12 3v18"
+      />
+      <path
+        className={direction === 'desc' ? undefined : 'opacity-30'}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.75}
+        d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3"
+      />
+    </svg>
+  )
+}
+
 export function StaffListPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('ALL')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [sort, setSort] = useState('first_name')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null)
@@ -183,9 +205,15 @@ export function StaffListPage() {
     role: roleParam,
     search: debouncedSearch || undefined,
     status: statusFilter || undefined,
+    sort,
     page,
     page_size: 10,
   })
+
+  const toggleNameSort = () => {
+    setSort((current) => (current === 'first_name' ? '-first_name' : 'first_name'))
+    setPage(1)
+  }
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: 'ALL', label: 'All Staff', count: stats?.total ?? 0 },
@@ -377,8 +405,17 @@ export function StaffListPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
-                    <th className="px-5 py-4 font-semibold">Name</th>
+                  <tr className="border-b border-stone-100 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-700 dark:text-stone-400">
+                    <th
+                      className="cursor-pointer select-none px-5 py-4 font-semibold"
+                      aria-sort={sort === '-first_name' ? 'descending' : 'ascending'}
+                      onClick={toggleNameSort}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        Name
+                        <NameSortIcon direction={sort === '-first_name' ? 'desc' : 'asc'} />
+                      </span>
+                    </th>
                     <th className="px-5 py-4 font-semibold">Email</th>
                     <th className="px-5 py-4 font-semibold">Role</th>
                     <th className="px-5 py-4 font-semibold">Phone</th>
