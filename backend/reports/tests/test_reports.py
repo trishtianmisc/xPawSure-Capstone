@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+import uuid
 
 from django.db import connection
 from django.test import TestCase
@@ -9,6 +10,7 @@ from ai_screenings.models import AiScreening, Disease, ScreeningStatus
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from clinics.models import Clinic, ClinicOperatingHours
 from owners.models import OwnerProfile
+from payments.models import Payment, PaymentMethod, PaymentProvider, PaymentStatus
 from pets.models import Breed, Pet, Sex
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import StaffPosition, StaffProfile, User, UserRole
@@ -27,6 +29,7 @@ ENDPOINTS = (
     '/api/reports/vet-workload/',
     '/api/reports/screenings/',
     '/api/reports/patients/',
+    '/api/reports/revenue/',
 )
 
 
@@ -70,19 +73,19 @@ class ReportsBase(TestCase):
         self.owner = self._create_user(
             'owner@clinic.test', UserRole.OWNER, 'Olivia', 'Owner',
         )
-        owner_profile = OwnerProfile.objects.create(usr_id=self.owner)
+        self.owner_profile = OwnerProfile.objects.create(usr_id=self.owner)
 
         self.pet = Pet.objects.create(
-            own_id=owner_profile, pet_name='Rex', pet_sex=Sex.MALE,
+            own_id=self.owner_profile, pet_name='Rex', pet_sex=Sex.MALE,
         )
         self.pet_multi = Pet.objects.create(
-            own_id=owner_profile, pet_name='Milo', pet_sex=Sex.MALE,
+            own_id=self.owner_profile, pet_name='Milo', pet_sex=Sex.MALE,
         )
         self.pet_cancelled_only = Pet.objects.create(
-            own_id=owner_profile, pet_name='Zoe', pet_sex=Sex.FEMALE,
+            own_id=self.owner_profile, pet_name='Zoe', pet_sex=Sex.FEMALE,
         )
         self.pet_prev = Pet.objects.create(
-            own_id=owner_profile, pet_name='Pip', pet_sex=Sex.FEMALE,
+            own_id=self.owner_profile, pet_name='Pip', pet_sex=Sex.FEMALE,
         )
 
         self.disease = Disease.objects.create(
@@ -179,6 +182,22 @@ class ReportsBase(TestCase):
             apt_scheduled_at=scheduled_at,
         )
 
+    def _payment(self, amount, paid_at, *, clinic=None,
+                 status=PaymentStatus.PAID, appointment=None):
+        """Create a payment with pay_paid_at set for every status, so only
+        the PAID filter can decide what counts in the revenue total."""
+        return Payment.objects.create(
+            pay_reference=f'XPS-TEST-{uuid.uuid4().hex[:16]}',
+            cln_id=clinic or self.clinic,
+            own_id=self.owner_profile,
+            apt_id=appointment,
+            pay_amount=amount,
+            pay_method=PaymentMethod.CASH,
+            pay_status=status,
+            pay_provider=PaymentProvider.CASH,
+            pay_paid_at=paid_at,
+        )
+
     def _screening(self, created_at, *, pet=None, confidence=80,
                    compared_at=None, is_correct=None,
                    status=ScreeningStatus.PENDING_REVIEW):
@@ -259,7 +278,11 @@ class ReportPermissionTests(ReportsBase):
             self.assertEqual(response.status_code, 403, endpoint)
 
     def test_other_clinic_admin_sees_only_their_own_data(self):
-        response = self._get('/api/reports/summary/', user=self.other_admin)
+        # Explicit window: the default resolves against today, which drifts
+        # away from the fixed fixture dates as time passes.
+        response = self._get(
+            '/api/reports/summary/', user=self.other_admin, **WINDOW,
+        )
         self.assertEqual(response.status_code, 200, response.data)
         # Their clinic has exactly its own appointment (Oct 3), never the
         # 8 appointments of Happy Paws.
@@ -449,14 +472,17 @@ class ReportAppointmentsTests(ReportsBase):
         )
         self.assertEqual(summary.data['total_appointments'], 1)
 
-    def test_status_breakdown_is_zero_filled_across_all_seven(self):
+    def test_status_breakdown_is_zero_filled_across_all_statuses(self):
         response = self._get('/api/reports/appointments/', **WINDOW)
         self.assertEqual(response.status_code, 200, response.data)
         by_status = {
             row['status']: row['count'] for row in response.data['by_status']
         }
-        self.assertEqual(len(by_status), 7)
+        # Every AppointmentStatus member appears exactly once, zero-filled.
+        self.assertEqual(len(by_status), len(AppointmentStatus.values))
         self.assertEqual(by_status, {
+            'REVIEW': 0,
+            'CONFIRMATION': 0,
             'PENDING': 1,
             'CONFIRMED': 0,
             'CHECKED_IN': 0,
@@ -656,6 +682,53 @@ class ReportScreeningsTests(ReportsBase):
         self.assertEqual(response.data['vet_confirmed'], 0)
         self.assertEqual(response.data['vet_changed'], 0)
 
+    def test_screenings_of_cancelled_only_and_no_show_only_pets_are_excluded(self):
+        # Zoe's only appointment at this clinic is CANCELLED (setUp).
+        self._screening(
+            datetime(2026, 10, 3, 10, 0, tzinfo=MNL),
+            pet=self.pet_cancelled_only,
+        )
+        no_show_pet = Pet.objects.create(
+            own_id=self.owner_profile, pet_name='Nona', pet_sex=Sex.FEMALE,
+        )
+        self._apt(
+            datetime(2026, 10, 3, 11, 0, tzinfo=MNL),
+            pet=no_show_pet, status=AppointmentStatus.NO_SHOW,
+        )
+        self._screening(
+            datetime(2026, 10, 3, 12, 0, tzinfo=MNL), pet=no_show_pet,
+        )
+
+        response = self._get('/api/reports/screenings/', **WINDOW)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['by_condition'], [])
+        self.assertEqual(response.data['reviewed'], 0)
+        self.assertEqual(response.data['pending_review'], 0)
+
+    def test_cancelled_booking_drops_screening_from_vet_filter(self):
+        screening = self._screening(datetime(2026, 10, 3, 10, 0, tzinfo=MNL))
+        appointment = self._apt(
+            datetime(2026, 10, 4, 15, 0, tzinfo=MNL),
+            vet=self.vet_a, status=AppointmentStatus.CANCELLED,
+        )
+        appointment.apt_screening = screening
+        appointment.save(update_fields=['apt_screening'])
+
+        # The pet still qualifies clinic-wide through its other visits.
+        unfiltered = self._get('/api/reports/screenings/', **WINDOW)
+        self.assertEqual(unfiltered.data['by_condition'][0]['count'], 1)
+
+        # A cancelled booking never attributes the screening to a vet.
+        filtered = self._get(
+            '/api/reports/screenings/',
+            vet_id=str(self.vet_a.stf_id), **WINDOW,
+        )
+        self.assertEqual(filtered.status_code, 200, filtered.data)
+        self.assertEqual(filtered.data['by_condition'], [])
+        self.assertEqual(filtered.data['reviewed'], 0)
+        self.assertEqual(filtered.data['pending_review'], 0)
+
 
 class ReportPatientsTests(ReportsBase):
 
@@ -817,6 +890,92 @@ class ReportPatientsTests(ReportsBase):
         )
 
 
+class ReportRevenueTests(ReportsBase):
+
+    def test_pay_paid_at_window_uses_clinic_local_days(self):
+        # 00:30 PHT on Oct 1 is 16:30 UTC on Sep 30: a naive UTC __date
+        # filter would drop it from the window entirely.
+        self._payment('100.00', datetime(2026, 10, 1, 0, 30, tzinfo=MNL))
+        # 23:30 PHT on Sep 30 belongs to the previous window (Sep 23-30).
+        self._payment('40.00', datetime(2026, 9, 30, 23, 30, tzinfo=MNL))
+
+        response = self._get('/api/reports/revenue/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+
+        self.assertEqual(response.data['revenue'], '100.00')
+        self.assertEqual(response.data['previous_revenue'], '40.00')
+        self.assertEqual(response.data['payment_count'], 1)
+
+    def test_pending_and_refunded_payments_are_excluded(self):
+        paid_at = datetime(2026, 10, 3, 12, 0, tzinfo=MNL)
+        self._payment('500.00', paid_at)
+        # paid_at is set on the non-PAID rows deliberately: only the status
+        # filter may exclude them.
+        self._payment('999.00', paid_at, status=PaymentStatus.PENDING)
+        self._payment('888.00', paid_at, status=PaymentStatus.REFUNDED)
+
+        response = self._get('/api/reports/revenue/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+
+        self.assertEqual(response.data['revenue'], '500.00')
+        self.assertEqual(response.data['payment_count'], 1)
+
+    def test_other_clinic_payments_never_count(self):
+        paid_at = datetime(2026, 10, 3, 12, 0, tzinfo=MNL)
+        self._payment('100.00', paid_at)
+        self._payment('900.00', paid_at, clinic=self.other_clinic)
+
+        mine = self._get('/api/reports/revenue/', **WINDOW)
+        theirs = self._get(
+            '/api/reports/revenue/', user=self.other_admin, **WINDOW,
+        )
+        self.assertEqual(mine.status_code, 200, mine.data)
+        self.assertEqual(theirs.status_code, 200, theirs.data)
+
+        self.assertEqual(mine.data['revenue'], '100.00')
+        self.assertEqual(theirs.data['revenue'], '900.00')
+
+    def test_vet_filter_counts_only_linked_payments(self):
+        paid_at = datetime(2026, 10, 3, 12, 0, tzinfo=MNL)
+        self._payment(
+            '300.00', paid_at,
+            appointment=self._apt(paid_at, vet=self.vet_a),
+        )
+        # Collected but never booked: counted unfiltered, dropped only
+        # under vet_id.
+        self._payment('700.00', paid_at)
+
+        unfiltered = self._get('/api/reports/revenue/', **WINDOW)
+        vet_filtered = self._get(
+            '/api/reports/revenue/', vet_id=str(self.vet_a.stf_id), **WINDOW,
+        )
+        self.assertEqual(unfiltered.status_code, 200, unfiltered.data)
+        self.assertEqual(vet_filtered.status_code, 200, vet_filtered.data)
+
+        self.assertEqual(unfiltered.data['revenue'], '1000.00')
+        self.assertEqual(unfiltered.data['payment_count'], 2)
+        self.assertEqual(vet_filtered.data['revenue'], '300.00')
+        self.assertEqual(vet_filtered.data['payment_count'], 1)
+
+    def test_decimal_sums_are_exact_and_empty_windows_are_zero(self):
+        self._payment('0.10', datetime(2026, 10, 3, 12, 0, tzinfo=MNL))
+        self._payment('0.20', datetime(2026, 10, 4, 12, 0, tzinfo=MNL))
+
+        data = self._get('/api/reports/revenue/', **WINDOW).data
+        # 0.10 + 0.20 is exactly 0.30; a float sum would drift to
+        # 0.30000000000000004 and the string form must never show it.
+        self.assertEqual(data['revenue'], '0.30')
+        self.assertEqual(data['currency'], 'PHP')
+
+        empty = self._get(
+            '/api/reports/revenue/',
+            date_from='2026-06-01', date_to='2026-06-08',
+        ).data
+        self.assertEqual(empty['revenue'], '0.00')
+        self.assertEqual(empty['previous_revenue'], '0.00')
+        self.assertEqual(empty['payment_count'], 0)
+
+
 class ReportQueryCountTests(ReportsBase):
 
     def test_query_count_is_constant_as_appointments_grow(self):
@@ -836,5 +995,30 @@ class ReportQueryCountTests(ReportsBase):
 
         with CaptureQueriesContext(connection) as large:
             response = self._get('/api/reports/summary/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(large.captured_queries), small_count)
+
+    def test_revenue_query_count_is_constant_as_payments_grow(self):
+        for index in range(3):
+            self._payment(
+                f'{index + 1}.00',
+                datetime(2026, 10, 2, 9, 0, tzinfo=MNL)
+                + timedelta(hours=index),
+            )
+
+        with CaptureQueriesContext(connection) as small:
+            response = self._get('/api/reports/revenue/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        small_count = len(small.captured_queries)
+
+        for index in range(20):
+            self._payment(
+                f'{index + 1}.00',
+                datetime(2026, 10, 5, 9, 0, tzinfo=MNL)
+                + timedelta(minutes=index),
+            )
+
+        with CaptureQueriesContext(connection) as large:
+            response = self._get('/api/reports/revenue/', **WINDOW)
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(len(large.captured_queries), small_count)

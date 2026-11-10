@@ -1,14 +1,17 @@
 import logging
 import secrets
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
+from django.db.models import DecimalField, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from appointments.models import SlotStatus
+from appointments.services import get_clinic_timezone
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import ClinicSettings
@@ -91,11 +94,19 @@ class PaymentService:
         appointment_id=None,
         date_from=None,
         date_to=None,
+        paid_from=None,
+        paid_to=None,
         page=1,
         page_size=20,
     ) -> dict:
         """One list shape for both scopes: a clinic's payments (staff) or a
-        single owner's own receipts (owner app)."""
+        single owner's own receipts (owner app).
+
+        ``paid_from``/``paid_to`` bound PAY_PAID_AT to clinic-local calendar
+        days - the exact window the revenue report uses - so a list filtered
+        to a range reconciles with the revenue KPI for that same range.
+        ``date_from``/``date_to`` remain the original creation-date filter.
+        """
         qs = Payment.objects.all().select_related('own_id__usr_id', 'apt_id')
         if clinic_id:
             qs = qs.filter(cln_id_id=clinic_id)
@@ -107,15 +118,58 @@ class PaymentService:
         if method:
             qs = qs.filter(pay_method=method)
         if reference:
-            qs = qs.filter(pay_reference__icontains=reference)
+            # Receipt number, owner name, or pet name - the three things a
+            # human has in hand when looking for a payment.
+            qs = qs.filter(
+                Q(pay_reference__icontains=reference)
+                | Q(own_id__usr_id__usr_first_name__icontains=reference)
+                | Q(own_id__usr_id__usr_last_name__icontains=reference)
+                | Q(pay_metadata__pet_name__icontains=reference)
+            )
         if appointment_id:
             qs = qs.filter(apt_id_id=appointment_id)
         if date_from:
             qs = qs.filter(pay_created_at__date__gte=date_from)
         if date_to:
             qs = qs.filter(pay_created_at__date__lte=date_to)
+        if paid_from or paid_to:
+            # Clinic-local [start, end_exclusive) bounds, same rule as the
+            # revenue report's day_bounds(). Unpaid rows (pay_paid_at NULL)
+            # fall outside any paid window on purpose.
+            tz = get_clinic_timezone(clinic_id)
+            if paid_from:
+                paid_start = timezone.make_aware(
+                    datetime.combine(paid_from, time.min), tz,
+                )
+                qs = qs.filter(pay_paid_at__gte=paid_start)
+            if paid_to:
+                paid_end_exclusive = timezone.make_aware(
+                    datetime.combine(paid_to + timedelta(days=1), time.min), tz,
+                )
+                qs = qs.filter(pay_paid_at__lt=paid_end_exclusive)
 
         total = qs.count()
+        # One conditional aggregate over the SAME filtered, unsliced queryset,
+        # so the totals cover every matching row (not just this page) and obey
+        # every filter - including the clinic-local PAY_PAID_AT window that
+        # Reports revenue uses, which is what makes the two figures reconcile.
+        summary = qs.aggregate(
+            paid_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PAID)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+            pending_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PENDING)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+            refunded_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.REFUNDED)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+        )
         start = (page - 1) * page_size
         results = list(qs[start:start + page_size])
 
@@ -125,6 +179,14 @@ class PaymentService:
             'page_size': page_size,
             'total_pages': (total + page_size - 1) // page_size if page_size else 0,
             'results': results,
+            # Fixed two-decimal strings: no float ever touches an amount,
+            # matching ReportService.get_revenue.
+            'summary': {
+                'paid_total': f"{summary['paid_total']:.2f}",
+                'pending_total': f"{summary['pending_total']:.2f}",
+                'refunded_total': f"{summary['refunded_total']:.2f}",
+                'payment_count': total,
+            },
         }
 
     # ------------------------------------------------------------------

@@ -143,3 +143,13 @@ class ReportPatientsView(APIView):
         if error:
             return error
         return Response(ReportService.get_patients(*params))
+
+
+class ReportRevenueView(APIView):
+    permission_classes = [IsClinicAdminReadOnly]
+
+    def get(self, request):
+        params, error = _report_params(request)
+        if error:
+            return error
+        return Response(ReportService.get_revenue(*params))

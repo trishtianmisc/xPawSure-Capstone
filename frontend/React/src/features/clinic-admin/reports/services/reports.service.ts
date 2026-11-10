@@ -3,6 +3,7 @@ import type {
   AppointmentsReport,
   PatientsReport,
   ReportQuery,
+  ReportRevenue,
   ReportSummary,
   ScreeningsReport,
   VetWorkloadReport,
@@ -50,6 +51,15 @@ export async function getReportPatients(
   params: ReportQuery,
 ): Promise<PatientsReport> {
   const { data } = await http.get<PatientsReport>('/reports/patients/', {
+    params,
+  })
+  return data
+}
+
+export async function getReportRevenue(
+  params: ReportQuery,
+): Promise<ReportRevenue> {
+  const { data } = await http.get<ReportRevenue>('/reports/revenue/', {
     params,
   })
   return data

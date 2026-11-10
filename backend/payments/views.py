@@ -26,6 +26,10 @@ from users.models import StaffProfile, UserRole
 
 logger = logging.getLogger(__name__)
 
+# Same span reports allow for one window; keeps a stray paid-date range from
+# turning a list request into an unbounded table scan.
+MAX_PAID_RANGE_DAYS = 366
+
 
 def _error(exc: PaymentError) -> Response:
     return Response(exc.as_dict(), status=exc.status_code)
@@ -43,8 +47,10 @@ def _parse_date(value):
 class PaymentCheckoutView(APIView):
     """Create the payment that must succeed before an appointment exists."""
 
+    # Clinic admins read payments but never record or refund them; only
+    # receptionists (counter) and owners (their own booking) may write.
     permission_classes = [HasRole(
-        UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN, UserRole.OWNER,
+        UserRole.RECEPTIONIST, UserRole.OWNER,
     )]
 
     def post(self, request):
@@ -189,6 +195,31 @@ def _list_response(request, **scope) -> Response:
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    paid_from, paid_from_error = _parse_date(request.query_params.get('paid_from'))
+    if paid_from_error:
+        return Response(
+            {'detail': paid_from_error, 'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    paid_to, paid_to_error = _parse_date(request.query_params.get('paid_to'))
+    if paid_to_error:
+        return Response(
+            {'detail': paid_to_error, 'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if paid_from and paid_to and paid_from > paid_to:
+        return Response(
+            {'detail': 'paid_from cannot be after paid_to.',
+             'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if paid_from and paid_to and (paid_to - paid_from).days + 1 > MAX_PAID_RANGE_DAYS:
+        return Response(
+            {'detail': f'Paid date range cannot exceed {MAX_PAID_RANGE_DAYS} days.',
+             'code': 'VALIDATION_ERROR'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     try:
         page = max(int(request.query_params.get('page', 1)), 1)
         page_size = min(max(int(request.query_params.get('page_size', 20)), 1), 100)
@@ -206,6 +237,8 @@ def _list_response(request, **scope) -> Response:
         appointment_id=request.query_params.get('appointment'),
         date_from=date_from,
         date_to=date_to,
+        paid_from=paid_from,
+        paid_to=paid_to,
         page=page,
         page_size=page_size,
     )
@@ -215,6 +248,7 @@ def _list_response(request, **scope) -> Response:
         'page': data['page'],
         'page_size': data['page_size'],
         'total_pages': data['total_pages'],
+        'summary': data['summary'],
         'results': serializer.data,
     })
 
@@ -254,8 +288,10 @@ class PaymentDetailView(PaymentAccessMixin, APIView):
 
 
 class PaymentCancelView(PaymentAccessMixin, APIView):
+    # Same write rule as checkout: cancelling is a counter/owner action,
+    # never a clinic-admin one.
     permission_classes = [HasRole(
-        UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN, UserRole.OWNER,
+        UserRole.RECEPTIONIST, UserRole.OWNER,
     )]
 
     def post(self, request, pay_id):

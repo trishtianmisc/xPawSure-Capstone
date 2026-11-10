@@ -198,7 +198,7 @@ export function StaffDetailPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setIsEditOpen(true)}
-                className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+                className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
                 type="button"
               >
                 Edit

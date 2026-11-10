@@ -1,4 +1,6 @@
 import json
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
@@ -7,10 +9,12 @@ from rest_framework.test import APIClient
 from ai_screenings.models import AiScreening, Disease, ScreeningSource, ScreeningStatus
 from ai_screenings.services import ScreeningService
 from appointments.models import Appointment, AppointmentStatus
+from appointments.services import get_clinic_timezone
 from clinics.models import Clinic, ClinicOperatingHours, ClinicSettings
 from consultations.models import Consultation
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
+from reports.services import ReportService
 from users.models import StaffPosition, StaffProfile, User, UserRole
 
 PASSWORD = 'TestPass123!'
@@ -18,6 +22,7 @@ OWNER_EMAIL = 'scanowner@example.com'
 OTHER_OWNER_EMAIL = 'scanother@example.com'
 RECEPTIONIST_EMAIL = 'scandesk@example.com'
 CLINIC_ADMIN_EMAIL = 'scanadmin@example.com'
+MNL = ZoneInfo('Asia/Manila')
 
 
 class OwnerScreeningBase(TestCase):
@@ -672,3 +677,198 @@ class ScreeningStatsTests(TestCase):
         self.assertEqual(response.data['screenings_pending_review'], 1)
         labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
         self.assertEqual(labels, {'Hotspot': 1})
+
+    def _backdate(self, screening, when):
+        AiScreening.objects.filter(pk=screening.pk).update(ais_created_at=when)
+
+    def test_by_disease_window_excludes_screenings_before_date_from(self):
+        older = AiScreening.objects.filter(
+            dis_id=self.mange,
+            ais_status=ScreeningStatus.PENDING_REVIEW,
+        ).first()
+        self._backdate(older, timezone.now() - timedelta(days=400))
+
+        # No params keeps the all-time counts, including the backdated row.
+        all_time = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+        self.assertEqual(all_time.status_code, 200, all_time.data)
+        labels = {row['label']: row['value'] for row in all_time.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 1})
+
+        date_from = timezone.localdate() - timedelta(days=30)
+        response = self.client.get(
+            f'/api/screenings/stats/?date_from={date_from.isoformat()}',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 1, 'Hotspot': 1})
+        # Pending review is a work queue: never windowed.
+        self.assertEqual(response.data['screenings_pending_review'], 2)
+
+    def test_by_disease_window_uses_clinic_local_days(self):
+        AiScreening.objects.all().update(
+            ais_created_at=datetime(2024, 1, 15, 12, 0, tzinfo=MNL),
+        )
+        boundary = self._make_screening(self.pet, self.mange, ScreeningStatus.REVIEWED)
+        self._backdate(boundary, datetime(2026, 11, 1, 0, 30, tzinfo=MNL))
+
+        inside = self.client.get(
+            '/api/screenings/stats/?date_from=2026-11-01&date_to=2026-11-01',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(inside.status_code, 200, inside.data)
+        labels = {row['label']: row['value'] for row in inside.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 1})
+        self.assertEqual(inside.data['screenings_pending_review'], 2)
+
+        outside = self.client.get(
+            '/api/screenings/stats/?date_from=2026-10-31&date_to=2026-10-31',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(outside.status_code, 200, outside.data)
+        self.assertEqual(outside.data['screenings_by_disease'], [])
+        self.assertEqual(outside.data['screenings_pending_review'], 2)
+
+    def test_stats_rejects_malformed_and_reversed_window(self):
+        malformed = self.client.get(
+            '/api/screenings/stats/?date_from=01-01-2026',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(malformed.status_code, 400)
+        self.assertEqual(malformed.data['code'], 'VALIDATION_ERROR')
+
+        reversed_range = self.client.get(
+            '/api/screenings/stats/?date_from=2026-01-31&date_to=2026-01-01',
+            **self._auth(CLINIC_ADMIN_EMAIL),
+        )
+        self.assertEqual(reversed_range.status_code, 400)
+        self.assertEqual(reversed_range.data['code'], 'VALIDATION_ERROR')
+
+    def _make_pet(self, name, owner_email):
+        owner_user = User.objects.create(
+            usr_email=owner_email, usr_password_hash='hashed',
+            usr_role=UserRole.OWNER, usr_first_name='O', usr_last_name=name,
+        )
+        owner_user.set_password(PASSWORD)
+        owner_user.save()
+        owner = OwnerProfile.objects.create(usr_id=owner_user)
+        return Pet.objects.create(own_id=owner, pet_name=name, pet_sex=Sex.MALE)
+
+    def _add_appointment(self, pet, clinic, status=AppointmentStatus.COMPLETED):
+        vet = StaffProfile.objects.filter(
+            cln_id=clinic, stf_position=StaffPosition.VETERINARIAN,
+        ).first()
+        return Appointment.objects.create(
+            cln_id=clinic, pet_id=pet, stf_id=vet,
+            apt_type='CONSULTATION', apt_status=status,
+            apt_scheduled_at=timezone.now(),
+        )
+
+    def test_screening_counted_once_regardless_of_appointment_count(self):
+        self._add_appointment(self.pet, self.clinic)
+        self._add_appointment(self.pet, self.clinic)
+
+        response = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 1})
+        self.assertEqual(response.data['screenings_pending_review'], 2)
+
+    def test_pets_scoped_by_clinic_appointments(self):
+        other_only = self._make_pet('Solo', 'statssolo@example.com')
+        self._link_to_clinic(other_only, self.other_clinic)
+        self._make_screening(other_only, self.mange, ScreeningStatus.PENDING_REVIEW)
+
+        both = self._make_pet('Both', 'statsboth@example.com')
+        self._link_to_clinic(both, self.clinic)
+        self._add_appointment(both, self.other_clinic)
+        self._make_screening(both, self.hotspot, ScreeningStatus.REVIEWED)
+
+        here = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+        self.assertEqual(here.status_code, 200, here.data)
+        labels = {row['label']: row['value'] for row in here.data['screenings_by_disease']}
+        # Solo's only appointment is elsewhere, so Solo never appears here;
+        # Both has an appointment at this clinic and counts exactly once.
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 2})
+        self.assertEqual(here.data['screenings_pending_review'], 2)
+
+        there = ScreeningService.get_stats(clinic_id=str(self.other_clinic.cln_id))
+        labels = {row['label']: row['value'] for row in there['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 1, 'Hotspot': 2})
+        self.assertEqual(there['screenings_pending_review'], 2)
+
+    def test_pet_without_clinic_appointment_is_excluded(self):
+        stray = self._make_pet('Stray', 'statsstray@example.com')
+        self._make_screening(stray, self.mange, ScreeningStatus.PENDING_REVIEW)
+
+        response = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 1})
+        self.assertEqual(response.data['screenings_pending_review'], 2)
+
+    def test_pets_with_only_cancelled_or_no_show_appointments_are_excluded(self):
+        fungal = Disease.objects.get(dis_code='FUNGAL')
+
+        cancelled = self._make_pet('Canc', 'statscanc@example.com')
+        self._add_appointment(cancelled, self.clinic, status=AppointmentStatus.CANCELLED)
+        self._make_screening(cancelled, fungal, ScreeningStatus.PENDING_REVIEW)
+
+        no_show = self._make_pet('NoShow', 'statsnoshow@example.com')
+        self._add_appointment(no_show, self.clinic, status=AppointmentStatus.NO_SHOW)
+        self._make_screening(no_show, fungal, ScreeningStatus.PENDING_REVIEW)
+
+        mixed = self._make_pet('Mixed', 'statsmixed@example.com')
+        self._add_appointment(mixed, self.clinic, status=AppointmentStatus.CANCELLED)
+        self._add_appointment(mixed, self.clinic, status=AppointmentStatus.PENDING)
+        self._make_screening(mixed, fungal, ScreeningStatus.PENDING_REVIEW)
+
+        response = self.client.get('/api/screenings/stats/', **self._auth(CLINIC_ADMIN_EMAIL))
+
+        self.assertEqual(response.status_code, 200, response.data)
+        labels = {row['label']: row['value'] for row in response.data['screenings_by_disease']}
+        # Cancelled-only and no-show-only pets never become clinic patients;
+        # the mixed pet qualifies through its PENDING appointment.
+        self.assertEqual(labels, {'Mange': 2, 'Hotspot': 1, 'Fungal': 1})
+        self.assertEqual(response.data['screenings_pending_review'], 3)
+
+    def test_stats_by_disease_matches_reports_for_same_window(self):
+        tz = get_clinic_timezone(str(self.clinic.cln_id))
+        date_to = datetime.now(tz).date()
+        date_from = date_to - timedelta(days=29)
+        start = timezone.make_aware(datetime.combine(date_from, time.min), tz)
+
+        # A second appointment makes any join-based count double this pet's
+        # screenings; both sides must still report them exactly once.
+        self._add_appointment(self.pet, self.clinic)
+
+        at_start = self._make_screening(self.pet, self.mange, ScreeningStatus.REVIEWED)
+        self._backdate(at_start, start)
+        before_start = self._make_screening(self.pet, self.hotspot, ScreeningStatus.REVIEWED)
+        self._backdate(before_start, start - timedelta(seconds=1))
+
+        cancelled = self._make_pet('ReconCanc', 'statsreconcancel@example.com')
+        self._add_appointment(cancelled, self.clinic, status=AppointmentStatus.CANCELLED)
+        self._make_screening(cancelled, self.mange, ScreeningStatus.PENDING_REVIEW)
+
+        stats = ScreeningService.get_stats(
+            clinic_id=str(self.clinic.cln_id),
+            date_from=date_from, date_to=date_to,
+        )
+        reports = ReportService.get_screenings(
+            str(self.clinic.cln_id), date_from, date_to,
+        )
+
+        stats_map = {row['label']: row['value'] for row in stats['screenings_by_disease']}
+        reports_map = {row['disease']: row['count'] for row in reports['by_condition']}
+        # In-window: the two setUp Mange plus the boundary Mange, plus Rex's
+        # setUp Hotspot. The screening one second before the window and the
+        # cancelled-only pet's screening count on neither side. (Stats pending
+        # is all-time by design, so only the by-disease maps are compared.)
+        expected = {'Mange': 3, 'Hotspot': 1}
+        self.assertEqual(stats_map, expected)
+        self.assertEqual(reports_map, expected)
+        self.assertEqual(stats_map, reports_map)

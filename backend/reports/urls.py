@@ -3,6 +3,7 @@ from django.urls import path
 from reports.views import (
     ReportAppointmentsView,
     ReportPatientsView,
+    ReportRevenueView,
     ReportScreeningsView,
     ReportSummaryView,
     ReportVetWorkloadView,
@@ -29,5 +30,10 @@ urlpatterns = [
         'reports/patients/',
         ReportPatientsView.as_view(),
         name='report-patients',
+    ),
+    path(
+        'reports/revenue/',
+        ReportRevenueView.as_view(),
+        name='report-revenue',
     ),
 ]

@@ -1011,7 +1011,8 @@ Payment object:
 
 ## POST /api/payments/checkout/
 
-Requires authentication. Receptionist, clinic admin, or owner.
+Requires authentication. Receptionist or owner — clinic admins get `403`
+(clinic admins read payments; only the counter and the payer record them).
 
 Creates the payment for a booking. The slot must still be `AVAILABLE`; owners
 pay only for their own pets and must pass the `screening_id` their booking will
@@ -1050,10 +1051,30 @@ Responses:
 Requires authentication. Receptionist or clinic admin. Scoped to the caller's
 clinic; owners get `403`.
 
-Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
-`date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
+Query params: `status`, `method`, `reference` (partial match on receipt
+number, owner first/last name, or pet name), `appointment` (uuid),
+`date_from`, `date_to` (creation date, UTC calendar days),
+`paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
+unpaid rows, so a range here reconciles with the revenue KPI for the same
+range), `page`, `page_size` (max 100).
 
-Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+`paid_from`/`paid_to` are inclusive clinic-local days (`[from 00:00, to+1
+00:00)` in the clinic's time zone). Validation: `400 VALIDATION_ERROR` when a
+date is malformed, `paid_from` is after `paid_to`, or the paid range exceeds
+366 days.
+
+Response (200):
+
+{ "total", "page", "page_size", "total_pages",
+  "summary": { "paid_total", "pending_total", "refunded_total", "payment_count" },
+  "results": [payment] }
+
+`summary` aggregates EVERY payment matching the filters (independent of
+`page`/`page_size`) with one conditional-sum query on the same queryset.
+Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
+(never netted against refunds) and honours the `paid_from`/`paid_to`
+payment-date window, so it equals the Reports revenue KPI for the same range.
+`payment_count` equals `total`.
 
 ---
 
@@ -1077,7 +1098,9 @@ clinic's payments, otherwise `404`.
 
 ## POST /api/payments/{id}/cancel/
 
-Requires authentication. Same access rule as the detail endpoint.
+Requires authentication. Receptionist or owner (the payer) — clinic admins get
+`403`: like checkout, cancelling is a counter/owner action even though clinic
+admins may read the payment.
 
 Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
 `409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
@@ -1872,16 +1895,30 @@ logs the API key or image bytes.
 Requires authentication (Clinic Admin). Clinic is resolved from the
 authenticated staff profile; other roles get 403.
 
-Screenings are scoped to pets that have a non-deleted appointment at the
-authenticated admin's clinic (any appointment status). A pet treated at multiple
+Screenings are scoped to pets that are clinic patients under the canonical
+patient rule: at least one non-deleted appointment at the authenticated
+admin's clinic whose status is neither CANCELLED nor NO_SHOW (the same rule
+as the Patients directory). Pets whose only appointments here were cancelled
+or no-shows are excluded, and each screening is counted exactly once
+regardless of how many appointments its pet has. A pet treated at multiple
 clinics therefore appears in each clinic's stats.
+
+Optional query parameters `date_from` and `date_to` (`YYYY-MM-DD`) restrict
+`screenings_by_disease` to screenings created within that inclusive range,
+resolved in the clinic's local days (a screening at 00:30 clinic time belongs to
+that day). Either parameter may be sent alone to bound only that side. With no
+date parameters the response is all-time (previous behavior, unchanged).
+Malformed dates or `date_from` after `date_to` return `400` with
+`{"detail": "...", "code": "VALIDATION_ERROR"}`.
 
 `screenings_pending_review` is derived, not read from `ais_status`: it counts
 screenings whose `ais_status` is `PENDING_REVIEW` **and** `ais_compared_at` is
 null. The status field is not transitioned after comparison in production, so
 reviewed screenings are identified by `ais_compared_at` (the appointment detail
-page uses the same rule). `screenings_by_disease` counts all screenings,
-reviewed or not.
+page uses the same rule). Pending review is a work queue and is therefore never
+windowed: it always counts all screenings regardless of the date parameters.
+`screenings_by_disease` counts all screenings in the requested window, reviewed
+or not.
 
 Response `200`:
 
@@ -2349,7 +2386,7 @@ Response:
 
 # 15. Clinic Admin Reports Endpoints (Web)
 
-All five endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+All six endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
 Any write method returns `403`; unauthenticated requests return `401`. The
 clinic scope always comes from the caller's own staff profile, never from the
 request, so one clinic's admin cannot read another clinic's numbers.
@@ -2488,14 +2525,17 @@ Response 200:
 
 Scoping notes:
 
-- Clinic scope uses a pet-level semi-join (the pet has any non-deleted
-  appointment at this clinic), so a screening still counts even when it was
-  not attached to a booking. One row per screening regardless of how many
-  appointments the pet has.
-- With `vet_id` supplied, only screenings referenced by an appointment of
-  that vet (in this clinic) are counted; unbooked screenings drop out.
-  Clinic-wide figures include screenings not linked to a booking — the UI
-  shows this caveat next to the filter.
+- Clinic scope uses a pet-level semi-join under the canonical patient rule
+  (the pet has at least one non-deleted appointment at this clinic whose
+  status is neither CANCELLED nor NO_SHOW), so a screening still counts even
+  when it was not attached to a booking — but never for pets whose only
+  appointments here were cancelled or no-shows. One row per screening
+  regardless of how many appointments the pet has.
+- With `vet_id` supplied, only screenings referenced by a qualifying
+  (non-cancelled, non-no-show) appointment of that vet (in this clinic) are
+  counted; unbooked screenings and cancelled bookings drop out. Clinic-wide
+  figures include screenings not linked to a booking — the UI shows this
+  caveat next to the filter.
 - `ais_confidence` is stored as a 0-100 percentage and returned as-is;
   `avg_confidence` is `0.0` when there are no screenings.
 - "Reviewed" is derived: `ais_compared_at` is set or the status moved off
@@ -2547,7 +2587,7 @@ Scoping notes:
 
 Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
 `/clinic/reports`). Exports are client-side: one multi-section CSV covering
-every loaded panel (KPIs, status breakdown, daily series, workload,
+every loaded panel (KPIs, revenue, status breakdown, daily series, workload,
 screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
 plus a
 print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
@@ -2560,3 +2600,42 @@ status legend / workload rows deep-link to
 `/clinic/appointments?status&vet_id&date_from&date_to` — the appointments page
 initializes its filters from those URL params (changes written with
 `replace`).
+
+## GET /api/reports/revenue/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "revenue": "12345.60",
+  "currency": "PHP",
+  "payment_count": 42,
+  "previous_revenue": "11000.00",
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-30"
+}
+```
+
+Scoping notes:
+
+- Sums `PAYMENT.PAY_AMOUNT` for payments whose `PAY_STATUS` is `PAID` at the
+  caller's clinic (`PAYMENT.CLN_ID` — the clinic foreign key on the payment
+  itself, so payments not yet linked to an appointment still count) inside the
+  window `[date_from 00:00, date_to + 1 day 00:00)` in the clinic's timezone,
+  on `PAY_PAID_AT` (the moment the money was confirmed: cash recorded at
+  checkout, or the provider webhook/mocked confirmation). `PENDING`, `FAILED`,
+  `EXPIRED`, `REFUNDED`, and `VOID` never count; a payment collected but never
+  booked still counts.
+- `vet_id` narrows the sum to payments linked to that veterinarian's
+  appointments (`PAYMENT.APT_ID → APPOINTMENT.STF_ID`); payments without an
+  appointment link are excluded only under `vet_id`, never in the unfiltered
+  view. The UI states this caveat when a vet is selected.
+- `revenue` and `previous_revenue` are fixed two-decimal strings (never
+  floats) and `previous_revenue` covers the equal-length prior window used by
+  every other report. An empty window returns `"0.00"`, never `null`.
+  `currency` is the recorded payment currency (`PHP`). `payment_count` counts
+  the `PAID` payments summed — one payment per consultation-fee collection.
+- This endpoint is read-only and never triggers payment expiry or
+  reconciliation side effects.

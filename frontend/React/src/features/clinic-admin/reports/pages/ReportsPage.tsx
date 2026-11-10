@@ -20,6 +20,7 @@ import { VetWorkloadTable } from '../components/VetWorkloadTable'
 import {
   useReportAppointments,
   useReportPatients,
+  useReportRevenue,
   useReportScreenings,
   useReportSummary,
   useReportVetWorkload,
@@ -126,6 +127,7 @@ export function ClinicAdminReportsPage() {
   const workload = useReportVetWorkload(params)
   const screenings = useReportScreenings(params)
   const patients = useReportPatients(params)
+  const revenue = useReportRevenue(params)
   const vets = useVeterinarians()
   const profile = useClinicProfile()
   const settings = useClinicSettings()
@@ -193,7 +195,8 @@ export function ClinicAdminReportsPage() {
       appointments.data &&
       workload.data &&
       screenings.data &&
-      patients.data,
+      patients.data &&
+      revenue.data,
   )
 
   function handleExport() {
@@ -207,6 +210,7 @@ export function ClinicAdminReportsPage() {
       workload: workload.data,
       screenings: screenings.data,
       patients: patients.data,
+      revenue: revenue.data,
     })
     downloadCsv(reportFilename(window), toCsv(rows))
   }
@@ -292,7 +296,8 @@ export function ClinicAdminReportsPage() {
           <span className="font-semibold">{vetLabel}</span> filter applies to
           appointment and screening metrics. New Patients and Patient
           Demographics always cover the whole clinic, and screening figures only
-          include bookings linked to this veterinarian.
+          include bookings linked to this veterinarian. Revenue includes only
+          payments linked to this veterinarian&apos;s appointments.
         </p>
       )}
 
@@ -308,6 +313,10 @@ export function ClinicAdminReportsPage() {
             previousAgreementRate={agreementPrevious}
             days={days}
             vetSelected={vetSelected}
+            revenue={revenue.data}
+            revenueLoading={revenue.isLoading}
+            revenueError={revenue.error}
+            onRevenueRetry={() => revenue.refetch()}
           />
         )}
       />
@@ -369,9 +378,9 @@ export function ClinicAdminReportsPage() {
       />
 
       <p className="text-xs text-stone-400 dark:text-stone-500">
-        Showing {rangeLabel}. Rates use different denominators: completion and
-        no-show are measured against elapsed, non-cancelled visits, while vet
-        agreement covers judged AI screenings only.
+        Showing {rangeLabel}. Rates use different denominators: no-show is
+        measured against elapsed, non-cancelled visits, while vet agreement
+        covers judged AI screenings only.
       </p>
     </div>
 
@@ -379,7 +388,8 @@ export function ClinicAdminReportsPage() {
       appointments.data &&
       workload.data &&
       screenings.data &&
-      patients.data && (
+      patients.data &&
+      revenue.data && (
         <PrintableReport
           profile={profile.data}
           summary={summary.data}
@@ -387,6 +397,7 @@ export function ClinicAdminReportsPage() {
           workload={workload.data}
           screenings={screenings.data}
           patients={patients.data}
+          revenue={revenue.data}
           rangeLabel={rangeLabel}
           days={days}
           vetLabel={vetLabel}
