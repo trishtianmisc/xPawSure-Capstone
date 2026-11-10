@@ -115,4 +115,15 @@ input {
   .print-section {
     break-inside: avoid;
   }
+
+  .prescription-preview-toolbar {
+    display: none !important;
+  }
+
+  .prescription-preview-sheet {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
 }

@@ -34,6 +34,13 @@ function parseTime(time: string): number {
   return (h || 0) * 60 + (m || 0)
 }
 
+function formatStatus(status: string): string {
+  return status
+    .split('_')
+    .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+    .join(' ')
+}
+
 interface WeeklyCalendarProps {
   days: Date[]
   slots: ScheduleSlot[]
@@ -113,7 +120,7 @@ export function WeeklyCalendar({ days, slots, onSlotClick }: WeeklyCalendarProps
                 if (startMin < gridStartMin || startMin >= gridEndMin) return null
 
                 const top = ((startMin - gridStartMin) / 60) * HOUR_PX
-                const height = Math.max(((endMin - startMin) / 60) * HOUR_PX, 56)
+                const height = Math.max(((endMin - startMin) / 60) * HOUR_PX, 64)
 
                 return (
                   <button
@@ -125,14 +132,14 @@ export function WeeklyCalendar({ days, slots, onSlotClick }: WeeklyCalendarProps
                     }`}
                     style={{ top: `${top}px`, height: `${height}px` }}
                   >
-                    <p className="truncate font-bold">{slot.pet_name}</p>
-                    {slot.condition && (
-                      <p className="truncate text-[10px] font-semibold opacity-75">
-                        {slot.condition}
-                      </p>
-                    )}
-                    <p className="truncate text-[10px] font-medium opacity-75">
+                    <p className="truncate font-bold" style={{ fontSize: 11, lineHeight: 1.1 }}>
+                      {slot.pet_name}
+                    </p>
+                    <p className="truncate font-medium opacity-75" style={{ fontSize: 10, lineHeight: 1.1 }}>
                       {slot.time_label}
+                    </p>
+                    <p className="truncate font-semibold opacity-75" style={{ fontSize: 10, lineHeight: 1.1 }}>
+                      {formatStatus(slot.status)}
                     </p>
                   </button>
                 )

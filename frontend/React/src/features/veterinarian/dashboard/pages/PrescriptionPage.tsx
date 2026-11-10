@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { PageHero } from '../../../receptionist/components/PageHero'
@@ -69,6 +69,16 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
   )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [pendingConfirm, setPendingConfirm] = useState(false)
+
+  useEffect(() => {
+    if (!pendingConfirm) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setPendingConfirm(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pendingConfirm])
 
   function handleChange(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -85,6 +95,11 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       return
     }
     setError('')
+    setPendingConfirm(true)
+  }
+
+  function confirmAdd() {
+    const medicineName = form.medicine_name.trim()
 
     if (editingId) {
       setRows((prev) =>
@@ -122,6 +137,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
     }
 
     setForm(EMPTY_FORM)
+    setPendingConfirm(false)
   }
 
   function handleEdit(row: PrescriptionItem) {
@@ -345,6 +361,63 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
           {savePrescription.isPending ? 'Saving…' : 'Complete Consultation'}
         </button>
       </div>
+
+      {pendingConfirm && (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setPendingConfirm(false)}
+          role="dialog"
+        >
+          <div
+            className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-stone-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3 className="mb-1 text-lg font-semibold text-stone-900 dark:text-stone-100">
+              {editingId ? 'Confirm update' : 'Confirm medication'}
+            </h3>
+            <p className="mb-4 text-sm text-stone-600 dark:text-stone-300">
+              Check the details below for spelling and accuracy before it is added.
+            </p>
+            <dl className="mb-5 space-y-2 rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800">
+              {[
+                ['Medicine', form.medicine_name.trim()],
+                ['Generic name', form.generic_name.trim() || '—'],
+                ['Dosage', form.dosage || '—'],
+                ['Route', routeLabel(form.route)],
+                ['Frequency', form.frequency || '—'],
+                ['Duration', form.duration || '—'],
+                ['Instructions', form.notes.trim() || '—'],
+              ].map(([label, value]) => (
+                <div className="flex justify-between gap-4" key={label}>
+                  <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    {label}
+                  </dt>
+                  <dd className="break-words text-right text-sm text-stone-800 dark:text-stone-200">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <div className="flex justify-end gap-3">
+              <button
+                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                onClick={() => setPendingConfirm(false)}
+                type="button"
+              >
+                Go back
+              </button>
+              <button
+                className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
+                onClick={confirmAdd}
+                type="button"
+              >
+                {editingId ? 'Confirm update' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )

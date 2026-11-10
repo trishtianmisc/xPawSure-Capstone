@@ -50,6 +50,7 @@ const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboar
 const VetAppointmentDetailPage = lazy(() => import('./features/veterinarian/dashboard/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
 const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
+const VetPrescriptionPreviewPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPreviewPage').then(m => ({ default: m.PrescriptionPreviewPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
 const VetProfilePage = lazy(() => import('./features/veterinarian/dashboard/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 
@@ -183,6 +184,7 @@ function App() {
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
             <Route element={<VetAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<VetPrescriptionPreviewPage />} path="appointments/:id/prescription/preview" />
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
             <Route element={<VetSchedulePage />} path="schedule" />
