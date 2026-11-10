@@ -46,7 +46,7 @@ export function AppointmentVolumeChart({ data }: AppointmentVolumeChartProps) {
               }}
               labelClassName="font-semibold"
             />
-            <Bar dataKey="value" fill="#d97706" radius={[4, 4, 0, 0]} />
+            <Bar dataKey="value" fill="#a85015" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}

@@ -68,15 +68,15 @@ export function AppointmentsPage() {
           <PageHero
             title="Appointments"
             subtitle="Schedule, confirm, and track patient visits."
-            actions={
-              <button
-                className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
-                onClick={() => navigate('/receptionist/appointments/new')}
-                type="button"
-              >
-                + New Appointment
-              </button>
-            }
+            // actions={
+            //   <button
+            //     className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+            //     onClick={() => navigate('/receptionist/appointments/new')}
+            //     type="button"
+            //   >
+            //     + New Appointment
+            //   </button>
+            // }
           />
         </div>
 
