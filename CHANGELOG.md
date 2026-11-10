@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.6.0] — 2026-11-02
+
+### Added
+- Cross-clinic Pet Owner management: `GET /api/super-admin/owners/` (clinic/search filters) and `GET/PUT /api/super-admin/owners/{own_id}/` — edit **contact info only** (first/last name, phone, address); email and role are not editable (unknown fields reject with `400`); audit-logged with old/new values via `SuperAdminOwnerService.update_contact`
+- Read-only cross-clinic vaccination listing: `GET /api/super-admin/vaccinations/` (clinic/search/date-range filters) — no writes by design; vaccination records are medical history and stay immutable
+- Preliminary AI accuracy report: `GET /api/super-admin/analytics/accuracy/` — on-device classifier predictions vs. the veterinarian's confirmed diagnosis (`ais_is_correct`), grouped by model version, disease, clinic, and monthly trend; never fuses classifier and Claude review outputs, agreement is not confirmation, and screenings awaiting comparison are shown separately from accuracy %
+- Cross-clinic disease report: `GET /api/super-admin/analytics/diseases/` — structured screening predictions with severity breakdown plus confirmed consultation diagnoses grouped case-insensitively (free text, top 20) and a monthly trend
+- `SuperAdminOwnerService`, `VaccinationReadService`, `AccuracyReportService`, `DiseaseReportService` in `backend/super_admin/services.py` — zero new models/migrations (reuses existing tables)
+- 32 new backend tests (76 total): permission matrix for the new routes, owner detail/update guards (email/role rejection, audit-log assertions), vaccination scoping/filters, accuracy aggregation and empty-state behavior, disease grouping and severity breakdown
+- Frontend `super-admin` features: Pet Owners page (`/super-admin/owners`, searchable/clinic-filtered table + `EditContactModal` with RHF + Zod contact validation), Vaccinations page (`/super-admin/vaccinations`, read-only table with clinic/date filters), Reports page (`/super-admin/reports`, AI Accuracy + Diseases tabs with shared clinic/model/date filters)
+- Frontend service unit tests for `ownerService`, `vaccinationService`, and `reportService`
+
+## [0.5.0] — 2026-10-31
+
+### Added
+- Backend `super_admin` app (`backend/super_admin/`) — no models, service-layer only (same pattern as `staff`), all endpoints `IsSuperAdmin`-gated and audit-logged
+- Platform analytics: `GET /api/super-admin/analytics/overview/` with cross-clinic counts (clinics by status, users by role, owners, pets, appointments by status, consultations, prescriptions, vaccinations, screenings, payments) and 12-month zero-filled growth series
+- Per-clinic overview: `GET /api/super-admin/clinics/{id}/overview/` — staff breakdown, owners, pets, appointments by status, revenue
+- Clinic Admin account management: `GET/POST /api/super-admin/clinics/{id}/admins/`, cross-clinic `GET /api/super-admin/admins/` (filter by clinic/search/status), and `POST /api/super-admin/admins/{user_id}/{resend-credentials|deactivate|activate}/` — credential resends rotate the password, set `must_change_password`, and revoke sessions via `usr_token_version`; resend is throttled (`admin-credentials`, default `10/hour`)
+- Read-only cross-clinic drill-down: `GET /api/super-admin/clinics/{id}/{staff|owners|pets|appointments}/` — strictly read-only; medical records stay unwritable
+- Cross-clinic audit trail: `GET /api/super-admin/audit-logs/` with clinic/module/action/search/date-range filters and pagination
+- Backend test suite `super_admin/tests.py` (44 tests): per-role permission matrix, analytics aggregates and scoping, admin create/resend/deactivate/activate with token revocation and self-guard, drill-down clinic scoping, audit-log filters and pagination
+- Frontend `super-admin` features: Analytics page (`/super-admin/analytics`, recharts growth charts + role/status breakdowns), Admins page (`/super-admin/admins`, cross-clinic table with resend credentials / deactivate / activate), Audit Logs page (`/super-admin/audit-logs`, filter bar + paginated table)
+- `CreateAdminModal` (RHF + Zod) and clinic-detail tabs (Overview, Admins, Staff, Owners, Pets, Activity) built on a shared read-only `ReadTab` table component
+- Frontend service unit tests for `adminService`, `analyticsService`, `drilldownService`, and `auditLogService`
+
+### Fixed
+- Removed the broken `/super-admin/staff` route (reused the clinic-admin-gated `StaffListPage`, which 403'd for Super Admin); staff browsing now lives in the clinic detail Staff tab
+- The Super Admin sidebar's dead `Admins` and `Analytics` links now resolve to real pages
+
 ## [0.4.0] — 2026-10-26
 
 ### Added

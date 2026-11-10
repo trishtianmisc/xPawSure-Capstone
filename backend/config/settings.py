@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     'audit_log',
     'reports',
     'payments',
+    'super_admin',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
@@ -340,6 +341,7 @@ REST_FRAMEWORK = {
         'public_pet': '60/min',
         'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='10/hour'),
         'screening-create': env('SCREENING_CREATE_THROTTLE_RATE', default='30/hour'),
+        'admin-credentials': env('ADMIN_CREDENTIALS_THROTTLE_RATE', default='10/hour'),
     },
 }
 

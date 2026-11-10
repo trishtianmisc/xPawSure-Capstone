@@ -8,8 +8,25 @@ import { useToast } from '../../../../components/ui/ToastContext'
 import { apiErrorMessage } from '../../../../utils/error'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../services/clinic.service'
+import { ClinicAdminsTab } from '../tabs/ClinicAdminsTab'
+import { ClinicActivityTab } from '../tabs/ClinicActivityTab'
+import { ClinicOverviewTab } from '../tabs/ClinicOverviewTab'
+import { ClinicOwnersTab } from '../tabs/ClinicOwnersTab'
+import { ClinicPetsTab } from '../tabs/ClinicPetsTab'
+import { ClinicStaffTab } from '../tabs/ClinicStaffTab'
 
 const STATUS_OPTIONS = ['ACTIVE', 'INACTIVE', 'SUSPENDED', 'ARCHIVED'] as const
+
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'admins', label: 'Admins' },
+  { key: 'staff', label: 'Staff' },
+  { key: 'owners', label: 'Owners' },
+  { key: 'pets', label: 'Pets' },
+  { key: 'activity', label: 'Activity' },
+] as const
+
+type TabKey = (typeof TABS)[number]['key']
 
 const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' | 'default'> = {
   ACTIVE: 'success',
@@ -42,6 +59,7 @@ export function ClinicDetailPage() {
   const queryClient = useQueryClient()
 
   const [editOpen, setEditOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
 
   const { data: clinic, isLoading, error } = useQuery({
     queryKey: ['clinic', id],
@@ -162,127 +180,165 @@ export function ClinicDetailPage() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 space-y-6">
-            <Card padding="lg">
-              <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Clinic Information</h2>
-              <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
-                <div className="py-4 sm:py-5">
-                  <InfoRow label="Name" value={clinic.name} />
-                </div>
-                <div className="py-4 sm:py-5">
-                  <InfoRow label="Email" value={clinic.email || '—'} />
-                </div>
-                <div className="py-4 sm:py-5">
-                  <InfoRow label="Phone" value={clinic.phone || '—'} />
-                </div>
-                <div className="py-4 sm:py-5">
-                  <InfoRow label="License number" value={clinic.license_number || '—'} />
-                </div>
-                <div className="py-4 sm:py-5">
-                  <InfoRow label="Address" value={clinic.address || '—'} />
-                </div>
-              </dl>
-            </Card>
+        <div className="mb-6 border-b border-stone-200 dark:border-stone-700">
+          <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label="Clinic sections">
+            {TABS.map((tab) => {
+              const isActive = activeTab === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-semibold transition ${
+                    isActive
+                      ? 'border-amber-600 text-amber-700 dark:border-amber-400 dark:text-amber-300'
+                      : 'border-transparent text-stone-500 hover:border-stone-300 hover:text-stone-700 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:text-stone-200'
+                  }`}
+                  type="button"
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
+          </nav>
+        </div>
 
-            <Card padding="lg">
-              <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Timeline</h2>
-              <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
-                <div className="py-4 sm:py-5">
-                  <InfoRow
-                    label="Created"
-                    value={new Date(clinic.created_at).toLocaleString()}
-                  />
-                </div>
-                <div className="py-4 sm:py-5">
-                  <InfoRow
-                    label="Last updated"
-                    value={new Date(clinic.updated_at).toLocaleString()}
-                  />
-                </div>
-              </dl>
-            </Card>
-          </div>
+        {activeTab === 'overview' && (
+          <>
+            <div className="mb-6">
+              <ClinicOverviewTab clinicId={clinic.id} />
+            </div>
+            <div className="grid gap-6 lg:grid-cols-3">
+              <div className="lg:col-span-2 space-y-6">
+                <Card padding="lg">
+                  <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Clinic Information</h2>
+                  <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
+                    <div className="py-4 sm:py-5">
+                      <InfoRow label="Name" value={clinic.name} />
+                    </div>
+                    <div className="py-4 sm:py-5">
+                      <InfoRow label="Email" value={clinic.email || '—'} />
+                    </div>
+                    <div className="py-4 sm:py-5">
+                      <InfoRow label="Phone" value={clinic.phone || '—'} />
+                    </div>
+                    <div className="py-4 sm:py-5">
+                      <InfoRow label="License number" value={clinic.license_number || '—'} />
+                    </div>
+                    <div className="py-4 sm:py-5">
+                      <InfoRow label="Address" value={clinic.address || '—'} />
+                    </div>
+                  </dl>
+                </Card>
 
-          <div className="space-y-6">
-            <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Status
-              </h3>
-              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Change the clinic's current status.</p>
-              <div className="mt-4 space-y-2">
-                {STATUS_OPTIONS.map((option) => {
-                  const isCurrent = clinic.status === option
-                  return (
-                    <button
-                      key={option}
-                      className={`flex w-full items-center gap-3 rounded-md border px-4 py-3 text-left text-sm font-medium transition ${
-                        isCurrent
-                          ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
-                          : 'border-transparent text-stone-600 hover:border-stone-200 hover:bg-stone-50 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-stone-800'
-                      }`}
-                      disabled={statusMutation.isPending || isCurrent}
-                      type="button"
+                <Card padding="lg">
+                  <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">Timeline</h2>
+                  <dl className="mt-6 divide-y divide-stone-100 dark:divide-stone-700">
+                    <div className="py-4 sm:py-5">
+                      <InfoRow
+                        label="Created"
+                        value={new Date(clinic.created_at).toLocaleString()}
+                      />
+                    </div>
+                    <div className="py-4 sm:py-5">
+                      <InfoRow
+                        label="Last updated"
+                        value={new Date(clinic.updated_at).toLocaleString()}
+                      />
+                    </div>
+                  </dl>
+                </Card>
+              </div>
+
+              <div className="space-y-6">
+                <Card padding="md">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    Status
+                  </h3>
+                  <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Change the clinic's current status.</p>
+                  <div className="mt-4 space-y-2">
+                    {STATUS_OPTIONS.map((option) => {
+                      const isCurrent = clinic.status === option
+                      return (
+                        <button
+                          key={option}
+                          className={`flex w-full items-center gap-3 rounded-md border px-4 py-3 text-left text-sm font-medium transition ${
+                            isCurrent
+                              ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-400'
+                              : 'border-transparent text-stone-600 hover:border-stone-200 hover:bg-stone-50 dark:text-stone-400 dark:hover:border-stone-600 dark:hover:bg-stone-800'
+                          }`}
+                          disabled={statusMutation.isPending || isCurrent}
+                          type="button"
+                          onClick={() => {
+                            if (!window.confirm(`Change status of "${clinic.name}" to ${option}?`)) return
+                            statusMutation.mutate(option)
+                          }}
+                        >
+                          <span
+                            className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                              option === 'ACTIVE' ? 'bg-emerald-500' :
+                              option === 'INACTIVE' ? 'bg-amber-500' :
+                              option === 'SUSPENDED' ? 'bg-red-500' :
+                              'bg-stone-400'
+                            }`}
+                          />
+                          <span className="flex-1">{option.charAt(0) + option.slice(1).toLowerCase()}</span>
+                          {isCurrent && (
+                            <span className="text-[11px] font-semibold uppercase text-amber-600 dark:text-amber-400">Current</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </Card>
+
+                <Card padding="md">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                    Edit
+                  </h3>
+                  <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Modify clinic information.</p>
+                  <div className="mt-4">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={openEdit}
+                    >
+                      Edit Clinic
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card padding="md">
+                  <h3 className="text-sm font-semibold uppercase tracking-wider text-red-500 dark:text-red-400">
+                    Danger Zone
+                  </h3>
+                  <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Irreversible action — proceed with caution.</p>
+                  <div className="mt-4">
+                    <Button
+                      loading={deleteMutation.isPending}
+                      size="sm"
+                      variant="danger"
                       onClick={() => {
-                        if (!window.confirm(`Change status of "${clinic.name}" to ${option}?`)) return
-                        statusMutation.mutate(option)
+                        if (!window.confirm(`Delete "${clinic.name}"? This action cannot be undone.`)) return
+                        deleteMutation.mutate()
                       }}
                     >
-                      <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          option === 'ACTIVE' ? 'bg-emerald-500' :
-                          option === 'INACTIVE' ? 'bg-amber-500' :
-                          option === 'SUSPENDED' ? 'bg-red-500' :
-                          'bg-stone-400'
-                        }`}
-                      />
-                      <span className="flex-1">{option.charAt(0) + option.slice(1).toLowerCase()}</span>
-                      {isCurrent && (
-                        <span className="text-[11px] font-semibold uppercase text-amber-600 dark:text-amber-400">Current</span>
-                      )}
-                    </button>
-                  )
-                })}
+                      Delete Clinic
+                    </Button>
+                  </div>
+                </Card>
               </div>
-            </Card>
+            </div>
+          </>
+        )}
 
-            <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                Edit
-              </h3>
-              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Modify clinic information.</p>
-              <div className="mt-4">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={openEdit}
-                >
-                  Edit Clinic
-                </Button>
-              </div>
-            </Card>
-
-            <Card padding="md">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-red-500 dark:text-red-400">
-                Danger Zone
-              </h3>
-              <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">Irreversible action — proceed with caution.</p>
-              <div className="mt-4">
-                <Button
-                  loading={deleteMutation.isPending}
-                  size="sm"
-                  variant="danger"
-                  onClick={() => {
-                    if (!window.confirm(`Delete "${clinic.name}"? This action cannot be undone.`)) return
-                    deleteMutation.mutate()
-                  }}
-                >
-                  Delete Clinic
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
+        {activeTab === 'admins' && (
+          <ClinicAdminsTab clinicId={clinic.id} clinicName={clinic.name} />
+        )}
+        {activeTab === 'staff' && <ClinicStaffTab clinicId={clinic.id} />}
+        {activeTab === 'owners' && <ClinicOwnersTab clinicId={clinic.id} />}
+        {activeTab === 'pets' && <ClinicPetsTab clinicId={clinic.id} />}
+        {activeTab === 'activity' && <ClinicActivityTab clinicId={clinic.id} />}
       </div>
 
       <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Edit Clinic">
