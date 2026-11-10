@@ -349,7 +349,7 @@ export function ClinicAdminPaymentsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
+                  <tr className="border-b border-stone-100 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-700 dark:text-stone-400">
                     <th className="px-5 py-4 font-semibold">Receipt</th>
                     <th className="px-5 py-4 font-semibold">Patient</th>
                     <th className="px-5 py-4 font-semibold">Owner</th>

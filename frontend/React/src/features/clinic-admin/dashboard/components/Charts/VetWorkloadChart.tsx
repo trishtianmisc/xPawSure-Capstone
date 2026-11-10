@@ -32,7 +32,7 @@ export function VetWorkloadChart({ data, subtitle }: VetWorkloadChartProps) {
               }}
               labelClassName="font-semibold"
             />
-            <Bar dataKey="value" fill="#d97706" radius={[0, 4, 4, 0]}>
+            <Bar dataKey="value" fill="#a85015" radius={[0, 4, 4, 0]}>
               <LabelList dataKey="value" position="right" fontSize={12} className="fill-stone-500 dark:fill-stone-400" />
             </Bar>
           </BarChart>
