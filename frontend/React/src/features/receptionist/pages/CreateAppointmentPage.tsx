@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
@@ -28,13 +28,19 @@ function isSettledWithoutPayment(status: Payment['status']): boolean {
 
 export function CreateAppointmentPage() {
   const navigate = useNavigate()
+  // The schedule grid hands a vet, date and slot over through the query
+  // string so the receptionist lands on this form with everything selected.
+  const [searchParams] = useSearchParams()
+  const prefillVet = searchParams.get('vet_id') ?? ''
+  const prefillDate = searchParams.get('date') ?? ''
+  const slotParam = searchParams.get('slot_id') ?? ''
   const { showToast } = useToast()
   const createAppointment = useCreateAppointment()
   const checkout = useCreateCheckout()
   const { data: clinicSettings, isError: settingsFailed } = useClinicSettings()
 
-  const [selectedDate, setSelectedDate] = useState('')
-  const [selectedVet, setSelectedVet] = useState('')
+  const [selectedDate, setSelectedDate] = useState(prefillDate)
+  const [selectedVet, setSelectedVet] = useState(prefillVet)
   const [selectedSlot, setSelectedSlot] = useState<VetSlot | null>(null)
   const [ownerSearch, setOwnerSearch] = useState('')
   const [selectedOwnerId, setSelectedOwnerId] = useState('')
@@ -68,6 +74,11 @@ export function CreateAppointmentPage() {
     refetch: refetchSlots,
     isFetching: slotsFetching,
   } = useAvailableSlots(selectedVet, selectedDate)
+  // The grid's preselected slot is resolved straight from the loaded list
+  // (no effect): a manual pick wins, otherwise the query-string slot applies
+  // as soon as it shows up as still available.
+  const activeSlot =
+    selectedSlot ?? (slotParam ? (slots?.find((s) => s.vsl_id === slotParam) ?? null) : null)
   const { data: ownersData } = useOwners({ search: ownerSearch || undefined, page_size: 20 })
   const { data: petsData } = usePets(
     {
@@ -96,22 +107,23 @@ export function CreateAppointmentPage() {
     resolver: zodResolver(createAppointmentSchema),
     defaultValues: {
       apt_type: 'CONSULTATION',
+      slot_id: slotParam,
     },
   })
 
   function book(data: CreateAppointmentForm, payId?: string | null) {
-    if (!selectedSlot) return
+    if (!activeSlot) return
     createAppointment.mutate(
-      { ...data, slot_id: selectedSlot.vsl_id, pay_id: payId ?? undefined },
+      { ...data, slot_id: activeSlot.vsl_id, pay_id: payId ?? undefined },
       { onSuccess: (result) => navigate(`/receptionist/appointments/${result.apt_id}`) },
     )
   }
 
   function onSubmit(data: CreateAppointmentForm) {
-    if (!selectedSlot) return
+    if (!activeSlot) return
     // The slot list refreshes in the background; if the picked slot vanished
     // (taken or blocked meanwhile), stop and say so instead of failing later.
-    if (slots && !slots.some((slot) => slot.vsl_id === selectedSlot.vsl_id)) {
+    if (slots && !slots.some((slot) => slot.vsl_id === activeSlot.vsl_id)) {
       setSelectedSlot(null)
       setValue('slot_id', '')
       showToast('That time slot is no longer available. Please pick another.', 'error')
@@ -140,7 +152,7 @@ export function CreateAppointmentPage() {
     checkout.mutate(
       {
         pet_id: data.pet_id,
-        slot_id: selectedSlot.vsl_id,
+        slot_id: activeSlot.vsl_id,
         apt_type: data.apt_type,
         method,
         reason: data.reason ?? '',
@@ -346,7 +358,7 @@ export function CreateAppointmentPage() {
                       `Time slot ${slot.vsl_start_time.slice(0, 5)} – ${slot.vsl_end_time.slice(0, 5)} selected`,
                     )
                   }}
-                  className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${selectedSlot?.vsl_id === slot.vsl_id
+                  className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${activeSlot?.vsl_id === slot.vsl_id
                     ? 'border-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300'
                     : 'border-stone-300 text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800'
                     }`}
@@ -511,7 +523,7 @@ export function CreateAppointmentPage() {
           <button
             type="submit"
             disabled={
-              !selectedSlot ||
+              !activeSlot ||
               fee === undefined ||
               checkout.isPending ||
               createAppointment.isPending ||

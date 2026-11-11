@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
 import { apiErrorMessage } from '../../../utils/error'
@@ -81,14 +81,87 @@ type GridSlot = {
 function SlotCell({
   slot,
   week,
+  onBook,
   onAppointmentClick,
   onToggleBlock,
 }: {
   slot: GridSlot
   week: boolean
+  onBook?: () => void
   onAppointmentClick?: (aptId: string) => void
   onToggleBlock?: (slotId: string, currentStatus: SlotStatus) => void
 }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Close on any click outside this cell's menu (including another cell's
+  // menu button, which then opens its own menu).
+  useEffect(() => {
+    if (!menuOpen) return
+    const onMouseDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [menuOpen])
+
+  function closeMenu(returnFocus: boolean) {
+    setMenuOpen(false)
+    if (returnFocus) menuButtonRef.current?.focus()
+  }
+
+  const isBlocked = slot.status === 'BLOCKED'
+  const slotMenu = (
+    <div
+      ref={menuRef}
+      data-slot-menu
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+          closeMenu(true)
+        }
+      }}
+      className="absolute right-0.5 top-0.5"
+    >
+      <button
+        ref={menuButtonRef}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label="Slot options"
+        onClick={() => setMenuOpen((open) => !open)}
+        className="rounded p-1 text-stone-400 hover:bg-white/70 hover:text-stone-600 dark:text-stone-500 dark:hover:bg-stone-700"
+      >
+        <svg className="size-3.5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="5" r="2" />
+          <circle cx="12" cy="12" r="2" />
+          <circle cx="12" cy="19" r="2" />
+        </svg>
+      </button>
+      {menuOpen && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-30 mt-1 w-32 overflow-hidden rounded-lg border border-stone-200 bg-white shadow-lg dark:border-stone-700 dark:bg-stone-800"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            autoFocus
+            onClick={() => {
+              closeMenu(true)
+              onToggleBlock?.(slot.vsl_id, slot.status)
+            }}
+            className="block w-full px-3 py-1.5 text-left text-xs font-medium text-stone-700 hover:bg-stone-100 dark:text-stone-200 dark:hover:bg-stone-700"
+          >
+            {isBlocked ? 'Unblock slot' : 'Block slot'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   if (slot.status === 'AVAILABLE' && slot.is_past) {
     return (
       <td className="border border-stone-200 bg-stone-100 px-2 py-1.5 text-center dark:border-stone-700 dark:bg-stone-800">
@@ -102,13 +175,13 @@ function SlotCell({
   if (slot.status === 'BLOCKED') {
     return (
       <td
-        onClick={() => onToggleBlock?.(slot.vsl_id, slot.status)}
-        title="Click to unblock"
-        className="cursor-pointer border border-red-200 bg-red-50 px-2 py-1.5 text-center transition hover:bg-red-100 dark:border-red-800 dark:bg-red-900/20 dark:hover:bg-red-900/30"
+        title="Use the slot options menu to unblock"
+        className="relative cursor-default border border-red-200 bg-red-50 px-2 py-1.5 text-center dark:border-red-800 dark:bg-red-900/20"
       >
         <span className="text-xs font-semibold uppercase tracking-wide text-red-700 dark:text-red-300">
           Blocked
         </span>
+        {slotMenu}
       </td>
     )
   }
@@ -116,13 +189,14 @@ function SlotCell({
   if (slot.status === 'AVAILABLE') {
     return (
       <td
-        onClick={() => onToggleBlock?.(slot.vsl_id, slot.status)}
-        title="Click to block"
-        className="cursor-pointer border border-green-200 bg-green-50 px-2 py-1.5 text-center transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:hover:bg-green-900/30"
+        onClick={onBook}
+        title="Click to book"
+        className="relative cursor-pointer border border-green-200 bg-green-50 px-2 py-1.5 text-center transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:hover:bg-green-900/30"
       >
         <span className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
           Available
         </span>
+        {slotMenu}
       </td>
     )
   }
@@ -533,6 +607,18 @@ export function SchedulePage() {
                             key={`${date}-${vet.stf_id}-${time}`}
                             slot={slot}
                             week={isWeek}
+                            onBook={
+                              slot.status === 'AVAILABLE' && !slot.is_past
+                                ? () =>
+                                    navigate(
+                                      `/receptionist/appointments/new?${new URLSearchParams({
+                                        vet_id: vet.stf_id,
+                                        date,
+                                        slot_id: slot.vsl_id,
+                                      })}`,
+                                    )
+                                : undefined
+                            }
                             onAppointmentClick={(aptId) => navigate(`/receptionist/appointments/${aptId}`)}
                             onToggleBlock={handleToggleBlock}
                           />

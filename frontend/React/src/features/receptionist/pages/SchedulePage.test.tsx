@@ -201,7 +201,7 @@ describe('SchedulePage (stage 1)', () => {
     expect(cells[2].textContent).toContain('Available')
   })
 
-  it('dims passed slots as Passed and keeps them inert', () => {
+  it('keeps passed slots inert, books on cell click, and blocks via the menu', () => {
     const updateMutate = vi.fn()
     vi.mocked(useUpdateSlotStatus).mockReturnValue(
       mockMutation<ReturnType<typeof useUpdateSlotStatus>>({ mutate: updateMutate }),
@@ -227,7 +227,16 @@ describe('SchedulePage (stage 1)', () => {
     fireEvent.click(within(table).getByText('Passed'))
     expect(updateMutate).not.toHaveBeenCalled()
 
+    // The open cell itself books; blocking lives in the slot options menu.
     fireEvent.click(within(table).getByText('Available'))
+    expect(navigateMock).toHaveBeenCalledWith(
+      `/receptionist/appointments/new?vet_id=vet-1&date=${TODAY_ISO}&slot_id=open-1`,
+    )
+    expect(updateMutate).not.toHaveBeenCalled()
+
+    const cell = within(table).getByText('Available').closest('td') as HTMLElement
+    fireEvent.click(within(cell).getByRole('button', { name: 'Slot options' }))
+    fireEvent.click(within(cell).getByRole('menuitem', { name: 'Block slot' }))
     expect(updateMutate).toHaveBeenCalledWith({ slotId: 'open-1', status: 'BLOCKED' })
   })
 
@@ -574,5 +583,79 @@ describe('SchedulePage (stage 2)', () => {
     const weekCell = screen.getByText('Rex').closest('td') as HTMLElement
     expect(weekCell.title).toContain('Olivia Owner')
     expect(weekCell.title).toContain('9:00 AM')
+  })
+})
+
+describe('SchedulePage (stage 3)', () => {
+  it('books an open slot with vet, date and slot prefilled', () => {
+    mockSchedule(() =>
+      schedule([
+        { date: dayOffsetIso(0), is_working: true, slots: [slot({ vsl_id: 'open-1' })] },
+        closedDay(dayOffsetIso(1)),
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    fireEvent.click(within(screen.getByRole('table')).getByText('Available'))
+    expect(navigateMock).toHaveBeenCalledWith(
+      `/receptionist/appointments/new?vet_id=vet-1&date=${TODAY_ISO}&slot_id=open-1`,
+    )
+  })
+
+  it('exposes block/unblock through a keyboard-friendly slot options menu', () => {
+    const updateMutate = vi.fn()
+    vi.mocked(useUpdateSlotStatus).mockReturnValue(
+      mockMutation<ReturnType<typeof useUpdateSlotStatus>>({ mutate: updateMutate }),
+    )
+    mockSchedule(() =>
+      schedule([
+        {
+          date: dayOffsetIso(0),
+          is_working: true,
+          slots: [
+            slot({ vsl_id: 'a1', vsl_start_time: '10:00', vsl_end_time: '10:30' }),
+            slot({ vsl_id: 'b1', vsl_start_time: '10:30', vsl_end_time: '11:00', status: 'BLOCKED' }),
+          ],
+        },
+        closedDay(dayOffsetIso(1)),
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    const table = screen.getByRole('table')
+    const openCell = within(table).getByText('Available').closest('td') as HTMLElement
+    const menuButton = within(openCell).getByRole('button', { name: 'Slot options' })
+    expect(menuButton).toHaveAttribute('aria-haspopup', 'menu')
+
+    // Opening the menu must not fire the cell's book action.
+    fireEvent.click(menuButton)
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true')
+
+    const item = within(openCell).getByRole('menuitem', { name: 'Block slot' })
+    expect(document.activeElement).toBe(item)
+
+    fireEvent.keyDown(item, { key: 'Escape' })
+    expect(within(openCell).queryByRole('menuitem')).not.toBeInTheDocument()
+    expect(document.activeElement).toBe(menuButton)
+
+    // Reopen and actually block.
+    fireEvent.click(menuButton)
+    fireEvent.click(within(openCell).getByRole('menuitem', { name: 'Block slot' }))
+    expect(updateMutate).toHaveBeenCalledWith({ slotId: 'a1', status: 'BLOCKED' })
+
+    // The blocked cell's body does nothing; its menu offers Unblock.
+    const blockedCell = within(table).getByText('Blocked').closest('td') as HTMLElement
+    fireEvent.click(blockedCell)
+    expect(navigateMock).not.toHaveBeenCalled()
+    expect(updateMutate).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(within(blockedCell).getByRole('button', { name: 'Slot options' }))
+    fireEvent.click(within(blockedCell).getByRole('menuitem', { name: 'Unblock slot' }))
+    expect(updateMutate).toHaveBeenCalledWith({ slotId: 'b1', status: 'AVAILABLE' })
   })
 })
