@@ -14,6 +14,7 @@ export async function listAppointments(params: {
   pet_id?: string
   search?: string
   overdue?: string
+  sort?: string
   page?: number
   page_size?: number
 }): Promise<AppointmentListResponse> {

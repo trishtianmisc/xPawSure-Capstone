@@ -1,3 +1,5 @@
+import { useMemo } from 'react'
+
 import { useAuth } from '../../../auth/context/AuthContext'
 import { useClinicDashboardStats, useDashboard, useScreeningStats } from '../hooks/useDashboard'
 import { StatCard, StatCardError, StatCardSkeleton } from '../components/StatCard'
@@ -9,9 +11,11 @@ import { ScreeningsByDiseaseChart } from '../components/Charts/ScreeningsByDisea
 import { VetWorkloadChart } from '../components/Charts/VetWorkloadChart'
 import { Button } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatPeso } from '../../../../utils/currency'
 import { useAppointmentVolume } from '../../appointments/hooks/useAppointments'
 import { aggregateVolumeByMonth } from '../../appointments/utils/volume'
-import { useReportVetWorkload } from '../../reports/hooks/useReports'
+import { useReportRevenue, useReportVetWorkload } from '../../reports/hooks/useReports'
+import type { ReportQuery } from '../../reports/types/reports.types'
 
 function rollingWindowStart(): string {
   const now = new Date()
@@ -20,14 +24,26 @@ function rollingWindowStart(): string {
   return `${from.getFullYear()}-${month}-01`
 }
 
+// Month-to-date window for the dashboard revenue card: same fixed
+// YYYY-MM-DD shape the reports filters use, with today as the end date.
+function monthStartWindow(): ReportQuery {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return { date_from: `${now.getFullYear()}-${month}-01`, date_to: `${now.getFullYear()}-${month}-${day}` }
+}
+
 export function DashboardPage() {
   const { user } = useAuth()
   const { data, error } = useDashboard()
   const clinicStats = useClinicDashboardStats()
-  const screeningStats = useScreeningStats()
+  const rollingFrom = useMemo(() => rollingWindowStart(), [])
+  const screeningStats = useScreeningStats({ date_from: rollingFrom })
   const { data: staffStats, isLoading: staffStatsLoading } = useStaffStats()
-  const volume = useAppointmentVolume({ date_from: rollingWindowStart() })
+  const volume = useAppointmentVolume({ date_from: rollingFrom })
   const vetWorkload = useReportVetWorkload({})
+  const revenueParams = useMemo(() => monthStartWindow(), [])
+  const revenue = useReportRevenue(revenueParams)
   const appointmentsByMonth = aggregateVolumeByMonth(volume.data ?? [])
   const thisMonthCount = appointmentsByMonth[appointmentsByMonth.length - 1]?.value
   const lastMonthCount = appointmentsByMonth[appointmentsByMonth.length - 2]?.value
@@ -70,8 +86,8 @@ export function DashboardPage() {
 
         {staffStatsLoading ? (
           <>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {Array.from({ length: 5 }).map((_, i) => (
                 <StatCardSkeleton key={i} />
               ))}
             </div>
@@ -83,7 +99,7 @@ export function DashboardPage() {
           </>
         ) : data ? (
           <>
-            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
               <StatCard
                 icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
                 label="Total Staff"
@@ -122,6 +138,25 @@ export function DashboardPage() {
                   label="Screenings Awaiting Review"
                   value={screeningStats.data?.screenings_pending_review ?? '—'}
                   hint="Reviewed by veterinarians"
+                />
+              )}
+              {/* Revenue is its own query: independent skeleton/error so a
+                  failed revenue fetch never hides the cards beside it. */}
+              {revenue.isLoading ? (
+                <StatCardSkeleton />
+              ) : revenue.error ? (
+                <StatCardError label="Revenue This Month" />
+              ) : (
+                <StatCard
+                  icon={<svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} /></svg>}
+                  label="Revenue This Month"
+                  value={revenue.data ? formatPeso(revenue.data.revenue) : '—'}
+                  valueClassName="text-2xl"
+                  hint={
+                    revenue.data
+                      ? `${revenue.data.payment_count} payment${revenue.data.payment_count === 1 ? '' : 's'} this month`
+                      : 'No data'
+                  }
                 />
               )}
             </section>
@@ -177,7 +212,10 @@ export function DashboardPage() {
                   </div>
                 </div>
               ) : (
-                <ScreeningsByDiseaseChart data={screeningStats.data?.screenings_by_disease ?? []} />
+                <ScreeningsByDiseaseChart
+                  data={screeningStats.data?.screenings_by_disease ?? []}
+                  subtitle="Last 12 months"
+                />
               )}
             </section>
 

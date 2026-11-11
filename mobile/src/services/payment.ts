@@ -1,5 +1,6 @@
 import type {
   CreateCheckoutPayload,
+  OwnerPaymentMethod,
   Payment,
   PaymentListResponse,
   PaymentStatus,
@@ -14,6 +15,20 @@ import { http } from './http'
  */
 export async function createCheckout(payload: CreateCheckoutPayload): Promise<Payment> {
   const { data } = await http.post('/payments/checkout/', payload)
+  return data
+}
+
+/**
+ * Start (or resume) the checkout for an already-scheduled follow-up.
+ *
+ * The backend owns the amount and reuses an existing pending attempt, so the
+ * client only supplies the chosen method.
+ */
+export async function createFollowUpCheckout(
+  aptId: string,
+  method: OwnerPaymentMethod,
+): Promise<Payment> {
+  const { data } = await http.post(`/owner/appointments/${aptId}/checkout/`, { method })
   return data
 }
 

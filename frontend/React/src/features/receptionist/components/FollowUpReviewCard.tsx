@@ -53,7 +53,9 @@ export function FollowUpReviewCard({ appointment }: FollowUpReviewCardProps) {
         </h2>
         <p className="mt-1 text-sm text-stone-600 dark:text-stone-300">
           Confirm a slot for {appointment.vet_name ?? 'the assigned veterinarian'}.
-          The appointment will be marked <strong>Awaiting Payment</strong>.
+          The owner is notified right away. If the clinic charges a consultation
+          fee, they pay it in the app before the appointment is confirmed;
+          otherwise it is confirmed immediately.
         </p>
       </div>
 
@@ -127,9 +129,7 @@ export function FollowUpReviewCard({ appointment }: FollowUpReviewCardProps) {
               disabled={!selectedSlotId || confirmFollowUp.isPending}
               className="rounded-lg bg-amber-700 px-5 py-2 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
             >
-              {confirmFollowUp.isPending
-                ? 'Scheduling...'
-                : 'Confirm & Await Payment'}
+              {confirmFollowUp.isPending ? 'Scheduling...' : 'Confirm follow-up'}
             </button>
           </div>
         </div>

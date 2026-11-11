@@ -1,14 +1,17 @@
 import logging
 import secrets
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
+from django.db.models import DecimalField, Q, Sum
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from appointments.models import SlotStatus
+from appointments.services import get_clinic_timezone
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import ClinicSettings
@@ -91,11 +94,19 @@ class PaymentService:
         appointment_id=None,
         date_from=None,
         date_to=None,
+        paid_from=None,
+        paid_to=None,
         page=1,
         page_size=20,
     ) -> dict:
         """One list shape for both scopes: a clinic's payments (staff) or a
-        single owner's own receipts (owner app)."""
+        single owner's own receipts (owner app).
+
+        ``paid_from``/``paid_to`` bound PAY_PAID_AT to clinic-local calendar
+        days - the exact window the revenue report uses - so a list filtered
+        to a range reconciles with the revenue KPI for that same range.
+        ``date_from``/``date_to`` remain the original creation-date filter.
+        """
         qs = Payment.objects.all().select_related('own_id__usr_id', 'apt_id')
         if clinic_id:
             qs = qs.filter(cln_id_id=clinic_id)
@@ -107,15 +118,65 @@ class PaymentService:
         if method:
             qs = qs.filter(pay_method=method)
         if reference:
-            qs = qs.filter(pay_reference__icontains=reference)
+            # Receipt number, owner name, or pet name - the three things a
+            # human has in hand when looking for a payment.
+            qs = qs.filter(
+                Q(pay_reference__icontains=reference)
+                | Q(own_id__usr_id__usr_first_name__icontains=reference)
+                | Q(own_id__usr_id__usr_last_name__icontains=reference)
+                | Q(pay_metadata__pet_name__icontains=reference)
+            )
         if appointment_id:
-            qs = qs.filter(apt_id_id=appointment_id)
+            # Follow-up checkouts are intentionally not linked to the
+            # appointment until they are paid, so a failed or expired attempt
+            # can be retried. The intent is stored in metadata; the final
+            # PAID record is linked through APT_ID.
+            qs = qs.filter(
+                Q(apt_id_id=appointment_id)
+                | Q(pay_metadata__appointment_id=str(appointment_id)),
+            )
         if date_from:
             qs = qs.filter(pay_created_at__date__gte=date_from)
         if date_to:
             qs = qs.filter(pay_created_at__date__lte=date_to)
+        if paid_from or paid_to:
+            # Clinic-local [start, end_exclusive) bounds, same rule as the
+            # revenue report's day_bounds(). Unpaid rows (pay_paid_at NULL)
+            # fall outside any paid window on purpose.
+            tz = get_clinic_timezone(clinic_id)
+            if paid_from:
+                paid_start = timezone.make_aware(
+                    datetime.combine(paid_from, time.min), tz,
+                )
+                qs = qs.filter(pay_paid_at__gte=paid_start)
+            if paid_to:
+                paid_end_exclusive = timezone.make_aware(
+                    datetime.combine(paid_to + timedelta(days=1), time.min), tz,
+                )
+                qs = qs.filter(pay_paid_at__lt=paid_end_exclusive)
 
         total = qs.count()
+        # One conditional aggregate over the SAME filtered, unsliced queryset,
+        # so the totals cover every matching row (not just this page) and obey
+        # every filter - including the clinic-local PAY_PAID_AT window that
+        # Reports revenue uses, which is what makes the two figures reconcile.
+        summary = qs.aggregate(
+            paid_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PAID)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+            pending_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PENDING)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+            refunded_total=Coalesce(
+                Sum('pay_amount', filter=Q(pay_status=PaymentStatus.REFUNDED)),
+                Decimal('0'),
+                output_field=DecimalField(),
+            ),
+        )
         start = (page - 1) * page_size
         results = list(qs[start:start + page_size])
 
@@ -125,6 +186,14 @@ class PaymentService:
             'page_size': page_size,
             'total_pages': (total + page_size - 1) // page_size if page_size else 0,
             'results': results,
+            # Fixed two-decimal strings: no float ever touches an amount,
+            # matching ReportService.get_revenue.
+            'summary': {
+                'paid_total': f"{summary['paid_total']:.2f}",
+                'pending_total': f"{summary['pending_total']:.2f}",
+                'refunded_total': f"{summary['refunded_total']:.2f}",
+                'payment_count': total,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -201,16 +270,7 @@ class PaymentService:
         # client error, so it carries a 503 instead of surfacing as a 500.
         provider = None
         if not is_cash:
-            try:
-                provider = get_provider()
-            except ImproperlyConfigured:
-                logger.warning('PAYMENT_MODE=paymongo without PAYMONGO_SECRET_KEY')
-                raise PaymentError(
-                    'Online payments are not configured for this deployment. '
-                    'Ask the clinic to record cash instead.',
-                    code='PROVIDER_NOT_CONFIGURED',
-                    status_code=503,
-                )
+            provider = cls._resolve_provider()
 
         payment = Payment.objects.create(
             pay_reference=cls._new_reference(),
@@ -239,30 +299,7 @@ class PaymentService:
         )
 
         if not is_cash:
-            try:
-                session = provider.create_checkout(payment)
-            except PaymentProviderMisconfigured as exc:
-                # Our own settings, not the gateway: say so instead of a 502.
-                payment.delete()
-                logger.warning('Payment gateway misconfigured: %s', exc)
-                raise PaymentError(
-                    'Online payments are misconfigured for this deployment. '
-                    'Ask the clinic to record cash instead.',
-                    code='PROVIDER_MISCONFIGURED',
-                    status_code=503,
-                )
-            except PaymentProviderError:
-                payment.delete()
-                raise PaymentError(
-                    'Payment provider is unavailable. Please try again.',
-                    code='PROVIDER_ERROR',
-                    status_code=502,
-                )
-            payment.pay_checkout_url = session.url
-            payment.pay_provider_ref = session.provider_ref
-            payment.save(
-                update_fields=['pay_checkout_url', 'pay_provider_ref', 'pay_updated_at'],
-            )
+            cls._create_provider_session(payment, provider)
 
         cls._record_event(
             payment, PaymentEventType.CREATED,
@@ -299,6 +336,184 @@ class PaymentService:
                 ip_address=ip_address,
             )
 
+        return payment
+
+    @classmethod
+    @transaction.atomic
+    def create_follow_up_checkout(
+        cls,
+        *,
+        appointment,
+        owner,
+        method,
+        actor_user_id=None,
+        ip_address=None,
+    ) -> Payment:
+        """Create the owner checkout for a scheduled follow-up.
+
+        The payment is not linked to the appointment until it is PAID. The
+        appointment id is stored in metadata so a failed or expired attempt can
+        be retried without violating the one-to-one APT_ID column.
+        """
+        from appointments.models import (
+            Appointment,
+            AppointmentStatus,
+            AppointmentType,
+        )
+
+        appointment = (
+            Appointment.objects
+            .select_for_update()
+            .select_related('pet_id', 'cln_id')
+            .filter(
+                apt_id=appointment.apt_id,
+                apt_deleted_at__isnull=True,
+            )
+            .first()
+        )
+        if appointment is None:
+            raise PaymentError(
+                'Appointment not found.',
+                code='APPOINTMENT_NOT_FOUND',
+                status_code=404,
+            )
+
+        if appointment.apt_type != AppointmentType.FOLLOW_UP:
+            raise PaymentError(
+                'Only follow-up appointments can be paid this way.',
+                code='NOT_A_FOLLOW_UP',
+                status_code=409,
+            )
+        if appointment.apt_status != AppointmentStatus.CONFIRMATION:
+            raise PaymentError(
+                'This appointment is not awaiting payment.',
+                code='NOT_AWAITING_PAYMENT',
+                status_code=409,
+            )
+        if appointment.apt_scheduled_at <= timezone.now():
+            raise PaymentError(
+                'This appointment has already passed.',
+                code='APPOINTMENT_EXPIRED',
+                status_code=409,
+            )
+        if appointment.pet_id.own_id_id != owner.own_id:
+            raise PaymentError(
+                'Appointment not found.',
+                code='APPOINTMENT_NOT_FOUND',
+                status_code=404,
+            )
+        if not appointment.pet_id.pet_is_active:
+            raise PaymentError(
+                'Pet not found or inactive.',
+                code='PET_NOT_FOUND',
+                status_code=404,
+            )
+        if method not in cls.OWNER_METHODS:
+            raise PaymentError(
+                'This payment method is not available for your account.',
+                code='METHOD_NOT_ALLOWED',
+                status_code=403,
+            )
+
+        fee = cls.get_fee(appointment.cln_id_id)
+        if fee <= 0:
+            raise PaymentError(
+                'This clinic does not require payment for this follow-up.',
+                code='PAYMENT_NOT_REQUIRED',
+                status_code=409,
+            )
+
+        existing = (
+            Payment.objects
+            .select_for_update()
+            .filter(own_id=owner, cln_id_id=appointment.cln_id_id)
+            .filter(
+                Q(apt_id_id=appointment.apt_id)
+                | Q(pay_metadata__appointment_id=str(appointment.apt_id)),
+            )
+            .order_by('-pay_created_at')
+            .first()
+        )
+        if existing is not None:
+            cls._expire_if_due(existing)
+            if existing.pay_status == PaymentStatus.PAID:
+                raise PaymentError(
+                    'This appointment is already paid.',
+                    code='ALREADY_PAID',
+                    status_code=409,
+                )
+            if existing.pay_status == PaymentStatus.PENDING:
+                if existing.pay_checkout_url:
+                    return existing
+
+                # The row exists but its checkout session does not (for
+                # example, a previous provider error): reuse it rather than
+                # leaving an unusable pending payment behind.
+                provider = cls._resolve_provider()
+                existing.pay_method = method
+                existing.pay_provider = provider.name
+                existing.pay_expires_at = (
+                    timezone.now()
+                    + timedelta(minutes=settings.PAYMENT_CHECKOUT_TTL_MINUTES)
+                )
+                existing.save(update_fields=[
+                    'pay_method', 'pay_provider', 'pay_expires_at', 'pay_updated_at',
+                ])
+                cls._create_provider_session(existing, provider)
+                return existing
+
+        provider = cls._resolve_provider()
+        payment = Payment.objects.create(
+            pay_reference=cls._new_reference(),
+            cln_id=appointment.cln_id,
+            own_id=owner,
+            pay_amount=fee,
+            pay_currency=settings.PAYMENT_CURRENCY,
+            pay_method=method,
+            pay_status=PaymentStatus.PENDING,
+            pay_provider=provider.name,
+            pay_expires_at=(
+                timezone.now()
+                + timedelta(minutes=settings.PAYMENT_CHECKOUT_TTL_MINUTES)
+            ),
+            pay_metadata={
+                'appointment_id': str(appointment.apt_id),
+                'pet_id': str(appointment.pet_id_id),
+                'pet_name': appointment.pet_id.pet_name,
+                'apt_type': appointment.apt_type,
+                'scheduled_at': appointment.apt_scheduled_at.isoformat(),
+                'booking_channel': 'owner_follow_up',
+            },
+        )
+
+        cls._create_provider_session(payment, provider)
+        cls._record_event(
+            payment,
+            PaymentEventType.CREATED,
+            {
+                'method': method,
+                'amount': str(fee),
+                'provider': payment.pay_provider,
+                'appointment_id': str(appointment.apt_id),
+            },
+        )
+        cls._audit(
+            action=AuditAction.PAYMENT_CREATED,
+            payment=payment,
+            user_id=actor_user_id,
+            description=(
+                f'Follow-up payment {payment.pay_reference} created for '
+                f'{fee} {settings.PAYMENT_CURRENCY} ({method})'
+            ),
+            new_values={
+                'pay_reference': payment.pay_reference,
+                'pay_amount': str(fee),
+                'pay_method': method,
+                'pay_status': payment.pay_status,
+                'appointment_id': str(appointment.apt_id),
+            },
+            ip_address=ip_address,
+        )
         return payment
 
     # ------------------------------------------------------------------
@@ -507,6 +722,8 @@ class PaymentService:
             ])
             if cls._record_event(payment, event, {'outcome': outcome}):
                 cls._notify_owner(payment, event)
+                if event == PaymentEventType.PAID:
+                    cls._on_follow_up_paid(payment)
             cls._audit(
                 action=action,
                 payment=payment,
@@ -592,12 +809,59 @@ class PaymentService:
             PaymentStatus.FAILED: PaymentEventType.FAILED,
             PaymentStatus.EXPIRED: PaymentEventType.EXPIRED,
         }
-        cls._record_event(
+        if cls._record_event(
             payment, event_type_map[target_status],
             {'event': event_type, 'payload': payload or {}},
-        )
-        cls._notify_owner(payment, event_type_map[target_status])
+        ):
+            cls._notify_owner(payment, event_type_map[target_status])
+            if target_status == PaymentStatus.PAID:
+                cls._on_follow_up_paid(payment)
         return payment
+
+    @classmethod
+    def _on_follow_up_paid(cls, payment) -> None:
+        """Confirm a scheduled follow-up after its checkout settles.
+
+        Best-effort: if the appointment was cancelled or is already past due,
+        the payment stays recorded for manual reconciliation. A failure here
+        must never roll back the payment itself.
+        """
+        appointment_id = (payment.pay_metadata or {}).get('appointment_id')
+        if not appointment_id:
+            return
+
+        from appointments.models import Appointment, AppointmentStatus
+        from appointments.services import AppointmentService
+
+        appointment = Appointment.objects.filter(
+            apt_id=appointment_id,
+            apt_deleted_at__isnull=True,
+        ).first()
+        if appointment is None:
+            logger.warning(
+                'Paid follow-up payment %s references missing appointment %s',
+                payment.pay_reference, appointment_id,
+            )
+            return
+        if appointment.apt_status != AppointmentStatus.CONFIRMATION:
+            logger.warning(
+                'Paid follow-up payment %s arrived for appointment %s in status '
+                '%s; not confirming.',
+                payment.pay_reference, appointment_id, appointment.apt_status,
+            )
+            return
+
+        try:
+            AppointmentService.confirm_follow_up_payment(
+                appointment=appointment,
+                payment=payment,
+                user_id=payment.own_id.usr_id_id,
+            )
+        except Exception:
+            logger.exception(
+                'Could not confirm follow-up appointment %s after payment %s',
+                appointment_id, payment.pay_reference,
+            )
 
     # ------------------------------------------------------------------
     # Internals
@@ -613,6 +877,46 @@ class PaymentService:
             'Could not allocate a payment reference. Please try again.',
             code='PAYMENT_ERROR',
             status_code=503,
+        )
+
+    @staticmethod
+    def _resolve_provider():
+        try:
+            return get_provider()
+        except ImproperlyConfigured:
+            logger.warning('Online payment provider is not configured')
+            raise PaymentError(
+                'Online payments are not configured for this deployment. '
+                'Ask the clinic to record cash instead.',
+                code='PROVIDER_NOT_CONFIGURED',
+                status_code=503,
+            )
+
+    @staticmethod
+    def _create_provider_session(payment, provider) -> None:
+        try:
+            session = provider.create_checkout(payment)
+        except PaymentProviderMisconfigured as exc:
+            # Our own settings, not the gateway: say so instead of a 502.
+            payment.delete()
+            logger.warning('Payment gateway misconfigured: %s', exc)
+            raise PaymentError(
+                'Online payments are misconfigured for this deployment. '
+                'Ask the clinic to record cash instead.',
+                code='PROVIDER_MISCONFIGURED',
+                status_code=503,
+            )
+        except PaymentProviderError:
+            payment.delete()
+            raise PaymentError(
+                'Payment provider is unavailable. Please try again.',
+                code='PROVIDER_ERROR',
+                status_code=502,
+            )
+        payment.pay_checkout_url = session.url
+        payment.pay_provider_ref = session.provider_ref
+        payment.save(
+            update_fields=['pay_checkout_url', 'pay_provider_ref', 'pay_updated_at'],
         )
 
     @staticmethod
@@ -662,18 +966,25 @@ class PaymentService:
         if ntf_type is None:
             return
 
+        is_follow_up = bool((payment.pay_metadata or {}).get('appointment_id'))
+        visit_label = 'follow-up' if is_follow_up else 'consultation'
         if event_type == PaymentEventType.PAID:
             title = 'Payment received'
             message = (
                 f'We received {payment.pay_amount} {payment.pay_currency} for your '
-                f'consultation at {payment.cln_id.cln_name}. '
+                f'{visit_label} at {payment.cln_id.cln_name}. '
                 f'Receipt {payment.pay_reference}.'
             )
         else:
             title = 'Payment checkout expired'
+            action = (
+                'Start a new payment to keep your follow-up appointment.'
+                if is_follow_up
+                else 'Start a new payment to book your appointment.'
+            )
             message = (
                 f'Checkout {payment.pay_reference} expired before it was paid. '
-                'Start a new payment to book your appointment.'
+                f'{action}'
             )
 
         try:

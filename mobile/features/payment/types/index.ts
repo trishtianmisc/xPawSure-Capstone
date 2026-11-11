@@ -5,6 +5,9 @@ export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'REFUNDE
 /** CASH exists on the model but is staff-only; owners are offered GCash/Card. */
 export type PaymentMethod = 'GCASH' | 'CARD' | 'CASH'
 
+/** Methods an owner is allowed to choose in the app. */
+export type OwnerPaymentMethod = Extract<PaymentMethod, 'GCASH' | 'CARD'>
+
 export interface Payment {
   pay_id: string
   reference_no: string

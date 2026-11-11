@@ -24,7 +24,10 @@ class PrescriptionService:
         queryset = Prescription.objects.filter(
             con_id__apt_id__pet_id__own_id=owner_profile,
         ).select_related(
-            'con_id__apt_id__pet_id', 'stf_id__usr_id',
+            'con_id__apt_id__cln_id',
+            'con_id__apt_id__pet_id__brd_id',
+            'con_id__apt_id__pet_id__own_id__usr_id',
+            'stf_id__usr_id',
         ).prefetch_related('items')
 
         if pet_id is not None:
@@ -38,7 +41,10 @@ class PrescriptionService:
             prs_id=prs_id,
             con_id__apt_id__pet_id__own_id=owner_profile,
         ).select_related(
-            'con_id__apt_id__pet_id', 'stf_id__usr_id',
+            'con_id__apt_id__cln_id',
+            'con_id__apt_id__pet_id__brd_id',
+            'con_id__apt_id__pet_id__own_id__usr_id',
+            'stf_id__usr_id',
         ).prefetch_related('items').first()
 
     @staticmethod

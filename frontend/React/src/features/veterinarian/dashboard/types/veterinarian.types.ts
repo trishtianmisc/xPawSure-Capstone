@@ -16,7 +16,6 @@ export interface ScheduleSlot {
   id: string
   date: string
   pet_name: string
-  condition: string
   start_time: string
   end_time: string
   time_label: string

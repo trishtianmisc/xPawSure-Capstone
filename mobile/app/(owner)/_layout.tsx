@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons'
+import { useQueryClient } from '@tanstack/react-query'
 import { Redirect, Tabs } from 'expo-router'
-import { useEffect } from 'react'
-import { InteractionManager, View } from 'react-native'
+import { useEffect, useRef } from 'react'
+import { AppState, InteractionManager, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { AppHeader } from '../../src/components/AppHeader'
@@ -10,10 +11,19 @@ import { useTheme } from '../../src/context/ThemeContext'
 import { preloadModel } from '../../ai/services/tensorflow.service'
 import { font } from '../../src/theme/typography'
 
+const OWNER_REFRESH_QUERY_KEYS = [
+  ['appointment'],
+  ['consultations'],
+  ['prescriptions'],
+  ['vaccinations'],
+] as const
+
 export default function OwnerTabLayout() {
   const { colors } = useTheme()
   const { isLoading, isAuthenticated, user } = useAuth()
+  const queryClient = useQueryClient()
   const insets = useSafeAreaInsets()
+  const appState = useRef(AppState.currentState)
 
   useEffect(() => {
     preloadModel()
@@ -24,6 +34,19 @@ export default function OwnerTabLayout() {
       task.cancel()
     }
   }, [])
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (appState.current === 'background' && nextState === 'active') {
+        for (const queryKey of OWNER_REFRESH_QUERY_KEYS) {
+          void queryClient.invalidateQueries({ queryKey })
+        }
+      }
+      appState.current = nextState
+    })
+
+    return () => subscription.remove()
+  }, [queryClient])
 
   if (isLoading) return null
   if (!isAuthenticated) return <Redirect href="/(auth)/login" />
@@ -42,7 +65,14 @@ export default function OwnerTabLayout() {
         <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'home' : 'home-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="pets" options={{ title: 'My Pets', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'paw' : 'paw-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="appointments" options={{ title: 'Appointments', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} /> }} />
-        <Tabs.Screen name="records" options={{ title: 'Records', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'folder' : 'folder-outline'} size={20} color={color} /> }} />
+        <Tabs.Screen
+          name="records"
+          options={{
+            title: 'Records',
+            popToTopOnBlur: true,
+            tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'folder' : 'folder-outline'} size={20} color={color} />,
+          }}
+        />
         <Tabs.Screen name="notifications/index" options={{ href: null }} />
         <Tabs.Screen name="payments/index" options={{ href: null }} />
         <Tabs.Screen name="screenings" options={{ href: null }} />

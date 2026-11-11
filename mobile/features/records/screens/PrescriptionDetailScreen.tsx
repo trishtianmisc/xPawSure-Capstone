@@ -1,12 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
+import { useLocalSearchParams } from 'expo-router'
+import { useMemo, useState } from 'react'
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
+import { PrescriptionImageModal } from '../components/PrescriptionImageModal'
 import { usePrescription } from '../hooks/usePrescription'
+import { usePrescriptionPdfExport } from '../hooks/usePrescriptionPdfExport'
+import { useRecordDetailBack } from '../lib/recordNavigation'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -38,24 +41,24 @@ function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
 }
 
 export default function PrescriptionDetailScreen() {
-  const router = useRouter()
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, fromConsultation } = useLocalSearchParams<{
+    id: string
+    fromConsultation?: string
+  }>()
   const { colors } = useTheme()
   const { data: prescription, isLoading, isError, error } = usePrescription(id)
+  const { exportPdf, isExporting } = usePrescriptionPdfExport()
+  const [imageModalVisible, setImageModalVisible] = useState(false)
   const styles = useMemo(() => createStyles(colors), [colors])
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back()
-    } else {
-      router.replace('/(owner)/records')
-    }
-  }
+  const backHref = fromConsultation
+    ? `/(owner)/records/consultations/${fromConsultation}`
+    : undefined
+  const handleBack = useRecordDetailBack('prescriptions', backHref)
 
   const renderHeader = () => (
     <View style={styles.header}>
       <Pressable
-        accessibilityLabel="Go back"
+        accessibilityLabel={fromConsultation ? 'Back to consultation' : 'Go back'}
         accessibilityRole="button"
         hitSlop={8}
         onPress={handleBack}
@@ -105,6 +108,54 @@ export default function PrescriptionDetailScreen() {
           </Text>
         </View>
 
+        <View style={styles.actionRow}>
+          <Pressable
+            accessibilityLabel="Save or share prescription PDF"
+            accessibilityRole="button"
+            disabled={isExporting}
+            onPress={() => void exportPdf(prescription)}
+            style={({ pressed }) => [
+              styles.pdfButton,
+              pressed && !isExporting && styles.pdfButtonPressed,
+              isExporting && styles.pdfButtonDisabled,
+            ]}
+          >
+            {isExporting ? (
+              <ActivityIndicator color={colors.inverse} size="small" />
+            ) : (
+              <MaterialCommunityIcons color={colors.inverse} name="file-pdf-box" size={18} />
+            )}
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              numberOfLines={1}
+              style={styles.pdfButtonText}
+            >
+              {isExporting ? 'Creating PDF...' : 'Save / Share PDF'}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityLabel="View prescription as an image"
+            accessibilityRole="button"
+            onPress={() => setImageModalVisible(true)}
+            style={({ pressed }) => [
+              styles.imageButton,
+              pressed && styles.imageButtonPressed,
+            ]}
+          >
+            <MaterialCommunityIcons color={colors.primary} name="image-outline" size={18} />
+            <Text
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
+              numberOfLines={1}
+              style={styles.imageButtonText}
+            >
+              View as Image
+            </Text>
+          </Pressable>
+        </View>
+
         {prescription.instructions ? (
           <View style={styles.instructionsCard}>
             <Text style={styles.instructionsLabel}>Instructions</Text>
@@ -119,6 +170,12 @@ export default function PrescriptionDetailScreen() {
           <MedicationCard key={item.id} item={item} />
         ))}
       </ScrollView>
+
+      <PrescriptionImageModal
+        onClose={() => setImageModalVisible(false)}
+        prescription={prescription}
+        visible={imageModalVisible}
+      />
     </View>
   )
 }
@@ -161,6 +218,41 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     textTransform: 'uppercase',
   },
   instructionsText: { ...font.regular, color: colors.text, fontSize: 14, lineHeight: 21 },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  pdfButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  pdfButtonPressed: { opacity: 0.85 },
+  pdfButtonDisabled: { opacity: 0.65 },
+  pdfButtonText: { ...font.bold, color: colors.inverse, flexShrink: 1, fontSize: 13 },
+  imageButton: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.primary,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
+  },
+  imageButtonPressed: { backgroundColor: colors.primaryLight },
+  imageButtonText: { ...font.bold, color: colors.primary, flexShrink: 1, fontSize: 13 },
   listTitle: { ...font.extrabold, color: colors.text, fontSize: 16, marginTop: 4 },
   medCard: {
     backgroundColor: colors.surfaceAlt,

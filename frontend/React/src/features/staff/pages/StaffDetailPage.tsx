@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { useStaffDetail } from '../hooks/useStaffDetail'
+import { useStaffActivity } from '../hooks/useStaffActivity'
 import { useStaffAction } from '../hooks/useStaffAction'
 import { EditStaffModal } from '../components/EditStaffModal'
 import { useToast } from '../../../components/ui/ToastContext'
@@ -42,6 +43,7 @@ export function StaffDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: staff, isLoading, error } = useStaffDetail(id)
+  const { data: activity } = useStaffActivity(id, staff?.role === 'VETERINARIAN')
   const actionMutation = useStaffAction()
   const { showToast } = useToast()
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -198,7 +200,7 @@ export function StaffDetailPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setIsEditOpen(true)}
-                className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
+                className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
                 type="button"
               >
                 Edit
@@ -259,27 +261,30 @@ export function StaffDetailPage() {
           </div>
         )}
 
-        {/* Activity Summary */}
-        <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
-            Activity Summary
-          </h3>
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            {/* TODO: Replace stubbed values with real data from API when staff-scoped activity endpoint is available */}
-            <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
-              <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{'\u2014'}</p>
-              <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Appointments This Month</p>
+        {/* Activity Summary — the stubbed metrics only describe veterinarian
+            work (appointments this month, patients seen, screenings reviewed),
+            so non-veterinarian staff don't get this card. */}
+        {staff.role === 'VETERINARIAN' && (
+          <section className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-900">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+              Activity Summary
+            </h3>
+            <div className="mt-4 grid grid-cols-3 gap-4">
+              <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
+                <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{activity?.appointments_this_month ?? '—'}</p>
+                <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Appointments This Month</p>
+              </div>
+              <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
+                <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{activity?.patients_seen_this_month ?? '—'}</p>
+                <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Patients Seen This Month</p>
+              </div>
+              <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
+                <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{activity?.screenings_reviewed_this_month ?? '—'}</p>
+                <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Screenings Reviewed This Month</p>
+              </div>
             </div>
-            <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
-              <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{'\u2014'}</p>
-              <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Patients Seen</p>
-            </div>
-            <div className="rounded-xl bg-stone-50 p-4 text-center dark:bg-stone-800">
-              <p className="text-2xl font-extrabold text-stone-900 dark:text-stone-100">{'\u2014'}</p>
-              <p className="mt-1 text-xs font-medium text-stone-500 dark:text-stone-400">Screenings Reviewed</p>
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Field Cards */}
         <div className="grid gap-6 sm:grid-cols-2">

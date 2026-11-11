@@ -19,6 +19,7 @@ export interface VetScreeningSummary {
   ais_created_at: string
   /** Owner's questionnaire rows (display-only); null when absent. */
   symptom_answers?: { question: string; answer: string }[] | null
+  image_url?: string | null
 }
 
 export interface VetAppointment {

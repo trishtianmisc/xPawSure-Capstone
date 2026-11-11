@@ -16,6 +16,7 @@ export interface ClinicAppointmentQuery {
   vet_id?: string
   pet_id?: string
   search?: string
+  sort?: string
   page?: number
   page_size?: number
 }

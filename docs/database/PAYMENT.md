@@ -13,13 +13,18 @@
 
 # Overview
 
-The Payment module collects the clinic's consultation fee **before** an
-appointment exists.
+The Payment module collects the clinic's consultation fee.
 
-A Receptionist (web) or an Owner (mobile) creates a *checkout* for a chosen
-slot. When the payment reaches `PAID` it may be attached to exactly one
+For a new booking, a Receptionist (web) or an Owner (mobile) creates a *checkout*
+for a chosen slot. When the payment reaches `PAID` it is attached to exactly one
 appointment; the booking endpoints refuse to create an appointment without it
 whenever the clinic's fee is greater than zero.
+
+A follow-up works in the opposite order: the receptionist books the slot first,
+and the owner pays from the appointment detail screen while the appointment is
+in `CONFIRMATION`. The pending attempt is tracked in `PAY_METADATA` and is
+linked to `APT_ID` only when it is paid. A zero-fee follow-up is confirmed by
+the scheduling endpoint and never creates a payment.
 
 Every Payment belongs to exactly one Clinic and one Owner.
 
@@ -34,7 +39,9 @@ Purpose
 Stores one attempt to collect the consultation fee.
 
 `APT_ID` is a one-to-one column, so a payment can never pay for two
-appointments.
+appointments. A pending follow-up attempt leaves it `NULL` and stores the
+intended appointment in `PAY_METADATA.appointment_id`; the column is filled
+when the payment settles.
 
 ## Attributes
 
@@ -63,7 +70,9 @@ appointments.
 used as PayMongo's `reference_number` (format `XPS-YYYYMMDD-XXXXXX`).
 
 `PAY_METADATA` snapshots the booking context (pet, slot, appointment type,
-booking channel) so the record stays meaningful after checkout.
+booking channel) so the record stays meaningful after checkout. Follow-up
+checkouts add `appointment_id`, `scheduled_at`, and
+`booking_channel = "owner_follow_up"`.
 
 ---
 
@@ -174,6 +183,30 @@ failed booking never consumes the payment.
 
 ---
 
+# Follow-Up Payment
+
+`POST /api/owner/appointments/{id}/checkout/` starts (or resumes) the checkout
+for a `FOLLOW_UP` already in `CONFIRMATION`.
+
+- The amount is the clinic's current consultation fee; the client sends only
+  `method` (`GCASH` or `CARD`).
+- A pending attempt for the same appointment is reused, so a retry does not
+  create duplicate rows.
+- The payment is intentionally not linked to `APT_ID` until it is `PAID`.
+  `GET /api/owner/payments/?appointment={id}` also filters on
+  `PAY_METADATA.appointment_id`, so the app can find a pending attempt.
+- On `PAID`, `AppointmentService.confirm_follow_up_payment()` moves the
+  appointment from `CONFIRMATION` to `CONFIRMED` and calls
+  `PaymentService.attach()`. This path is separate from the generic status
+  transition table, so a receptionist cannot bypass payment.
+- If the appointment was cancelled or is past due when payment settles, the
+  payment stays `PAID` and unlinked for manual reconciliation; the appointment
+  is not changed.
+- The owner may cancel a pending checkout with `POST /api/payments/{id}/cancel/`.
+  That does not cancel the appointment.
+
+---
+
 # Owner Surface
 
 The owner app never sees clinic-wide data:
@@ -181,9 +214,10 @@ The owner app never sees clinic-wide data:
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/owner/clinics/` | Clinic list with `consultation_fee`, so the booking wizard can show the amount before checkout |
-| `POST /api/payments/checkout/` | Create the payment (`GCASH`/`CARD` only, `screening_id` required) |
+| `POST /api/payments/checkout/` | Create the payment for a new booking (`GCASH`/`CARD` only, `screening_id` required) |
+| `POST /api/owner/appointments/{id}/checkout/` | Start or resume the payment for a scheduled follow-up |
 | `GET /api/payments/{id}/` | Poll one payment until it settles |
-| `GET /api/owner/payments/` | Own receipts; `?status=PENDING` finds an abandoned checkout to resume |
+| `GET /api/owner/payments/` | Own receipts; `?status=PENDING` finds an abandoned checkout to resume, and `?appointment={id}` includes pending follow-up attempts |
 | `POST /api/payments/{id}/cancel/` | Discard an unpaid checkout |
 
 Settlement and expiry also write an owner notification

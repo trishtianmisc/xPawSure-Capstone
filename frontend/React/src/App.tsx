@@ -14,6 +14,7 @@ const ClinicAdminDashboardPage = lazy(() => import('./features/clinic-admin/dash
 const ClinicAdminAppointmentsPage = lazy(() => import('./features/clinic-admin/appointments/pages/ClinicAdminAppointmentsPage').then(m => ({ default: m.ClinicAdminAppointmentsPage })))
 const ClinicAdminAppointmentDetailPage = lazy(() => import('./features/clinic-admin/appointments/pages/ClinicAdminAppointmentDetailPage').then(m => ({ default: m.ClinicAdminAppointmentDetailPage })))
 const ClinicAdminPatientsPage = lazy(() => import('./features/clinic-admin/patients/pages/ClinicAdminPatientsPage').then(m => ({ default: m.ClinicAdminPatientsPage })))
+const ClinicAdminPaymentsPage = lazy(() => import('./features/clinic-admin/payments/pages/ClinicAdminPaymentsPage').then(m => ({ default: m.ClinicAdminPaymentsPage })))
 const ClinicAdminReportsPage = lazy(() => import('./features/clinic-admin/reports/pages/ReportsPage').then(m => ({ default: m.ClinicAdminReportsPage })))
 const ClinicAdminPatientDetailPage = lazy(() => import('./features/clinic-admin/patients/pages/ClinicAdminPatientDetailPage').then(m => ({ default: m.ClinicAdminPatientDetailPage })))
 const ClinicProfilePage = lazy(() => import('./features/clinic-profile/pages/ClinicProfilePage').then(m => ({ default: m.ClinicProfilePage })))
@@ -23,6 +24,12 @@ const StaffDetailPage = lazy(() => import('./features/staff/pages/StaffDetailPag
 const ClinicListPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicListPage').then(m => ({ default: m.ClinicListPage })))
 const CreateClinicPage = lazy(() => import('./features/super-admin/clinics/pages/CreateClinicPage').then(m => ({ default: m.CreateClinicPage })))
 const ClinicDetailPage = lazy(() => import('./features/super-admin/clinics/pages/ClinicDetailPage').then(m => ({ default: m.ClinicDetailPage })))
+const AnalyticsPage = lazy(() => import('./features/super-admin/analytics/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })))
+const AdminsPage = lazy(() => import('./features/super-admin/admins/pages/AdminsPage').then(m => ({ default: m.AdminsPage })))
+const AuditLogsPage = lazy(() => import('./features/super-admin/audit-logs/pages/AuditLogsPage').then(m => ({ default: m.AuditLogsPage })))
+const OwnersPage = lazy(() => import('./features/super-admin/owners/pages/OwnersPage').then(m => ({ default: m.OwnersPage })))
+const VaccinationsPage = lazy(() => import('./features/super-admin/vaccinations/pages/VaccinationsPage').then(m => ({ default: m.VaccinationsPage })))
+const ReportsPage = lazy(() => import('./features/super-admin/reports/pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
 const ClinicAdminLayout = lazy(() => import('./features/clinic-admin/components/ClinicAdminLayout').then(m => ({ default: m.ClinicAdminLayout })))
 const ReceptionistLayout = lazy(() => import('./features/receptionist/components/ReceptionistLayout').then(m => ({ default: m.ReceptionistLayout })))
 const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
@@ -43,6 +50,7 @@ const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboar
 const VetAppointmentDetailPage = lazy(() => import('./features/veterinarian/dashboard/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
 const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
+const VetPrescriptionPreviewPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPreviewPage').then(m => ({ default: m.PrescriptionPreviewPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
 const VetProfilePage = lazy(() => import('./features/veterinarian/dashboard/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
 
@@ -103,6 +111,54 @@ function App() {
             path="/super-admin/clinics/:id"
           />
           <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AnalyticsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/analytics"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AdminsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/admins"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <AuditLogsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/audit-logs"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <OwnersPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/owners"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <VaccinationsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/vaccinations"
+          />
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+            path="/super-admin/reports"
+          />
+          <Route
   path="/clinic"
   element={
     <ProtectedRoute allowedRoles={['CLINIC_ADMIN']}>
@@ -118,23 +174,17 @@ function App() {
   <Route path="appointments/:id" element={<ClinicAdminAppointmentDetailPage />} />
   <Route path="patients" element={<ClinicAdminPatientsPage />} />
   <Route path="patients/:id" element={<ClinicAdminPatientDetailPage />} />
+  <Route path="payments" element={<ClinicAdminPaymentsPage />} />
   <Route path="reports" element={<ClinicAdminReportsPage />} />
   <Route path="profile" element={<ClinicProfilePage />} />
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
 
-<Route
-  path="/super-admin/staff"
-  element={
-    <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
-      <StaffListPage />
-    </ProtectedRoute>
-  }
-/>
           <Route element={<VetDashboardLayout />} path="/veterinarian">
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
             <Route element={<VetAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<VetPrescriptionPreviewPage />} path="appointments/:id/prescription/preview" />
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
             <Route element={<VetSchedulePage />} path="schedule" />

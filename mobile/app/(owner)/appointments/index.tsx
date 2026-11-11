@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useQueryClient } from '@tanstack/react-query'
+import { useFocusEffect, useRouter } from 'expo-router'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { StatusPill } from '../../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppointments'
@@ -69,10 +70,27 @@ function AppointmentRow({
 
 export default function AppointmentsScreen() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [tab, setTab] = useState<Tab>('upcoming')
-  const { data, isError, isLoading } = useMyAppointments()
+  const [refreshing, setRefreshing] = useState(false)
+  const { data, isError, isLoading, refetch } = useMyAppointments()
+
+  useFocusEffect(
+    useCallback(() => {
+      void queryClient.invalidateQueries({ queryKey: ['appointment', 'mine'] })
+    }, [queryClient]),
+  )
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await refetch()
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refetch])
 
   const { upcoming, history } = useMemo(() => {
     const results = data?.results ?? []
@@ -127,7 +145,18 @@ export default function AppointmentsScreen() {
           ))}
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => void handleRefresh()}
+              refreshing={refreshing}
+              tintColor={colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
           {isLoading ? (
             <View style={styles.statusState}><ActivityIndicator color={colors.primary} /></View>
           ) : isError ? (

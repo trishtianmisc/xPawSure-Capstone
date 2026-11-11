@@ -367,13 +367,20 @@ appointment is cancelled before completion, no follow-up appointment is
 created.
 
 A receptionist schedules the follow-up by choosing a future available slot for
-the assigned veterinarian. This books the slot and sets the appointment to
-`CONFIRMATION` (displayed as `AWAITING PAYMENT`). `CONFIRMATION` is not final
-confirmation; owner acceptance/payment is a separate deferred step.
+the assigned veterinarian. This books the slot.
 
-If a `CONFIRMATION` appointment is not paid before its scheduled time, it is
-cancelled with reason "Payment not completed before appointment time" and the
-slot returns to `AVAILABLE`.
+- If the clinic's consultation fee is greater than `0`, the appointment moves
+  to `CONFIRMATION` (displayed as `AWAITING PAYMENT`) and the owner receives a
+  payment prompt in the app. Only a successful payment moves it to `CONFIRMED`;
+  a generic status update cannot perform that transition.
+- If the consultation fee is `0`, the appointment is confirmed immediately and
+  no payment is created.
+
+The owner cannot cancel a `CONFIRMATION` follow-up from the app. They may cancel
+only an unpaid checkout attempt; the appointment remains reserved until it is
+paid or auto-cancelled. If a `CONFIRMATION` appointment is not paid before its
+scheduled time, it is cancelled with reason "Payment not completed before
+appointment time" and the slot returns to `AVAILABLE`.
 
 Cancelling a `REVIEW` follow-up is an internal action and does not notify the
 owner because the appointment was never visible to them.
@@ -644,8 +651,9 @@ Receptionist desk bookings are created CONFIRMED.
 
 Follow-up recommendations create a REVIEW appointment when the source
 appointment is completed. Scheduling its slot moves it to CONFIRMATION
-(AWAITING PAYMENT), then to PENDING once owner payment handling is implemented.
-Phase 1 stops at CONFIRMATION.
+(AWAITING PAYMENT) when the clinic charges a fee, or directly to CONFIRMED when
+the fee is 0. A successful follow-up payment moves CONFIRMATION to CONFIRMED.
+Owner payment handling is implemented in the mobile app.
 
 ---
 

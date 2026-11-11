@@ -272,7 +272,7 @@ export default function PetProfileScreen() {
             <VaccinationRow
               key={record.id}
               record={record}
-              onPress={() => router.push(`/(owner)/records/vaccinations/${record.id}`)}
+              onPress={() => router.push(`/(owner)/records/vaccinations/${record.id}`, { withAnchor: true })}
             />
           ))}
         </PetRecordSection>
@@ -291,7 +291,7 @@ export default function PetProfileScreen() {
             <ConsultationRow
               key={record.id}
               record={record}
-              onPress={() => router.push(`/(owner)/records/consultations/${record.id}`)}
+              onPress={() => router.push(`/(owner)/records/consultations/${record.id}`, { withAnchor: true })}
             />
           ))}
         </PetRecordSection>

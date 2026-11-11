@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useQueryClient } from '@tanstack/react-query'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type {
@@ -14,17 +15,16 @@ import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useConsultations } from '../hooks/useConsultations'
 import { usePrescriptions } from '../hooks/usePrescriptions'
 import { useVaccinations } from '../hooks/useVaccinations'
+import { consumeRequestedRecordsTab, type RecordsTab } from '../lib/recordNavigation'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
-type Tab = 'consultations' | 'prescriptions' | 'vaccinations'
-
-const TABS: { value: Tab; label: string }[] = [
+const TABS: { value: RecordsTab; label: string }[] = [
   { value: 'consultations', label: 'Consults' },
   { value: 'prescriptions', label: 'Meds' },
   { value: 'vaccinations', label: 'Vaccines' },
 ]
 
-function parseTab(value: string | string[] | undefined): Tab | null {
+function parseTab(value: string | string[] | undefined): RecordsTab | null {
   if (value === 'consultations' || value === 'prescriptions' || value === 'vaccinations') {
     return value
   }
@@ -75,19 +75,48 @@ function RecordCard({
 
 export default function RecordsScreen() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const params = useLocalSearchParams<{ tab?: string }>()
-  const [tab, setTab] = useState<Tab>(() => parseTab(params.tab) ?? 'consultations')
+  const [tab, setTab] = useState<RecordsTab>(() => parseTab(params.tab) ?? 'consultations')
+  const [refreshing, setRefreshing] = useState(false)
 
   useEffect(() => {
     const requested = parseTab(params.tab)
     if (requested) setTab(requested)
   }, [params.tab])
 
+  useFocusEffect(
+    useCallback(() => {
+      const requested = consumeRequestedRecordsTab()
+      if (requested) {
+        setTab(requested)
+        router.setParams({ tab: requested })
+      }
+
+      void queryClient.invalidateQueries({ queryKey: ['consultations'] })
+      void queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
+      void queryClient.invalidateQueries({ queryKey: ['vaccinations'] })
+    }, [queryClient, router]),
+  )
+
   const consultations = useConsultations()
   const prescriptions = usePrescriptions()
   const vaccinations = useVaccinations()
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['consultations'] }),
+        queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
+        queryClient.invalidateQueries({ queryKey: ['vaccinations'] }),
+      ])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [queryClient])
 
   const active = tab === 'consultations' ? consultations
     : tab === 'prescriptions' ? prescriptions
@@ -198,7 +227,18 @@ export default function RecordsScreen() {
           ))}
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => void handleRefresh()}
+              refreshing={refreshing}
+              tintColor={colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
           {tab === 'vaccinations' ? (
             <Pressable
               accessibilityRole="button"

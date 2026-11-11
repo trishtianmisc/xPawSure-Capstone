@@ -35,6 +35,7 @@ class StaffListCreateView(APIView):
         role = request.query_params.get('role', '')
         search = request.query_params.get('search', '').strip()
         staff_status = request.query_params.get('status', '').strip()
+        sort = request.query_params.get('sort', '').strip()
         try:
             page = max(int(request.query_params.get('page', 1) or 1), 1)
         except (ValueError, TypeError):
@@ -49,6 +50,7 @@ class StaffListCreateView(APIView):
             role=role if role else None,
             search=search,
             status=staff_status if staff_status else None,
+            sort=sort,
             page=page,
             page_size=page_size,
         )
@@ -117,6 +119,22 @@ class StaffDetailView(APIView):
 
         updated_staff = StaffService.get_by_id(staff_id)
         return Response(StaffDetailSerializer(updated_staff).data)
+
+
+class StaffActivityView(APIView):
+    permission_classes = [IsClinicAdmin]
+
+    def get(self, request, staff_id):
+        try:
+            staff = StaffService.get_by_id(staff_id)
+        except StaffProfile.DoesNotExist:
+            return Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        clinic = request.user.staffprofile.cln_id
+        if staff.cln_id != clinic:
+            return Response({'detail': 'Staff member not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(StaffService.get_activity(staff))
 
 
 class StaffBulkUploadView(APIView):

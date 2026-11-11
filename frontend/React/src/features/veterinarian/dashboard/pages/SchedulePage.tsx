@@ -40,56 +40,10 @@ function startOfWeek(date: Date): Date {
   return result
 }
 
-function parseIso(value?: string | null): Date | null {
-  if (!value) return null
-  const parsed = new Date(value)
-  return Number.isNaN(parsed.getTime()) ? null : parsed
-}
-
 function formatClock(date: Date): string {
   const meridiem = date.getHours() >= 12 ? 'PM' : 'AM'
   const hours = date.getHours() % 12 || 12
   return `${hours}:${pad2(date.getMinutes())} ${meridiem}`
-}
-
-function formatRange(start: Date, end: Date): string {
-  const startMeridiem = start.getHours() >= 12 ? 'PM' : 'AM'
-  const endMeridiem = end.getHours() >= 12 ? 'PM' : 'AM'
-  if (startMeridiem === endMeridiem) {
-    return `${formatClock(start)}–${formatClock(end).replace(` ${endMeridiem}`, '')} ${endMeridiem}`
-  }
-  return `${formatClock(start)}–${formatClock(end)}`
-}
-
-function buildTimeLabel(
-  apt: VetAppointmentSummary,
-  scheduled: Date,
-): string {
-  const checkedIn = parseIso(apt.apt_checked_in_at)
-  const completed = parseIso(apt.apt_completed_at)
-
-  if (apt.apt_status === 'COMPLETED') {
-    if (checkedIn && completed) {
-      return formatRange(checkedIn, completed)
-    }
-    return formatClock(scheduled)
-  }
-
-  if (
-    checkedIn &&
-    (apt.apt_status === 'CHECKED_IN' || apt.apt_status === 'IN_PROGRESS')
-  ) {
-    return formatClock(checkedIn)
-  }
-
-  return formatClock(scheduled)
-}
-
-function firstTwoWords(value?: string | null): string {
-  const words = value?.trim().split(/\s+/).filter(Boolean) ?? []
-  if (words.length === 0) return ''
-  if (words.length <= 2) return words.join(' ')
-  return `${words.slice(0, 2).join(' ')}…`
 }
 
 function toSlot(apt: VetAppointmentSummary): ScheduleSlot | null {
@@ -101,10 +55,9 @@ function toSlot(apt: VetAppointmentSummary): ScheduleSlot | null {
     id: apt.apt_id,
     date: toDateKey(scheduled),
     pet_name: apt.pet_name,
-    condition: firstTwoWords(apt.screening?.disease || apt.apt_reason),
     start_time: `${pad2(scheduled.getHours())}:${pad2(scheduled.getMinutes())}`,
     end_time: `${pad2(end.getHours())}:${pad2(end.getMinutes())}`,
-    time_label: buildTimeLabel(apt, scheduled),
+    time_label: formatClock(scheduled),
     status: apt.apt_status,
   }
 }

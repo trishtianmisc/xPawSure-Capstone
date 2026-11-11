@@ -3,6 +3,7 @@ import type { ClinicProfile } from '../../../clinic-profile/types/clinicProfile.
 import type {
   AppointmentsReport,
   PatientsReport,
+  ReportRevenue,
   ReportSummary,
   ScreeningsReport,
   VetWorkloadReport,
@@ -22,6 +23,7 @@ interface PrintableReportProps {
   workload: VetWorkloadReport
   screenings: ScreeningsReport
   patients: PatientsReport
+  revenue?: ReportRevenue
   rangeLabel: string
   days: number
   vetLabel: string
@@ -46,6 +48,7 @@ export function PrintableReport({
   workload,
   screenings,
   patients,
+  revenue,
   rangeLabel,
   days,
   vetLabel,
@@ -104,7 +107,7 @@ export function PrintableReport({
           <p className="mt-2 rounded border border-stone-300 bg-stone-50 px-3 py-2 text-xs text-stone-700">
             All figures below reflect only the filters above.{' '}
             {vetSelected &&
-              'Patient Demographics and New Patients always cover the whole clinic, and screening figures only include bookings linked to the selected veterinarian.'}
+              'Patient Demographics and New Patients always cover the whole clinic, screening figures only include bookings linked to the selected veterinarian, and Revenue includes only payments linked to that veterinarian\u2019s appointments.'}
           </p>
         </section>
 
@@ -117,6 +120,7 @@ export function PrintableReport({
               previousAgreementRate={previousAgreementRate}
               days={days}
               vetSelected={vetSelected}
+              revenue={revenue}
             />
           </section>
 
@@ -152,9 +156,9 @@ export function PrintableReport({
             {generatedAt ? formatDateTime(generatedAt, timezone) : '—'}
           </p>
           <p>
-            Rates use different denominators: completion and no-show are
-            measured against elapsed, non-cancelled visits, while vet agreement
-            covers judged AI screenings only.
+            Rates use different denominators: no-show is measured against
+            elapsed, non-cancelled visits, while vet agreement covers judged
+            AI screenings only.
           </p>
           <p>AI output is advisory only and never a diagnosis.</p>
         </footer>

@@ -437,6 +437,10 @@ class VetAppointmentDetailTests(VetDashboardBase):
             self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
         )
 
+        self.pet.pet_weight = '12.50'
+        self.pet.pet_color = 'Black'
+        self.pet.save(update_fields=['pet_weight', 'pet_color'])
+
         response = self.client.get(
             f'/api/appointments/{appointment.apt_id}/',
             **self._auth(VET_EMAIL),
@@ -445,6 +449,8 @@ class VetAppointmentDetailTests(VetDashboardBase):
         self.assertEqual(response.data['pet_name'], 'Max')
         self.assertEqual(response.data['pet_breed'], 'Pug')
         self.assertIn('pet_birth_date', response.data)
+        self.assertEqual(str(response.data['pet_weight']), '12.50')
+        self.assertEqual(response.data['pet_color'], 'Black')
         self.assertEqual(response.data['owner_name'], 'Olivia Owner')
 
     def test_vet_cannot_read_other_vets_appointment(self):

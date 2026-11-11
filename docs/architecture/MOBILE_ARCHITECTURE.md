@@ -248,12 +248,36 @@ Filters: `status`, `method`, `reference`, `appointment`, `date_from`,
 `date_to`, `page`, `page_size`.
 
 `?status=PENDING` is how an abandoned checkout is found again and resumed.
+`?appointment=` also matches pending follow-up attempts tracked in
+`pay_metadata.appointment_id`, not only the linked `PAID` record, so the
+appointment detail can resume a follow-up checkout before it is paid.
 
 Screen: `app/(owner)/payments/` — reached from the Appointments header
 (receipt icon) or from a `PAYMENT_*` notification; it is registered as a hidden
 tab (`href: null`).
 
 Refunds and cancellations of settled payments are out of scope until phase 3.
+
+---
+
+## Pay a Follow-Up
+
+A follow-up scheduled by the clinic appears in the owner's appointment list as
+`CONFIRMATION` ("Awaiting payment"). Its detail screen shows a Follow-Up Payment
+card:
+
+- The amount is the appointment detail's `consultation_fee`; the client never
+  sends an amount.
+- GCash and card are offered (cash is staff-only).
+- Pay calls `POST /api/owner/appointments/{id}/checkout/`, which creates or
+  resumes a pending payment for the already-booked slot.
+- The screen polls that payment. On `PAID` it refreshes the appointment, which
+  is now `CONFIRMED`, and the normal receipt card replaces the pay card.
+- A pending checkout can be cancelled without cancelling the appointment.
+  Unpaid follow-ups auto-cancel at the scheduled time; the owner cannot cancel
+  a `CONFIRMATION` follow-up itself.
+- When the clinic's fee is `0`, the appointment is already `CONFIRMED` and no
+  pay card is shown.
 
 ---
 
@@ -267,6 +291,14 @@ Owners may view their pets' medical history, including:
 - AI screening history
 
 Owners cannot edit consultation or prescription records.
+
+Consultation details show the veterinarian, consultation date, diagnosis, specific disease when recorded, chief complaint, clinical notes, and follow-up recommendation. When the consultation has a linked prescription, a Prescription card opens that prescription; the prescription detail back action returns to the consultation. Otherwise, the card states that no prescription was issued. Returning from a record detail opened from the Records list opens the matching record-type tab.
+
+Prescription details include a **Save / Share PDF** action. The PDF is generated on-device with `expo-print` from the same A4 document layout as the veterinarian web prescription preview, including the clinic header, owner and pet details, medication table, instructions, and the veterinarian signature/license block. `expo-sharing` opens the device share sheet so the owner can save the PDF or send it to another app. The PDF is never generated or stored on the server.
+
+Prescription details also include a **View as Image** action. It renders the prescription document on-device, captures it as a PNG with `react-native-view-shot`, and opens a full-screen preview. The preview offers **Download Image**, which requests photo-library access and saves the PNG with `expo-media-library`. The image is generated and stored only on the device; no prescription image is uploaded to the server.
+
+Owner records and appointments refresh when the screen gains focus, when the app returns to the foreground from the background, and when the owner pulls to refresh. These refreshes invalidate the owner consultation, prescription, vaccination, and appointment queries so newly created records appear without signing out or clearing the app cache.
 
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 
@@ -297,7 +329,9 @@ Completed appointment details include read-only consultation and prescription re
 Veterinarian mobile lists and schedules exclude `PENDING` owner bookings and
 the internal `REVIEW`/`CONFIRMATION` follow-up states; clinic staff manage
 those through the web receptionist workflow. Owner mobile lists hide `REVIEW`
-and show `CONFIRMATION` read-only as "Awaiting payment".
+and show `CONFIRMATION` as "Awaiting payment" with an in-app pay action. A
+successful payment confirms the follow-up in place; zero-fee follow-ups are
+confirmed by the receptionist's scheduling action and never show the pay card.
 
 Veterinarians cannot register owners, manage pets, perform AI screening, or book appointments through the mobile app.
 

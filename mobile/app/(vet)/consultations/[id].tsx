@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
@@ -181,9 +181,17 @@ export default function VetConsultationDetailScreen() {
                 <Text style={styles.sectionTitle}>AI Screening Analysis</Text>
 
                 <View style={styles.screeningCard}>
-                  <View style={styles.screeningImagePlaceholder}>
-                    <MaterialCommunityIcons color={colors.textMuted} name="image-outline" size={40} />
-                  </View>
+                  {detail.screening.image_url ? (
+                    <Image
+                      source={{ uri: detail.screening.image_url }}
+                      style={styles.screeningImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.screeningImagePlaceholder}>
+                      <MaterialCommunityIcons color={colors.textMuted} name="image-outline" size={40} />
+                    </View>
+                  )}
                   <Text style={styles.screeningLabel}>Final Assessment</Text>
                   <Text style={styles.screeningPrediction}>{detail.screening.disease}</Text>
                   <Text style={styles.screeningDesc}>
@@ -203,7 +211,7 @@ export default function VetConsultationDetailScreen() {
             )}
 
             {showCompletedRecords && detail.consultation && (
-              <ConsultationSummary consultation={detail.consultation} />
+              <ConsultationSummary consultation={detail.consultation} screening={detail.screening} />
             )}
 
             {showCompletedRecords && detail.prescription && (
@@ -442,6 +450,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   sectionTitle: { ...font.bold, color: colors.text, fontSize: 17, marginBottom: 14 },
 
   screeningCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.borderLight },
+  screeningImage: { width: '100%', height: 160, borderRadius: 12, backgroundColor: colors.surfaceAlt, marginBottom: 14 },
   screeningImagePlaceholder: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, height: 120, justifyContent: 'center', marginBottom: 14 },
   screeningLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
   screeningPrediction: { ...font.extrabold, color: colors.primary, fontSize: 16, marginBottom: 6 },

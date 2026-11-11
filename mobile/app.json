@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.xpawsure.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -45,7 +46,31 @@
           "cameraPermission": "XPawSure uses your camera so you can take a picture of your pet's skin for AI screening.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow XPawSure to access your photos.",
+          "savePhotosPermission": "Allow XPawSure to save prescription images to your photo library.",
+          "granularPermissions": ["photo"]
+        }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f12557fa-fa49-4036-b092-647c893e617c"
+      }
+    },
+    "owner": "trishtianmisc"
   }
 }

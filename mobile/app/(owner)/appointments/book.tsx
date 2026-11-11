@@ -26,6 +26,7 @@ import { useCancelPayment } from '../../../features/payment/hooks/useCancelPayme
 import { useCreateCheckout } from '../../../features/payment/hooks/useCreateCheckout'
 import { usePayment } from '../../../features/payment/hooks/usePayment'
 import { formatMoney } from '../../../features/payment/lib/format'
+import { OWNER_METHODS } from '../../../features/payment/lib/methods'
 import type { Payment, PaymentMethod } from '../../../features/payment/types'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
@@ -57,12 +58,6 @@ const PAYMENT_STEP = FREE_STEPS + 1
 
 /** Owners only ever book consultations; the type picker is gone. */
 const APT_TYPE = 'CONSULTATION' as const
-
-/** Owners can never record cash, so it is never offered here. */
-const OWNER_METHODS: Array<{ value: PaymentMethod; label: string }> = [
-  { value: 'GCASH', label: 'GCash' },
-  { value: 'CARD', label: 'Card' },
-]
 
 interface DayChip {
   iso: string

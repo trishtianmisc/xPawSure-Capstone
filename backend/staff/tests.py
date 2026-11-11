@@ -1,10 +1,16 @@
 from datetime import date, timedelta
 
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from ai_screenings.models import AiScreening, Disease
+from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from clinics.models import Clinic, ClinicStatus
+from consultations.models import Consultation
+from owners.models import OwnerProfile
+from pets.models import Pet, Sex
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
@@ -85,7 +91,7 @@ class CreateVeterinarianTests(StaffAPITestCase):
             'last_name': 'Doe',
             'phone': '+63 912 345 6789',
             'role': 'VETERINARIAN',
-            'license_number': 'LIC-001',
+            'license_number': '1234567',
             'license_expiration_date': '2027-12-31',
         }
         response = self.client.post(
@@ -108,7 +114,7 @@ class CreateVeterinarianTests(StaffAPITestCase):
         profile = StaffProfile.objects.get(usr_id=user)
         self.assertEqual(profile.cln_id, self.clinic)
         self.assertEqual(profile.stf_position, StaffPosition.VETERINARIAN)
-        self.assertEqual(profile.stf_license_number, 'LIC-001')
+        self.assertEqual(profile.stf_license_number, '1234567')
         self.assertEqual(profile.stf_license_expiration_date, date(2027, 12, 31))
 
     def test_create_veterinarian_requires_license(self):
@@ -130,13 +136,33 @@ class CreateVeterinarianTests(StaffAPITestCase):
             'first_name': 'Jane',
             'last_name': 'Doe',
             'role': 'VETERINARIAN',
-            'license_number': 'LIC-002',
+            'license_number': '1234568',
         }
         response = self.client.post(
             self.list_url, payload, format='json',
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_veterinarian_rejects_license_not_seven_digits(self):
+        for bad_license in ('123456', '12345678', 'PRC-12345', 'ABCDEFG'):
+            payload = {
+                'email': 'vet_bad_license@test.com',
+                'first_name': 'John',
+                'last_name': 'Doe',
+                'role': 'VETERINARIAN',
+                'license_number': bad_license,
+                'license_expiration_date': '2027-12-31',
+            }
+            response = self.client.post(
+                self.list_url, payload, format='json',
+                **self._auth_header(self.clinic_admin),
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, bad_license)
+            self.assertIn(
+                'License number must be exactly 7 digits.',
+                response.data['license_number'],
+            )
 
 
 class CreateReceptionistTests(StaffAPITestCase):
@@ -176,6 +202,24 @@ class CreateReceptionistTests(StaffAPITestCase):
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_create_receptionist_rejects_invalid_license_format(self):
+        payload = {
+            'email': 'rec_bad_license@test.com',
+            'first_name': 'Bob',
+            'last_name': 'Smith',
+            'role': 'RECEPTIONIST',
+            'license_number': 'PRC-12345',
+        }
+        response = self.client.post(
+            self.list_url, payload, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            'License number must be exactly 7 digits.',
+            response.data['license_number'],
+        )
 
 
 class PermissionTests(StaffAPITestCase):
@@ -389,6 +433,62 @@ class StaffListTests(StaffAPITestCase):
         self.assertEqual(len(response.data['results']), 2)
         self.assertEqual(response.data['total_pages'], 3)
 
+    def _create_alpha_staff(self):
+        for email, first_name in (
+            ('zoe@test.com', 'Zoe'),
+            ('alice@test.com', 'Alice'),
+            ('mike@test.com', 'Mike'),
+        ):
+            user = User.objects.create(
+                usr_email=email,
+                usr_first_name=first_name,
+                usr_last_name='User',
+                usr_role=UserRole.RECEPTIONIST,
+            )
+            StaffProfile.objects.create(
+                usr_id=user,
+                cln_id=self.clinic,
+                stf_position=StaffPosition.RECEPTIONIST,
+            )
+
+    def test_list_sorted_by_first_name_ascending_by_default(self):
+        self._create_alpha_staff()
+
+        response = self.client.get(
+            self.list_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [r['first_name'] for r in response.data['results']],
+            ['Alice', 'Clinic', 'Mike', 'Zoe'],
+        )
+
+    def test_list_sort_descending_by_first_name(self):
+        self._create_alpha_staff()
+
+        response = self.client.get(
+            self.list_url, {'sort': '-first_name'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [r['first_name'] for r in response.data['results']],
+            ['Zoe', 'Mike', 'Clinic', 'Alice'],
+        )
+
+    def test_list_sort_unknown_value_falls_back_to_default(self):
+        self._create_alpha_staff()
+
+        response = self.client.get(
+            self.list_url, {'sort': 'email'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [r['first_name'] for r in response.data['results']],
+            ['Alice', 'Clinic', 'Mike', 'Zoe'],
+        )
+
 
 class StaffDetailTests(StaffAPITestCase):
 
@@ -471,7 +571,7 @@ class BulkUploadTests(StaffAPITestCase):
     def test_bulk_upload_success(self):
         content = (
             f'{CSV_HEADER}\n'
-            'vet1@test.com,John,Doe,+63 912 000 0001,VETERINARIAN,LIC-100,2027-12-31\n'
+            'vet1@test.com,John,Doe,+63 912 000 0001,VETERINARIAN,1000001,2027-12-31\n'
             'rec1@test.com,Jane,Smith,+63 912 000 0002,RECEPTIONIST,,\n'
         )
         response = self._upload(content)
@@ -497,7 +597,7 @@ class BulkUploadTests(StaffAPITestCase):
             f'{CSV_HEADER}\n'
             'new1@test.com,Alice,Adams,+63 912 000 0003,RECEPTIONIST,,\n'
             'taken@test.com,Bob,Brown,+63 912 000 0004,RECEPTIONIST,,\n'
-            'new2@test.com,Carol,Clark,+63 912 000 0005,VETERINARIAN,LIC-200,2027-12-31\n'
+            'new2@test.com,Carol,Clark,+63 912 000 0005,VETERINARIAN,2000001,2027-12-31\n'
         )
         response = self._upload(content)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -533,6 +633,19 @@ class BulkUploadTests(StaffAPITestCase):
         self.assertEqual(response.data['success_count'], 0)
         self.assertEqual(response.data['fail_count'], 1)
         self.assertIn('License number is required', response.data['errors'][0]['errors'])
+
+    def test_bulk_upload_rejects_invalid_license_format(self):
+        content = (
+            f'{CSV_HEADER}\n'
+            'vetfmt@test.com,John,Doe,+63 912 000 0010,VETERINARIAN,LIC-100,2027-12-31\n'
+            'recfmt@test.com,Jane,Smith,+63 912 000 0011,RECEPTIONIST,ABC12345,\n'
+        )
+        response = self._upload(content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['success_count'], 0)
+        self.assertEqual(response.data['fail_count'], 2)
+        for row_error in response.data['errors']:
+            self.assertIn('License number must be exactly 7 digits.', row_error['errors'])
 
     def test_bulk_upload_invalid_role(self):
         content = (
@@ -654,13 +767,13 @@ class StaffUpdateTests(StaffAPITestCase):
     def test_update_license_fields(self):
         response = self.client.patch(
             self.vet_url, {
-                'license_number': 'LIC-NEW',
+                'license_number': '7654321',
                 'license_expiration_date': '2030-12-31',
             }, format='json',
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['license_number'], 'LIC-NEW')
+        self.assertEqual(response.data['license_number'], '7654321')
         self.assertEqual(response.data['license_expiration_date'], '2030-12-31')
 
     def test_update_rejects_empty_license_for_vet(self):
@@ -669,6 +782,17 @@ class StaffUpdateTests(StaffAPITestCase):
             **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_update_rejects_invalid_license_format(self):
+        response = self.client.patch(
+            self.vet_url, {'license_number': 'LIC-BAD1'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(
+            'License number must be exactly 7 digits.',
+            response.data['license_number'],
+        )
 
     def test_update_rejects_empty_license_date_for_vet(self):
         response = self.client.patch(
@@ -996,3 +1120,181 @@ class StaffStatsTests(StaffAPITestCase):
             self.stats_url, **self._auth_header(self.clinic_admin),
         )
         self.assertEqual(response.data['total'], 1)
+
+
+class StaffActivityEndpointTests(StaffAPITestCase):
+    """GET /api/staff/{id}/activity/ — current-month counters for the vet card."""
+
+    def setUp(self):
+        super().setUp()
+
+        self.vet_user = User.objects.create(
+            usr_email='activity_vet@test.com',
+            usr_first_name='Vera',
+            usr_last_name='Vet',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        self.vet = StaffProfile.objects.create(
+            usr_id=self.vet_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+
+        self.other_vet_user = User.objects.create(
+            usr_email='activity_other_vet@test.com',
+            usr_first_name='Otto',
+            usr_last_name='Other',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        self.other_vet = StaffProfile.objects.create(
+            usr_id=self.other_vet_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+
+        self.receptionist_user = User.objects.create(
+            usr_email='activity_rec@test.com',
+            usr_first_name='Rita',
+            usr_last_name='Reception',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        self.receptionist = StaffProfile.objects.create(
+            usr_id=self.receptionist_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        self.owner_user = User.objects.create(
+            usr_email='activity_owner@test.com',
+            usr_first_name='Olive',
+            usr_last_name='Owner',
+            usr_role=UserRole.OWNER,
+        )
+        self.owner = OwnerProfile.objects.create(usr_id=self.owner_user)
+        self.pet = Pet.objects.create(
+            own_id=self.owner, pet_name='Rex', pet_sex=Sex.MALE,
+        )
+        self.pet2 = Pet.objects.create(
+            own_id=self.owner, pet_name='Milo', pet_sex=Sex.MALE,
+        )
+        self.disease = Disease.objects.create(
+            dis_code='ACT_MANGE', dis_name='Activity Mange', dis_severity='LOW',
+        )
+
+    def _activity_url(self, staff_user_id):
+        return reverse('staff-activity', args=[staff_user_id])
+
+    def _apt(self, *, vet, pet=None, status=AppointmentStatus.PENDING,
+             scheduled_at=None, screening=None):
+        return Appointment.objects.create(
+            pet_id=pet or self.pet,
+            cln_id=self.clinic,
+            stf_id=vet,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=status,
+            apt_scheduled_at=scheduled_at or timezone.now(),
+            apt_screening=screening,
+        )
+
+    def _screening(self, *, compared_at=None):
+        return AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=self.disease,
+            usr_id=self.owner_user,
+            ais_confidence=90,
+            ais_model_version='test-1.0.0',
+            ais_compared_at=compared_at,
+        )
+
+    def test_counts_for_veterinarian(self):
+        now = timezone.now()
+        outside = timedelta(days=40)
+
+        # --- Appointments this month: completed + upcoming both count. ---
+        self._apt(vet=self.vet, pet=self.pet, status=AppointmentStatus.COMPLETED)
+        self._apt(vet=self.vet, pet=self.pet2, status=AppointmentStatus.CONFIRMED)
+        self._apt(vet=self.vet, pet=self.pet2, status=AppointmentStatus.COMPLETED)
+
+        # Excluded: cancelled / no-show / other vet / other months / deleted.
+        self._apt(vet=self.vet, status=AppointmentStatus.CANCELLED)
+        self._apt(vet=self.vet, status=AppointmentStatus.NO_SHOW)
+        self._apt(vet=self.other_vet, status=AppointmentStatus.COMPLETED)
+        self._apt(vet=self.vet, status=AppointmentStatus.COMPLETED, scheduled_at=now + outside)
+        self._apt(vet=self.vet, status=AppointmentStatus.COMPLETED, scheduled_at=now - outside)
+        deleted = self._apt(vet=self.vet, status=AppointmentStatus.COMPLETED)
+        Appointment.objects.filter(pk=deleted.pk).update(apt_deleted_at=now)
+
+        # --- Screenings. ---
+        # s1: reviewed this month through this vet's consultation -> counted.
+        # The consultation fires the post_save signal, which records the
+        # comparison and writes screening.con_id exactly as production does.
+        s1 = self._screening()
+        s1_apt = self._apt(vet=self.vet, pet=self.pet,
+                           status=AppointmentStatus.COMPLETED, screening=s1)
+        Consultation.objects.create(
+            apt_id=s1_apt, stf_id=self.vet, con_diagnosis='Mange infestation',
+        )
+        s1.refresh_from_db()
+        self.assertIsNotNone(s1.con_id)
+        self.assertIsNotNone(s1.ais_compared_at)
+
+        # s2: never reviewed -> excluded (no comparison recorded).
+        self._screening()
+
+        # s3: reviewed, but by the other vet -> excluded.
+        s3 = self._screening()
+        s3_apt = self._apt(vet=self.other_vet, pet=self.pet, screening=s3)
+        Consultation.objects.create(
+            apt_id=s3_apt, stf_id=self.other_vet, con_diagnosis='Hotspot',
+        )
+
+        # s4: reviewed by this vet last month -> excluded by the window.
+        # The consultation has no diagnosis, so the signal does not touch the
+        # screening; con_id and the old timestamp are set explicitly.
+        s4 = self._screening(compared_at=now - outside)
+        s4_apt = self._apt(vet=self.vet, pet=self.pet, scheduled_at=now - outside)
+        s4_con = Consultation.objects.create(
+            apt_id=s4_apt, stf_id=self.vet, con_diagnosis='',
+        )
+        s4.con_id = s4_con
+        s4.save(update_fields=['con_id'])
+
+        # s5: reviewed this month but not linked to a consultation -> no vet.
+        self._screening(compared_at=now)
+
+        response = self.client.get(
+            self._activity_url(str(self.vet_user.usr_id)),
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {
+            'appointments_this_month': 4,
+            'patients_seen_this_month': 2,
+            'screenings_reviewed_this_month': 1,
+        })
+
+    def test_returns_zeros_for_non_vet_staff(self):
+        response = self.client.get(
+            self._activity_url(str(self.receptionist_user.usr_id)),
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, {
+            'appointments_this_month': 0,
+            'patients_seen_this_month': 0,
+            'screenings_reviewed_this_month': 0,
+        })
+
+    def test_other_clinic_staff_returns_404(self):
+        response = self.client.get(
+            self._activity_url(str(self.other_admin.usr_id)),
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_requires_clinic_admin(self):
+        response = self.client.get(
+            self._activity_url(str(self.vet_user.usr_id)),
+            **self._auth_header(self.vet_user),
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

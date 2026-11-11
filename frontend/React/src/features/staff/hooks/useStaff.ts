@@ -5,6 +5,7 @@ export function useStaff(params?: {
   role?: string
   search?: string
   status?: string
+  sort?: string
   page?: number
   page_size?: number
 }) {

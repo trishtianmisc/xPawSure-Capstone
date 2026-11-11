@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 
 from django.utils import timezone
 
@@ -11,6 +12,7 @@ from appointments.models import (
 )
 from appointments.services import AppointmentService, CLINIC_TIMEZONE, DashboardService
 from appointments.tests.test_owner_booking import OwnerBookingBase
+from clinics.models import ClinicSettings
 from consultations.models import Consultation
 from consultations.services import ConsultationService, ConsultationStateError
 from notifications.models import Notification, NotificationType
@@ -20,6 +22,11 @@ class FollowUpFlowBase(OwnerBookingBase):
 
     def setUp(self):
         super().setUp()
+        # Most follow-up tests exercise the paid path, so the clinic charges a
+        # fee by default. Free-follow-up behaviour has its own test class.
+        ClinicSettings.objects.filter(cln_id=self.clinic).update(
+            cls_consultation_fee=Decimal('500.00'),
+        )
         source_scheduled_at = timezone.now()
         source_date = timezone.localtime(
             source_scheduled_at, CLINIC_TIMEZONE,
@@ -448,3 +455,31 @@ class FollowUpExpiryTests(FollowUpFlowBase):
         )
         self.assertEqual(slot.vsl_status, SlotStatus.AVAILABLE)
         self.assertIsNone(slot.vsl_appointment_id)
+
+
+class FreeFollowUpTests(FollowUpFlowBase):
+
+    def setUp(self):
+        super().setUp()
+        ClinicSettings.objects.filter(cln_id=self.clinic).update(
+            cls_consultation_fee=Decimal('0.00'),
+        )
+
+    def test_confirm_sets_confirmed_immediately(self):
+        follow_up = Appointment.objects.get(
+            apt_source_consultation=self._create_follow_up(),
+        )
+
+        response = self._confirm(follow_up, self._slot())
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['apt_status'], AppointmentStatus.CONFIRMED)
+        follow_up.refresh_from_db()
+        self.assertEqual(follow_up.apt_status, AppointmentStatus.CONFIRMED)
+        self.assertTrue(
+            Notification.objects.filter(
+                usr_id=self.owner_user,
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ntf_reference_id=str(follow_up.apt_id),
+            ).exists(),
+        )

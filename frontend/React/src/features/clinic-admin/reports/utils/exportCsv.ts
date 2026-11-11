@@ -1,6 +1,8 @@
+import { formatPeso } from '../../../../utils/currency'
 import type {
   AppointmentsReport,
   PatientsReport,
+  ReportRevenue,
   ReportSummary,
   ScreeningsReport,
   VetWorkloadReport,
@@ -62,6 +64,7 @@ export interface ReportCsvInput {
   workload?: VetWorkloadReport
   screenings?: ScreeningsReport
   patients?: PatientsReport
+  revenue?: ReportRevenue
 }
 
 // One file, one section per report panel, so a single download captures the
@@ -82,11 +85,19 @@ export function reportCsvRows(
     [],
     ['Key metrics', 'Current period', 'Previous period'],
     ['Total appointments', summary.total_appointments, summary.previous.total_appointments],
-    ['Completion rate', pct(summary.completion_rate), pct(summary.previous.completion_rate)],
     ['No-show rate', pct(summary.no_show_rate), pct(summary.previous.no_show_rate)],
-    ['New patients (all vets)', summary.new_patients, summary.previous.new_patients],
     ['Vet agreement rate', rateCell(agreement.current), rateCell(agreement.previous)],
+    ['New patients (all vets)', summary.new_patients, summary.previous.new_patients],
   ]
+
+  // Rows mirror the on-page cards, so revenue only exports when loaded.
+  if (input.revenue) {
+    rows.push([
+      'Revenue',
+      formatPeso(input.revenue.revenue),
+      formatPeso(input.revenue.previous_revenue),
+    ])
+  }
 
   if (input.appointments) {
     rows.push(

@@ -82,3 +82,12 @@ export interface PatientsReport {
   by_sex: SexCount[]
   age_buckets: AgeBucketCount[]
 }
+
+export interface ReportRevenue {
+  revenue: string
+  currency: string
+  payment_count: number
+  previous_revenue: string
+  date_from: string
+  date_to: string
+}

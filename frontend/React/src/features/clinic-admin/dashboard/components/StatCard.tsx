@@ -7,10 +7,11 @@ interface StatCardProps {
   trend?: { direction: 'up' | 'down'; value: string }
   hint?: string
   className?: string
+  valueClassName?: string
 };
 
 
-export function StatCard({ icon, label, value, trend, hint, className = '' }: StatCardProps) {
+export function StatCard({ icon, label, value, trend, hint, className = '', valueClassName = 'text-4xl' }: StatCardProps) {
   return (
     <div className={`rounded-xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-stone-700 dark:bg-stone-800 ${className}`}>
       <div className="flex items-start justify-between">
@@ -26,7 +27,7 @@ export function StatCard({ icon, label, value, trend, hint, className = '' }: St
           </span>
         )}
       </div>
-      <p className="mt-4 text-4xl font-extrabold tracking-tight text-stone-950 dark:text-stone-100">
+      <p className={`mt-4 font-extrabold tracking-tight text-stone-950 dark:text-stone-100 ${valueClassName}`}>
         {value}
       </p>
       <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">

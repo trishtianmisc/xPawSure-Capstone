@@ -20,8 +20,13 @@ export async function getClinicDashboardStats(): Promise<ClinicDashboardStats> {
   return data
 }
 
-export async function getScreeningStats(): Promise<ScreeningStats> {
-  const { data } = await http.get<ScreeningStats>('/screenings/stats/')
+export interface ScreeningStatsQuery {
+  date_from?: string
+  date_to?: string
+}
+
+export async function getScreeningStats(params: ScreeningStatsQuery = {}): Promise<ScreeningStats> {
+  const { data } = await http.get<ScreeningStats>('/screenings/stats/', { params })
   return data
 }
 

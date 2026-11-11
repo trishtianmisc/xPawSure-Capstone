@@ -6,14 +6,15 @@
     "@expo-google-fonts/poppins": "^0.4.1",
     "@expo/vector-icons": "^15.0.3",
     "@hookform/resolvers": "^5.4.0",
-    "@react-native-async-storage/async-storage": "^3.1.1",
-    "@react-native-community/datetimepicker": "8.4.4",
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.6.0",
     "@tanstack/react-query": "^5.101.3",
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-react-native": "^1.0.0",
     "axios": "^1.18.1",
-    "expo": "~55.0.31",
+    "expo": "~55.0.32",
     "expo-asset": "~55.0.20",
+    "expo-build-properties": "~55.0.18",
     "expo-camera": "~55.0.23",
     "expo-constants": "~55.0.17",
     "expo-crypto": "~55.0.19",
@@ -23,9 +24,12 @@
     "expo-image-manipulator": "~55.0.21",
     "expo-image-picker": "~55.0.24",
     "expo-linking": "~55.0.17",
+    "expo-media-library": "~55.0.21",
     "expo-notifications": "~55.0.27",
+    "expo-print": "~55.0.19",
     "expo-router": "~55.0.18",
     "expo-secure-store": "~55.0.18",
+    "expo-sharing": "~55.0.25",
     "expo-splash-screen": "~55.0.25",
     "expo-status-bar": "~55.0.6",
     "react": "19.2.0",
@@ -36,7 +40,8 @@
     "react-native-qrcode-svg": "^6.3.21",
     "react-native-safe-area-context": "~5.6.2",
     "react-native-screens": "~4.23.0",
-    "react-native-svg": "15.15.5",
+    "react-native-svg": "15.15.3",
+    "react-native-view-shot": "4.0.3",
     "react-native-web": "~0.21.0",
     "react-native-webview": "^13.16.0",
     "zod": "^4.4.3"
@@ -51,14 +56,24 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "compute:reference": "node scripts/compute_training_reference_tfjs.js",
-    "test": "npm run test:screening && npm run test:appointment && npm run test:payment",
+    "test": "npm run test:screening && npm run test:appointment && npm run test:payment && npm run test:records",
     "test:screening": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/screening/__tests__/comparison.test.ts features/screening/__tests__/resultNavigationParams.test.ts features/screening/__tests__/savePayload.test.ts features/screening/__tests__/careGuidelines.test.ts features/screening/__tests__/reviewOutcome.test.ts ai/constants/__tests__/classes.test.ts ai/__tests__/weightsValidation.test.ts ai/__tests__/screeningState.test.ts features/pet/__tests__/qr.test.ts features/vet/__tests__/schedule.test.ts",
     "test:appointment": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/appointment/__tests__/findConflictingAppointment.test.ts",
     "test:payment": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/payment/__tests__/pickAppointmentPayment.test.ts",
+    "test:records": "node --experimental-strip-types --experimental-loader ./scripts/ts-resolve-loader.mjs --test features/records/__tests__/prescriptionPdf.test.ts features/records/__tests__/prescriptionImage.test.ts",
     "test:bayesian": "node scripts/test-bayesian-logic.js",
     "test:adaptive": "node scripts/test-adaptive-logic.js",
     "test:summary": "node scripts/test-summary-logic.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-fs"
+        ]
+      }
+    }
   },
   "private": true
 }

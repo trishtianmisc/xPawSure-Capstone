@@ -655,7 +655,8 @@ Requires authentication. Receptionist or Clinic Admin (read). Owner bookings use
 
 Owner: Returns own pets' appointments. `REVIEW` follow-ups are hidden from
 owners until the receptionist schedules them. `CONFIRMATION` appointments are
-visible read-only and displayed as `AWAITING PAYMENT`.
+visible and displayed as `AWAITING PAYMENT` with an in-app payment action (see
+`POST /api/owner/appointments/{id}/checkout/`).
 Clinic staff: Returns clinic appointments (clinic-scoped).
 
 Query parameters:
@@ -667,6 +668,9 @@ Query parameters:
 - overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
   with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
   "Needs attention" indicator; additive, combines with the other filters.
+- sort: `apt_scheduled_at` (oldest first) or `-apt_scheduled_at` (newest first,
+  default). Unknown values fall back to the default. Ordering is applied in SQL
+  before pagination, with `apt_id` as a tie-breaker.
 
 Notes:
 
@@ -777,6 +781,11 @@ Clinic Admin (read-only). Appointments outside the caller's clinic return `404`.
 Owner: own pets' appointments only; `REVIEW` follow-ups return `404`. Clinic
 staff: appointments within their own clinic, otherwise `404`.
 
+The owner detail response includes `consultation_fee`, the clinic's current fee,
+so the mobile follow-up pay card can show the amount before it creates a
+checkout. The value does not change an existing payment; the backend owns the
+amount charged.
+
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
 details. Beyond the shared appointment fields it adds:
@@ -798,10 +807,15 @@ details. Beyond the shared appointment fields it adds:
 
 Requires authentication. Receptionist only.
 
-Schedules a `REVIEW` follow-up appointment and moves it to `CONFIRMATION`
-(displayed as `AWAITING PAYMENT`). The slot must be future, available, in the
-same clinic, and assigned to the follow-up's veterinarian. The slot becomes
-`BOOKED` and `apt_scheduled_at` becomes the slot start time.
+Schedules a `REVIEW` follow-up appointment. When the clinic's consultation fee
+is greater than `0` it moves to `CONFIRMATION` (displayed as `AWAITING PAYMENT`)
+and the owner is notified with a payment prompt (`APPOINTMENT_CREATED`). When
+the fee is `0` it moves directly to `CONFIRMED` and the owner is notified with
+`APPOINTMENT_CONFIRMED`; no payment is created.
+
+The slot must be future, available, in the same clinic, and assigned to the
+follow-up's veterinarian. The slot becomes `BOOKED` and `apt_scheduled_at`
+becomes the slot start time.
 
 Request:
 
@@ -819,8 +833,51 @@ Responses:
 - 409: slot is unknown, blocked/taken/past, or belongs to another
   veterinarian/clinic
 
-This endpoint is the only way to perform `REVIEW -> CONFIRMATION`. A generic
-`PATCH` cannot make that transition.
+This endpoint is the only way to perform `REVIEW -> CONFIRMATION` or
+`REVIEW -> CONFIRMED`. A generic `PATCH` cannot make either transition.
+
+---
+
+## POST /api/owner/appointments/{id}/checkout/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets. The appointment must be a `FOLLOW_UP` in `CONFIRMATION`, and its
+scheduled time must still be in the future.
+
+Starts or resumes the payment for a follow-up that is already scheduled. The
+slot is already `BOOKED`; this endpoint does not create an appointment or
+consume a slot.
+
+Request:
+
+{
+  "method": "GCASH | CARD"
+}
+
+The amount always comes from the clinic's consultation fee. A pending attempt
+is reused, so tapping Pay twice does not create duplicate payments. A failed,
+expired, or void attempt stays as history and a new attempt is created.
+
+`appointment_id` remains `null` on the payment until it is `PAID`; the intended
+appointment is tracked in `pay_metadata.appointment_id`. On successful payment
+the backend links `APT_ID`, moves the appointment to `CONFIRMED`, and notifies
+the owner (`APPOINTMENT_CONFIRMED`). If the appointment was cancelled or is
+already past due when payment settles, the payment stays recorded for manual
+reconciliation and the appointment is not changed.
+
+Responses:
+
+- 201: pending payment object with `checkout_url`
+- 400 `VALIDATION_ERROR` / `METHOD_NOT_ALLOWED`
+- 404 `APPOINTMENT_NOT_FOUND` / `PET_NOT_FOUND`
+- 409 `NOT_A_FOLLOW_UP` / `NOT_AWAITING_PAYMENT` / `APPOINTMENT_EXPIRED` /
+  `ALREADY_PAID` / `PAYMENT_NOT_REQUIRED`
+- 502 `PROVIDER_ERROR` · 503 `PROVIDER_NOT_CONFIGURED` / `PROVIDER_MISCONFIGURED`
+
+A pending checkout can be cancelled with `POST /api/payments/{id}/cancel/`.
+That voids the checkout only; the appointment stays `CONFIRMATION` until it is
+paid or auto-cancelled at the scheduled time. The owner cannot cancel a
+`CONFIRMATION` follow-up itself.
 
 When the appointment has a linked screening, the payload embeds a `screening`
 summary object (`ais_id`, `disease`, `ais_confidence`, `ais_model_version`,
@@ -983,6 +1040,11 @@ Payments gate booking: the consultation fee is configured per clinic
 (`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`, default `0.00`). A fee of `0` disables
 the gate entirely.
 
+`POST /api/payments/checkout/` is for a new booking whose slot is still
+available. A follow-up whose slot is already booked uses
+`POST /api/owner/appointments/{id}/checkout/` instead. Zero-fee follow-ups are
+confirmed by the scheduling endpoint and never create a payment.
+
 Providers: `PAYMENT_MODE=mock` (default, signed checkout page in the web app) or
 `PAYMENT_MODE=paymongo` (hosted checkout + webhook). See `docs/database/PAYMENT.md`.
 
@@ -1021,7 +1083,8 @@ Payment object:
 
 ## POST /api/payments/checkout/
 
-Requires authentication. Receptionist, clinic admin, or owner.
+Requires authentication. Receptionist or owner — clinic admins get `403`
+(clinic admins read payments; only the counter and the payer record them).
 
 Creates the payment for a booking. The slot must still be `AVAILABLE`; owners
 pay only for their own pets and must pass the `screening_id` their booking will
@@ -1060,10 +1123,30 @@ Responses:
 Requires authentication. Receptionist or clinic admin. Scoped to the caller's
 clinic; owners get `403`.
 
-Query params: `status`, `method`, `reference` (partial), `appointment` (uuid),
-`date_from`, `date_to` (YYYY-MM-DD), `page`, `page_size` (max 100).
+Query params: `status`, `method`, `reference` (partial match on receipt
+number, owner first/last name, or pet name), `appointment` (uuid),
+`date_from`, `date_to` (creation date, UTC calendar days),
+`paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
+unpaid rows, so a range here reconciles with the revenue KPI for the same
+range), `page`, `page_size` (max 100).
 
-Response (200): `{ "total", "page", "page_size", "total_pages", "results": [payment] }`
+`paid_from`/`paid_to` are inclusive clinic-local days (`[from 00:00, to+1
+00:00)` in the clinic's time zone). Validation: `400 VALIDATION_ERROR` when a
+date is malformed, `paid_from` is after `paid_to`, or the paid range exceeds
+366 days.
+
+Response (200):
+
+{ "total", "page", "page_size", "total_pages",
+  "summary": { "paid_total", "pending_total", "refunded_total", "payment_count" },
+  "results": [payment] }
+
+`summary` aggregates EVERY payment matching the filters (independent of
+`page`/`page_size`) with one conditional-sum query on the same queryset.
+Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
+(never netted against refunds) and honours the `paid_from`/`paid_to`
+payment-date window, so it equals the Reports revenue KPI for the same range.
+`payment_count` equals `total`.
 
 ---
 
@@ -1076,6 +1159,11 @@ payments.
 `?status=PENDING` is how the mobile app finds a checkout that was abandoned
 mid-payment and offers "resume payment".
 
+`?appointment={id}` matches both the linked `PAID` payment and pending
+follow-up attempts whose `pay_metadata.appointment_id` equals the appointment.
+That lets the appointment detail screen resume a follow-up checkout before the
+payment is linked.
+
 ---
 
 ## GET /api/payments/{id}/
@@ -1087,7 +1175,9 @@ clinic's payments, otherwise `404`.
 
 ## POST /api/payments/{id}/cancel/
 
-Requires authentication. Same access rule as the detail endpoint.
+Requires authentication. Receptionist or owner (the payer) — clinic admins get
+`403`: like checkout, cancelling is a counter/owner action even though clinic
+admins may read the payment.
 
 Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
 `409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
@@ -1374,10 +1464,12 @@ Query params:
 
 Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
-specific_disease, treatment, notes, follow_up_required,
+specific_disease, prescription_id, treatment, notes, follow_up_required,
 follow_up_target_date, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
+`prescription_id` is the linked prescription UUID when one exists, otherwise
+`null`. A consultation has at most one prescription.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
 when no follow-up is requested.
 
@@ -1484,10 +1576,17 @@ Query params:
 - pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
   list; invalid UUID returns 400.
 
-Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
-instructions, items, created_at } where items is an array of
+Response (200): Array of { id, consultation_id, pet_id, pet_name, pet_breed,
+pet_sex, pet_birth_date, pet_weight, pet_color, owner_name, veterinarian,
+vet_license_number, clinic_name, clinic_address, clinic_phone, instructions,
+items, created_at } where items is an array of
 { id, medicine_name, generic_name, dosage, frequency, duration, route,
 quantity, notes }
+
+The pet, owner, clinic, and veterinarian-license fields are read-only and
+support the owner mobile prescription PDF, which mirrors the veterinarian web
+printable document. They are resolved through the prescription's consultation
+and appointment, so the owner can only receive values for their own pets.
 
 ---
 
@@ -1887,16 +1986,30 @@ logs the API key or image bytes.
 Requires authentication (Clinic Admin). Clinic is resolved from the
 authenticated staff profile; other roles get 403.
 
-Screenings are scoped to pets that have a non-deleted appointment at the
-authenticated admin's clinic (any appointment status). A pet treated at multiple
+Screenings are scoped to pets that are clinic patients under the canonical
+patient rule: at least one non-deleted appointment at the authenticated
+admin's clinic whose status is neither CANCELLED nor NO_SHOW (the same rule
+as the Patients directory). Pets whose only appointments here were cancelled
+or no-shows are excluded, and each screening is counted exactly once
+regardless of how many appointments its pet has. A pet treated at multiple
 clinics therefore appears in each clinic's stats.
+
+Optional query parameters `date_from` and `date_to` (`YYYY-MM-DD`) restrict
+`screenings_by_disease` to screenings created within that inclusive range,
+resolved in the clinic's local days (a screening at 00:30 clinic time belongs to
+that day). Either parameter may be sent alone to bound only that side. With no
+date parameters the response is all-time (previous behavior, unchanged).
+Malformed dates or `date_from` after `date_to` return `400` with
+`{"detail": "...", "code": "VALIDATION_ERROR"}`.
 
 `screenings_pending_review` is derived, not read from `ais_status`: it counts
 screenings whose `ais_status` is `PENDING_REVIEW` **and** `ais_compared_at` is
 null. The status field is not transitioned after comparison in production, so
 reviewed screenings are identified by `ais_compared_at` (the appointment detail
-page uses the same rule). `screenings_by_disease` counts all screenings,
-reviewed or not.
+page uses the same rule). Pending review is a work queue and is therefore never
+windowed: it always counts all screenings regardless of the date parameters.
+`screenings_by_disease` counts all screenings in the requested window, reviewed
+or not.
 
 Response `200`:
 
@@ -2037,6 +2150,133 @@ Super Admin only.
 
 ---
 
+# 10A. Super Admin Endpoints
+
+All endpoints below are Super Admin only (`IsSuperAdmin`). Every write is
+audit-logged. Medical records are never writable through these endpoints — the
+per-clinic drill-down listings are strictly read-only.
+
+## GET /api/super-admin/analytics/overview/
+
+Platform-wide aggregates: clinics by status, users by role, owners, pets,
+appointments by status, consultations, prescriptions, vaccinations, AI
+screenings, payments (paid amount/count), and 12-month zero-filled growth
+series for clinics, users, pets, and appointments.
+
+## GET /api/super-admin/clinics/{id}/overview/
+
+Single-clinic aggregates: staff breakdown by position and activity, owners,
+pets, appointments by status and this-month count, consultations,
+prescriptions, vaccinations, screenings, and payments. Returns `404` for
+unknown or soft-deleted clinics.
+
+## GET /api/super-admin/admins/
+
+Cross-clinic listing of every Clinic Admin account.
+
+Query params: `clinic_id`, `search` (name, email, or clinic name), `status`
+(`ACTIVE` | `PENDING` | `DEACTIVATED`), `page`, `page_size`. Shares the
+standard pagination envelope.
+
+## GET /api/super-admin/clinics/{id}/admins/
+
+Clinic Admin accounts for one clinic.
+
+## POST /api/super-admin/clinics/{id}/admins/
+
+Creates an additional Clinic Admin for an existing clinic. Body: `email`,
+`first_name`, `last_name`, optional `phone`. Generates a temporary password,
+sets `must_change_password`, emails the credentials to the admin, and returns
+`temp_password` once (it is never retrievable again). Returns `400` on
+duplicate email or invalid phone.
+
+## POST /api/super-admin/admins/{user_id}/{action}/
+
+Actions:
+
+- `resend-credentials` — rotates the password, sets `must_change_password`,
+  increments `usr_token_version` (revoking all active sessions), and resends
+  the email. Throttled (`admin-credentials`, default `10/hour`).
+- `deactivate` — sets `usr_is_active=false` and revokes outstanding tokens.
+  Rejects deactivating your own account.
+- `activate` — sets `usr_is_active=true`.
+
+Only `CLINIC_ADMIN` targets resolve; anything else returns `404`.
+
+## GET /api/super-admin/clinics/{id}/staff/
+
+Read-only staff listing for one clinic (reuses the staff service). Query
+params: `role`, `search`, `status`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/owners/
+
+Read-only owner listing scoped to pets seen at that clinic. Query params:
+`search`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/pets/
+
+Read-only pet listing scoped to appointments at that clinic. Query params:
+`search`, `page`, `page_size`.
+
+## GET /api/super-admin/clinics/{id}/appointments/
+
+Read-only appointment listing for one clinic. Query params: `status`,
+`page`, `page_size`.
+
+## GET /api/super-admin/audit-logs/
+
+Cross-clinic audit trail. Query params: `clinic_id` (resolves to that
+clinic's staff user IDs), `module`, `action`, `search` (description or table
+name), `date_from` / `date_to` (`YYYY-MM-DD`, inclusive), `page`,
+`page_size`. Shares the standard pagination envelope.
+
+## GET /api/super-admin/owners/
+
+Cross-clinic pet owner directory. Query params: `clinic_id` (owners linked
+through pets seen at that clinic), `search` (name or email), `page`,
+`page_size`. Shares the standard pagination envelope. Each row includes
+`first_name`, `last_name`, `email`, `phone`, `address`, `is_active`,
+`pet_count`, `created_at`.
+
+## GET /api/super-admin/owners/{own_id}/
+
+Owner detail with `pets` (active, non-soft-deleted) and the distinct
+`clinics` their pets have appointments at. Returns `404` for unknown owners.
+
+## PUT /api/super-admin/owners/{own_id}/
+
+Edits contact info only: `first_name`, `last_name`, optional `phone`,
+optional `address`. Email and role are **not** editable — unknown fields
+reject with `400`. Audit-logged (`UPDATE`, module `owners`) with old/new
+values. Returns the updated detail.
+
+## GET /api/super-admin/vaccinations/
+
+Read-only cross-clinic vaccination listing (medical history is never
+writable through Super Admin). Query params: `clinic_id`, `search` (vaccine,
+pet, or owner name), `date_from` / `date_to` (`vac_date_given`, inclusive),
+`page`, `page_size`. Shares the standard pagination envelope.
+
+## GET /api/super-admin/analytics/accuracy/
+
+Preliminary AI accuracy: on-device classifier predictions vs. the
+veterinarian's confirmed diagnosis (`ais_is_correct`, recorded after the
+fact by the consultation signal). Never fuses classifier and review outputs;
+agreement is not confirmation. Query params: `clinic_id`, `model_version`,
+`date_from` / `date_to`. Returns `summary` (total, compared, correct,
+incorrect, awaiting comparison, accuracy %), `model_versions`,
+`by_model_version`, `by_disease`, `by_clinic`, and a zero-filled monthly
+`trend`.
+
+## GET /api/super-admin/analytics/diseases/
+
+Cross-clinic disease distribution. Query params: `clinic_id`, `date_from` /
+`date_to`. Returns `totals`, `screenings_by_disease` (structured prediction
+with severity), `confirmed_by_disease` (consultation free text grouped
+case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
+
+---
+
 # 11. User Management Endpoints (Clinic Admin)
 
 ## GET /api/staff/
@@ -2044,6 +2284,11 @@ Super Admin only.
 Clinic Admin.
 
 Returns staff members within the admin's own clinic.
+
+Query parameters: `page`, `page_size`, `role`, `search`, `status`, and `sort`.
+`sort` accepts `first_name` (default, A→Z) or `-first_name` (Z→A); unknown
+values fall back to the default ordering. Ordering happens in SQL before
+pagination.
 
 ## GET /api/veterinarians/
 
@@ -2061,14 +2306,56 @@ Clinic Admin.
 
 Creates staff users (VETERINARIAN, RECEPTIONIST) within the admin's own clinic.
 
+`license_number`, whenever provided, must be exactly 7 digits (e.g. `0123456`);
+letters, hyphens, and other lengths are rejected with a validation error. The
+rule applies to every staff write path: create, `PATCH /api/staff/{id}/`, and
+`POST /api/staff/bulk-upload/`. Veterinarians must also provide a license number
+and expiration date, as before.
+
 The `201` response includes `temp_password` exactly once (it is also emailed to
 the staff member via the welcome email). It is never returned again — the
 `reset-password` and `resend-welcome` actions deliver a new temporary password by
 email only.
 
 Related endpoints: `GET /api/staff/stats/`, `GET`/`PATCH /api/staff/{id}/`,
-`POST /api/staff/{id}/{action}/` (activate | deactivate | reset-password |
-resend-welcome), `POST /api/staff/bulk-upload/`.
+`GET /api/staff/{id}/activity/`, `POST /api/staff/{id}/{action}/`
+(activate | deactivate | reset-password | resend-welcome),
+`POST /api/staff/bulk-upload/`.
+
+## GET /api/staff/{staff_id}/activity/
+
+Clinic Admin.
+
+Returns the current-month activity counters for one staff member (the
+Activity Summary card, which the web app renders only for veterinarians).
+`staff_id` is the same id used by `GET /api/staff/{id}/`; staff from another
+clinic receive the usual `404`. Non-veterinarian staff return `0` for all
+three fields.
+
+The window is the current calendar month in the clinic's local timezone
+(`ClinicSettings.cls_timezone`, default `Asia/Manila`): the first of the
+month up to, but not including, the first of the next month.
+
+| Field | Definition |
+|---|---|
+| `appointments_this_month` | Non-deleted appointments assigned to this staff member scheduled inside the window, excluding `CANCELLED` and `NO_SHOW` (the canonical patient rule). |
+| `patients_seen_this_month` | Distinct pets with at least one `COMPLETED` appointment from the same filtered set; never greater than `appointments_this_month`. |
+| `screenings_reviewed_this_month` | Screenings whose review (`ais_compared_at`) falls inside the window and that are credited to this vet through the consultation recorded at review time (`con_id → Consultation.stf_id`). |
+
+Screening credit rule: a review is only ever recorded through a consultation
+on the booking that carries the screening (`record_comparison` writes
+`screening.con_id`), and consultations are restricted to the appointment's
+veterinarian — so the consultation's vet is the vet who reviewed. A screening
+never attached to a booking is never marked reviewed, and a review not linked
+to a consultation (`con_id` NULL) is not credited to any vet.
+
+```json
+{
+  "appointments_this_month": 12,
+  "patients_seen_this_month": 8,
+  "screenings_reviewed_this_month": 5
+}
+```
 
 ---
 
@@ -2237,7 +2524,7 @@ Response:
 
 # 15. Clinic Admin Reports Endpoints (Web)
 
-All five endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
+All six endpoints are Clinic Admin only, `GET` only (`IsClinicAdminReadOnly`).
 Any write method returns `403`; unauthenticated requests return `401`. The
 clinic scope always comes from the caller's own staff profile, never from the
 request, so one clinic's admin cannot read another clinic's numbers.
@@ -2376,14 +2663,17 @@ Response 200:
 
 Scoping notes:
 
-- Clinic scope uses a pet-level semi-join (the pet has any non-deleted
-  appointment at this clinic), so a screening still counts even when it was
-  not attached to a booking. One row per screening regardless of how many
-  appointments the pet has.
-- With `vet_id` supplied, only screenings referenced by an appointment of
-  that vet (in this clinic) are counted; unbooked screenings drop out.
-  Clinic-wide figures include screenings not linked to a booking — the UI
-  shows this caveat next to the filter.
+- Clinic scope uses a pet-level semi-join under the canonical patient rule
+  (the pet has at least one non-deleted appointment at this clinic whose
+  status is neither CANCELLED nor NO_SHOW), so a screening still counts even
+  when it was not attached to a booking — but never for pets whose only
+  appointments here were cancelled or no-shows. One row per screening
+  regardless of how many appointments the pet has.
+- With `vet_id` supplied, only screenings referenced by a qualifying
+  (non-cancelled, non-no-show) appointment of that vet (in this clinic) are
+  counted; unbooked screenings and cancelled bookings drop out. Clinic-wide
+  figures include screenings not linked to a booking — the UI shows this
+  caveat next to the filter.
 - `ais_confidence` is stored as a 0-100 percentage and returned as-is;
   `avg_confidence` is `0.0` when there are no screenings.
 - "Reviewed" is derived: `ais_compared_at` is set or the status moved off
@@ -2435,7 +2725,7 @@ Scoping notes:
 
 Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
 `/clinic/reports`). Exports are client-side: one multi-section CSV covering
-every loaded panel (KPIs, status breakdown, daily series, workload,
+every loaded panel (KPIs, revenue, status breakdown, daily series, workload,
 screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
 plus a
 print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
@@ -2448,3 +2738,42 @@ status legend / workload rows deep-link to
 `/clinic/appointments?status&vet_id&date_from&date_to` — the appointments page
 initializes its filters from those URL params (changes written with
 `replace`).
+
+## GET /api/reports/revenue/
+
+Query parameters: shared parameters above.
+
+Response 200:
+
+```json
+{
+  "revenue": "12345.60",
+  "currency": "PHP",
+  "payment_count": 42,
+  "previous_revenue": "11000.00",
+  "date_from": "2026-10-01",
+  "date_to": "2026-10-30"
+}
+```
+
+Scoping notes:
+
+- Sums `PAYMENT.PAY_AMOUNT` for payments whose `PAY_STATUS` is `PAID` at the
+  caller's clinic (`PAYMENT.CLN_ID` — the clinic foreign key on the payment
+  itself, so payments not yet linked to an appointment still count) inside the
+  window `[date_from 00:00, date_to + 1 day 00:00)` in the clinic's timezone,
+  on `PAY_PAID_AT` (the moment the money was confirmed: cash recorded at
+  checkout, or the provider webhook/mocked confirmation). `PENDING`, `FAILED`,
+  `EXPIRED`, `REFUNDED`, and `VOID` never count; a payment collected but never
+  booked still counts.
+- `vet_id` narrows the sum to payments linked to that veterinarian's
+  appointments (`PAYMENT.APT_ID → APPOINTMENT.STF_ID`); payments without an
+  appointment link are excluded only under `vet_id`, never in the unfiltered
+  view. The UI states this caveat when a vet is selected.
+- `revenue` and `previous_revenue` are fixed two-decimal strings (never
+  floats) and `previous_revenue` covers the equal-length prior window used by
+  every other report. An empty window returns `"0.00"`, never `null`.
+  `currency` is the recorded payment currency (`PHP`). `payment_count` counts
+  the `PAID` payments summed — one payment per consultation-fee collection.
+- This endpoint is read-only and never triggers payment expiry or
+  reconciliation side effects.

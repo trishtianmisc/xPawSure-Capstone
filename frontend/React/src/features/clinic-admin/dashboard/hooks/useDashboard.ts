@@ -4,6 +4,7 @@ import {
   dashboardService,
   getClinicDashboardStats,
   getScreeningStats,
+  type ScreeningStatsQuery,
 } from '../services/dashboard.service'
 
 export function useDashboard() {
@@ -22,10 +23,10 @@ export function useClinicDashboardStats() {
   })
 }
 
-export function useScreeningStats() {
+export function useScreeningStats(params: ScreeningStatsQuery = {}) {
   return useQuery({
-    queryKey: ['clinic-admin', 'dashboard', 'screenings'],
-    queryFn: getScreeningStats,
+    queryKey: ['clinic-admin', 'dashboard', 'screenings', params],
+    queryFn: () => getScreeningStats(params),
     staleTime: 30_000,
   })
 }
