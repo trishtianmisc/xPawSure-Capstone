@@ -43,7 +43,7 @@ Jest and React Native Testing Library are not configured, so there are no compon
 
 1. From `mobile/`, launch the project's normal Expo development setup on a device with camera and photo-library access.
 2. Sign in as an owner with at least one pet.
-3. Backend access is required for the image-validation review and the save-and-book path. Real review calls need a valid `ANTHROPIC_API_KEY` in the backend `.env`; without it, photos report `NOT_CONFIGURED` and no screening runs.
+3. Backend access is required for the image-validation review and the save-and-book path. Real review calls need a valid `ANTHROPIC_API_KEY` in the backend `.env`; without it, photos report `NOT_CONFIGURED` and the app shows a preview-only screening: the on-device classifier runs, the result page displays a warning banner, and saving and booking stay disabled. Other review failures (timeout, rate limit, provider error) still abort the screening.
 4. Keep the backend reachable from the device (`EXPO_PUBLIC_API_URL` in `mobile/.env` must point at the machine's current LAN IP).
 
 ## Manual Scenarios

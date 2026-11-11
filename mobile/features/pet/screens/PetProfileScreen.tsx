@@ -59,6 +59,7 @@ export default function PetProfileScreen() {
   const scrollViewRef = useRef<ScrollView>(null)
   const qrSectionY = useRef(0)
   const [confirmVisible, setConfirmVisible] = useState(false)
+  const publicProfileUrl = pet ? buildPetPublicUrl(pet.qr_code || pet.id) : null
 
   const scrollToQrSection = () => {
     scrollViewRef.current?.scrollTo({ y: qrSectionY.current, animated: true })
@@ -226,17 +227,26 @@ export default function PetProfileScreen() {
         >
           <Text style={styles.sectionTitle}>QR Code</Text>
           <View style={styles.qrCard}>
-            <View style={styles.qrContainer}>
-              <QRCode
-                value={buildPetPublicUrl(pet.qr_code || pet.id)}
-                size={140}
-                backgroundColor="#FFFFFF"
-                color="#000000"
-              />
-            </View>
-            <Text style={styles.qrHint}>
-              Scan this code to view {pet.name}'s public profile
-            </Text>
+            {publicProfileUrl ? (
+              <>
+                <View style={styles.qrContainer}>
+                  <QRCode
+                    value={publicProfileUrl}
+                    size={140}
+                    backgroundColor="#FFFFFF"
+                    color="#000000"
+                  />
+                </View>
+                <Text style={styles.qrHint}>
+                  Scan this code to view {pet.name}'s public profile
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.qrHint}>
+                QR sharing is unavailable: this build has no public web URL
+                configured (EXPO_PUBLIC_WEB_URL).
+              </Text>
+            )}
           </View>
         </View>
 

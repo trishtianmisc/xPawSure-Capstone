@@ -170,7 +170,7 @@ export default function ResultScreen() {
     ? null
     : RESULT_STATES.includes(params.state as ScreeningResultState)
       ? (params.state as ScreeningResultState)
-      : 'DISEASE_DETECTED'
+      : 'UNCERTAIN'
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -217,6 +217,10 @@ export default function ResultScreen() {
   const [savedId, setSavedId] = useState<string | null>(null)
 
   const claudeResponse = useMemo(() => parseClaude(params.claude), [params.claude])
+  // Backend had no review key: classifier output is preview-only and must
+  // never be savable. canBook already enforces this (no claude token), the
+  // banner makes the limitation visible.
+  const reviewNotConfigured = claudeResponse?.status === 'NOT_CONFIGURED'
   const gateFindings = classifierSkipped ? claudeResponse?.result ?? null : null
   const gateMeta = gateFindings ? GATE_META[gateFindings.image_suitability] : null
   const sorted = useMemo(
@@ -334,6 +338,18 @@ export default function ResultScreen() {
             </Text>
           </View>
         </View>
+
+        {reviewNotConfigured && (
+          <View
+            accessibilityRole="alert"
+            style={[styles.infoCard, { backgroundColor: '#F39C1218', borderColor: '#F39C1240', borderWidth: 1 }]}
+          >
+            <MaterialCommunityIcons color="#F39C12" name="alert-circle-outline" size={16} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Backend image review not configured — this result is a preview and cannot be saved.
+            </Text>
+          </View>
+        )}
 
         {classifierSkipped && gateFindings && gateMeta && (
           <>

@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useMemo, useState, type ComponentProps } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useAppointment } from '../../../features/appointment/hooks/useAppointment'
 import { useCancelAppointment } from '../../../features/appointment/hooks/useCancelAppointment'
@@ -14,6 +14,7 @@ import type { PaymentStatus } from '../../../features/payment/types'
 import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { apiErrorMessage } from '../../../src/utils/error'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -84,6 +85,9 @@ export default function AppointmentDetailScreen() {
     cancelAppointment.mutate(
       { aptId: id, reason: cancelReason.trim() || undefined },
       {
+        onError: (error) => {
+          Alert.alert('Cancellation failed', apiErrorMessage(error))
+        },
         onSettled: () => {
           setConfirmVisible(false)
           setCancelReason('')
