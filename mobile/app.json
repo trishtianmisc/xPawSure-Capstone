@@ -46,7 +46,15 @@
           }
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow XPawSure to access your photos.",
+          "savePhotosPermission": "Allow XPawSure to save prescription images to your photo library.",
+          "granularPermissions": ["photo"]
+        }
+      ]
     ],
     "extra": {
       "router": {},

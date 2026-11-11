@@ -283,6 +283,10 @@ Consultation details show the veterinarian, consultation date, diagnosis, specif
 
 Prescription details include a **Save / Share PDF** action. The PDF is generated on-device with `expo-print` from the same A4 document layout as the veterinarian web prescription preview, including the clinic header, owner and pet details, medication table, instructions, and the veterinarian signature/license block. `expo-sharing` opens the device share sheet so the owner can save the PDF or send it to another app. The PDF is never generated or stored on the server.
 
+Prescription details also include a **View as Image** action. It renders the prescription document on-device, captures it as a PNG with `react-native-view-shot`, and opens a full-screen preview. The preview offers **Download Image**, which requests photo-library access and saves the PNG with `expo-media-library`. The image is generated and stored only on the device; no prescription image is uploaded to the server.
+
+Owner records and appointments refresh when the screen gains focus, when the app returns to the foreground from the background, and when the owner pulls to refresh. These refreshes invalidate the owner consultation, prescription, vaccination, and appointment queries so newly created records appear without signing out or clearing the app cache.
+
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 
 ---
