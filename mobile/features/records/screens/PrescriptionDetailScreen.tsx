@@ -7,6 +7,7 @@ import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
 import { usePrescription } from '../hooks/usePrescription'
+import { usePrescriptionPdfExport } from '../hooks/usePrescriptionPdfExport'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
 function formatDate(iso: string): string {
@@ -45,6 +46,7 @@ export default function PrescriptionDetailScreen() {
   }>()
   const { colors } = useTheme()
   const { data: prescription, isLoading, isError, error } = usePrescription(id)
+  const { exportPdf, isExporting } = usePrescriptionPdfExport()
   const styles = useMemo(() => createStyles(colors), [colors])
   const backHref = fromConsultation
     ? `/(owner)/records/consultations/${fromConsultation}`
@@ -104,6 +106,27 @@ export default function PrescriptionDetailScreen() {
           </Text>
         </View>
 
+        <Pressable
+          accessibilityLabel="Save or share prescription PDF"
+          accessibilityRole="button"
+          disabled={isExporting}
+          onPress={() => void exportPdf(prescription)}
+          style={({ pressed }) => [
+            styles.pdfButton,
+            pressed && !isExporting && styles.pdfButtonPressed,
+            isExporting && styles.pdfButtonDisabled,
+          ]}
+        >
+          {isExporting ? (
+            <ActivityIndicator color={colors.inverse} size="small" />
+          ) : (
+            <MaterialCommunityIcons color={colors.inverse} name="file-pdf-box" size={20} />
+          )}
+          <Text style={styles.pdfButtonText}>
+            {isExporting ? 'Creating PDF...' : 'Save / Share PDF'}
+          </Text>
+        </Pressable>
+
         {prescription.instructions ? (
           <View style={styles.instructionsCard}>
             <Text style={styles.instructionsLabel}>Instructions</Text>
@@ -160,6 +183,19 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     textTransform: 'uppercase',
   },
   instructionsText: { ...font.regular, color: colors.text, fontSize: 14, lineHeight: 21 },
+  pdfButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  pdfButtonPressed: { opacity: 0.85 },
+  pdfButtonDisabled: { opacity: 0.65 },
+  pdfButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
   listTitle: { ...font.extrabold, color: colors.text, fontSize: 16, marginTop: 4 },
   medCard: {
     backgroundColor: colors.surfaceAlt,

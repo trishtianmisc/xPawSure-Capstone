@@ -1,4 +1,6 @@
 import uuid
+from datetime import date
+from decimal import Decimal
 
 from django.test import TestCase
 from django.utils import timezone
@@ -17,7 +19,11 @@ FOREIGN_EMAIL = 'prsforeign@example.com'
 VET_EMAIL = 'prsvet@example.com'
 
 LIST_FIELDS = {
-    'id', 'consultation_id', 'pet_id', 'pet_name', 'veterinarian',
+    'id', 'consultation_id',
+    'pet_id', 'pet_name', 'pet_breed', 'pet_sex', 'pet_birth_date',
+    'pet_weight', 'pet_color', 'owner_name',
+    'veterinarian', 'vet_license_number',
+    'clinic_name', 'clinic_address', 'clinic_phone',
     'instructions', 'items', 'created_at',
 }
 ITEM_FIELDS = {
@@ -29,12 +35,17 @@ ITEM_FIELDS = {
 class PrescriptionBase(TestCase):
 
     def setUp(self):
-        self.clinic = Clinic.objects.create(cln_name='Happy Paws Prescriptions')
+        self.clinic = Clinic.objects.create(
+            cln_name='Happy Paws Prescriptions',
+            cln_address='123 Bark Street, Manila',
+            cln_phone='555-0100',
+        )
         self.vet_user = self._create_user(VET_EMAIL, UserRole.VETERINARIAN, 'Vera', 'Vet')
         self.vet = StaffProfile.objects.create(
             usr_id=self.vet_user,
             cln_id=self.clinic,
             stf_position=StaffPosition.VETERINARIAN,
+            stf_license_number='VET-1234',
         )
 
         self.owner_user = self._create_user(OWNER_EMAIL, UserRole.OWNER, 'Olivia', 'Owner')
@@ -45,6 +56,9 @@ class PrescriptionBase(TestCase):
             brd_id=self.breed,
             pet_name='Rex',
             pet_sex=Sex.MALE,
+            pet_birth_date=date(2020, 1, 1),
+            pet_weight=Decimal('12.50'),
+            pet_color='Golden',
         )
 
         self.foreign_user = self._create_user(FOREIGN_EMAIL, UserRole.OWNER, 'Otto', 'Other')
@@ -152,7 +166,17 @@ class PrescriptionListTests(PrescriptionBase):
         self.assertEqual(record['id'], str(self.prescription.prs_id))
         self.assertEqual(record['consultation_id'], str(self.consultation.con_id))
         self.assertEqual(record['pet_name'], 'Rex')
+        self.assertEqual(record['pet_breed'], 'Labrador')
+        self.assertEqual(record['pet_sex'], 'MALE')
+        self.assertEqual(record['pet_birth_date'], '2020-01-01')
+        self.assertEqual(record['pet_weight'], '12.50')
+        self.assertEqual(record['pet_color'], 'Golden')
+        self.assertEqual(record['owner_name'], 'Olivia Owner')
         self.assertEqual(record['veterinarian'], 'Vera Vet')
+        self.assertEqual(record['vet_license_number'], 'VET-1234')
+        self.assertEqual(record['clinic_name'], 'Happy Paws Prescriptions')
+        self.assertEqual(record['clinic_address'], '123 Bark Street, Manila')
+        self.assertEqual(record['clinic_phone'], '555-0100')
         self.assertEqual(record['instructions'], 'Give with food')
 
         self.assertEqual(len(record['items']), 2)

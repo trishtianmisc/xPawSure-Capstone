@@ -281,6 +281,8 @@ Owners cannot edit consultation or prescription records.
 
 Consultation details show the veterinarian, consultation date, diagnosis, specific disease when recorded, chief complaint, clinical notes, and follow-up recommendation. When the consultation has a linked prescription, a Prescription card opens that prescription; the prescription detail back action returns to the consultation. Otherwise, the card states that no prescription was issued. Returning from a record detail opened from the Records list opens the matching record-type tab.
 
+Prescription details include a **Save / Share PDF** action. The PDF is generated on-device with `expo-print` from the same A4 document layout as the veterinarian web prescription preview, including the clinic header, owner and pet details, medication table, instructions, and the veterinarian signature/license block. `expo-sharing` opens the device share sheet so the owner can save the PDF or send it to another app. The PDF is never generated or stored on the server.
+
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 
 ---
