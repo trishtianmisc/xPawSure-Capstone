@@ -35,6 +35,13 @@ function dayOffsetIso(days: number): string {
   return isoDate(d)
 }
 
+function monthDay(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 function slot(overrides: Partial<GridSlot> = {}): GridSlot {
   return {
     vsl_id: 'slot-1',
@@ -191,7 +198,7 @@ describe('SchedulePage (stage 1)', () => {
     const row = timeCells[0].closest('tr') as HTMLElement
     const cells = row.querySelectorAll('td')
     expect(cells[1].textContent).toBe('')
-    expect(cells[2].textContent).toContain('4:00 PM')
+    expect(cells[2].textContent).toContain('Available')
   })
 
   it('dims passed slots as Passed and keeps them inert', () => {
@@ -216,10 +223,11 @@ describe('SchedulePage (stage 1)', () => {
 
     renderPage()
 
-    fireEvent.click(screen.getByText('Passed'))
+    const table = screen.getByRole('table')
+    fireEvent.click(within(table).getByText('Passed'))
     expect(updateMutate).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByText('Available'))
+    fireEvent.click(within(table).getByText('Available'))
     expect(updateMutate).toHaveBeenCalledWith({ slotId: 'open-1', status: 'BLOCKED' })
   })
 
@@ -365,7 +373,7 @@ describe('SchedulePage (stage 1)', () => {
 
     renderPage()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next day' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Next 3 days' }))
     fireEvent.click(screen.getByRole('button', { name: 'Block rest of today' }))
 
     const dialog = screen.getByRole('dialog')
@@ -428,5 +436,143 @@ describe('SchedulePage (stage 1)', () => {
     expect(heading.closest('.fixed')?.textContent).toContain(
       `No slots created: clinic closed on ${weekday}.`,
     )
+  })
+})
+
+describe('SchedulePage (stage 2)', () => {
+  it('builds the time axis from slot data instead of a fixed 8:00-17:30 grid', () => {
+    mockSchedule(() =>
+      schedule([
+        {
+          date: dayOffsetIso(0),
+          is_working: true,
+          slots: [slot({ vsl_id: 's10', vsl_start_time: '10:00', vsl_end_time: '10:30' })],
+        },
+        {
+          date: dayOffsetIso(1),
+          is_working: true,
+          slots: [slot({ vsl_id: 's16', vsl_start_time: '16:00', vsl_end_time: '16:30' })],
+        },
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    expect(screen.queryByText('8:00 AM')).not.toBeInTheDocument()
+    expect(screen.queryByText('9:00 AM')).not.toBeInTheDocument()
+    expect(screen.getByText('10:00 AM')).toBeInTheDocument()
+    expect(screen.getByText('4:00 PM')).toBeInTheDocument()
+  })
+
+  it('falls back to a single tall row when no day has any slots', () => {
+    mockSchedule(() =>
+      schedule([
+        closedDay(dayOffsetIso(0)),
+        notGeneratedDay(dayOffsetIso(1)),
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    expect(screen.queryByText('9:00 AM')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Clinic closed')).toHaveLength(2)
+    expect(screen.getAllByText('Not generated yet')).toHaveLength(1)
+  })
+
+  it('shows a legend for the slot states', () => {
+    renderPage()
+
+    const legend = screen.getByLabelText('Schedule legend')
+    for (const label of ['Available', 'Booked', 'Blocked', 'Passed', 'Closed']) {
+      expect(within(legend).getByText(label)).toBeInTheDocument()
+    }
+  })
+
+  it('switches between Day, 3 days and Week views with a matching range label', () => {
+    renderPage()
+
+    const headers = () => document.querySelectorAll('th[data-date]')
+    const label = () => screen.getByTestId('range-label').textContent ?? ''
+
+    expect(headers()).toHaveLength(3)
+    expect(label()).toContain(monthDay(TODAY_ISO))
+    expect(screen.getByRole('button', { name: 'Previous 3 days' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Day' }))
+    expect(headers()).toHaveLength(1)
+    expect(label()).toBe(monthDay(TODAY_ISO))
+    expect(screen.getByRole('button', { name: 'Next day' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }))
+    expect(headers()).toHaveLength(7)
+    expect(headers()[6].getAttribute('data-date')).toBe(dayOffsetIso(6))
+    expect(screen.getByRole('table').className).toContain('min-w-[860px]')
+    expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument()
+  })
+
+  it("shows each day's utilization in the header", () => {
+    mockSchedule(() =>
+      schedule([
+        {
+          date: dayOffsetIso(0),
+          is_working: true,
+          slots: [
+            slot({ vsl_id: 'p1', is_past: true }),
+            slot({ vsl_id: 'a1', vsl_start_time: '10:00', vsl_end_time: '10:30' }),
+            slot({
+              vsl_id: 'b1',
+              vsl_start_time: '10:30',
+              vsl_end_time: '11:00',
+              status: 'BOOKED',
+              appointment: BOOKED_APT,
+            }),
+          ],
+        },
+        closedDay(dayOffsetIso(1)),
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    expect(screen.getByText('1 booked · 1 open')).toBeInTheDocument()
+  })
+
+  it("highlights today's date header", () => {
+    renderPage()
+
+    const todayHeader = document.querySelector('th[data-today="true"]')
+    expect(todayHeader).not.toBeNull()
+    expect(todayHeader?.getAttribute('data-date')).toBe(TODAY_ISO)
+  })
+
+  it('shows the owner inline in Day view but only as a tooltip in Week view', () => {
+    mockSchedule(() =>
+      schedule([
+        {
+          date: dayOffsetIso(0),
+          is_working: true,
+          slots: [slot({ vsl_id: 'b1', status: 'BOOKED', appointment: BOOKED_APT })],
+        },
+        closedDay(dayOffsetIso(1)),
+        closedDay(dayOffsetIso(2)),
+      ]),
+    )
+
+    renderPage()
+
+    expect(screen.getByText('Olivia Owner')).toBeInTheDocument()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    const dayCell = screen.getByText('Rex').closest('td') as HTMLElement
+    expect(dayCell.title).toBe('')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Week' }))
+
+    expect(screen.queryByText('Olivia Owner')).not.toBeInTheDocument()
+    const weekCell = screen.getByText('Rex').closest('td') as HTMLElement
+    expect(weekCell.title).toContain('Olivia Owner')
+    expect(weekCell.title).toContain('9:00 AM')
   })
 })

@@ -39,10 +39,20 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: strin
   },
 }
 
-export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
+export function AppointmentStatusBadge({
+  status,
+  compact = false,
+}: {
+  status: AppointmentStatus
+  compact?: boolean
+}) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
   return (
-    <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${config.className}`}>
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full font-bold uppercase tracking-wide ${
+        compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'
+      } ${config.className}`}
+    >
       {config.label}
     </span>
   )
