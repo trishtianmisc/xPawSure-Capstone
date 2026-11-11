@@ -4,7 +4,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeContext'
 import { useAuth } from '../../auth/context/AuthContext'
 import { roleLabel } from '../../../utils/roles'
-import { useUnreadCount } from '../hooks/useNotifications'
+import { NotificationDropdown } from './NotificationDropdown'
 
 interface NavItem {
   label: string
@@ -27,7 +27,7 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Management',
     items: [
-      { label: 'Schedule', path: '/receptionist/schedule', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+      { label: 'Schedule', path: '/receptionist/schedule', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
       { label: 'Appointments', path: '/receptionist/appointments', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
       { label: 'Payments', path: '/receptionist/payments', icon: 'M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z' },
       { label: 'Patients', path: '/receptionist/pets', icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z' },
@@ -42,7 +42,6 @@ export function ReceptionistLayout() {
   const { pathname } = useLocation()
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const { data: unreadData } = useUnreadCount()
 
   useEffect(() => {
     if (user && user.clinic_name === undefined) {
@@ -211,20 +210,7 @@ export function ReceptionistLayout() {
 
           <div className="flex items-center gap-3 ml-auto">
             {/* Notification bell */}
-            <button
-              className="relative grid size-9 place-items-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
-              type="button"
-              aria-label="Notifications"
-            >
-              <svg className="size-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              {(unreadData?.unread_count ?? 0) > 0 && (
-                <span className="absolute right-1.5 top-1.5 flex size-4 items-center justify-center rounded-full bg-amber-600 text-[10px] font-bold text-white ring-2 ring-white dark:ring-stone-900">
-                  {unreadData!.unread_count > 9 ? '9+' : unreadData!.unread_count}
-                </span>
-              )}
-            </button>
+            <NotificationDropdown />
 
             {/* Theme toggle */}
             <button

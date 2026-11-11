@@ -64,6 +64,14 @@ export function formatDate(
   })
 }
 
+/** Local calendar date as `YYYY-MM-DD` for date query params. */
+export function isoDate(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export function formatDateLong(
   value: string | Date | null | undefined,
   timeZone?: string,

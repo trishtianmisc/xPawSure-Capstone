@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { formatDate, formatTime } from '../../../utils/format'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { DetailLoadError } from '../components/DetailLoadError'
 import { PageHero } from '../components/PageHero'
 import { usePetDetail, usePetHistory } from '../hooks/usePets'
 import type { ConsultationRecord, PetHistory, ScreeningSummary } from '../types/receptionist.types'
@@ -464,9 +465,13 @@ export function PetDetailPage() {
 
   if (petQuery.error || !pet) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center p-6">
-        <p className="text-sm text-stone-500">Patient not found</p>
-      </div>
+      <DetailLoadError
+        entity="Patient"
+        error={petQuery.error}
+        onRetry={petQuery.refetch}
+        isRetrying={petQuery.isFetching}
+        onBack={() => navigate(-1)}
+      />
     )
   }
 

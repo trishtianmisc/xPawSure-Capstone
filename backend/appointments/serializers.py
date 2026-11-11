@@ -269,6 +269,7 @@ class ScheduleSlotSerializer(serializers.Serializer):
     vsl_start_time = serializers.CharField()
     vsl_end_time = serializers.CharField()
     status = serializers.CharField()
+    is_past = serializers.BooleanField()
     appointment = ScheduleAppointmentSerializer(allow_null=True)
 
 

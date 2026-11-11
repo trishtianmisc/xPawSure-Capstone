@@ -25,11 +25,16 @@ export function useVetsForDate(date: string) {
   })
 }
 
-export function useSchedule(startDate: string, endDate: string, vetId?: string) {
+export function useSchedule(
+  startDate: string,
+  endDate: string,
+  vetId?: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ['receptionist', 'schedule', startDate, endDate, vetId],
     queryFn: () => getSchedule(startDate, endDate, vetId),
-    enabled: !!startDate && !!endDate,
+    enabled: (!!startDate && !!endDate) && (options?.enabled ?? true),
     staleTime: 30_000,
   })
 }

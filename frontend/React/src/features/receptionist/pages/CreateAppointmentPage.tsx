@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
+import { useToast } from '../../../components/ui/ToastContext'
 import { useCancelPayment, useCreateCheckout, usePayment } from '../../payments/hooks/usePayments'
 import type { Payment, PaymentMethod } from '../../payments/types/payment.types'
 import { apiErrorCode } from '../../../utils/error'
@@ -11,6 +12,7 @@ import { useAvailableSlots, useVetsForDate } from '../hooks/useAvailableSlots'
 import { useClinicSettings } from '../hooks/useClinicSettings'
 import { useOwners } from '../hooks/useOwners'
 import { usePets } from '../hooks/usePets'
+import { PetRegisterModal } from '../components/PetRegisterModal'
 import { createAppointmentSchema, type CreateAppointmentForm } from '../schemas/receptionist.schema'
 import type { VetSlot } from '../types/receptionist.types'
 
@@ -26,6 +28,7 @@ function isSettledWithoutPayment(status: Payment['status']): boolean {
 
 export function CreateAppointmentPage() {
   const navigate = useNavigate()
+  const { showToast } = useToast()
   const createAppointment = useCreateAppointment()
   const checkout = useCreateCheckout()
   const { data: clinicSettings, isError: settingsFailed } = useClinicSettings()
@@ -36,6 +39,7 @@ export function CreateAppointmentPage() {
   const [ownerSearch, setOwnerSearch] = useState('')
   const [selectedOwnerId, setSelectedOwnerId] = useState('')
   const [petSearch, setPetSearch] = useState('')
+  const [petRegisterOpen, setPetRegisterOpen] = useState(false)
   const [method, setMethod] = useState<PaymentMethod>('GCASH')
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
   const [submittedForm, setSubmittedForm] = useState<CreateAppointmentForm | null>(null)
@@ -50,8 +54,20 @@ export function CreateAppointmentPage() {
   })
   const cancelPayment = useCancelPayment()
 
-  const { data: vets, isLoading: vetsLoading } = useVetsForDate(selectedDate)
-  const { data: slots, isLoading: slotsLoading } = useAvailableSlots(selectedVet, selectedDate)
+  const {
+    data: vets,
+    isLoading: vetsLoading,
+    error: vetsError,
+    refetch: refetchVets,
+    isFetching: vetsFetching,
+  } = useVetsForDate(selectedDate)
+  const {
+    data: slots,
+    isLoading: slotsLoading,
+    error: slotsError,
+    refetch: refetchSlots,
+    isFetching: slotsFetching,
+  } = useAvailableSlots(selectedVet, selectedDate)
   const { data: ownersData } = useOwners({ search: ownerSearch || undefined, page_size: 20 })
   const { data: petsData } = usePets(
     {
@@ -93,6 +109,14 @@ export function CreateAppointmentPage() {
 
   function onSubmit(data: CreateAppointmentForm) {
     if (!selectedSlot) return
+    // The slot list refreshes in the background; if the picked slot vanished
+    // (taken or blocked meanwhile), stop and say so instead of failing later.
+    if (slots && !slots.some((slot) => slot.vsl_id === selectedSlot.vsl_id)) {
+      setSelectedSlot(null)
+      setValue('slot_id', '')
+      showToast('That time slot is no longer available. Please pick another.', 'error')
+      return
+    }
     setSubmittedForm(data)
 
     if (pendingPayment?.status === 'PAID') {
@@ -226,6 +250,15 @@ export function CreateAppointmentPage() {
               No pets found for this owner.
             </p>
           )}
+          {selectedOwnerId && (
+            <button
+              type="button"
+              onClick={() => setPetRegisterOpen(true)}
+              className="mt-2 text-xs font-semibold text-amber-700 transition hover:text-amber-800 hover:underline dark:text-amber-400"
+            >
+              + Register a new pet for this owner
+            </button>
+          )}
           {errors.pet_id && <p className="mt-1 text-xs text-red-500">{errors.pet_id.message}</p>}
         </div>
 
@@ -258,6 +291,21 @@ export function CreateAppointmentPage() {
               </select>
             </div>
           </div>
+          {vetsError && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-800 dark:bg-red-900/20">
+              <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                Couldn&apos;t load veterinarians for this date.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchVets()}
+                disabled={vetsFetching}
+                className="mt-2 rounded-md border border-red-300 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-900/30"
+              >
+                {vetsFetching ? 'Retrying…' : 'Try again'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Step 3: Select Time Slot */}
@@ -265,6 +313,20 @@ export function CreateAppointmentPage() {
           <h2 className="mb-4 text-lg font-semibold text-stone-900 dark:text-stone-100">3. Select Time Slot</h2>
           {!selectedDate || !selectedVet ? (
             <p className="text-sm text-stone-500 dark:text-stone-400">Select a date and veterinarian first</p>
+          ) : slotsError ? (
+            <div>
+              <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                Couldn&apos;t load time slots.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchSlots()}
+                disabled={slotsFetching}
+                className="mt-2 rounded-md border border-stone-300 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-stone-100 disabled:opacity-50 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+              >
+                {slotsFetching ? 'Retrying…' : 'Try again'}
+              </button>
+            </div>
           ) : slotsLoading ? (
             <div className="flex gap-2">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -277,7 +339,13 @@ export function CreateAppointmentPage() {
                 <button
                   key={slot.vsl_id}
                   type="button"
-                  onClick={() => { setSelectedSlot(slot); setValue('slot_id', slot.vsl_id) }}
+                  onClick={() => {
+                    setSelectedSlot(slot)
+                    setValue('slot_id', slot.vsl_id)
+                    showToast(
+                      `Time slot ${slot.vsl_start_time.slice(0, 5)} – ${slot.vsl_end_time.slice(0, 5)} selected`,
+                    )
+                  }}
                   className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${selectedSlot?.vsl_id === slot.vsl_id
                     ? 'border-amber-500 bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300'
                     : 'border-stone-300 text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800'
@@ -463,6 +531,20 @@ export function CreateAppointmentPage() {
           </button>
         </div>
       </form>
+
+      <PetRegisterModal
+        open={petRegisterOpen}
+        onClose={() => setPetRegisterOpen(false)}
+        ownerId={selectedOwnerId || undefined}
+        ownerLabel={
+          ownersData?.results.find((owner) => owner.own_id === selectedOwnerId)
+            ?.full_name
+        }
+        onCreated={(pet) => {
+          setValue('pet_id', pet.id, { shouldValidate: true })
+          setPetSearch('')
+        }}
+      />
     </div>
   )
 }

@@ -251,9 +251,14 @@ export interface DashboardStats {
     no_show: number
     total: number
   }
+  upcoming: {
+    pending: number
+    confirmed: number
+  }
   total_owners: number
   total_pets: number
   recent_appointments: Appointment[]
+  unpaid_completions: Appointment[]
   needs_attention: number
   review_pending: number
 }
@@ -273,6 +278,7 @@ export interface ScheduleSlot {
   vsl_start_time: string
   vsl_end_time: string
   status: SlotStatus
+  is_past: boolean
   appointment: ScheduleAppointment | null
 }
 
@@ -303,6 +309,8 @@ export interface GenerateSlotsPayload {
 export interface GenerateSlotsResponse {
   generated: boolean
   slots_created: number
+  already_existed: number
+  skipped_dates: { date: string; reason: string }[]
 }
 
 export interface VetTodaySummary {
@@ -336,4 +344,5 @@ export interface UpdateSlotStatusResponse {
 export interface BlockRemainingResponse {
   blocked: number
   skipped_booked: number
+  skipped_passed: number
 }

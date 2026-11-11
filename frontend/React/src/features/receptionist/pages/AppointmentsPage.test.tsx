@@ -5,7 +5,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppointments } from '../hooks/useAppointments'
 import { AppointmentsPage } from './AppointmentsPage'
 
-vi.mock('../hooks/useAppointments', () => ({ useAppointments: vi.fn() }))
+vi.mock('../hooks/useAppointments', () => ({
+  useAppointments: vi.fn(),
+  useUpdateAppointmentStatus: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+}))
+vi.mock('../hooks/useAvailableSlots', () => ({
+  useVetScheduleList: vi.fn(() => ({
+    data: { vets: [{ stf_id: 'stf-1', full_name: 'Vera Vet' }] },
+    isLoading: false,
+    error: null,
+  })),
+}))
 
 function renderPage() {
   return render(

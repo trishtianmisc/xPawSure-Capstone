@@ -5,6 +5,7 @@ import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { usePets } from '../hooks/usePets'
 import { PageHero } from '../components/PageHero'
+import { PetRegisterModal } from '../components/PetRegisterModal'
 import { apiErrorMessage } from '../../../utils/error'
 
 const INPUT_CLASSES =
@@ -14,6 +15,7 @@ export function PetsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [registerOpen, setRegisterOpen] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -28,7 +30,19 @@ export function PetsPage() {
     <div className="p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <PageHero title="Patients" subtitle="View and manage patient records." />
+          <PageHero
+            title="Patients"
+            subtitle="View and manage patient records."
+            actions={
+              <button
+                type="button"
+                onClick={() => setRegisterOpen(true)}
+                className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
+              >
+                + Register patient
+              </button>
+            }
+          />
         </div>
 
         {/* Filter card */}
@@ -196,6 +210,8 @@ export function PetsPage() {
           )}
         </div>
       </div>
+
+      <PetRegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
     </div>
   )
 }

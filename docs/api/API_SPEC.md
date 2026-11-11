@@ -701,6 +701,19 @@ not count. The clinic admin "Total Patients" KPI, the receptionist
 `GET /api/receptionist/pets/` directory, and the future clinic admin Patients
 page must all use this definition.
 
+`upcoming` counts every `PENDING` and `CONFIRMED` appointment scheduled from
+now onward (clinic-local), regardless of day, so the dashboard's "To confirm"
+card agrees with the appointments list the receptionist compares it against;
+past-due rows are excluded here and surface through `needs_attention` instead.
+
+`unpaid_completions` lists up to 10 `COMPLETED` appointments from the last 7
+days (by scheduled time, clinic-local) with no `PAID` payment linked through
+`APT_ID`, newest first. The list is empty when the clinic's consultation fee
+is `0`, because every completion would otherwise be flagged. The field remains
+for API consumers; the receptionist dashboard no longer renders a
+"completed without payment" row, because no endpoint records a payment
+against an already-completed appointment.
+
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
 for the requesting clinic before returning. It cancels past-due
@@ -1299,6 +1312,7 @@ Response (200):
               "vsl_start_time": "09:00",
               "vsl_end_time": "09:30",
               "status": "AVAILABLE",
+              "is_past": false,
               "appointment": null
             }
           ]
@@ -1307,6 +1321,8 @@ Response (200):
     }
   ]
 }
+
+`is_past` is computed against the clinic timezone (not the caller's clock): true when the slot's date is before today, or it is today and the slot has already started. The schedule grid, its block-confirmation counts, and the block-remaining endpoint share this clock.
 
 ---
 
@@ -1355,8 +1371,15 @@ Response (200):
 
 {
   "generated": true,
-  "slots_created": 96
+  "slots_created": 96,
+  "already_existed": 16,
+  "skipped_dates": [
+    { "date": "2026-09-20", "reason": "clinic_closed" }
+  ]
 }
+
+- `slots_created` counts only slots created by this call; slots that already existed for the vet/date are reported in `already_existed`.
+- `skipped_dates` lists dates where nothing could be generated (no operating hours / clinic closed), deduplicated across vets. The only `reason` value is `clinic_closed`.
 
 ---
 
@@ -1391,7 +1414,7 @@ Errors:
 
 Receptionist only.
 
-Blocks all available slots for a vet on a specific date. Skips booked slots.
+Blocks the remaining available slots for a vet on a specific date. Skips booked slots and slots that have already started (clinic timezone), so "rest of today" never touches passed slots.
 
 Query params:
 
@@ -1401,7 +1424,8 @@ Response (200):
 
 {
   "blocked": 12,
-  "skipped_booked": 3
+  "skipped_booked": 3,
+  "skipped_passed": 2
 }
 
 ---

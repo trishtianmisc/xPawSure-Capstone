@@ -374,3 +374,145 @@ class VetScheduleRegressionTests(OwnerBookingBase):
 
         vet_ids = [vet['stf_id'] for vet in summary['vets']]
         self.assertIn(str(self.vet.stf_id), vet_ids)
+
+
+class ScheduleGridApiTests(OwnerBookingBase):
+    """Stage-1 schedule grid contract: honest generate results, block-remaining
+    that never touches passed slots, and the clinic-clock is_past flag."""
+
+    def _slot(self, date, start_time):
+        return VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=date,
+            vsl_start_time=start_time,
+            vsl_end_time=(
+                datetime.combine(date, start_time) + timedelta(minutes=30)
+            ).time(),
+        )
+
+    def _schedule(self, day):
+        response = self.client.get(
+            '/api/schedule/',
+            {
+                'start_date': day.isoformat(),
+                'end_date': day.isoformat(),
+                'vet_id': str(self.vet.stf_id),
+            },
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def _generate(self, start, end):
+        response = self.client.post(
+            '/api/generate-slots/',
+            {
+                'start_date': start.isoformat(),
+                'end_date': end.isoformat(),
+                'vet_id': str(self.vet.stf_id),
+            },
+            format='json',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def _block_remaining(self, day):
+        response = self.client.post(
+            f'/api/schedule/vets/{self.vet.stf_id}/block-remaining/'
+            f'?date={day.isoformat()}',
+            **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data
+
+    def test_generate_reports_created_existing_and_closed_days(self):
+        start = self.date                      # has the seeded operating hours
+        closed_1 = start + timedelta(days=1)   # other weekdays, no hours rows
+        closed_2 = start + timedelta(days=2)
+
+        first = self._generate(start, closed_2)
+
+        # 9:00-17:00 at a 30-minute duration is 16 slots on the open day; the
+        # closed days are named instead of being reported as a silent zero.
+        self.assertEqual(first['slots_created'], 16)
+        self.assertEqual(first['already_existed'], 0)
+        self.assertEqual(first['skipped_dates'], [
+            {'date': closed_1.isoformat(), 'reason': 'clinic_closed'},
+            {'date': closed_2.isoformat(), 'reason': 'clinic_closed'},
+        ])
+
+        second = self._generate(start, closed_2)
+
+        self.assertEqual(second['slots_created'], 0)
+        self.assertEqual(second['already_existed'], 16)
+        self.assertEqual(second['skipped_dates'], first['skipped_dates'])
+
+    def test_block_remaining_skips_booked_and_passed_slots(self):
+        manila_today = datetime.now(ZoneInfo('Asia/Manila')).date()
+        future_day = manila_today + timedelta(days=1)
+        past_day = manila_today - timedelta(days=1)
+
+        open_slot = self._slot(date=future_day, start_time=time(9, 0))
+        later_slot = self._slot(date=future_day, start_time=time(14, 0))
+        booked_slot = self._slot(date=future_day, start_time=time(15, 0))
+        booked_slot.vsl_status = SlotStatus.BOOKED
+        booked_slot.save(update_fields=['vsl_status'])
+        stale_1 = self._slot(date=past_day, start_time=time(9, 0))
+        stale_2 = self._slot(date=past_day, start_time=time(9, 30))
+
+        result = self._block_remaining(future_day)
+
+        self.assertEqual(result, {
+            'blocked': 2,
+            'skipped_booked': 1,
+            'skipped_passed': 0,
+        })
+        open_slot.refresh_from_db()
+        later_slot.refresh_from_db()
+        booked_slot.refresh_from_db()
+        self.assertEqual(open_slot.vsl_status, SlotStatus.BLOCKED)
+        self.assertEqual(later_slot.vsl_status, SlotStatus.BLOCKED)
+        self.assertEqual(booked_slot.vsl_status, SlotStatus.BOOKED)
+
+        stale_result = self._block_remaining(past_day)
+
+        self.assertEqual(stale_result, {
+            'blocked': 0,
+            'skipped_booked': 0,
+            'skipped_passed': 2,
+        })
+        stale_1.refresh_from_db()
+        stale_2.refresh_from_db()
+        self.assertEqual(stale_1.vsl_status, SlotStatus.AVAILABLE)
+        self.assertEqual(stale_2.vsl_status, SlotStatus.AVAILABLE)
+
+    def test_schedule_flags_past_slots_and_exposes_appointment_status(self):
+        # Same weekday as the seeded operating-hours row, one week ago: days
+        # without hours report an empty slot list, so a past slot only shows
+        # up on an open weekday.
+        past_day = self.date - timedelta(days=7)
+        self._slot(date=past_day, start_time=time(9, 0))
+        self._slot(date=self.date, start_time=time(16, 0))
+
+        past_slots = self._schedule(past_day)['vets'][0]['days'][0]['slots']
+        self.assertEqual(len(past_slots), 1)
+        self.assertTrue(past_slots[0]['is_past'])
+
+        future_slots = self._schedule(self.date)['vets'][0]['days'][0]['slots']
+        self.assertEqual(len(future_slots), 1)
+        self.assertFalse(future_slots[0]['is_past'])
+
+        # The owner books that remaining slot; the grid badge reads apt_status.
+        booking = self._book()
+        self.assertIn(booking.status_code, (200, 201), booking.data)
+        appointment = Appointment.objects.get()
+
+        booked_slot = self._schedule(self.date)['vets'][0]['days'][0]['slots'][0]
+        self.assertEqual(booked_slot['status'], SlotStatus.BOOKED)
+        self.assertFalse(booked_slot['is_past'])
+        self.assertEqual(
+            booked_slot['appointment']['apt_status'],
+            appointment.apt_status,
+        )

@@ -2,20 +2,13 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
 import { apiErrorMessage } from '../../../utils/error'
-import { formatClockTime } from '../../../utils/format'
-import type { SlotStatus } from '../types/receptionist.types'
-
-function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
+import { formatClockTime, isoDate } from '../../../utils/format'
+import { Modal } from '../../../components/ui/Modal'
+import type { GenerateSlotsResponse, SlotStatus } from '../types/receptionist.types'
 
 function formatDisplayDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00')
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
-
-function formatDateInput(date: Date): string {
-  return formatDate(date)
 }
 
 function addDays(date: Date, days: number): Date {
@@ -33,30 +26,68 @@ function generateTimeSlots(): string[] {
   return slots
 }
 
+function formatMonthDay(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+function weekdayName(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })
+}
+
+function describeGenerateResult(data: GenerateSlotsResponse): string {
+  const created = data.slots_created
+  const existing = data.already_existed
+  const skipped = data.skipped_dates ?? []
+
+  if (created === 0) {
+    if (skipped.length > 0 && existing === 0) {
+      const weekdays = [...new Set(skipped.map((s) => weekdayName(s.date)))]
+      return `No slots created: clinic closed on ${weekdays.join(', ')}.`
+    }
+    if (existing > 0) {
+      return `No new slots: ${existing} already existed for those dates.`
+    }
+    return 'No slots created.'
+  }
+
+  let message = `Created ${created} slot${created === 1 ? '' : 's'}`
+  if (existing > 0) message += `, ${existing} already existed`
+  if (skipped.length > 0) {
+    message += `. Skipped ${skipped.map((s) => formatMonthDay(s.date)).join(', ')} (clinic closed)`
+  }
+  return `${message}.`
+}
+
+type GridSlot = {
+  vsl_id: string
+  vsl_start_time: string
+  vsl_end_time: string
+  status: SlotStatus
+  is_past: boolean
+  appointment: { apt_id: string; pet_name: string; owner_name: string; apt_type: string } | null
+}
+
 function SlotCell({
   slot,
-  isWorking,
   onAppointmentClick,
   onToggleBlock,
 }: {
-  time: string
-  slot?: { vsl_id: string; vsl_start_time: string; vsl_end_time: string; status: SlotStatus; appointment: { apt_id: string; pet_name: string; owner_name: string; apt_type: string } | null }
-  isWorking: boolean
+  slot: GridSlot
   onAppointmentClick?: (aptId: string) => void
   onToggleBlock?: (slotId: string, currentStatus: SlotStatus) => void
 }) {
-  if (!isWorking) {
+  if (slot.status === 'AVAILABLE' && slot.is_past) {
     return (
-      <td className="border border-stone-200 bg-stone-100 px-2 py-3 text-center text-xs text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-500">
-        Closed
-      </td>
-    )
-  }
-
-  if (!slot) {
-    return (
-      <td className="border border-dashed border-stone-300 px-2 py-3 text-center text-xs text-stone-400 dark:border-stone-600 dark:text-stone-500">
-        No slots
+      <td className="border border-stone-200 bg-stone-100 px-2 py-3 text-center text-xs dark:border-stone-700 dark:bg-stone-800">
+        <div className="font-medium text-stone-500 dark:text-stone-400">
+          {formatClockTime(slot.vsl_start_time)} - {formatClockTime(slot.vsl_end_time)}
+        </div>
+        <div className="mt-1 text-[10px] uppercase tracking-wide text-stone-400 dark:text-stone-500">
+          Passed
+        </div>
       </td>
     )
   }
@@ -80,7 +111,7 @@ function SlotCell({
     return (
       <td
         onClick={() => onToggleBlock?.(slot.vsl_id, slot.status)}
-        className="group cursor-pointer border border-green-200 bg-green-50 px-2 py-3 text-center text-xs transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30"
+        className="group cursor-pointer border border-green-200 bg-green-50 px-2 py-3 text-center text-xs transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:text-green-700 dark:hover:bg-green-900/30"
       >
         <div className="font-medium text-green-700 dark:text-green-300">{formatClockTime(slot.vsl_start_time)} - {formatClockTime(slot.vsl_end_time)}</div>
         <div className="mt-1 text-[10px] uppercase tracking-wide text-green-600 dark:text-green-400">Available</div>
@@ -109,29 +140,55 @@ export function SchedulePage() {
   const today = useMemo(() => new Date(), [])
   const [rangeStart, setRangeStart] = useState(() => today)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
-  const [generateStartDate, setGenerateStartDate] = useState(() => formatDateInput(today))
-  const [generateEndDate, setGenerateEndDate] = useState(() => formatDateInput(addDays(today, 6)))
+  const [generateStartDate, setGenerateStartDate] = useState(() => isoDate(today))
+  const [generateEndDate, setGenerateEndDate] = useState(() => isoDate(addDays(today, 6)))
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false)
   const [blockToast, setBlockToast] = useState<string | null>(null)
 
-  const startDateStr = formatDate(rangeStart)
-  const endDateStr = formatDate(addDays(rangeStart, 2))
+  const todayStr = isoDate(today)
+  const startDateStr = isoDate(rangeStart)
+  const endDateStr = isoDate(addDays(rangeStart, 2))
 
   const { data: schedule, isLoading, error } = useSchedule(startDateStr, endDateStr, vetId)
+  // The block dialog counts today's slots from the visible range when it
+  // covers today, otherwise from a small today-only fetch — both carry the
+  // same clinic-clock is_past flags the block-remaining endpoint uses.
+  const todayInRange = startDateStr <= todayStr && todayStr <= endDateStr
+  const { data: todaySchedule } = useSchedule(todayStr, todayStr, vetId, {
+    enabled: showBlockConfirm && !todayInRange,
+  })
   const generateMutation = useGenerateSlots()
   const toggleBlockMutation = useUpdateSlotStatus()
   const bulkBlockMutation = useBlockRemainingSlots()
 
   const timeSlots = useMemo(() => generateTimeSlots(), [])
 
+  const todayDay = (todayInRange ? schedule : todaySchedule)?.vets?.[0]?.days
+    .find((d) => d.date === todayStr)
+  const openToday = todayDay?.slots.filter((s) => s.status === 'AVAILABLE' && !s.is_past).length ?? 0
+  const bookedToday = todayDay?.slots.filter((s) => s.status === 'BOOKED').length ?? 0
+  const todayCountsReady = Boolean(todayDay)
+  const vetName = schedule?.vets?.[0]?.full_name ?? 'this veterinarian'
+
   const goToPrevDay = () => setRangeStart(prev => addDays(prev, -1))
   const goToNextDay = () => setRangeStart(prev => addDays(prev, 1))
   const goToToday = () => setRangeStart(today)
 
+  const openGenerateModal = (start?: string, end?: string) => {
+    generateMutation.reset()
+    if (start) {
+      setGenerateStartDate(start)
+      setGenerateEndDate(end ?? start)
+    }
+    setShowGenerateModal(true)
+  }
+
   const handleGenerate = () => {
-    generateMutation.mutate(
-      { start_date: generateStartDate, end_date: generateEndDate, vet_id: vetId },
-      { onSuccess: () => setShowGenerateModal(false) },
-    )
+    generateMutation.mutate({
+      start_date: generateStartDate,
+      end_date: generateEndDate,
+      vet_id: vetId,
+    })
   }
 
   const handleToggleBlock = (slotId: string, currentStatus: SlotStatus) => {
@@ -140,14 +197,20 @@ export function SchedulePage() {
   }
 
   const handleBulkBlock = () => {
-    if (!vetId) return
-    const todayStr = formatDate(today)
+    if (!vetId || !todayCountsReady) return
     bulkBlockMutation.mutate(
       { vetId, date: todayStr },
       {
         onSuccess: (data) => {
-          const msg = `Blocked ${data.blocked} slots. ${data.skipped_booked > 0 ? `${data.skipped_booked} booked slots were skipped.` : ''}`
-          setBlockToast(msg)
+          setShowBlockConfirm(false)
+          const parts = [`Blocked ${data.blocked} slots.`]
+          if (data.skipped_booked > 0) {
+            parts.push(`${data.skipped_booked} booked slots were skipped.`)
+          }
+          if (data.skipped_passed > 0) {
+            parts.push(`${data.skipped_passed} passed slots were left alone.`)
+          }
+          setBlockToast(parts.join(' '))
           setTimeout(() => setBlockToast(null), 5000)
         },
       },
@@ -155,7 +218,7 @@ export function SchedulePage() {
   }
 
   const dates = useMemo(() => {
-    return [0, 1, 2].map(i => formatDate(addDays(rangeStart, i)))
+    return [0, 1, 2].map(i => isoDate(addDays(rangeStart, i)))
   }, [rangeStart])
 
   return (
@@ -165,6 +228,7 @@ export function SchedulePage() {
           {vetId && (
             <button
               onClick={() => navigate('/receptionist/schedule')}
+              aria-label="Back to vet list"
               className="rounded-lg border border-stone-300 p-2 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
             >
               <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -188,6 +252,7 @@ export function SchedulePage() {
         <div className="flex items-center gap-3">
           <button
             onClick={goToPrevDay}
+            aria-label="Previous day"
             className="rounded-lg border border-stone-300 p-2 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
           >
             <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -202,6 +267,7 @@ export function SchedulePage() {
           </button>
           <button
             onClick={goToNextDay}
+            aria-label="Next day"
             className="rounded-lg border border-stone-300 p-2 text-stone-600 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
           >
             <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -210,15 +276,14 @@ export function SchedulePage() {
           </button>
           {vetId && (
             <button
-              onClick={handleBulkBlock}
-              disabled={bulkBlockMutation.isPending}
-              className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
+              onClick={() => setShowBlockConfirm(true)}
+              className="rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-900/20"
             >
-              {bulkBlockMutation.isPending ? 'Blocking...' : 'Block All Remaining'}
+              Block rest of today
             </button>
           )}
           <button
-            onClick={() => setShowGenerateModal(true)}
+            onClick={() => openGenerateModal()}
             className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
           >
             Generate Slots
@@ -293,7 +358,7 @@ export function SchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {timeSlots.map(time => (
+              {timeSlots.map((time, rowIndex) => (
                 <tr key={time}>
                   <td className="sticky left-0 z-10 border-b border-r border-stone-200 bg-stone-50 px-2 py-3 text-center text-xs font-medium text-stone-600 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400">
                     {formatClockTime(time)}
@@ -302,14 +367,60 @@ export function SchedulePage() {
                     schedule.vets.map(vet => {
                       const dayData = vet.days.find(d => d.date === date)
                       const isWorking = dayData?.is_working ?? false
-                      const slot = dayData?.slots.find(s => s.vsl_start_time === time)
+                      const daySlots = dayData?.slots ?? []
+
+                      if (!isWorking) {
+                        if (rowIndex !== 0) return null
+                        return (
+                          <td
+                            key={`${date}-${vet.stf_id}`}
+                            rowSpan={timeSlots.length}
+                            className="align-middle border border-stone-200 bg-stone-100 px-2 py-3 text-center text-xs font-medium text-stone-400 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-500"
+                          >
+                            Clinic closed
+                          </td>
+                        )
+                      }
+
+                      if (daySlots.length === 0) {
+                        if (rowIndex !== 0) return null
+                        return (
+                          <td
+                            key={`${date}-${vet.stf_id}`}
+                            rowSpan={timeSlots.length}
+                            className="align-middle border border-dashed border-stone-300 bg-stone-50 px-2 py-3 text-center text-xs dark:border-stone-600 dark:bg-stone-800/60"
+                          >
+                            <div className="font-medium text-stone-500 dark:text-stone-400">
+                              Not generated yet
+                            </div>
+                            {date >= todayStr && (
+                              <button
+                                type="button"
+                                onClick={() => openGenerateModal(date)}
+                                className="mt-2 rounded-md border border-amber-300 px-2.5 py-1 text-[11px] font-semibold text-amber-700 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-900/30"
+                              >
+                                Generate
+                              </button>
+                            )}
+                          </td>
+                        )
+                      }
+
+                      const slot = daySlots.find(s => s.vsl_start_time === time)
+
+                      if (!slot) {
+                        return (
+                          <td
+                            key={`${date}-${vet.stf_id}-${time}`}
+                            className="border border-stone-200 bg-stone-50/50 dark:border-stone-800 dark:bg-stone-900/30"
+                          />
+                        )
+                      }
 
                       return (
                         <SlotCell
                           key={`${date}-${vet.stf_id}-${time}`}
-                          time={time}
                           slot={slot}
-                          isWorking={isWorking}
                           onAppointmentClick={(aptId) => navigate(`/receptionist/appointments/${aptId}`)}
                           onToggleBlock={handleToggleBlock}
                         />
@@ -322,6 +433,56 @@ export function SchedulePage() {
           </table>
         </div>
       )}
+
+      <Modal
+        open={showBlockConfirm}
+        onClose={() => setShowBlockConfirm(false)}
+        title="Block rest of today"
+      >
+        {!todayCountsReady ? (
+          <p className="text-sm text-stone-600 dark:text-stone-300">
+            Loading today&apos;s slots&hellip;
+          </p>
+        ) : openToday === 0 ? (
+          <p className="text-sm text-stone-600 dark:text-stone-300">
+            There are no open slots left to block today.
+          </p>
+        ) : (
+          <p className="text-sm text-stone-600 dark:text-stone-300">
+            This will block <strong>{openToday} open slot{openToday === 1 ? '' : 's'}</strong> for{' '}
+            {vetName} today.
+            {bookedToday > 0 && (
+              <>
+                {' '}
+                {bookedToday} booked appointment{bookedToday === 1 ? '' : 's'} won&apos;t be
+                affected.
+              </>
+            )}
+          </p>
+        )}
+        {bulkBlockMutation.isError && (
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">
+            {apiErrorMessage(bulkBlockMutation.error)}
+          </p>
+        )}
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setShowBlockConfirm(false)}
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleBulkBlock}
+            disabled={bulkBlockMutation.isPending || !todayCountsReady || openToday === 0}
+            className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50"
+          >
+            {bulkBlockMutation.isPending ? 'Blocking...' : 'Block'}
+          </button>
+        </div>
+      </Modal>
 
       {showGenerateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -356,24 +517,41 @@ export function SchedulePage() {
               </p>
             )}
             {generateMutation.isSuccess && (
-              <p className="mt-3 text-sm text-green-600 dark:text-green-400">
-                Generated {generateMutation.data?.slots_created ?? 0} slots
+              <p className="mt-3 text-sm font-medium text-green-700 dark:text-green-400">
+                {describeGenerateResult(generateMutation.data)}
               </p>
             )}
             <div className="mt-6 flex justify-end gap-3">
-              <button
-                onClick={() => setShowGenerateModal(false)}
-                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleGenerate}
-                disabled={generateMutation.isPending}
-                className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
-              >
-                {generateMutation.isPending ? 'Generating...' : 'Generate'}
-              </button>
+              {generateMutation.isSuccess ? (
+                <button
+                  onClick={() => {
+                    generateMutation.reset()
+                    setShowGenerateModal(false)
+                  }}
+                  className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+                >
+                  Done
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      generateMutation.reset()
+                      setShowGenerateModal(false)
+                    }}
+                    className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerate}
+                    disabled={generateMutation.isPending}
+                    className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
+                  >
+                    {generateMutation.isPending ? 'Generating...' : 'Generate'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

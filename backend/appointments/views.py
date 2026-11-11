@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from appointments.models import AppointmentStatus, SlotStatus
+from appointments.models import AppointmentStatus, SlotStatus, VetSlot
 from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
@@ -626,21 +626,46 @@ class GenerateSlotsView(APIView):
             )
 
         total_created = 0
+        already_existed = 0
+        skipped_dates = []
+        skipped_seen = set()
         num_days = (end_date - start_date).days + 1
 
         for vet in vets:
             for i in range(num_days):
                 date = start_date + timedelta(days=i)
+                # get_or_generate_slots returns the existing set untouched, so
+                # count before and after to report only what this call created.
+                before = VetSlot.objects.filter(
+                    cln_id_id=staff.cln_id_id,
+                    stf_id=vet.stf_id,
+                    vsl_date=date,
+                ).count()
                 slots = VetSlotService.get_or_generate_slots(
                     clinic_id=staff.cln_id_id,
                     vet_id=vet.stf_id,
                     date=date,
                 )
-                total_created += slots.count()
+                after = slots.count()
+                if after == 0:
+                    # No operating hours / closed that day (clinic-wide, so a
+                    # date is reported once even when generating for all vets).
+                    date_key = date.isoformat()
+                    if date_key not in skipped_seen:
+                        skipped_seen.add(date_key)
+                        skipped_dates.append({
+                            'date': date_key,
+                            'reason': 'clinic_closed',
+                        })
+                    continue
+                total_created += after - before
+                already_existed += before
 
         return Response({
             'generated': True,
             'slots_created': total_created,
+            'already_existed': already_existed,
+            'skipped_dates': skipped_dates,
         })
 
 

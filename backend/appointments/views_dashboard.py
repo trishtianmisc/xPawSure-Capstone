@@ -26,12 +26,17 @@ class DashboardStatsView(APIView):
         recent_serializer = AppointmentListSerializer(
             stats['recent_appointments'], many=True,
         )
+        unpaid_serializer = AppointmentListSerializer(
+            stats['unpaid_completions'], many=True,
+        )
 
         return Response({
             'today': stats['today'],
+            'upcoming': stats['upcoming'],
             'total_owners': stats['total_owners'],
             'total_pets': stats['total_pets'],
             'recent_appointments': recent_serializer.data,
+            'unpaid_completions': unpaid_serializer.data,
             'needs_attention': stats['needs_attention'],
             'review_pending': stats['review_pending'],
         })

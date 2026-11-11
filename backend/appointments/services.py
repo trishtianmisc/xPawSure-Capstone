@@ -258,6 +258,11 @@ class VetSlotService:
         num_days = (end_date - start_date).days + 1
         date_range = [start_date + timedelta(days=i) for i in range(num_days)]
 
+        # One clinic-clock "now" for every is_past flag in this response, so
+        # the schedule grid, its block-confirmation counts, and the
+        # block-remaining service all agree on which slots have passed.
+        now = datetime.now(get_clinic_timezone(clinic_id))
+
         all_slots = VetSlot.objects.filter(
             cln_id_id=clinic_id,
             vsl_date__gte=start_date,
@@ -323,6 +328,10 @@ class VetSlotService:
                         'vsl_start_time': s.vsl_start_time.strftime('%H:%M'),
                         'vsl_end_time': s.vsl_end_time.strftime('%H:%M'),
                         'status': s.vsl_status,
+                        'is_past': (
+                            s.vsl_date < now.date()
+                            or (s.vsl_date == now.date() and s.vsl_start_time < now.time())
+                        ),
                         'appointment': apt_info,
                     })
 
@@ -436,12 +445,23 @@ class VetSlotService:
             cln_id_id=clinic_id,
         )
 
+        # Same clinic clock as the schedule response's is_past flags: "rest of
+        # today" never touches slots that have already started.
+        now = datetime.now(get_clinic_timezone(clinic_id))
+
         blocked_count = 0
         skipped_booked = 0
+        skipped_passed = 0
         for slot in slots:
             if slot.vsl_status == SlotStatus.BOOKED:
                 skipped_booked += 1
             elif slot.vsl_status == SlotStatus.AVAILABLE:
+                if (
+                    slot.vsl_date < now.date()
+                    or (slot.vsl_date == now.date() and slot.vsl_start_time < now.time())
+                ):
+                    skipped_passed += 1
+                    continue
                 slot.vsl_status = SlotStatus.BLOCKED
                 slot.save(update_fields=['vsl_status', 'vsl_updated_at'])
                 blocked_count += 1
@@ -449,6 +469,7 @@ class VetSlotService:
         return {
             'blocked': blocked_count,
             'skipped_booked': skipped_booked,
+            'skipped_passed': skipped_passed,
         }
 
 
@@ -1307,6 +1328,51 @@ class DashboardService:
             apt_deleted_at__isnull=True,
         ).count()
 
+        # The dashboard's "To confirm" card spans every future appointment,
+        # not just today's, so it agrees with the appointments list the
+        # receptionist compares it against. Past-due rows were just closed
+        # above and surface through needs_attention instead.
+        upcoming = {
+            'pending': Appointment.objects.filter(
+                cln_id_id=clinic_id,
+                apt_status=AppointmentStatus.PENDING,
+                apt_scheduled_at__gte=now,
+                apt_deleted_at__isnull=True,
+            ).count(),
+            'confirmed': Appointment.objects.filter(
+                cln_id_id=clinic_id,
+                apt_status=AppointmentStatus.CONFIRMED,
+                apt_scheduled_at__gte=now,
+                apt_deleted_at__isnull=True,
+            ).count(),
+        }
+
+        # Consultations completed in the last 7 days with no PAID receipt
+        # linked. A clinic that charges no fee would flag every row, so the
+        # panel stays empty until a fee is configured.
+        from payments.models import Payment, PaymentStatus
+        from payments.services import PaymentService
+
+        unpaid_completions = []
+        if PaymentService.get_fee(clinic_id) > 0:
+            paid_appointment_ids = Payment.objects.filter(
+                pay_status=PaymentStatus.PAID,
+                apt_id__isnull=False,
+            ).values_list('apt_id_id', flat=True)
+            unpaid_completions = list(
+                Appointment.objects.filter(
+                    cln_id_id=clinic_id,
+                    apt_status=AppointmentStatus.COMPLETED,
+                    apt_deleted_at__isnull=True,
+                    apt_scheduled_at__gte=now - timedelta(days=7),
+                )
+                .exclude(apt_id__in=paid_appointment_ids)
+                .select_related(
+                    'pet_id__own_id__usr_id', 'stf_id__usr_id', 'apt_created_by',
+                )
+                .order_by('-apt_scheduled_at')[:10]
+            )
+
         from owners.models import OwnerProfile
         from pets.models import Pet
 
@@ -1343,6 +1409,8 @@ class DashboardService:
             'recent_appointments': recent_appointments,
             'needs_attention': needs_attention,
             'review_pending': review_pending,
+            'upcoming': upcoming,
+            'unpaid_completions': unpaid_completions,
         }
 
 

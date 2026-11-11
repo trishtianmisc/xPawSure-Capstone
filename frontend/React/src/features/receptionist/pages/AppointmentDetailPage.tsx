@@ -5,6 +5,7 @@ import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAp
 import { usePaymentsByAppointment } from '../../payments/hooks/usePayments'
 import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { DetailLoadError } from '../components/DetailLoadError'
 import { FollowUpReviewCard } from '../components/FollowUpReviewCard'
 import { formatDateLong, formatDateTime, formatPhone, formatTime } from '../../../utils/format'
 
@@ -49,7 +50,7 @@ const GRACE_PERIOD_MINUTES = 60
 export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: appointment, isLoading, error } = useAppointmentDetail(id ?? '')
+  const { data: appointment, isLoading, error, refetch, isFetching } = useAppointmentDetail(id ?? '')
   const { data: payments, isLoading: paymentsLoading } = usePaymentsByAppointment(id ?? '')
   const payment = payments?.results?.[0]
   const updateStatus = useUpdateAppointmentStatus()
@@ -72,9 +73,13 @@ export function AppointmentDetailPage() {
 
   if (error || !appointment) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center p-6">
-        <p className="text-sm text-stone-500">Appointment not found</p>
-      </div>
+      <DetailLoadError
+        entity="Appointment"
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        onBack={() => navigate(-1)}
+      />
     )
   }
 

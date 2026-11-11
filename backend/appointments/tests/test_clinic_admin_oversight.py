@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from django.test import TestCase
@@ -8,8 +9,9 @@ from django.utils import timezone
 from ai_screenings.models import AiScreening, Disease
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from appointments.services import AppointmentService
-from clinics.models import Clinic
+from clinics.models import Clinic, ClinicSettings
 from owners.models import OwnerProfile
+from payments.models import Payment, PaymentStatus
 from pets.models import Pet, Sex
 from rest_framework_simplejwt.tokens import RefreshToken
 from users.models import StaffPosition, StaffProfile, User, UserRole
@@ -685,3 +687,103 @@ class DashboardStatsTests(OversightBase):
     def test_owner_and_vet_cannot_read_stats(self):
         self.assertEqual(self._stats(self.owner).status_code, 403)
         self.assertEqual(self._stats(self.vet_user).status_code, 403)
+
+    def test_upcoming_counts_span_future_days(self):
+        self._apt(timezone.now() + timedelta(days=1))
+        self._apt(
+            timezone.now() + timedelta(days=2),
+            status=AppointmentStatus.CONFIRMED,
+        )
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['upcoming']['pending'], 1)
+        self.assertEqual(response.data['upcoming']['confirmed'], 1)
+
+    def test_upcoming_excludes_past_and_other_clinic(self):
+        # Past-due PENDING is closed by the refresh before counts are taken;
+        # a within-grace CONFIRMED stays open but is not upcoming.
+        self._apt(timezone.now() - timedelta(hours=1))
+        self._apt(
+            timezone.now() - timedelta(minutes=10),
+            status=AppointmentStatus.CONFIRMED,
+        )
+        self._apt(
+            timezone.now() + timedelta(days=1),
+            clinic=self.other_clinic,
+            status=AppointmentStatus.CONFIRMED,
+        )
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['upcoming']['pending'], 0)
+        self.assertEqual(response.data['upcoming']['confirmed'], 0)
+
+    def _enable_fee(self, clinic=None, amount='500.00'):
+        return ClinicSettings.objects.create(
+            cln_id=clinic or self.clinic,
+            cls_consultation_fee=Decimal(amount),
+        )
+
+    def _receipt(self, appointment, status=PaymentStatus.PAID):
+        return Payment.objects.create(
+            pay_reference=f'XPS-{appointment.apt_id.hex[:12]}',
+            cln_id=appointment.cln_id,
+            own_id=appointment.pet_id.own_id,
+            apt_id=appointment,
+            pay_amount=Decimal('500.00'),
+            pay_method='CASH',
+            pay_status=status,
+            pay_provider='CASH',
+            pay_paid_at=timezone.now() if status == PaymentStatus.PAID else None,
+        )
+
+    def test_unpaid_completions_lists_recent_completed_without_payment(self):
+        self._enable_fee()
+        apt = self._completed()
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        ids = [row['apt_id'] for row in response.data['unpaid_completions']]
+        self.assertEqual(ids, [str(apt.apt_id)])
+
+    def test_unpaid_completions_excludes_paid_old_and_other_clinic(self):
+        self._enable_fee()
+        self._receipt(self._completed())
+        self._apt(
+            timezone.now() - timedelta(days=10),
+            status=AppointmentStatus.COMPLETED,
+        )
+        other_apt = self._completed(clinic=self.other_clinic)
+        self._enable_fee(self.other_clinic)
+
+        response = self._stats(self.admin)
+        ids = [row['apt_id'] for row in response.data['unpaid_completions']]
+        self.assertEqual(ids, [])
+
+        other_response = self._stats(self.other_admin)
+        other_ids = [
+            row['apt_id'] for row in other_response.data['unpaid_completions']
+        ]
+        self.assertEqual(other_ids, [str(other_apt.apt_id)])
+
+    def test_unpaid_completions_counts_only_paid_receipts(self):
+        self._enable_fee()
+        apt = self._completed()
+        self._receipt(apt, status=PaymentStatus.PENDING)
+
+        response = self._stats(self.admin)
+
+        ids = [row['apt_id'] for row in response.data['unpaid_completions']]
+        self.assertEqual(ids, [str(apt.apt_id)])
+
+    def test_unpaid_completions_hidden_when_clinic_charges_no_fee(self):
+        self._completed()
+
+        response = self._stats(self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['unpaid_completions'], [])

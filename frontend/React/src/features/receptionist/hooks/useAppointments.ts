@@ -21,6 +21,8 @@ const STATUS_TOAST: Record<string, string> = {
 
 export function useAppointments(params: {
   date?: string
+  date_from?: string
+  date_to?: string
   status?: string
   vet_id?: string
   pet_id?: string

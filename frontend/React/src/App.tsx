@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { SessionWatcher } from './components/SessionWatcher'
+import { NotFoundPage } from './components/NotFoundPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
@@ -211,7 +212,10 @@ function App() {
             <Route element={<ReceptionistVetScheduleListPage />} path="schedule" />
             <Route element={<ReceptionistSchedulePage />} path="schedule/:vetId" />
             <Route element={<ReceptionistProfilePage />} path="profile" />
+            <Route element={<NotFoundPage />} path="*" />
           </Route>
+
+          <Route element={<NotFoundPage />} path="*" />
         </Routes>
       </Suspense>
     </>

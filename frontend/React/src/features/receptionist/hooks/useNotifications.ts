@@ -6,15 +6,19 @@ import {
   markAllNotificationsRead,
 } from '../services/notification.service'
 
-export function useNotifications(params: {
-  unread_only?: boolean
-  page?: number
-  page_size?: number
-}) {
+export function useNotifications(
+  params: {
+    unread_only?: boolean
+    page?: number
+    page_size?: number
+  },
+  options?: { enabled?: boolean },
+) {
   return useQuery({
     queryKey: ['receptionist', 'notifications', params],
     queryFn: () => listNotifications(params),
     staleTime: 15_000,
+    enabled: options?.enabled ?? true,
   })
 }
 
