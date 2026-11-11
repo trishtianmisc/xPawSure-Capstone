@@ -1566,10 +1566,17 @@ Query params:
 - pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
   list; invalid UUID returns 400.
 
-Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
-instructions, items, created_at } where items is an array of
+Response (200): Array of { id, consultation_id, pet_id, pet_name, pet_breed,
+pet_sex, pet_birth_date, pet_weight, pet_color, owner_name, veterinarian,
+vet_license_number, clinic_name, clinic_address, clinic_phone, instructions,
+items, created_at } where items is an array of
 { id, medicine_name, generic_name, dosage, frequency, duration, route,
 quantity, notes }
+
+The pet, owner, clinic, and veterinarian-license fields are read-only and
+support the owner mobile prescription PDF, which mirrors the veterinarian web
+printable document. They are resolved through the prescription's consultation
+and appointment, so the owner can only receive values for their own pets.
 
 ---
 

@@ -27,7 +27,28 @@ class PrescriptionResponseSerializer(serializers.ModelSerializer):
     consultation_id = serializers.UUIDField(source='con_id.con_id', read_only=True)
     pet_id = serializers.UUIDField(source='con_id.apt_id.pet_id.pet_id', read_only=True)
     pet_name = serializers.CharField(source='con_id.apt_id.pet_id.pet_name', read_only=True)
+    pet_breed = serializers.SerializerMethodField()
+    pet_sex = serializers.CharField(source='con_id.apt_id.pet_id.pet_sex', read_only=True)
+    pet_birth_date = serializers.DateField(
+        source='con_id.apt_id.pet_id.pet_birth_date', read_only=True,
+    )
+    pet_weight = serializers.DecimalField(
+        source='con_id.apt_id.pet_id.pet_weight',
+        max_digits=5,
+        decimal_places=2,
+        read_only=True,
+    )
+    pet_color = serializers.CharField(source='con_id.apt_id.pet_id.pet_color', read_only=True)
+    owner_name = serializers.SerializerMethodField()
     veterinarian = serializers.SerializerMethodField()
+    vet_license_number = serializers.CharField(
+        source='stf_id.stf_license_number', read_only=True,
+    )
+    clinic_name = serializers.CharField(source='con_id.apt_id.cln_id.cln_name', read_only=True)
+    clinic_address = serializers.CharField(
+        source='con_id.apt_id.cln_id.cln_address', read_only=True,
+    )
+    clinic_phone = serializers.CharField(source='con_id.apt_id.cln_id.cln_phone', read_only=True)
     instructions = serializers.CharField(source='prs_instructions', read_only=True)
     items = PrescriptionItemResponseSerializer(many=True, read_only=True)
     created_at = serializers.DateTimeField(source='prs_created_at', read_only=True)
@@ -35,9 +56,26 @@ class PrescriptionResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Prescription
         fields = [
-            'id', 'consultation_id', 'pet_id', 'pet_name', 'veterinarian',
+            'id', 'consultation_id',
+            'pet_id', 'pet_name', 'pet_breed', 'pet_sex', 'pet_birth_date',
+            'pet_weight', 'pet_color', 'owner_name',
+            'veterinarian', 'vet_license_number',
+            'clinic_name', 'clinic_address', 'clinic_phone',
             'instructions', 'items', 'created_at',
         ]
+
+    def get_pet_breed(self, obj) -> str | None:
+        pet = obj.con_id.apt_id.pet_id
+        if pet and pet.brd_id:
+            return pet.brd_id.brd_name
+        return None
+
+    def get_owner_name(self, obj) -> str | None:
+        pet = obj.con_id.apt_id.pet_id
+        if pet and pet.own_id and pet.own_id.usr_id:
+            user = pet.own_id.usr_id
+            return f'{user.usr_first_name} {user.usr_last_name}'.strip()
+        return None
 
     def get_veterinarian(self, obj) -> str:
         user = obj.stf_id.usr_id

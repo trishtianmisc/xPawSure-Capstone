@@ -20,6 +20,7 @@ export interface ConsultationRecord {
 export interface PrescriptionItemRecord {
   id: string
   medicine_name: string
+  generic_name: string | null
   dosage: string
   frequency: string
   duration: string
@@ -33,7 +34,17 @@ export interface PrescriptionRecord {
   consultation_id: string
   pet_id: string
   pet_name: string
+  pet_breed: string | null
+  pet_sex: string | null
+  pet_birth_date: string | null
+  pet_weight: string | null
+  pet_color: string | null
+  owner_name: string | null
   veterinarian: string
+  vet_license_number: string | null
+  clinic_name: string
+  clinic_address: string | null
+  clinic_phone: string | null
   instructions: string | null
   items: PrescriptionItemRecord[]
   created_at: string
