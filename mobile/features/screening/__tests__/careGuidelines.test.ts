@@ -30,7 +30,7 @@ const EXPECTED_TITLES: Record<DiseaseType, string> = {
   MANGE: 'Mange',
 }
 
-describe('CARE_GUIDELINES mock data', () => {
+describe('CARE_GUIDELINES data', () => {
   it('covers all five supported predicted classes', () => {
     assert.deepEqual(Object.keys(CARE_GUIDELINES).sort(), [...ALL_KEYS].sort())
   })
@@ -41,20 +41,18 @@ describe('CARE_GUIDELINES mock data', () => {
     }
   })
 
-  it('every entry has non-empty overview and all four guidance lists', () => {
+  it('every entry has a non-empty care-steps list with non-empty items', () => {
     for (const key of ALL_KEYS) {
       const g = CARE_GUIDELINES[key]
-      assert.ok(g.overview.trim().length > 0, `${key}: overview empty`)
-      for (const list of [g.precautions, g.avoid, g.consultVet, g.warningSigns]) {
-        assert.ok(list.length > 0, `${key}: list empty`)
-        for (const item of list) assert.ok(item.trim().length > 0, `${key}: empty item`)
-      }
+      assert.ok(g.careSteps.length > 0, `${key}: careSteps empty`)
+      for (const item of g.careSteps) assert.ok(item.trim().length > 0, `${key}: empty item`)
     }
   })
 
-  it('is clearly labeled as sample content pending veterinary review', () => {
-    assert.match(CARE_GUIDELINE_DISCLAIMER, /Sample Content — Pending Veterinary Review/)
-    assert.match(CARE_GUIDELINE_DISCLAIMER, /not veterinarian-approved/i)
+  it('labels the content as general guidance, not a diagnosis or prescription', () => {
+    assert.match(CARE_GUIDELINE_DISCLAIMER, /not a diagnosis/i)
+    assert.match(CARE_GUIDELINE_DISCLAIMER, /not a prescription/i)
+    assert.match(CARE_GUIDELINE_DISCLAIMER, /veterinarian/i)
   })
 
   it('contains no medication dosages, units, or treatment schedules', () => {

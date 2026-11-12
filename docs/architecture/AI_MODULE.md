@@ -290,7 +290,9 @@ Moderate Confidence
 
 Below 80%
 
-Recommend manual examination only
+Low confidence — reported as-is; does not block screening
+
+Screening decision: similarity ≥ 50% → Possible Condition Detected; 10–50% → Unable to Determine; < 10% → Not a Skin Image.
 
 Confidence thresholds may be adjusted after clinical evaluation.
 
@@ -336,7 +338,7 @@ The review findings are no longer rendered as a separate card on the result or
 details screens, and cross-analysis is no longer rendered on any mobile screen.
 Both outputs are still requested, gated, saved, and recorded
 independently — only the display changed: the former review slot shows the
-sample Care Guidelines card (static mock content, pending veterinary review),
+veterinarian-approved Care Guidelines card (static, display-only content),
 selected solely by the primary raw AI predicted class and never able to modify
 the prediction, confidence, saved result, questionnaire answers, or booking
 eligibility. Gate outcome, eligibility, `claude_token` verification, and the
@@ -693,7 +695,7 @@ When working on the AI module:
 - Never run TensorFlow inference in Django.
 - Match preprocessing and the 224 × 224 input to the training pipeline.
 - Preserve the class label order in `mobile/ai/constants/classes.ts`.
-- Preserve confidence outputs and uncertainty thresholds exactly.
+- Preserve confidence outputs exactly; decision thresholds live in `mobile/ai/constants/screening.ts` and must match §12.
 - Do not hardcode disease names outside configuration files.
 - Preserve model version information.
 - Store prediction metadata with every screening.

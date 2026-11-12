@@ -46,11 +46,17 @@ export function AppHeader() {
           <MaterialCommunityIcons color={colors.iconColor} name={theme === 'dark' ? 'weather-sunny' : 'weather-night'} size={19} />
         </Pressable>
 
-        <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Profile"
+          hitSlop={8}
+          onPress={() => router.push(user?.role === 'VETERINARIAN' ? '/(vet)/profile' : '/(owner)/profile')}
+          style={[styles.avatar, { backgroundColor: colors.primary }]}
+        >
           <Text style={styles.avatarText}>
             {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
           </Text>
-        </View>
+        </Pressable>
       </View>
     </View>
   )

@@ -123,8 +123,8 @@ displayed on any active mobile screen (neither the fresh result screen nor the
 stored screening's details screen). Agreement is not confirmation. The
 image-validation gate still runs and its outcome appears in the
 image-validation UI, but the review findings card ("Independent Image Review")
-is also no longer rendered; that slot now shows the sample Care Guidelines
-card.
+is also no longer rendered; that slot now shows the veterinarian-approved Care
+Guidelines card.
 
 When the classifier reports `DISEASE_DETECTED`, the owner may answer a
 supplementary symptom questionnaire (adaptive question order; answers may
@@ -133,18 +133,18 @@ screen presents, in order:
 
 - **AI Preliminary Screening Result** — the raw on-device prediction as the
   sole primary result, with its top-3 confidence list
-- **Care Guidelines · Sample Content** — static mock care guidance selected
-  only by the primary raw AI predicted class (never by questionnaire
-  answers), labeled "Sample Content — Pending Veterinary Review"; it is not
-  veterinarian-approved or a treatment plan, and a missing or unsupported
-  predicted class shows a general veterinary consultation message instead
+- **Care Guidelines** — veterinarian-approved care steps selected only by the
+  primary raw AI predicted class (never by questionnaire answers), labeled
+  "Veterinarian-Approved Guidance"; the content is general guidance, not a
+  diagnosis or prescription, and a missing or unsupported predicted class
+  shows a general veterinary consultation message instead
 - **Symptom Summary · Supplementary** — the plain questionnaire answers,
   labeled as context that does not change the AI prediction
 
 The care-guideline content lives in
 `mobile/features/screening/data/careGuidelines.ts` (display-only, separate
-from AI model logic) so it can be replaced with veterinarian-reviewed content
-later without touching components or AI code.
+from AI model logic) so it can be updated without touching components or AI
+code.
 
 Saving persists the raw AI prediction and confidence plus the display-only
 `symptom_answers` rows (shown on the result and details screens); the stored
@@ -520,8 +520,8 @@ screen and details screen as a symptom summary, stored only as display rows
 (`symptom_answers`); they never modify the displayed or saved prediction
 
 The review findings card is no longer rendered on the mobile result or
-details screens — those slots show the sample Care Guidelines card instead
-(pending veterinary review). Cross-analysis is likewise no longer rendered on
+details screens — those slots show the veterinarian-approved Care Guidelines
+card instead. Cross-analysis is likewise no longer rendered on
 any mobile screen. The gate itself, its eligibility outcome, and the stored
 review/cross-analysis records are unchanged and remain available through the
 API for audit.

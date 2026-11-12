@@ -4,19 +4,13 @@ import type { ScreeningResultState } from '../types/ai.types'
  * Pure screening constants (no model-asset loading), so decision logic can be
  * imported by unit tests without resolving bundled model files.
  */
-export const CONFIDENCE_THRESHOLDS = {
-  VERY_HIGH: 0.95,
-  HIGH: 0.90,
-  MODERATE: 0.80,
-} as const
-
 export const SCREENING_THRESHOLDS = {
   IMAGE_MIN_BRIGHTNESS: 15,
   IMAGE_MAX_BRIGHTNESS: 240,
   IMAGE_MIN_VARIANCE: 30,
   IMAGE_MIN_COLOR_STD: 5,
   FEATURE_SIMILARITY_MIN: 0.10,
-  FEATURE_SIMILARITY_HIGH: 0.30,
+  FEATURE_SIMILARITY_HIGH: 0.50,
 } as const
 
 export const SCREENING_STATE_MESSAGES: Record<ScreeningResultState, { title: string; message: string }> = {

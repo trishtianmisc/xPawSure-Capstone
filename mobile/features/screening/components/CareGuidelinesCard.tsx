@@ -18,20 +18,12 @@ interface CareGuidelinesCardProps {
   note?: string
 }
 
-const BLOCK_LABELS: { key: 'precautions' | 'avoid' | 'consultVet' | 'warningSigns'; label: string }[] = [
-  { key: 'precautions', label: 'Recommended Precautions' },
-  { key: 'avoid', label: 'Things to Avoid' },
-  { key: 'consultVet', label: 'When to Consult a Veterinarian' },
-  { key: 'warningSigns', label: 'Warning Signs \u2014 Prompt Veterinary Attention' },
-]
-
 /**
- * Display-only care guidance selected from static mock data by the primary
- * raw AI predicted class. The questionnaire never selects or alters the
- * content, and this card can never modify the AI prediction, confidence,
- * saved result, or booking. Content is sample data pending veterinary review.
- * Renders the general consultation message when the predicted class is
- * missing or unsupported.
+ * Display-only, veterinarian-approved care steps selected from static data by
+ * the primary raw AI predicted class. The questionnaire never selects or
+ * alters the content, and this card can never modify the AI prediction,
+ * confidence, saved result, or booking. Renders the general consultation
+ * message when the predicted class is missing or unsupported.
  */
 export function CareGuidelinesCard({ prediction, title, note }: CareGuidelinesCardProps) {
   const { colors } = useTheme()
@@ -40,27 +32,24 @@ export function CareGuidelinesCard({ prediction, title, note }: CareGuidelinesCa
 
   return (
     <>
-      <Text style={styles.sectionLabel}>{title ?? 'Care Guidelines \u00b7 Sample Content'}</Text>
+      <Text style={styles.sectionLabel}>{title ?? 'Care Guidelines'}</Text>
       <View style={styles.card}>
-        <Text style={styles.disclaimerBadge}>Sample Content \u2014 Pending Veterinary Review</Text>
+        <Text style={styles.disclaimerBadge}>Veterinarian-Approved Guidance</Text>
         <Text style={styles.title}>{guideline ? guideline.title : 'Consult a Veterinarian'}</Text>
-        <Text style={styles.overview}>
-          {guideline ? guideline.overview : GENERAL_CONSULT_MESSAGE}
-        </Text>
 
-        {guideline
-          ? BLOCK_LABELS.map((block) => (
-              <View key={block.key} style={styles.block}>
-                <Text style={styles.blockLabel}>{block.label}</Text>
-                {guideline[block.key].map((item) => (
-                  <View key={item} style={styles.bulletRow}>
-                    <Text style={styles.bulletMark}>{'\u2022'}</Text>
-                    <Text style={styles.bulletText}>{item}</Text>
-                  </View>
-                ))}
+        {guideline ? (
+          <View style={styles.block}>
+            <Text style={styles.blockLabel}>Care Steps</Text>
+            {guideline.careSteps.map((item) => (
+              <View key={item} style={styles.bulletRow}>
+                <Text style={styles.bulletMark}>{'\u2022'}</Text>
+                <Text style={styles.bulletText}>{item}</Text>
               </View>
-            ))
-          : null}
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.overview}>{GENERAL_CONSULT_MESSAGE}</Text>
+        )}
 
         <Text style={styles.note}>{note ?? CARE_GUIDELINE_DISCLAIMER}</Text>
       </View>

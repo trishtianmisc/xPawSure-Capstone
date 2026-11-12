@@ -346,7 +346,7 @@ const createStyles = (colors: AppColors) =>
       paddingHorizontal: 14,
       paddingVertical: 12,
     },
-    appointmentEmpty: { borderStyle: 'dashed', gap: 8, justifyContent: 'center', minHeight: 76 },
+    appointmentEmpty: { borderStyle: 'dashed', flexDirection: 'column', gap: 8, justifyContent: 'center', minHeight: 76 },
     dateBlock: {
       alignItems: 'center',
       backgroundColor: colors.surfaceAlt,

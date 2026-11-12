@@ -2,7 +2,6 @@ import type { DiseaseType, ModelInfo } from '../types/ai.types'
 import { SCREENING_CLASS_ORDER } from './classes'
 
 export {
-  CONFIDENCE_THRESHOLDS,
   SCREENING_THRESHOLDS,
   SCREENING_STATE_MESSAGES,
 } from './screening'

@@ -1,5 +1,4 @@
 import {
-  CONFIDENCE_THRESHOLDS,
   SCREENING_THRESHOLDS,
   SCREENING_STATE_MESSAGES,
 } from '../constants/screening'
@@ -8,13 +7,12 @@ import type { Prediction, ScreeningResultState } from '../types/ai.types'
 /**
  * Decides the screening state from the raw on-device outputs.
  *
- * Rules (fail-closed):
+ * Rules (similarity-only decision):
  * - No predictions → UNCERTAIN (never a positive result).
- * - Very low feature similarity → NOT_SKIN_IMAGE.
- * - High feature similarity AND top-1 confidence at or above the documented
- *   moderate threshold (0.80, see docs/architecture/AI_MODULE.md §12) →
- *   DISEASE_DETECTED.
- * - High similarity but low confidence, or the overlap zone → UNCERTAIN.
+ * - Feature similarity ≥ 0.50 → DISEASE_DETECTED, regardless of the
+ *   classifier's confidence. Confidence stays display/log metadata only.
+ * - Feature similarity < 0.10 → NOT_SKIN_IMAGE.
+ * - Feature similarity in [0.10, 0.50) → UNCERTAIN.
  *
  * Pure: questionnaire answers and the Claude review never reach this function;
  * it only reads the classifier's own predictions and feature similarity.
@@ -26,10 +24,11 @@ export function determineScreeningState(
   const sorted = [...predictions].sort((a, b) => b.confidence - a.confidence)
 
   if (sorted.length === 0) {
-    console.log('[TF SCREENING] UNCERTAIN: no predictions available (fail-closed)')
+    console.log('[TF SCREENING] UNCERTAIN: no predictions available')
     return { state: 'UNCERTAIN', stateMessage: SCREENING_STATE_MESSAGES.UNCERTAIN.message }
   }
 
+  // Diagnostic log only — confidence never influences the decision below.
   const top1 = sorted[0].confidence / 100
   const top2 = sorted[1] ? sorted[1].confidence / 100 : 0
   const margin = top1 - top2
@@ -44,20 +43,11 @@ export function determineScreeningState(
   )
 
   if (featureSimilarity >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH) {
-    if (top1 >= CONFIDENCE_THRESHOLDS.MODERATE) {
-      console.log(
-        `[TF SCREENING] DISEASE_DETECTED: similarity ${featureSimilarity.toFixed(3)} >= ` +
-          `${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH} and top1 ` +
-          `${(top1 * 100).toFixed(1)}% >= ${CONFIDENCE_THRESHOLDS.MODERATE * 100}%`,
-      )
-      return { state: 'DISEASE_DETECTED', stateMessage: SCREENING_STATE_MESSAGES.DISEASE_DETECTED.message }
-    }
     console.log(
-      `[TF SCREENING] UNCERTAIN (fail-closed): similarity ${featureSimilarity.toFixed(3)} >= ` +
-        `${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH} but top1 ` +
-        `${(top1 * 100).toFixed(1)}% < ${CONFIDENCE_THRESHOLDS.MODERATE * 100}%`,
+      `[TF SCREENING] DISEASE_DETECTED: similarity ${featureSimilarity.toFixed(3)} >= ` +
+        `${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH} threshold`,
     )
-    return { state: 'UNCERTAIN', stateMessage: SCREENING_STATE_MESSAGES.UNCERTAIN.message }
+    return { state: 'DISEASE_DETECTED', stateMessage: SCREENING_STATE_MESSAGES.DISEASE_DETECTED.message }
   }
 
   if (featureSimilarity < SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN) {

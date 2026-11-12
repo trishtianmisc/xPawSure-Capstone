@@ -24,25 +24,25 @@ describe('determineScreeningState', () => {
     assert.equal(result.state, 'NOT_SKIN_IMAGE')
   })
 
-  it('returns DISEASE_DETECTED at high similarity with top1 exactly at the 0.80 boundary', () => {
-    const result = determineScreeningState(predictions(80.0), 0.30)
+  it('returns DISEASE_DETECTED at the 0.50 similarity boundary even with low confidence', () => {
+    const result = determineScreeningState(predictions(45.0), 0.50)
     assert.equal(result.state, 'DISEASE_DETECTED')
   })
 
-  it('returns UNCERTAIN when top1 is just below the 0.80 boundary despite high similarity', () => {
-    const result = determineScreeningState(predictions(79.9), 0.95)
+  it('returns UNCERTAIN just below the 0.50 similarity boundary despite high confidence', () => {
+    const result = determineScreeningState(predictions(99.0), 0.4999)
     assert.equal(result.state, 'UNCERTAIN')
   })
 
-  it('returns UNCERTAIN for every top1 strictly below 0.80 at high similarity', () => {
-    for (const top1 of [0, 10, 50, 79.99]) {
+  it('ignores confidence entirely: every top1 yields DISEASE_DETECTED at high similarity', () => {
+    for (const top1 of [0, 5, 40, 79.99, 99]) {
       const result = determineScreeningState(predictions(top1), 0.8)
-      assert.equal(result.state, 'UNCERTAIN', `top1=${top1}`)
+      assert.equal(result.state, 'DISEASE_DETECTED', `top1=${top1}`)
     }
   })
 
   it('returns UNCERTAIN in the overlap zone even with high confidence', () => {
-    const result = determineScreeningState(predictions(99.0), 0.2999)
+    const result = determineScreeningState(predictions(99.0), 0.30)
     assert.equal(result.state, 'UNCERTAIN')
   })
 

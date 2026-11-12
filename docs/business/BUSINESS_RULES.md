@@ -598,8 +598,8 @@ Display note: the two outputs are still requested, gated, saved, and recorded
 independently — "Display Both Results Separately" holds at the data level. On
 the mobile owner app neither the review-findings card nor the cross-analysis
 card is rendered on the result or screening-details screens; those slots show
-the sample Care Guidelines card (static mock content, pending veterinary
-review), selected only by the primary raw AI predicted class and never able to
+the veterinarian-approved Care Guidelines card (static, display-only
+content), selected only by the primary raw AI predicted class and never able to
 modify prediction, confidence, saved result, questionnaire answers, or
 booking. Stored screenings still carry both outputs independently in the
 database and API for audit; the veterinarian consult surfaces are unaffected.

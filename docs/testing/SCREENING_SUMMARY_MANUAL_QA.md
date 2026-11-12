@@ -10,8 +10,8 @@ Scope (single-photo, AI-only primary result):
 - Claude independent image-validation gate (one review request per run)
 - Adaptive 12-question supplementary questionnaire with early stopping
 - Result screen: AI Preliminary Screening Result as the sole primary result,
-  Top-3 list, Care Guidelines (static mock content, pending veterinary
-  review), Symptom Summary (supplementary). The Independent Review card was
+  Top-3 list, Care Guidelines (veterinarian-approved static care steps),
+  Symptom Summary (supplementary). The Independent Review card was
   removed from the active results UI; the gate and stored review data are
   unchanged.
 - Save / Save-and-Book with a payload that contains only raw AI values
@@ -102,7 +102,7 @@ Expected:
 
 - Section `AI PRELIMINARY SCREENING RESULT` shows one `Predicted Condition` card with a single percentage labeled `model confidence` and the note that it is raw on-device output.
 - The `Top 3 Predictions` list shows exactly three AI predictions (or fewer when the model returned fewer).
-- Section `CARE GUIDELINES · SAMPLE CONTENT` appears between the Top-3 list and the symptom summary, shows the `Sample Content — Pending Veterinary Review` badge, and its condition title matches the primary predicted class (Allergic Dermatitis, Bacterial Infection, Fungal Infection, Hotspot, or Mange) with the five guidance blocks; a missing/unsupported class shows the general "Consult a Veterinarian" message instead.
+- Section `CARE GUIDELINES` appears between the Top-3 list and the symptom summary, shows the `Veterinarian-Approved Guidance` badge, and its condition title matches the primary predicted class (Allergic Dermatitis, Bacterial Infection, Fungal Infection, Hotspot, or Mange) with a `Care Steps` list; a missing/unsupported class shows the general "Consult a Veterinarian" message instead.
 - Section `SYMPTOM SUMMARY · SUPPLEMENTARY` lists the answered questions with their selected option labels, headed `Your questionnaire answers (X of 12)`, and states the answers do not change the AI prediction.
 - No `QUESTIONNAIRE-ONLY`, `COMBINED`, `Answer-Only`, or `Adjusted` card exists anywhere on the screen.
 - No `INDEPENDENT REVIEW` section or Claude findings card exists on the screen.
@@ -196,7 +196,7 @@ Steps:
 Expected:
 
 - Malformed JSON values are treated as empty data; the symptom summary section is hidden when no answers exist.
-- An unknown screening state falls back to `DISEASE_DETECTED` rendering only when predictions exist.
+- An unknown screening state falls back to the `UNCERTAIN` (Unable to Determine) state card.
 - `Scan Again` still navigates.
 
 Status: NOT TESTED.
@@ -245,7 +245,7 @@ Status: NOT TESTED.
 - Questionnaire answers never modify the displayed or saved prediction; they reach the backend only as the display-only `symptom_answers` rows.
 - Adaptive question ordering and early-stopping evaluation still run (internal only); `test:adaptive` passes.
 - The `engine.ts`, `summary.ts`, bayesian refinement code, and their test scripts remain in the repository untouched (cleanup deferred).
-- Top-3 AI list, Image Validation card, Care Guidelines card (static mock content, selected only by the primary raw AI predicted class; questionnaire answers cannot select or change it; it can never modify prediction, confidence, saved result, or booking), state cards, Save/Book/`alreadySaved`/`scanAgain` behavior unchanged. The Independent Review card and the Cross-analysis card no longer appear on any active results or details UI; the Claude gate, `claude_token` save wiring, the API's stored review/cross-analysis fields, and backend comparison logic are unchanged.
+- Top-3 AI list, Image Validation card, Care Guidelines card (veterinarian-approved static content, selected only by the primary raw AI predicted class; questionnaire answers cannot select or change it; it can never modify prediction, confidence, saved result, or booking), state cards, Save/Book/`alreadySaved`/`scanAgain` behavior unchanged. The Independent Review card and the Cross-analysis card no longer appear on any active results or details UI; the Claude gate, `claude_token` save wiring, the API's stored review/cross-analysis fields, and backend comparison logic are unchanged.
 - Backend contract, migrations, and database history unchanged by this refactor; `ai_screenings` passes 75/75 on a test database built from this working tree (shared-DB drift on the team's Supabase instance noted under Automated Verification).
 - No mode-specific results or stopping metadata are sent to the backend; questionnaire answers travel only in the display-only `symptom_answers` field.
 - One additive database field was introduced (`symptom_answers` / `AIS_SYMPTOM_ANSWERS`, migration `ai_screenings.0008`, nullable); no other API surface changed and the field stays optional for legacy clients.

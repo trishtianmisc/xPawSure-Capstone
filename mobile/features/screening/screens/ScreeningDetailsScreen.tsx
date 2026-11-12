@@ -152,8 +152,8 @@ export default function ScreeningDetailsScreen() {
               <Text style={styles.infoText}>
                 AI-assisted screening does not replace professional veterinary diagnosis. The
                 on-device prediction is the primary result and is never merged with any other
-                output into one probability. Care guidelines are sample content pending
-                veterinary review. Consult a vet for definitive results.
+                output into one probability. Care guidelines are general veterinarian-approved
+                guidance, not a prescription. Consult a veterinarian for definitive results.
               </Text>
             </View>
           </>
