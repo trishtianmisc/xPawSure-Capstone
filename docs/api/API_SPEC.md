@@ -458,11 +458,17 @@ Response shape is unchanged.
 
 Requires authentication. Receptionist.
 
-Owner directory. Owners are platform-wide (not attached to one clinic), so the
-list is not clinic-filtered. `pet_count` counts only the owner's active pets that
-have an appointment at the receptionist's clinic.
+Owner directory. Owners are platform-wide (not attached to one clinic), so by
+default the list is not clinic-filtered. `pet_count` counts only the owner's
+active pets that have an appointment at the receptionist's clinic.
 
-Query parameters: `search`, `page`, `page_size`
+Query parameters: `search`, `scope`, `page`, `page_size`
+
+- `scope=clinic`: only owners whose pets are clinic patients (same rule as
+  `GET /api/receptionist/pets/`). Used by the receptionist Owners tab, so it
+  never lists owners with no record at that clinic. The booking and patient
+  registration pickers omit it to search every owner.
+- A receptionist without a staff profile gets `400` when `scope=clinic`.
 
 ## GET /api/owners/{id}/
 

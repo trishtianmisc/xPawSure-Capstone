@@ -232,6 +232,28 @@ class ReceptionistPetDetailTests(ReceptionistPetBase):
 
 class ReceptionistOwnerPetsScopingTests(ReceptionistPetBase):
 
+    def test_owner_list_clinic_scope_hides_owners_without_clinic_records(self):
+        response = self.client.get(
+            '/api/owners/', {'scope': 'clinic'}, **self._auth(REC_A_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(
+            response.data['results'][0]['own_id'], str(self.owner.own_id),
+        )
+
+        response = self.client.get(
+            '/api/owners/', {'scope': 'clinic'}, **self._auth(REC_B_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 0)
+        self.assertEqual(response.data['results'], [])
+
+    def test_owner_list_without_scope_stays_platform_wide(self):
+        response = self.client.get('/api/owners/', **self._auth(REC_B_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 1)
+
     def test_owner_list_pet_count_is_clinic_scoped(self):
         response = self.client.get('/api/owners/', **self._auth(REC_A_EMAIL))
         self.assertEqual(response.status_code, 200, response.data)

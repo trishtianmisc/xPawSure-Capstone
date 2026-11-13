@@ -3,6 +3,7 @@ import type { OwnerDetail, OwnerListResponse } from '../types/receptionist.types
 
 export async function listOwners(params: {
   search?: string
+  scope?: string
   page?: number
   page_size?: number
 }): Promise<OwnerListResponse> {

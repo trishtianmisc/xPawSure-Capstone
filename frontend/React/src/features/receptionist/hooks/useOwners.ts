@@ -4,6 +4,7 @@ import { listOwners, getOwnerDetail } from '../services/owner.service'
 export function useOwners(
   params: {
     search?: string
+    scope?: string
     page?: number
     page_size?: number
   },

@@ -7,9 +7,30 @@ import { usePets } from '../hooks/usePets'
 import { PageHero } from '../components/PageHero'
 import { PetRegisterModal } from '../components/PetRegisterModal'
 import { apiErrorMessage } from '../../../utils/error'
+import { formatDate } from '../../../utils/format'
 
 const INPUT_CLASSES =
   'rounded-md border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40'
+
+function sexLabel(sex: string): string {
+  if (!sex) return '—'
+  return sex.charAt(0).toUpperCase() + sex.slice(1).toLowerCase()
+}
+
+function SexCell({ sex }: { sex: string }) {
+  const dot =
+    sex?.toUpperCase() === 'MALE'
+      ? 'bg-sky-400'
+      : sex?.toUpperCase() === 'FEMALE'
+        ? 'bg-pink-400'
+        : 'bg-stone-300 dark:bg-stone-600'
+  return (
+    <span className="inline-flex items-center gap-2 text-stone-500 dark:text-stone-400">
+      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
+      {sexLabel(sex)}
+    </span>
+  )
+}
 
 export function PetsPage() {
   const navigate = useNavigate()
@@ -26,13 +47,25 @@ export function PetsPage() {
 
   const { data, isLoading, error, refetch, isFetching } = usePets(params)
 
+  const clearSearch = () => {
+    setSearch('')
+    setPage(1)
+  }
+
   return (
     <div className="p-6">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
           <PageHero
             title="Patients"
-            subtitle="View and manage patient records."
+            subtitle="View and manage patient records for your clinic."
+            meta={
+              data && (
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-amber-100">
+                  {search ? `${data.total} matching` : `${data.total} ${data.total === 1 ? 'patient' : 'patients'}`}
+                </span>
+              )
+            }
             actions={
               <button
                 type="button"
@@ -51,7 +84,7 @@ export function PetsPage() {
             <div className="relative min-w-52 flex-1">
               <input
                 className={`${INPUT_CLASSES} pl-10`}
-                placeholder="Search pets..."
+                placeholder="Search pets or breeds..."
                 type="text"
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(1) }}
@@ -67,6 +100,15 @@ export function PetsPage() {
                 <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} />
               </svg>
             </div>
+            {search && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-medium text-stone-600 transition hover:bg-stone-100 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </Card>
 
@@ -81,8 +123,7 @@ export function PetsPage() {
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
-                    <th className="px-5 py-4 font-semibold">Name</th>
-                    <th className="px-5 py-4 font-semibold">Breed</th>
+                    <th className="px-5 py-4 font-semibold">Patient</th>
                     <th className="px-5 py-4 font-semibold">Sex</th>
                     <th className="px-5 py-4 font-semibold">Weight</th>
                     <th className="px-5 py-4 font-semibold">Registered</th>
@@ -101,37 +142,52 @@ export function PetsPage() {
                           {pet.profile_picture ? (
                             <img
                               src={pet.profile_picture}
-                              alt={pet.name}
-                              className="size-9 shrink-0 rounded-full object-cover"
+                              alt=""
+                              className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white dark:ring-stone-700"
                             />
                           ) : (
-                            <div className="grid size-9 shrink-0 place-items-center rounded-full bg-amber-100 text-xs font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            <div className="grid size-10 shrink-0 place-items-center rounded-full bg-amber-100 text-sm font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
                               {pet.name?.[0]?.toUpperCase() ?? '?'}
                             </div>
                           )}
-                          <Link
-                            to={`/receptionist/pets/${pet.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="text-sm font-semibold text-stone-900 transition hover:text-amber-700 dark:text-stone-100 dark:hover:text-amber-400"
-                          >
-                            {pet.name}
-                          </Link>
+                          <div className="min-w-0">
+                            <Link
+                              to={`/receptionist/pets/${pet.id}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="block truncate text-sm font-semibold text-stone-900 transition hover:text-amber-700 dark:text-stone-100 dark:hover:text-amber-400"
+                            >
+                              {pet.name}
+                            </Link>
+                            <p className="truncate text-xs text-stone-500 dark:text-stone-400">
+                              {pet.breed_name ?? 'Unknown breed'}
+                            </p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">{pet.breed_name ?? '—'}</td>
-                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">{pet.sex}</td>
+                      <td className="px-5 py-4">
+                        <SexCell sex={pet.sex} />
+                      </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {pet.weight ? `${pet.weight} kg` : '—'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(pet.created_at).toLocaleDateString()}
+                        {formatDate(pet.created_at)}
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <Link
                           to={`/receptionist/pets/${pet.id}`}
-                          className="rounded-lg px-3 py-1.5 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                          title="View patient"
+                          aria-label={`View ${pet.name}`}
+                          className="inline-flex rounded-lg p-2 text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"
                         >
-                          View
+                          <svg className="size-5 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
+                            <path
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                              d="M1.323 11.447C2.811 6.976 7.028 3.75 12.001 3.75c4.97 0 9.185 3.223 10.675 7.69.12.362.12.752 0 1.113-1.487 4.471-5.705 7.697-10.677 7.697-4.97 0-9.186-3.223-10.675-7.69a1.762 1.762 0 010-1.113zM17.25 12a5.25 5.25 0 11-10.5 0 5.25 5.25 0 0110.5 0z"
+                            />
+                          </svg>
                         </Link>
                       </td>
                     </tr>
@@ -167,24 +223,41 @@ export function PetsPage() {
             <div className="py-16 text-center">
               <svg
                 className="mx-auto h-12 w-12 text-stone-300 dark:text-stone-600"
-                fill="none"
-                stroke="currentColor"
+                fill="currentColor"
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                <path d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} />
+                <ellipse cx="5.5" cy="10.5" rx="2" ry="2.6" />
+                <ellipse cx="9.8" cy="6.8" rx="2" ry="2.6" />
+                <ellipse cx="14.2" cy="6.8" rx="2" ry="2.6" />
+                <ellipse cx="18.5" cy="10.5" rx="2" ry="2.6" />
+                <path d="M12 12.2c-2.6 0-5.2 2.3-5.2 4.8 0 1.7 1.2 2.8 2.8 2.8 1 0 1.7-.4 2.4-.4s1.4.4 2.4.4c1.6 0 2.8-1.1 2.8-2.8 0-2.5-2.6-4.8-5.2-4.8z" />
               </svg>
-              <h3 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">No patients found</h3>
+              <h3 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">
+                {search ? 'No patients match your search' : 'No patients yet'}
+              </h3>
               <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
-                {search ? 'Try adjusting your search.' : 'Patients will appear here once registered.'}
+                {search
+                  ? 'Try a different name or breed, or clear the search.'
+                  : 'Patients appear here after their first appointment at your clinic.'}
               </p>
+              {search ? (
+                <Button type="button" size="sm" variant="secondary" className="mt-4" onClick={clearSearch}>
+                  Clear search
+                </Button>
+              ) : (
+                <Button type="button" size="sm" className="mt-4" onClick={() => setRegisterOpen(true)}>
+                  + Register patient
+                </Button>
+              )}
             </div>
           )}
 
           {data && data.total_pages > 1 && (
             <div className="flex items-center justify-between border-t border-stone-100 px-5 py-4 dark:border-stone-700">
               <span className="text-sm text-stone-500 dark:text-stone-400">
-                Page {data.page} of {data.total_pages} ({data.total} total)
+                Showing {(data.page - 1) * data.page_size + 1}–
+                {Math.min(data.page * data.page_size, data.total)} of {data.total}
               </span>
               <div className="flex gap-2">
                 <Button
@@ -201,7 +274,7 @@ export function PetsPage() {
                   size="sm"
                   variant="secondary"
                   disabled={page >= data.total_pages}
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => setPage((p) => Math.min(data.total_pages, p + 1))}
                 >
                   Next
                 </Button>
