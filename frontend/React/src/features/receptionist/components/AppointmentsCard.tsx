@@ -247,7 +247,7 @@ export function AppointmentsCard() {
                 </div>
                 <div className="flex items-center gap-3">
                   <AppointmentStatusBadge status={apt.apt_status} />
-                  <span className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-900 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50">
                     View
                   </span>
                 </div>
