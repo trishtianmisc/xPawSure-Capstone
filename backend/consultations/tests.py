@@ -18,7 +18,7 @@ VET_EMAIL = 'convet@example.com'
 NO_PROFILE_EMAIL = 'connoprofile@example.com'
 
 LIST_FIELDS = {
-    'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
+    'id', 'appointment_id', 'screening_id', 'pet_id', 'pet_name', 'veterinarian',
     'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
     'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
     'follow_up_required', 'follow_up_target_date', 'created_at',

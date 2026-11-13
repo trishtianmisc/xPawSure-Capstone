@@ -11,7 +11,7 @@ import { formatDate, formatTime, manilaDateParts, manilaHour } from '../../src/u
 import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import { usePets } from '../../features/pet/hooks/usePets'
-import { BOOKED_PILL } from '../../features/screening/constants'
+import { screeningStatusPill } from '../../features/screening/constants'
 import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 function formatScreeningDate(iso: string): string {
@@ -238,36 +238,39 @@ export default function HomeScreen() {
             </View>
           ) : recentScreenings.length > 0 ? (
             <View style={styles.screeningList}>
-              {recentScreenings.map((screening) => (
-                <Pressable
-                  key={screening.ais_id}
-                  accessibilityHint="Opens your screening history"
-                  accessibilityLabel={`Screening result ${screening.disease} for ${screening.pet_name}`}
-                  accessibilityRole="button"
-                  onPress={() => router.push('/(owner)/screenings')}
-                  style={styles.screeningRow}
-                >
-                  <View style={styles.previewIcon}>
-                    <MaterialCommunityIcons color={colors.iconColor} name="dog" size={19} />
-                  </View>
-                  <View style={styles.previewText}>
-                    <Text numberOfLines={1} style={styles.previewTitle}>
-                      {screening.disease}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.previewMeta}>
-                      {screening.pet_name} · {formatScreeningDate(screening.ais_created_at)}
-                    </Text>
-                  </View>
-                  {screening.is_booked ? (
-                    <View style={[styles.previewStatus, { backgroundColor: BOOKED_PILL.bg }]}>
-                      <Text style={[styles.previewStatusText, { color: BOOKED_PILL.fg }]}>
-                        {BOOKED_PILL.label}
+              {recentScreenings.map((screening) => {
+                const statusPill = screeningStatusPill(screening.is_consulted, screening.is_booked)
+                return (
+                  <Pressable
+                    key={screening.ais_id}
+                    accessibilityHint="Opens your screening history"
+                    accessibilityLabel={`Screening result ${screening.disease} for ${screening.pet_name}`}
+                    accessibilityRole="button"
+                    onPress={() => router.push('/(owner)/screenings')}
+                    style={styles.screeningRow}
+                  >
+                    <View style={styles.previewIcon}>
+                      <MaterialCommunityIcons color={colors.iconColor} name="dog" size={19} />
+                    </View>
+                    <View style={styles.previewText}>
+                      <Text numberOfLines={1} style={styles.previewTitle}>
+                        {screening.disease}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.previewMeta}>
+                        {screening.pet_name} · {formatScreeningDate(screening.ais_created_at)}
                       </Text>
                     </View>
-                  ) : null}
-                  <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={18} />
-                </Pressable>
-              ))}
+                    {statusPill ? (
+                      <View style={[styles.previewStatus, { backgroundColor: statusPill.bg }]}>
+                        <Text style={[styles.previewStatusText, { color: statusPill.fg }]}>
+                          {statusPill.label}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={18} />
+                  </Pressable>
+                )
+              })}
             </View>
           ) : (
             <Pressable

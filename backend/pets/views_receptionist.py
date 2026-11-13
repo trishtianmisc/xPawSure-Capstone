@@ -14,6 +14,7 @@ from pets.serializers_receptionist import (
 )
 from prescriptions.serializers import PrescriptionResponseSerializer
 from vaccinations.serializers import VaccinationResponseSerializer
+from vaccinations.services import VaccinationService
 
 
 def _get_clinic_id(request):
@@ -54,6 +55,7 @@ class ReceptionistPetListCreateView(APIView):
         )
 
         serializer = PetResponseSerializer(result['results'], many=True)
+
         return Response({
             'total': result['total'],
             'page': result['page'],
@@ -155,6 +157,9 @@ class ReceptionistPetHistoryView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        vaccinations = list(history['vaccinations'])
+        VaccinationService.latest_by_series(vaccinations)
+
         return Response({
             'consultations': ConsultationResponseSerializer(
                 list(history['consultations']), many=True,
@@ -163,7 +168,7 @@ class ReceptionistPetHistoryView(APIView):
                 list(history['prescriptions']), many=True,
             ).data,
             'vaccinations': VaccinationResponseSerializer(
-                list(history['vaccinations']), many=True,
+                vaccinations, many=True,
             ).data,
             'screenings': ScreeningSummarySerializer(
                 list(history['screenings']), many=True,
