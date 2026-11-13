@@ -1,13 +1,11 @@
 import { z } from 'zod'
 
 import type { VaccinationWritePayload } from '../../../src/services/records'
+import { manilaDateKey } from '../../../src/utils/datetime'
 import { isValidIsoDate } from '../../pet/lib/date'
 
 export function localToday(): string {
-  const d = new Date()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${month}-${day}`
+  return manilaDateKey()
 }
 
 export const vaccinationSchema = z
@@ -22,7 +20,7 @@ export const vaccinationSchema = z
       .string()
       .min(1, 'Date given is required')
       .refine(isValidIsoDate, 'Select a valid date')
-      .refine((value) => value <= localToday(), 'Date cannot be in the future'),
+      .refine((value) => value <= manilaDateKey(), 'Date cannot be in the future'),
     next_due: z
       .string()
       .optional()

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
 import { useDebounce } from '../../../../hooks/useDebounce'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDate } from '../../../../utils/format'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import {
   clinicService,
@@ -158,7 +159,7 @@ export function ClinicListPage() {
                         </Badge>
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(clinic.created_at).toLocaleDateString()}
+                        {formatDate(clinic.created_at)}
                       </td>
                       <td className="px-5 py-4 text-right">
                         <button

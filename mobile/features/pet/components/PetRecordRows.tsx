@@ -4,18 +4,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import type { ConsultationRecord, VaccinationRecordItem } from '../../../src/services/records'
 import { VaccinationStatusPill } from '../../records/components/VaccinationStatusPill'
 import { screeningStatusPill } from '../../screening/constants'
 import type { Screening } from '../../screening/types'
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 function RowShell({
   title,

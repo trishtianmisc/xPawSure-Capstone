@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 
 import { clinicService } from '../../clinics/services/clinic.service'
 import { DashboardLayout } from '../components/DashboardLayout'
+import { formatDate } from '../../../../utils/format'
 
 const STAT_CARDS = [
   {
@@ -141,7 +142,7 @@ export function DashboardPage() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-200">{clinic.name}</p>
-                        <p className="text-xs text-stone-400 dark:text-stone-500">{new Date(clinic.created_at).toLocaleDateString()}</p>
+                        <p className="text-xs text-stone-400 dark:text-stone-500">{formatDate(clinic.created_at)}</p>
                       </div>
                     </button>
                   ))}

@@ -18,6 +18,10 @@ All endpoints require role-based authorization.
 
 The API returns JSON responses.
 
+All timestamps are stored in UTC and serialized as ISO 8601 in `Asia/Manila`
+time (`+08:00`). Date-only fields represent calendar dates in `Asia/Manila`
+unless an endpoint documents a clinic-specific timezone override.
+
 ---
 
 # 2. Authentication
@@ -836,6 +840,19 @@ so the mobile follow-up pay card can show the amount before it creates a
 checkout. The value does not change an existing payment; the backend owns the
 amount charged.
 
+The shared `screening` summary includes the stored `symptom_answers`
+questionnaire rows (display-only `{question, answer}` objects) alongside the
+final condition, confidence, image URL, and review statuses. `symptom_answers`
+is `null` when the screening was saved without a questionnaire.
+
+The `consultation` object includes the consultation's own `created_at`
+timestamp. The vet history endpoint also adds the source appointment's
+`scheduled_at`, `checked_in_at`, and `completed_at` timestamps.
+
+The detail response also includes `payment_provider_ref`, the linked payment's
+provider reference (`null` when no payment is linked or the provider did not
+return one).
+
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
 details. Beyond the shared appointment fields it adds:
@@ -1079,15 +1096,26 @@ Query parameters:
 - date (optional, `YYYY-MM-DD`, defaults to the clinic-local today). `400` for an
   invalid date.
 
-Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed },
-today_consultations: [ ...appointment summaries ] }`. All three stats are scoped to the
-calendar month of the `date` query parameter (they reset on the 1st of each month):
-`consultations_this_month` is the monthly total (confirmed, checked-in, in-progress, and
-completed appointments scheduled within that month, so
+Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed,
+today_stats: { total, confirmed, ongoing, completed } }, today_consultations: [
+...appointment summaries ], upcoming_consultations: [ ...appointment summaries ] }`.
+`today_consultations` lists the vet's appointments scheduled on `date` (confirmed,
+checked-in, in-progress, and completed). `upcoming_consultations` lists the vet's confirmed,
+checked-in, and in-progress appointments scheduled on or after `date`, ordered by schedule
+time, capped at 10.
+
+The monthly stats remain for mobile clients and are scoped to the calendar month of the
+`date` query parameter: `consultations_this_month` is the monthly total (confirmed,
+checked-in, in-progress, and completed appointments scheduled within that month, so
 `consultations_this_month == pending + completed`), `pending` counts the not-completed
-portion (confirmed, checked-in, in-progress; labeled "Upcoming" in the UI), and
-`completed` counts completed appointments. Unconfirmed (PENDING), cancelled, and no-show
-appointments are excluded from all three.
+portion (confirmed, checked-in, in-progress), and `completed` counts completed appointments.
+Unconfirmed (PENDING), cancelled, and no-show appointments are excluded from all three.
+
+`today_stats` is scoped to `date` and powers the four web dashboard cards:
+`total` is the sum of confirmed, ongoing, and completed appointments that day,
+`confirmed` counts confirmed appointments (Upcoming), `ongoing` counts checked-in plus
+in-progress appointments, and `completed` counts completed appointments. PENDING,
+cancelled, and no-show appointments are excluded.
 
 ---
 
@@ -1099,6 +1127,29 @@ appointment summaries (each includes `apt_reschedule_request_reason` and
 `apt_cancellation_request_reason`). Each summary embeds the same `screening`
 object as `GET /api/appointments/{id}/`, including the display-only
 `symptom_answers` rows.
+
+---
+
+## GET /api/veterinarian/pets/{pet_id}/history/
+
+Returns the pet's completed consultation history at the veterinarian's clinic,
+newest first. Only consultations tied to `COMPLETED` appointments are included.
+Only consultations from the caller's clinic are included. Accessible to
+veterinarians; the pet must have at least one appointment at the caller's clinic.
+
+Response (200):
+
+- pet: `{ pet_id, pet_name, pet_species }`
+- consultations: array of consultation objects (same shape as
+  `GET /api/appointments/{id}/` `consultation`, plus `scheduled_at` and the
+  source appointment's `checked_in_at` and `completed_at`; either timestamp is
+  `null` when it was never recorded).
+
+Responses:
+
+- 400: the caller has no staff profile or is not assigned to a clinic
+- 403: the caller is not a veterinarian
+- 404: unknown pet, or the pet has no appointments at the caller's clinic
 
 ---
 
@@ -1252,7 +1303,7 @@ clinic; owners get `403`.
 
 Query params: `status`, `method`, `reference` (partial match on receipt
 number, owner first/last name, or pet name), `appointment` (uuid),
-`date_from`, `date_to` (creation date, UTC calendar days),
+`date_from`, `date_to` (creation date, `Asia/Manila` calendar days),
 `paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
 unpaid rows, so a range here reconciles with the revenue KPI for the same
 range), `page`, `page_size` (max 100).
@@ -1762,8 +1813,7 @@ Request body:
   - frequency (required)
   - duration (required)
   - route (required): ORAL | TOPICAL | INJECTION | EAR | EYE | OTHER
-  - quantity (optional): integer; stays null when the veterinarian UI does
-    not capture it
+  - quantity (required): positive integer
   - notes (optional): string
 
 Responses:
@@ -2572,7 +2622,7 @@ Response 200:
     "title": "Staff member deactivated: maria@test.com",
     "subtitle": "by Ada Admin",
     "category": "staff",
-    "timestamp": "2026-09-30T16:35:35Z"
+    "timestamp": "2026-10-01T00:35:35+08:00"
   }
 ]
 
@@ -2661,6 +2711,11 @@ All other endpoints are shared between web and mobile.
 Requires authentication. Allowed roles: Owner, Receptionist, Veterinarian,
 Clinic Admin. Users can only read or modify their own notifications
 (foreign ids return 404).
+
+Assigned veterinarians receive `APPOINTMENT_CONFIRMED` notifications when an
+appointment is confirmed and `CONSULTATION_AVAILABLE` notifications when a
+patient checks in. Both reference the appointment through
+`ntf_reference_table = "APPOINTMENT"` and `ntf_reference_id`.
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,

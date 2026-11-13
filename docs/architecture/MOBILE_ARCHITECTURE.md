@@ -355,7 +355,7 @@ Veterinarians have read-only access to:
 
 **Consultations** — view consultation and prescription records associated with completed appointments.
 
-Completed appointment details include read-only consultation and prescription records from the appointment detail response.
+Completed appointment details include read-only consultation and prescription records from the appointment detail response. Appointment details also show the linked AI screening image, result, and the stored questionnaire answers in a card that initially shows five rows with a Show more / Show less toggle.
 
 Veterinarian mobile lists and schedules exclude `PENDING` owner bookings and
 the internal `REVIEW`/`CONFIRMATION` follow-up states; clinic staff manage

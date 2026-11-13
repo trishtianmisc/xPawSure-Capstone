@@ -2,6 +2,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 
 import { DetailLoadError } from '../components/DetailLoadError'
 import { useOwnerDetail } from '../hooks/useOwners'
+import { formatDate } from '../../../utils/format'
 
 export function OwnerDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -60,7 +61,7 @@ export function OwnerDetailPage() {
             <div className="flex justify-between">
               <dt className="text-sm text-stone-500 dark:text-stone-400">Registered</dt>
               <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">
-                {new Date(owner.own_created_at).toLocaleDateString()}
+                {formatDate(owner.own_created_at)}
               </dd>
             </div>
           </dl>

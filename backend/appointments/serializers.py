@@ -104,6 +104,9 @@ class VetSlotSerializer(serializers.ModelSerializer):
 class AppointmentListSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_species = serializers.SerializerMethodField()
+    pet_profile_image = serializers.CharField(
+        source='pet_id.pet_profile_image', read_only=True, allow_null=True
+    )
     vet_name = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
@@ -112,7 +115,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = [
-            'apt_id', 'pet_id', 'pet_name', 'pet_species',
+            'apt_id', 'pet_id', 'pet_name', 'pet_species', 'pet_profile_image',
             'cln_id', 'stf_id', 'vet_name', 'owner_name',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name', 'screening',
@@ -175,6 +178,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         source='pet_id.pet_weight', max_digits=5, decimal_places=2, read_only=True
     )
     pet_color = serializers.CharField(source='pet_id.pet_color', read_only=True)
+    pet_profile_image = serializers.CharField(
+        source='pet_id.pet_profile_image', read_only=True, allow_null=True
+    )
     owner_name = serializers.SerializerMethodField()
     owner_phone = serializers.SerializerMethodField()
     owner_email = serializers.SerializerMethodField()
@@ -194,12 +200,13 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     # which strips these fields together with the raw reason columns.
     vet_request = serializers.SerializerMethodField()
     has_open_request = serializers.SerializerMethodField()
+    payment_provider_ref = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
-            'pet_birth_date', 'pet_weight', 'pet_color',
+            'pet_birth_date', 'pet_weight', 'pet_color', 'pet_profile_image',
             'cln_id', 'clinic_name', 'consultation_fee',
             'clinic_address', 'clinic_phone',
             'stf_id', 'vet_name', 'vet_license_number',
@@ -211,7 +218,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
-            'vet_request', 'has_open_request',
+            'vet_request', 'has_open_request', 'payment_provider_ref',
         ]
 
     def get_consultation_fee(self, obj):
@@ -233,6 +240,12 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         except ObjectDoesNotExist:
             return None
         return PrescriptionResponseSerializer(prescription).data
+
+    def get_payment_provider_ref(self, obj):
+        try:
+            return obj.payment.pay_provider_ref
+        except ObjectDoesNotExist:
+            return None
 
     def get_pet_breed(self, obj):
         if obj.pet_id and obj.pet_id.brd_id:

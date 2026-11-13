@@ -1,4 +1,5 @@
 import { drilldownService } from '../services/drilldown.service'
+import { formatDate } from '../../../../utils/format'
 
 import { ReadTab } from './ReadTab'
 
@@ -23,7 +24,7 @@ export function ClinicPetsTab({ clinicId }: { clinicId: string }) {
         {
           key: 'created_at',
           label: 'Registered',
-          render: (row) => new Date(row.created_at).toLocaleDateString(),
+          render: (row) => formatDate(row.created_at),
         },
       ]}
       emptyMessage="No pets seen at this clinic yet."

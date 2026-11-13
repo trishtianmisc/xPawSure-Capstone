@@ -14,7 +14,25 @@ export function AppHeader() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const isOwner = user?.role === 'OWNER'
-  const { data: unreadCount } = useUnreadCount(isOwner)
+  const isVet = user?.role === 'VETERINARIAN'
+  const canUseNotifications = isOwner || isVet
+  const { data: unreadCount } = useUnreadCount(canUseNotifications)
+
+  function openNotifications() {
+    if (isOwner) {
+      router.push('/(owner)/notifications')
+    } else if (isVet) {
+      router.push('/(vet)/notifications')
+    }
+  }
+
+  function openProfile() {
+    if (isOwner) {
+      router.push('/(owner)/profile')
+    } else if (isVet) {
+      router.push('/(vet)/profile')
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
@@ -34,8 +52,8 @@ export function AppHeader() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Notifications"
-          disabled={!isOwner}
-          onPress={isOwner ? () => router.push('/(owner)/notifications') : undefined}
+          disabled={!canUseNotifications}
+          onPress={openNotifications}
           style={[styles.iconBtn, { backgroundColor: colors.iconBg }]}
         >
           {(unreadCount ?? 0) > 0 && <View style={[styles.notifDot, { backgroundColor: colors.error }]} />}
@@ -48,9 +66,9 @@ export function AppHeader() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Profile"
+          accessibilityLabel="Open profile"
           hitSlop={8}
-          onPress={() => router.push(user?.role === 'VETERINARIAN' ? '/(vet)/profile' : '/(owner)/profile')}
+          onPress={openProfile}
           style={[styles.avatar, { backgroundColor: colors.primary }]}
         >
           <Text style={styles.avatarText}>

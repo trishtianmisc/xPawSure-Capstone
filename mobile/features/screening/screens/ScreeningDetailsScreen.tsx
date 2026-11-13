@@ -13,6 +13,7 @@ import {
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDateTime as formatManilaDateTime } from '../../../src/utils/datetime'
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
 import { CareGuidelinesCard } from '../components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../components/SymptomSummaryCard'
@@ -32,7 +33,7 @@ import { consultationLinkLabel } from '../../records/lib/medicalRecordLinks'
  */
 
 function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
+  return formatManilaDateTime(iso, {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

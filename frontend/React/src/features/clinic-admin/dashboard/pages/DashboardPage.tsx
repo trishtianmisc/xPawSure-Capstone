@@ -15,23 +15,7 @@ import { formatPeso } from '../../../../utils/currency'
 import { useAppointmentVolume } from '../../appointments/hooks/useAppointments'
 import { aggregateVolumeByMonth } from '../../appointments/utils/volume'
 import { useReportRevenue, useReportVetWorkload } from '../../reports/hooks/useReports'
-import type { ReportQuery } from '../../reports/types/reports.types'
-
-function rollingWindowStart(): string {
-  const now = new Date()
-  const from = new Date(now.getFullYear(), now.getMonth() - 11, 1)
-  const month = String(from.getMonth() + 1).padStart(2, '0')
-  return `${from.getFullYear()}-${month}-01`
-}
-
-// Month-to-date window for the dashboard revenue card: same fixed
-// YYYY-MM-DD shape the reports filters use, with today as the end date.
-function monthStartWindow(): ReportQuery {
-  const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return { date_from: `${now.getFullYear()}-${month}-01`, date_to: `${now.getFullYear()}-${month}-${day}` }
-}
+import { monthStartWindow, rollingWindowStart } from '../utils/dateWindows'
 
 export function DashboardPage() {
   const { user } = useAuth()

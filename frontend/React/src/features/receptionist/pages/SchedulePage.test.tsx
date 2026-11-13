@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { isoDate } from '../../../utils/format'
+import { clinicDateKey, clinicToday } from '../../../utils/format'
 import {
   useBlockRemainingSlots,
   useGenerateSlots,
@@ -27,12 +27,12 @@ vi.mock('react-router-dom', () => ({
 type GridSlot = ScheduleResponse['vets'][number]['days'][number]['slots'][number]
 type GridDay = ScheduleResponse['vets'][number]['days'][number]
 
-const TODAY_ISO = isoDate()
+const TODAY_ISO = clinicDateKey()
 
 function dayOffsetIso(days: number): string {
-  const d = new Date()
+  const d = clinicToday()
   d.setDate(d.getDate() + days)
-  return isoDate(d)
+  return clinicDateKey(d)
 }
 
 function monthDay(iso: string): string {
@@ -657,5 +657,36 @@ describe('SchedulePage (stage 3)', () => {
     fireEvent.click(within(blockedCell).getByRole('button', { name: 'Slot options' }))
     fireEvent.click(within(blockedCell).getByRole('menuitem', { name: 'Unblock slot' }))
     expect(updateMutate).toHaveBeenCalledWith({ slotId: 'b1', status: 'AVAILABLE' })
+  })
+})
+
+describe('SchedulePage clinic days', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('requests the Manila calendar day when UTC is still the previous day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
+
+    renderPage()
+
+    expect(vi.mocked(useSchedule).mock.calls[0]?.[0]).toBe('2026-10-02')
+    expect(vi.mocked(useSchedule).mock.calls[0]?.[1]).toBe('2026-10-04')
+  })
+
+  it('defaults the generate form to the Manila day and the following six days', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
+
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Generate Slots' }))
+
+    const heading = screen.getByRole('heading', { name: 'Generate Slots' })
+    const overlay = heading.closest('.fixed') as HTMLElement
+    const dateInputs = overlay.querySelectorAll<HTMLInputElement>('input[type="date"]')
+    expect(dateInputs).toHaveLength(2)
+    expect(dateInputs[0].value).toBe('2026-10-02')
+    expect(dateInputs[1].value).toBe('2026-10-08')
   })
 })

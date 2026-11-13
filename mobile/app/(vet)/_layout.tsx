@@ -46,7 +46,8 @@ export default function VetTabLayout() {
         <Tabs.Screen name="consultations" options={{ title: 'Consultations', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'document-text' : 'document-text-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="schedule" options={{ title: 'Schedule', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} /> }} />
         <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color, focused }) => <Ionicons name={focused ? 'person' : 'person-outline'} size={20} color={color} /> }} />
-        
+        <Tabs.Screen name="notifications" options={{ href: null }} />
+        <Tabs.Screen name="pet-history" options={{ href: null }} />
       </Tabs>
     </View>
   )

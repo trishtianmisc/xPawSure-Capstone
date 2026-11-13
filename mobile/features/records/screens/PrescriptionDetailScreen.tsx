@@ -6,17 +6,14 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { PrescriptionImageModal } from '../components/PrescriptionImageModal'
 import { usePrescription } from '../hooks/usePrescription'
 import { usePrescriptionPdfExport } from '../hooks/usePrescriptionPdfExport'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
@@ -104,7 +101,7 @@ export default function PrescriptionDetailScreen() {
         <View style={styles.headerCard}>
           <Text style={styles.petName}>{prescription.pet_name}</Text>
           <Text style={styles.meta}>
-            {formatDate(prescription.created_at)} · {prescription.veterinarian}
+            {formatLongDate(prescription.created_at)} · {prescription.veterinarian}
           </Text>
         </View>
 
