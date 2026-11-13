@@ -16,6 +16,21 @@ class VaccinationImmutableError(Exception):
 class VaccinationService:
 
     @staticmethod
+    def _audit_values(vaccination: VaccinationRecord) -> dict:
+        return {
+            'pet_id': str(vaccination.pet_id_id),
+            'vac_name': vaccination.vac_name,
+            'vac_brand': vaccination.vac_brand,
+            'vac_batch_no': vaccination.vac_batch_no,
+            'vac_dose': vaccination.vac_dose,
+            'vac_route': vaccination.vac_route,
+            'vac_date_given': str(vaccination.vac_date_given),
+            'vac_next_due': str(vaccination.vac_next_due) if vaccination.vac_next_due else None,
+            'vac_notes': vaccination.vac_notes,
+            'vac_source': vaccination.vac_source,
+        }
+
+    @staticmethod
     def list_for_owner(owner_profile: OwnerProfile, pet_id: uuid_lib.UUID | None = None) -> list[VaccinationRecord]:
         if pet_id is not None and not Pet.objects.filter(pet_id=pet_id, own_id=owner_profile).exists():
             return []
@@ -66,13 +81,7 @@ class VaccinationService:
             table_name='VACCINATION_RECORD',
             record_id=str(vaccination.vac_id),
             description=f'Owner reported vaccination: {vaccination.vac_name} for {pet.pet_name}',
-            new_values={
-                'vac_name': vaccination.vac_name,
-                'vac_dose': vaccination.vac_dose,
-                'vac_route': vaccination.vac_route,
-                'vac_date_given': str(vaccination.vac_date_given),
-                'vac_next_due': str(vaccination.vac_next_due) if vaccination.vac_next_due else None,
-            },
+            new_values=VaccinationService._audit_values(vaccination),
             ip_address=ip_address,
         )
 
@@ -94,19 +103,13 @@ class VaccinationService:
         if vaccination.vac_source != VaccinationSource.OWNER:
             raise VaccinationImmutableError('Vet-issued records cannot be modified.')
 
-        old_values = {}
-        for key in VaccinationService._UPDATABLE_FIELDS:
-            if key in validated_data:
-                old_values[key] = str(getattr(vaccination, key)) if getattr(vaccination, key) is not None else None
-
-        new_values = {}
+        old_values = VaccinationService._audit_values(vaccination)
         for key in VaccinationService._UPDATABLE_FIELDS:
             if key in validated_data:
                 value = validated_data[key]
                 if isinstance(value, str) and value == '':
                     value = None
                 setattr(vaccination, key, value)
-                new_values[key] = str(value) if value is not None else None
 
         vaccination.save()
 
@@ -117,8 +120,8 @@ class VaccinationService:
             table_name='VACCINATION_RECORD',
             record_id=str(vaccination.vac_id),
             description=f'Owner updated vaccination: {vaccination.vac_name}',
-            old_values=old_values or None,
-            new_values=new_values or None,
+            old_values=old_values,
+            new_values=VaccinationService._audit_values(vaccination),
             ip_address=ip_address,
         )
 
@@ -134,8 +137,8 @@ class VaccinationService:
         if vaccination.vac_source != VaccinationSource.OWNER:
             raise VaccinationImmutableError('Vet-issued records cannot be modified.')
 
-        vac_name = vaccination.vac_name
         vac_id = str(vaccination.vac_id)
+        old_values = VaccinationService._audit_values(vaccination)
         vaccination.delete()
 
         AuditService.log(
@@ -144,6 +147,7 @@ class VaccinationService:
             module='vaccinations',
             table_name='VACCINATION_RECORD',
             record_id=vac_id,
-            description=f'Owner deleted vaccination: {vac_name}',
+            description=f'Owner deleted vaccination: {old_values["vac_name"]}',
+            old_values=old_values,
             ip_address=ip_address,
         )

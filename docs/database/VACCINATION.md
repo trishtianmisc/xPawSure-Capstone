@@ -11,11 +11,9 @@
 
 # Overview
 
-The Vaccination module manages all vaccination records administered to registered pets.
+The Vaccination module lets pet owners record vaccination history for their registered pets through the mobile application. These records are owner-reported and may be unverified.
 
-Veterinarian-issued records are created by licensed veterinarians during a Consultation.
-
-Owner-reported records are created by the pet owner from the mobile app (for vaccines given outside the clinic).
+Only an authenticated owner may create, edit, or delete their own reported records. The application does not provide a clinic-staff vaccination write flow. Existing veterinarian-issued records remain read-only to owners.
 
 Each vaccination becomes part of the pet's medical history.
 
@@ -42,9 +40,9 @@ One Consultation may contain multiple Vaccination Records.
 | Column | Type | Constraints |
 |---------|------|-------------|
 | VAC_ID | UUID | PK |
-| CON_ID | UUID | FK → CONSULTATION, NULL (vet-issued only) |
+| CON_ID | UUID | FK → CONSULTATION, NULL for owner-reported records |
 | PET_ID | UUID | FK → PET |
-| STF_ID | UUID | FK → STAFF_PROFILE, NULL (vet-issued only) |
+| STF_ID | UUID | FK → STAFF_PROFILE, NULL for owner-reported records |
 | VAC_NAME | VARCHAR(255) | NOT NULL |
 | VAC_BRAND | VARCHAR(255) | NULL |
 | VAC_BATCH_NO | VARCHAR(100) | NULL |
@@ -83,19 +81,17 @@ OWNER (owner-reported)
 
 # Business Rules
 
-Veterinarian-issued Vaccination Records belong to one Consultation.
-
 Every Vaccination Record belongs to one Pet.
 
-Only Veterinarians may issue veterinarian-issued vaccination records.
+Owners create records only through the mobile app. New records are always
+`OWNER` (owner-reported); the client cannot select or spoof the source.
 
-Owners may add, edit, and delete only their own reported records.
+Owners may add, edit, and delete only their own reported records. Existing
+`VET` records are read-only in the owner application; no staff write workflow is
+provided by this feature.
 
-Veterinarian-issued vaccination records cannot be deleted.
-
-Veterinarian-issued vaccination history is immutable.
-
-All creates, updates, and deletes are recorded in the audit log.
+All owner creates, updates, and deletes are recorded in the audit log with the
+record values needed to review the event.
 
 Next due date is optional.
 
@@ -165,8 +161,6 @@ IDX_VACCINATION_NEXT_DUE
 
 # Vaccination Workflow
 
-Veterinarian-issued: Appointment → Consultation → Vaccination → Medical History → Owner Mobile App
-
 Owner-reported: Owner Mobile App → Vaccination (source=OWNER) → Medical History
 
 ---
@@ -193,4 +187,4 @@ Used By
 
 • Reports
 
-• Vaccination Reminder System
+• Planned vaccination reminder system (not currently implemented)

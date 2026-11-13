@@ -625,7 +625,9 @@ Clinic Admins must change their password on first login before accessing protect
 
 Owners self-register through the mobile application.
 
-Owners may view medical records; they may add, edit, and delete only their own reported vaccination records.
+Owners may view medical records. Only owners using the mobile application may
+create new vaccination records; they may edit and delete only their own
+reported records. Existing veterinarian-issued records remain read-only to owners.
 
 ---
 

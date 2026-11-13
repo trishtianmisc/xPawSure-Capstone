@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
+from audit_log.models import AuditLog
 from clinics.models import Clinic
 from consultations.models import Consultation
 from owners.models import OwnerProfile
@@ -277,6 +278,43 @@ class VaccinationCreateTests(VaccinationWriteTestMixin, VaccinationBase):
         self.assertIsNone(record.stf_id)
         self.assertEqual(record.vac_source, 'OWNER')
         self.assertEqual(record.pet_id, self.pet)
+        audit = AuditLog.objects.get(adl_record_id=str(record.vac_id), adl_action='CREATE')
+        self.assertEqual(
+            set(audit.adl_new_values),
+            {
+                'pet_id', 'vac_name', 'vac_brand', 'vac_batch_no', 'vac_dose',
+                'vac_route', 'vac_date_given', 'vac_next_due', 'vac_notes', 'vac_source',
+            },
+        )
+        self.assertEqual(audit.adl_new_values['vac_brand'], 'Zoetis')
+        self.assertEqual(audit.adl_new_values['vac_notes'], 'No adverse reaction.')
+
+    def test_create_ignores_attempt_to_spoof_veterinarian_source(self):
+        response = self.client.post(
+            '/api/vaccinations/',
+            self._create_payload(source='VET', consultation_id=str(self.consultation.con_id)),
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        record = VaccinationRecord.objects.get(vac_id=response.data['id'])
+        self.assertEqual(record.vac_source, 'OWNER')
+        self.assertIsNone(record.con_id)
+        self.assertIsNone(record.stf_id)
+
+    def test_create_inactive_pet_returns_404(self):
+        self.pet.pet_is_active = False
+        self.pet.save(update_fields=['pet_is_active'])
+
+        response = self.client.post(
+            '/api/vaccinations/',
+            self._create_payload(),
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(
+            VaccinationRecord.objects.filter(pet_id=self.pet, vac_name='Leptospirosis').exists()
+        )
 
     def test_create_missing_required_fields_returns_400(self):
         response = self.client.post(
@@ -354,6 +392,11 @@ class VaccinationUpdateTests(VaccinationWriteTestMixin, VaccinationBase):
 
         record = VaccinationRecord.objects.get(vac_id=vac_id)
         self.assertEqual(record.vac_name, 'Leptospirosis 2nd dose')
+        audit = AuditLog.objects.get(adl_record_id=vac_id, adl_action='UPDATE')
+        self.assertEqual(audit.adl_old_values['vac_name'], 'Leptospirosis')
+        self.assertEqual(audit.adl_new_values['vac_name'], 'Leptospirosis 2nd dose')
+        self.assertIn('vac_brand', audit.adl_old_values)
+        self.assertIn('vac_notes', audit.adl_new_values)
 
     def test_owner_cannot_update_vet_record(self):
         response = self._put_json(
@@ -432,6 +475,9 @@ class VaccinationDeleteTests(VaccinationWriteTestMixin, VaccinationBase):
         )
         self.assertEqual(response.status_code, 204)
         self.assertFalse(VaccinationRecord.objects.filter(vac_id=vac_id).exists())
+        audit = AuditLog.objects.get(adl_record_id=vac_id, adl_action='DELETE')
+        self.assertEqual(audit.adl_old_values['vac_name'], 'Leptospirosis')
+        self.assertEqual(audit.adl_old_values['vac_brand'], 'Zoetis')
 
         detail = self.client.get(f'/api/vaccinations/{vac_id}/', **self._auth(OWNER_EMAIL))
         self.assertEqual(detail.status_code, 404)

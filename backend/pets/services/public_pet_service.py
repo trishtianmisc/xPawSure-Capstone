@@ -39,7 +39,7 @@ class PublicPetService:
     @staticmethod
     def get_public_profile(qr_code: str) -> dict | None:
         try:
-            pet = Pet.objects.select_related('brd_id').get(
+            pet = Pet.objects.select_related('brd_id', 'own_id__usr_id').get(
                 pet_qr_code=qr_code,
                 pet_is_active=True,
                 pet_deleted_at__isnull=True,
@@ -56,8 +56,17 @@ class PublicPetService:
             'age': PublicPetService.age_years(pet.pet_birth_date),
             'color': pet.pet_color or None,
             'profile_picture': pet.pet_profile_image,
-            'vaccinations': PublicPetService.vaccination_alerts(pet),
+            'owner_contact_number': PublicPetService.owner_contact_number(pet),
+            'vaccination_statuses': PublicPetService.vaccination_statuses(pet),
         }
+
+    @staticmethod
+    def owner_contact_number(pet: Pet) -> str | None:
+        owner = pet.own_id
+        if not owner.own_public_phone_consent:
+            return None
+        phone = (owner.usr_id.usr_phone or '').strip()
+        return phone or None
 
     @staticmethod
     def vaccination_status(next_due: date | None, today: date | None = None) -> str:
@@ -98,21 +107,12 @@ class PublicPetService:
         return OVERALL_UP_TO_DATE
 
     @staticmethod
-    def vaccination_alerts(pet: Pet) -> list[dict]:
-        records = VaccinationRecord.objects.filter(pet_id=pet).values(
-            'vac_name', 'vac_date_given', 'vac_next_due',
-        )
-        vaccinations = [
-            {
-                'name': record['vac_name'],
-                'date_given': record['vac_date_given'],
-                'next_due': record['vac_next_due'],
-                'status': PublicPetService.vaccination_status(record['vac_next_due']),
-            }
-            for record in records
+    def vaccination_statuses(pet: Pet) -> list[str]:
+        next_due_dates = VaccinationRecord.objects.filter(
+            pet_id=pet,
+        ).values_list('vac_next_due', flat=True)
+        statuses = [
+            PublicPetService.vaccination_status(next_due)
+            for next_due in next_due_dates
         ]
-        vaccinations.sort(key=lambda item: (
-            _STATUS_PRIORITY[item['status']],
-            item['next_due'] or date.max,
-        ))
-        return vaccinations
+        return sorted(statuses, key=_STATUS_PRIORITY.__getitem__)

@@ -71,6 +71,8 @@ Editable fields:
 - Phone Number
 - Address
 - Profile Picture
+- Public pet QR phone-sharing consent (off by default; anyone scanning a pet QR
+  can see the number when enabled)
 
 ---
 

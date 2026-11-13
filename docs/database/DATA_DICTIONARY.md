@@ -122,6 +122,7 @@
 | OWNER_PROFILE | USR_ID | User ID (FK → USER) | UUID | NOT NULL |
 | OWNER_PROFILE | OWN_ADDRESS | Owner address | TEXT | NULL |
 | OWNER_PROFILE | OWN_PROFILE_IMAGE | Profile image URL | TEXT | NULL |
+| OWNER_PROFILE | OWN_PUBLIC_PHONE_CONSENT | Owner consent to show phone on public pet QR profiles | BOOLEAN | NOT NULL, DEFAULT FALSE |
 | OWNER_PROFILE | OWN_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | OWNER_PROFILE | OWN_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 
@@ -287,16 +288,18 @@
 | Table | Field Name | Description | Data type | Null Characteristic |
 |-------|------------|-------------|-----------|---------------------|
 | VACCINATION_RECORD | VAC_ID | Vaccination ID (PK) | UUID | NOT NULL |
-| VACCINATION_RECORD | CON_ID | Consultation ID (FK → CONSULTATION) | UUID | NOT NULL |
+| VACCINATION_RECORD | CON_ID | Consultation ID (FK → CONSULTATION) | UUID | NULL |
 | VACCINATION_RECORD | PET_ID | Pet ID (FK → PET) | UUID | NOT NULL |
-| VACCINATION_RECORD | STF_ID | Veterinarian ID (FK → STAFF_PROFILE) | UUID | NOT NULL |
-| VACCINATION_RECORD | VCC_ID | Vaccine ID (FK → VACCINE) | UUID | NOT NULL |
-| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine batch number | VARCHAR | NULL |
-| VACCINATION_RECORD | VAC_DOSE | Dose info (e.g., 1st dose) | VARCHAR | NULL |
-| VACCINATION_RECORD | VAC_ROUTE | Administration route (AdministrationRoute enum) | ENUM | NULL |
+| VACCINATION_RECORD | STF_ID | Veterinarian ID (FK → STAFF_PROFILE) | UUID | NULL |
+| VACCINATION_RECORD | VAC_NAME | Vaccine name | VARCHAR(255) | NOT NULL |
+| VACCINATION_RECORD | VAC_BRAND | Vaccine brand | VARCHAR(255) | NULL |
+| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine batch number | VARCHAR(100) | NULL |
+| VACCINATION_RECORD | VAC_DOSE | Dose info (e.g., 1st dose) | VARCHAR(100) | NOT NULL |
+| VACCINATION_RECORD | VAC_ROUTE | Administration route (VaccinationRoute enum) | ENUM | NOT NULL |
 | VACCINATION_RECORD | VAC_DATE_GIVEN | Date vaccine was given | DATE | NOT NULL |
 | VACCINATION_RECORD | VAC_NEXT_DUE | Next due date for booster | DATE | NULL |
 | VACCINATION_RECORD | VAC_NOTES | Notes | TEXT | NULL |
+| VACCINATION_RECORD | VAC_SOURCE | Record source (VET or OWNER) | ENUM | NOT NULL, DEFAULT 'VET' |
 | VACCINATION_RECORD | VAC_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | VACCINATION_RECORD | VAC_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 

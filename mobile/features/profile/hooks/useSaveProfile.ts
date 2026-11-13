@@ -10,6 +10,7 @@ export interface SaveProfilePayload {
   phone?: string
   address?: string
   profile_picture?: string | null
+  public_phone_consent: boolean
 }
 
 export function useSaveProfile() {
@@ -25,6 +26,7 @@ export function useSaveProfile() {
       return profileService.updateOwnerProfile({
         address: payload.address ?? '',
         profile_picture: payload.profile_picture,
+        public_phone_consent: payload.public_phone_consent,
       })
     },
     onSuccess: () => {

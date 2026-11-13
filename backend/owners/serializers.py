@@ -76,10 +76,17 @@ class OwnerProfileSerializer(serializers.ModelSerializer):
     clinic = serializers.SerializerMethodField()
     address = serializers.SerializerMethodField()
     profile_picture = serializers.SerializerMethodField()
+    public_phone_consent = serializers.BooleanField(
+        source='own_public_phone_consent',
+        read_only=True,
+    )
 
     class Meta:
         model = OwnerProfile
-        fields = ['id', 'user', 'clinic', 'address', 'profile_picture']
+        fields = [
+            'id', 'user', 'clinic', 'address', 'profile_picture',
+            'public_phone_consent',
+        ]
 
     def get_clinic(self, obj):
         # Owners are not permanently attached to a clinic (see AUTHENTICATION.md).
@@ -96,6 +103,16 @@ class OwnerProfileSerializer(serializers.ModelSerializer):
 class OwnerProfileUpdateSerializer(serializers.Serializer):
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     profile_picture = serializers.ImageField(required=False, allow_null=True)
+    public_phone_consent = serializers.BooleanField(required=False)
+
+    def validate_public_phone_consent(self, value):
+        profile = self.context.get('profile')
+        phone = (profile.usr_id.usr_phone or '').strip() if profile else ''
+        if value and not phone:
+            raise serializers.ValidationError(
+                'Add a phone number before making it public.',
+            )
+        return value
 
     def validate_profile_picture(self, value):
         if value is None:

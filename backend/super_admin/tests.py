@@ -667,11 +667,50 @@ class OwnerManagementTests(SuperAdminTestBase):
         self.assertEqual(self.owner_user.usr_phone, '+639171234567')
         self.assertEqual(self.owner.own_address, '123 Sample Street, Manila')
 
-        log = AuditLog.objects.get(adl_table_name='OWNER_PROFILE')
+        log = AuditLog.objects.get(
+            adl_table_name='OWNER_PROFILE',
+            adl_description__startswith='Owner contact updated',
+        )
         self.assertEqual(log.adl_action, AuditAction.UPDATE)
         self.assertEqual(str(log.usr_id), str(self.super_admin.usr_id))
         self.assertEqual(log.adl_old_values['first_name'], 'Pet')
         self.assertEqual(log.adl_new_values['first_name'], 'Updated')
+
+    def test_update_contact_revokes_public_phone_consent_when_phone_changes(self):
+        self.owner.own_public_phone_consent = True
+        self.owner.save(update_fields=['own_public_phone_consent'])
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {
+            'first_name': 'Pet',
+            'last_name': 'Owner',
+            'phone': '09991234567',
+        }
+
+        response = self.client.put(
+            url, payload, format='json', **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.own_public_phone_consent)
+
+    def test_update_contact_without_phone_change_keeps_public_phone_consent(self):
+        self.owner.own_public_phone_consent = True
+        self.owner.save(update_fields=['own_public_phone_consent'])
+        url = self._url('super-admin-owner-detail', str(self.owner.own_id))
+        payload = {
+            'first_name': 'Updated',
+            'last_name': 'Owner',
+            'address': 'New Address',
+        }
+
+        response = self.client.put(
+            url, payload, format='json', **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.own_public_phone_consent)
 
     def test_update_rejects_email_field(self):
         url = self._url('super-admin-owner-detail', str(self.owner.own_id))
