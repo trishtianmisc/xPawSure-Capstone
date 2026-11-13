@@ -158,7 +158,11 @@ class ClinicPatientDetailSerializer(serializers.ModelSerializer):
 
     def get_vaccination_status(self, obj):
         return PublicPetService.overall_vaccination_status(
-            [record.vac_next_due for record in self.context.get('vaccinations', [])],
+            [
+                record.vac_next_due
+                for record in self.context.get('vaccinations', [])
+                if getattr(record, 'is_latest_in_series', True)
+            ],
             self.context.get('today'),
         )
 

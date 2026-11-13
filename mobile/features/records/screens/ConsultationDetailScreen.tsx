@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { useConsultation } from '../hooks/useConsultation'
+import { useMedicalRecordLinks } from '../hooks/useMedicalRecordLinks'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
@@ -81,12 +82,16 @@ function ClinicalSection({ icon, title, value }: ClinicalSectionProps) {
 }
 
 export default function ConsultationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, fromScreening } = useLocalSearchParams<{ id: string; fromScreening?: string }>()
   const router = useRouter()
   const { colors } = useTheme()
   const { data: consultation, isLoading, isError, error } = useConsultation(id)
   const styles = useMemo(() => createStyles(colors), [colors])
-  const handleBack = useRecordDetailBack('consultations')
+  const { viewScreening } = useMedicalRecordLinks()
+  const handleBack = useRecordDetailBack(
+    'consultations',
+    fromScreening ? `/(owner)/screenings/${fromScreening}` : undefined,
+  )
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -202,6 +207,24 @@ export default function ConsultationDetailScreen() {
               <ClinicalSection key={section.title} {...section} />
             ))}
           </View>
+        ) : null}
+
+        {consultation.screening_id ? (
+          <Pressable
+            accessibilityLabel="View Screening"
+            accessibilityRole="button"
+            onPress={() => viewScreening(consultation.id, consultation.screening_id!, fromScreening)}
+            style={({ pressed }) => [styles.prescriptionCard, pressed && styles.prescriptionCardPressed]}
+          >
+            <View style={styles.prescriptionIcon}>
+              <MaterialCommunityIcons color={colors.primary} name="image-search-outline" size={20} />
+            </View>
+            <View style={styles.prescriptionCopy}>
+              <Text style={styles.prescriptionTitle}>View Screening</Text>
+              <Text style={styles.prescriptionText}>Open the skin screening linked to this visit.</Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={20} />
+          </Pressable>
         ) : null}
 
         {prescriptionId ? (

@@ -72,17 +72,26 @@ class OwnerScreeningListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # `is_booked` is annotated as one EXISTS query so the list never
+        # `is_booked`/`is_consulted` are each one EXISTS query so the list never
         # fans out into per-screening appointment lookups.
-        qs = AiScreening.objects.filter(
+        qs = ScreeningService.with_consultation_links(AiScreening.objects.filter(
             pet_id__own_id=owner_profile,
-        ).select_related('dis_id', 'pet_id').annotate(
+        ).select_related('dis_id', 'pet_id', 'image').annotate(
             is_booked=Exists(
                 Appointment.objects.filter(
                     apt_screening=OuterRef('ais_id'),
+                    apt_deleted_at__isnull=True,
                 ).exclude(apt_status=AppointmentStatus.CANCELLED),
             ),
-        )
+            is_consulted=Exists(
+                Appointment.objects.filter(
+                    apt_screening=OuterRef('ais_id'),
+                    apt_deleted_at__isnull=True,
+                    apt_status=AppointmentStatus.COMPLETED,
+                    consultation__isnull=False,
+                ),
+            ),
+        ))
 
         pet_id = _parse_uuid(request.query_params.get('pet_id'))
         if request.query_params.get('pet_id'):
@@ -246,6 +255,22 @@ class OwnerScreeningListCreateView(APIView):
 
         result = ScreeningSerializer(screening, context={'request': request})
         return Response(result.data, status=status.HTTP_201_CREATED)
+
+
+class OwnerScreeningDetailView(APIView):
+    permission_classes = [IsOwner]
+
+    def get(self, request, screening_id):
+        owner_profile = _get_owner_profile(request.user)
+        if owner_profile is None:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        screening = ScreeningService.get_for_owner(screening_id, owner_profile)
+        if screening is None:
+            return Response({'detail': 'Screening not found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(ScreeningSerializer(screening, context={'request': request}).data)
 
 
 class OwnerVisionAnalysisView(APIView):

@@ -293,9 +293,11 @@
 | VACCINATION_RECORD | STF_ID | Veterinarian ID (FK → STAFF_PROFILE) | UUID | NULL |
 | VACCINATION_RECORD | VAC_NAME | Vaccine name | VARCHAR(255) | NOT NULL |
 | VACCINATION_RECORD | VAC_BRAND | Vaccine brand | VARCHAR(255) | NULL |
-| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine batch number | VARCHAR(100) | NULL |
-| VACCINATION_RECORD | VAC_DOSE | Dose info (e.g., 1st dose) | VARCHAR(100) | NOT NULL |
-| VACCINATION_RECORD | VAC_ROUTE | Administration route (VaccinationRoute enum) | ENUM | NOT NULL |
+| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine lot number | VARCHAR(100) | NULL |
+| VACCINATION_RECORD | VAC_VETERINARIAN_NAME | Free-text veterinarian name for owner-reported records | VARCHAR(255) | NULL |
+| VACCINATION_RECORD | VAC_SERIES_ID | Dose-series grouping UUID (scoped by pet) | UUID | NOT NULL |
+| VACCINATION_RECORD | VAC_DOSE | Legacy dose information | VARCHAR(100) | NULL |
+| VACCINATION_RECORD | VAC_ROUTE | Legacy administration route | ENUM | NULL |
 | VACCINATION_RECORD | VAC_DATE_GIVEN | Date vaccine was given | DATE | NOT NULL |
 | VACCINATION_RECORD | VAC_NEXT_DUE | Next due date for booster | DATE | NULL |
 | VACCINATION_RECORD | VAC_NOTES | Notes | TEXT | NULL |

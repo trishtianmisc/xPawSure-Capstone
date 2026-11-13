@@ -3,6 +3,7 @@ import { http } from './http'
 export interface ConsultationRecord {
   id: string
   appointment_id: string
+  screening_id: string | null
   pet_id: string
   pet_name: string
   veterinarian: string
@@ -59,8 +60,10 @@ export interface VaccinationRecordItem {
   name: string
   brand: string | null
   batch_no: string | null
-  dose: string
-  route: string
+  series_id: string
+  is_latest_in_series: boolean
+  dose: string | null
+  route: string | null
   date_given: string
   next_due: string | null
   notes: string | null
@@ -73,11 +76,10 @@ export interface VaccinationWritePayload {
   name: string
   brand: string | null
   batch_no: string | null
-  dose: string
-  route: string
+  veterinarian: string | null
+  series_id?: string
   date_given: string
   next_due: string | null
-  notes: string | null
 }
 
 export async function getConsultations(petId?: string): Promise<ConsultationRecord[]> {

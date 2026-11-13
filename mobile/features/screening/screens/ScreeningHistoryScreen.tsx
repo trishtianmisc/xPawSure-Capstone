@@ -5,7 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
-import { BOOKED_PILL } from '../constants'
+import { screeningStatusPill } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
 
 function formatDate(iso: string): string {
@@ -56,14 +56,15 @@ export default function ScreeningHistoryScreen() {
           </Text>
         ) : screenings.length > 0 ? (
           screenings.map((screening) => {
+            const statusPill = screeningStatusPill(screening.is_consulted, screening.is_booked)
             return (
               <View key={screening.ais_id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
-                  {screening.is_booked ? (
-                    <View style={[styles.statusPill, { backgroundColor: BOOKED_PILL.bg }]}>
-                      <Text style={[styles.statusPillText, { color: BOOKED_PILL.fg }]}>
-                        {BOOKED_PILL.label}
+                  {statusPill ? (
+                    <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+                      <Text style={[styles.statusPillText, { color: statusPill.fg }]}>
+                        {statusPill.label}
                       </Text>
                     </View>
                   ) : null}

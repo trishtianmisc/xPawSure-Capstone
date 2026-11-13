@@ -10,6 +10,7 @@ export function useCreateVaccination() {
     mutationFn: recordsService.createVaccination,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vaccinations'] })
+      queryClient.invalidateQueries({ queryKey: ['vaccination'] })
     },
   })
 }

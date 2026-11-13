@@ -385,6 +385,9 @@ The public QR profile exposes status values only; it never exposes vaccination
 names, administration dates, or due dates. Statuses are sorted by urgency:
 `OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
 Each array item is one of `OVERDUE`, `DUE_SOON`, `CURRENT`, or `NO_DUE_DATE`.
+Statuses are computed from only the latest dose in each vaccine series, so a
+newly recorded dose clears the prior dose's overdue status while preserving the
+old dose in vaccination history.
 
 ---
 
@@ -1597,7 +1600,7 @@ Query params:
 - pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
   list; invalid UUID returns 400.
 
-Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
+Response (200): Array of { id, appointment_id, screening_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
 specific_disease, prescription_id, treatment, notes, follow_up_required,
 follow_up_target_date, created_at }
@@ -1605,6 +1608,10 @@ follow_up_target_date, created_at }
 `specific_disease` is `null` when no specific disease/subtype is recorded.
 `prescription_id` is the linked prescription UUID when one exists, otherwise
 `null`. A consultation has at most one prescription.
+`screening_id` is the visit's screening UUID, resolved through its appointment,
+or `null` if none is linked. A different pet's screening is never returned.
+The owner app uses it for **View Screening**. This is a read-only link and does
+not depend on prediction/diagnosis agreement or screening comparison metadata.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
 when no follow-up is requested.
 
@@ -1790,11 +1797,17 @@ Query params:
   list; invalid UUID returns 400.
 
 Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
-name, brand, batch_no, dose, route, date_given, next_due, notes, source,
-created_at }, ordered by date_given descending.
+name, brand, batch_no, series_id, dose, route, date_given, next_due, notes,
+source, created_at, is_latest_in_series }, ordered by date_given descending.
 
 - source is "VET" (veterinarian-issued) or "OWNER" (owner-reported).
-- veterinarian and consultation_id are null for owner-reported records.
+- veterinarian is the linked staff veterinarian on clinic records, or the
+  optional owner-entered free-text name on owner-reported records. Consultation
+  ID is null for owner-reported records.
+- `series_id` groups doses for one pet. `is_latest_in_series` identifies the
+  newest dose; due status is based only on that dose. Older doses remain in
+  history but no longer contribute an overdue status after a newer dose is
+  recorded.
 
 ---
 
@@ -1820,16 +1833,22 @@ Request:
   "pet_id": "uuid",
   "name": "Rabies",
   "brand": "Nobivac (optional)",
-  "batch_no": "B-123 (optional)",
-  "dose": "1 ml",
-  "route": "SUBCUTANEOUS",
+  "batch_no": "LOT-123 (optional)",
+  "veterinarian": "Dr. Example (optional)",
+  "series_id": "uuid (optional; use to record another dose in an existing series)",
   "date_given": "2026-09-30",
-  "next_due": "2027-09-30 (optional)",
-  "notes": "optional"
+  "next_due": "2027-09-30 (optional)"
 }
 
-Validation errors (400): missing required fields, unknown route, date_given in
-the future, next_due before date_given. Unknown or foreign pet returns 404.
+Dose, route, and notes are accepted as optional legacy fields but are not
+collected by the current owner app. If `series_id` is omitted, a normalized
+same-pet vaccine-name match reuses the existing series; otherwise a new series
+is created. A supplied series must already belong to the selected pet.
+
+Validation errors (400): missing required fields, date_given in the future,
+next_due before date_given, or a series that does not belong to the selected pet.
+The new dose date cannot precede the latest recorded dose in the selected series.
+Unknown or foreign pet returns 404.
 
 Response (201): Vaccination object as above.
 
@@ -1920,6 +1939,10 @@ Response:
       "ais_is_correct": null,
       "ais_created_at": "...",
       "is_booked": false,
+      "is_consulted": false,
+      "linked_consultations": [
+        { "kind": "ORIGINAL", "id": "...", "created_at": "...", "veterinarian": "..." }
+      ],
       "symptom_answers": [
         { "question": "Where is the affected area?", "answer": "Back, Ears" }
       ],
@@ -1963,8 +1986,28 @@ Response:
 the linked appointment; it then becomes `true`/`false` (see verdict rules
 below).
 
-`is_booked` is `true` while a non-cancelled appointment was booked from the
-screening; cancelling that appointment returns it to `false`.
+`is_booked` is `true` while a live, non-cancelled appointment was booked from the
+screening; cancelling or soft-deleting that appointment returns it to `false`.
+A deleted appointment is hidden everywhere else in the app, so a scan it used no
+longer reads as booked and can be booked again.
+
+`is_consulted` is `true` once the visit booked from the screening is completed
+and has a recorded consultation. A consultation drafted while the appointment is
+still in progress, a cancelled appointment, and a deleted appointment all keep it
+`false`. The owner app shows a **Consulted** pill when it is `true`, otherwise
+**Booked** while `is_booked`.
+
+`linked_consultations` contains at most two `{ kind, id, created_at, veterinarian }`
+summaries of the visits linked to this screening for the same pet, on non-deleted
+appointments. `kind` is `ORIGINAL` for the earliest visit — the one the scan was
+first used for — and `FOLLOW_UP` for a follow-up visit that reused the same scan.
+A follow-up is only linked once its appointment is `COMPLETED`, so an unfinished
+follow-up is never exposed. Entries are ordered original first, then follow-up.
+The list is empty when no consultation exists (booking alone does not count). The
+owner app labels the links **View Consultation** and **View Follow-up
+Consultation**. No medical record or AI output is modified when following a link.
+The scan's `con_id` is comparison metadata and is not used as the full visit
+history because later follow-up comparisons may replace it.
 
 `symptom_answers` is the stored questionnaire summary, returned as display
 context only. It is `null` when the screening was saved without answers or
@@ -1978,6 +2021,21 @@ never treated as confirmation.
 
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
+
+---
+
+## GET /api/owner/screenings/{id}/
+
+Requires authentication (Owner role). Returns the same screening object as a
+list item, including `linked_consultations`, looked up directly by screening ID.
+This supports older scans that are not in the first page of history.
+
+- 200: the owner's screening.
+- 404: unknown screening or screening belonging to a different owner.
+- 401/403: unauthenticated or not an owner.
+- 400: the authenticated owner has no owner profile.
+
+Read-only: update and delete methods are not supported.
 
 ---
 

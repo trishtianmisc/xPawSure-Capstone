@@ -23,6 +23,7 @@ from staff.services import normalize_phone
 from staff.tasks import send_staff_welcome_email
 from users.models import StaffPosition, StaffProfile, User, UserRole
 from vaccinations.models import VaccinationRecord
+from vaccinations.services import VaccinationService
 
 logger = logging.getLogger(__name__)
 
@@ -683,8 +684,10 @@ class VaccinationReadService:
         page: int = 1,
         page_size: int = 20,
     ) -> dict:
-        queryset = VaccinationRecord.objects.select_related(
+        queryset = VaccinationService.annotate_latest_in_series(
+            VaccinationRecord.objects.select_related(
             'pet_id__own_id__usr_id', 'stf_id__usr_id', 'con_id',
+            )
         )
 
         if clinic_id:

@@ -4,15 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
-import { type VaccinationFormValues } from '../schemas/vaccination'
-
-const ROUTE_OPTIONS = [
-  { value: 'SUBCUTANEOUS', label: 'Subcutaneous' },
-  { value: 'INTRAMUSCULAR', label: 'Intramuscular' },
-  { value: 'INTRAVENOUS', label: 'Intravenous' },
-  { value: 'ORAL', label: 'Oral' },
-  { value: 'OTHER', label: 'Other' },
-] as const
+import { localToday, type VaccinationFormValues } from '../schemas/vaccination'
+import { VaccinationDateField } from './VaccinationDateField'
 
 interface PetOption {
   id: string
@@ -23,6 +16,7 @@ interface VaccinationFormProps {
   form: UseFormReturn<VaccinationFormValues>
   pets?: PetOption[]
   petLocked?: boolean
+  vaccineNameLocked?: boolean
   onSubmit: () => void
   isPending: boolean
   errorMessage?: string | null
@@ -33,6 +27,7 @@ export function VaccinationForm({
   form,
   pets,
   petLocked = false,
+  vaccineNameLocked = false,
   onSubmit,
   isPending,
   errorMessage,
@@ -44,6 +39,7 @@ export function VaccinationForm({
     control,
     formState: { errors },
   } = form
+  const dateGiven = form.watch('date_given')
 
   return (
     <>
@@ -88,6 +84,7 @@ export function VaccinationForm({
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
               autoCapitalize="words"
+              editable={!vaccineNameLocked}
               onBlur={onBlur}
               onChangeText={onChange}
               placeholder="e.g. Rabies"
@@ -99,58 +96,17 @@ export function VaccinationForm({
         />
         {errors.name && <Text style={styles.fieldError}>{errors.name.message}</Text>}
 
-        <Text style={styles.label}>Dose *</Text>
-        <Controller
-          control={control}
-          name="dose"
-          render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
-              onBlur={onBlur}
-              onChangeText={onChange}
-              placeholder="e.g. 1 ml"
-              placeholderTextColor={colors.textMuted}
-              style={[styles.input, errors.dose && styles.inputError]}
-              value={value}
-            />
-          )}
-        />
-        {errors.dose && <Text style={styles.fieldError}>{errors.dose.message}</Text>}
-
-        <Text style={styles.label}>Route *</Text>
-        <Controller
-          control={control}
-          name="route"
-          render={({ field: { value, onChange } }) => (
-            <View style={styles.routeRow}>
-              {ROUTE_OPTIONS.map((option) => (
-                <Pressable
-                  key={option.value}
-                  accessibilityRole="button"
-                  onPress={() => onChange(option.value)}
-                  style={[styles.routeChip, value === option.value && styles.routeChipActive]}
-                >
-                  <Text
-                    style={[styles.routeChipText, value === option.value && styles.routeChipTextActive]}
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        />
-
         <Text style={styles.label}>Date Given *</Text>
         <Controller
           control={control}
           name="date_given"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
+            <VaccinationDateField
+              label="Date given"
+              maximum={localToday()}
               onBlur={onBlur}
-              onChangeText={onChange}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-              style={[styles.input, errors.date_given && styles.inputError]}
+              onChange={onChange}
+              invalid={!!errors.date_given}
               value={value}
             />
           )}
@@ -162,12 +118,13 @@ export function VaccinationForm({
           control={control}
           name="next_due"
           render={({ field: { onChange, onBlur, value } }) => (
-            <TextInput
+            <VaccinationDateField
+              label="Next due"
+              minimum={dateGiven || undefined}
+              optional
               onBlur={onBlur}
-              onChangeText={onChange}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-              style={[styles.input, errors.next_due && styles.inputError]}
+              onChange={onChange}
+              invalid={!!errors.next_due}
               value={value ?? ''}
             />
           )}
@@ -195,7 +152,7 @@ export function VaccinationForm({
           )}
         />
 
-        <Text style={styles.label}>Batch No.</Text>
+        <Text style={styles.label}>Lot No.</Text>
         <Controller
           control={control}
           name="batch_no"
@@ -212,18 +169,18 @@ export function VaccinationForm({
           )}
         />
 
-        <Text style={styles.label}>Notes</Text>
+        <Text style={styles.label}>Veterinarian</Text>
         <Controller
           control={control}
-          name="notes"
+          name="veterinarian"
           render={({ field: { onChange, onBlur, value } }) => (
             <TextInput
-              multiline
+              autoCapitalize="words"
               onBlur={onBlur}
               onChangeText={onChange}
-              placeholder="Anything the vet should know"
+              placeholder="Veterinarian's name (optional)"
               placeholderTextColor={colors.textMuted}
-              style={[styles.input, styles.notesInput]}
+              style={styles.input}
               value={value ?? ''}
             />
           )}
@@ -283,12 +240,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     height: 50,
     paddingHorizontal: 16,
   },
-  notesInput: {
-    height: 90,
-    paddingBottom: 12,
-    paddingTop: 12,
-    textAlignVertical: 'top',
-  },
   inputError: { borderColor: colors.error },
   fieldError: { ...font.regular, color: colors.error, fontSize: 12, marginTop: 4 },
   petRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
@@ -303,18 +254,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   petChipActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
   petChipText: { ...font.semibold, color: colors.textSecondary, fontSize: 14 },
   petChipTextActive: { color: colors.primary },
-  routeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  routeChip: {
-    backgroundColor: colors.bg,
-    borderColor: colors.border,
-    borderRadius: 999,
-    borderWidth: 1.5,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  routeChipActive: { backgroundColor: colors.primaryLight, borderColor: colors.primary },
-  routeChipText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
-  routeChipTextActive: { color: colors.primary },
   submitButton: {
     alignItems: 'center',
     backgroundColor: colors.primary,

@@ -39,7 +39,6 @@ export default function NewPetScreen() {
       date_of_birth: '',
       weight: '',
       color: '',
-      microchip_number: '',
       profile_picture: undefined,
     },
   })
@@ -200,28 +199,6 @@ export default function NewPetScreen() {
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Identification</Text>
-          <Text style={styles.sectionHint}>Optional but recommended</Text>
-
-          <Text style={styles.label}>Microchip Number</Text>
-          <Controller
-            control={control}
-            name="microchip_number"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                autoCapitalize="characters"
-                onBlur={onBlur}
-                onChangeText={onChange}
-                placeholder="e.g. 985112003456789"
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                value={value}
-              />
-            )}
-          />
-        </View>
-
         <Pressable
           disabled={createPet.isPending}
           onPress={handleSubmit(onSubmit)}
@@ -273,7 +250,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   headerTitle: { ...font.extrabold, color: colors.text, fontSize: 20, marginTop: -45, marginLeft: 60 },
   headerHint: { ...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: -3, marginLeft: 60 },
   sectionTitle: { ...font.bold, color: colors.text, fontSize: 17, marginBottom: 4 },
-  sectionHint: { ...font.regular, color: colors.textMuted, fontSize: 12, marginBottom: 12, marginTop: -2 },
   label: { ...font.semibold, color: colors.text, fontSize: 13, marginBottom: 6, marginTop: 16 },
   input: {
     ...font.regular,
