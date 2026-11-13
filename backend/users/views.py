@@ -132,6 +132,7 @@ class ProfileView(APIView):
             request.user,
             data=request.data,
             partial=True,
+            context={'request': request},
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()

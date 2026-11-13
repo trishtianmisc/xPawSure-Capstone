@@ -159,7 +159,8 @@ Requires authentication.
 Request:
 
 {
-  "full_name": "string (optional)",
+  "first_name": "string (optional)",
+  "last_name": "string (optional)",
   "phone": "string (optional)"
 }
 
@@ -169,10 +170,15 @@ Response (200):
   "id": "uuid",
   "email": "string",
   "full_name": "string",
+  "first_name": "string",
+  "last_name": "string",
   "phone": "string",
   "role": "string",
   "clinic_name": "string | null"
 }
+
+Changing `phone` revokes any public pet QR phone-sharing consent. The owner
+must opt in again before the new number can appear publicly.
 
 ---
 
@@ -199,7 +205,8 @@ Response (200):
     "name": "string"
   },
   "address": "string",
-  "profile_picture": "string (url)"
+  "profile_picture": "string (url)",
+  "public_phone_consent": false
 }
 
 Implementation notes:
@@ -218,8 +225,14 @@ Request:
 
 {
   "address": "string (optional)",
-  "profile_picture": "file (optional)"
+  "profile_picture": "file (optional)",
+  "public_phone_consent": "boolean (optional)"
 }
+
+`public_phone_consent` defaults to `false`. Setting it to `true` requires a
+phone number and allows that number to appear on the owner's public pet QR
+profiles. The owner can revoke consent by setting it to `false`. Changing the
+phone number revokes existing consent; the owner must opt in again.
 
 `profile_picture` accepts JPEG, PNG, or WebP up to 2 MB; the file is stored in the
 Supabase `owner-images` bucket and the returned URL is saved. Sending
@@ -346,8 +359,9 @@ Reached by scanning a pet's QR code (encoded value:
 `/pets/:qrCode/public`). Throttled to 60 requests/min per IP.
 
 Returns a restricted, privacy-safe profile of an active pet looked up by its
-`qr_code` (the pet ID). Never exposes owner data, microchip number, weight, or
-internal IDs. Deleted or inactive pets return `404`.
+`qr_code` (the pet ID). Never exposes the owner's name, email, address,
+microchip number, weight, or internal IDs. The owner contact number is null
+unless the owner has explicitly opted in. Deleted or inactive pets return `404`.
 
 Response (200):
 
@@ -360,18 +374,17 @@ Response (200):
   "age": "integer | null",
   "color": "string | null",
   "profile_picture": "url | null",
-  "vaccinations": [
-    {
-      "name": "string",
-      "date_given": "YYYY-MM-DD",
-      "next_due": "YYYY-MM-DD | null",
-      "status": "OVERDUE | DUE_SOON | CURRENT | NO_DUE_DATE"
-    }
-  ]
+  "owner_contact_number": "string | null",
+  "vaccination_statuses": ["OVERDUE", "CURRENT"]
 }
 
-Vaccinations are sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
-`NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
+`owner_contact_number` is shown only when the owner has opted in and has a
+non-empty phone number; otherwise it is `null`.
+
+The public QR profile exposes status values only; it never exposes vaccination
+names, administration dates, or due dates. Statuses are sorted by urgency:
+`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
+Each array item is one of `OVERDUE`, `DUE_SOON`, `CURRENT`, or `NO_DUE_DATE`.
 
 ---
 
@@ -921,6 +934,14 @@ That voids the checkout only; the appointment stays `CONFIRMATION` until it is
 paid or auto-cancelled at the scheduled time. The owner cannot cancel a
 `CONFIRMATION` follow-up itself.
 
+When the appointment has a linked screening, the payload embeds a `screening`
+summary object (`ais_id`, `disease`, `ais_confidence`, `ais_model_version`,
+`ais_status`, `ais_source`, `ais_is_correct`, `ais_created_at`, `image_url`,
+`claude_status`, `cross_analysis_status`, and `symptom_answers`). The
+`symptom_answers` field carries the owner's questionnaire rows as display-only
+context for the treatment team and is `null` when absent; it can never
+influence the AI fields.
+
 ---
 
 ## PATCH /api/appointments/{id}/
@@ -1072,7 +1093,9 @@ appointments are excluded from all three.
 Query parameters: `start_date`, `end_date` (optional `YYYY-MM-DD`; `400` for invalid
 values or when `start_date` is after `end_date`). Returns the vet's own appointments as
 appointment summaries (each includes `apt_reschedule_request_reason` and
-`apt_cancellation_request_reason`).
+`apt_cancellation_request_reason`). Each summary embeds the same `screening`
+object as `GET /api/appointments/{id}/`, including the display-only
+`symptom_answers` rows.
 
 ---
 
@@ -1947,6 +1970,11 @@ screening; cancelling that appointment returns it to `false`.
 context only. It is `null` when the screening was saved without answers or
 predates the column; stored rows never influence prediction, confidence,
 review, or booking.
+
+`cross_analysis` is deterministic audit data computed at save time from the
+two independent outputs. The mobile app no longer renders it (the API field is
+retained for backward compatibility, audit, and future tooling); agreement is
+never treated as confirmation.
 
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.

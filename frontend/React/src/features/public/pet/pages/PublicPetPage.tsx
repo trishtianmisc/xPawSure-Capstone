@@ -41,7 +41,7 @@ function PageShell({ children }: { children: ReactNode }) {
         </header>
         {children}
         <footer className="mt-6 text-center text-xs text-stone-400 dark:text-stone-500">
-          Scanned via XPawSure QR code. Owner contact details are never shown publicly.
+          Scanned via XPawSure QR code. Owner phone numbers appear only with the owner’s consent.
         </footer>
       </div>
     </main>
@@ -108,8 +108,15 @@ export function PublicPetPage() {
     )
   }
 
-  const overdue = pet.vaccinations.filter((v) => v.status === 'OVERDUE').length
-  const dueSoon = pet.vaccinations.filter((v) => v.status === 'DUE_SOON').length
+  const statusCounts: Record<VaccinationStatus, number> = {
+    OVERDUE: 0,
+    DUE_SOON: 0,
+    CURRENT: 0,
+    NO_DUE_DATE: 0,
+  }
+  pet.vaccination_statuses.forEach((status) => {
+    statusCounts[status] += 1
+  })
 
   return (
     <PageShell>
@@ -145,46 +152,44 @@ export function PublicPetPage() {
             <dt className="text-sm text-stone-500 dark:text-stone-400">Color</dt>
             <dd className="text-sm font-medium text-stone-900 dark:text-stone-100">{pet.color ?? '—'}</dd>
           </div>
+          <div className="flex justify-between gap-4 sm:col-span-2">
+            <dt className="text-sm text-stone-500 dark:text-stone-400">Owner contact number</dt>
+            <dd className="text-right text-sm font-medium text-stone-900 dark:text-stone-100">
+              {pet.owner_contact_number ? (
+                <a className="underline" href={`tel:${pet.owner_contact_number}`}>
+                  {pet.owner_contact_number}
+                </a>
+              ) : 'Not publicly shared'}
+            </dd>
+          </div>
         </dl>
       </Card>
 
       <Card className="mt-4">
         <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Health alerts</h2>
         <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
-          Vaccination status reported by the treating clinic.
+          Status is based on records on file and may include owner-reported information; it is not verified here.
         </p>
 
-        {overdue > 0 && (
-          <Alert variant="error" className="mt-4">
-            {overdue} vaccination{overdue > 1 ? 's are' : ' is'} overdue.
-          </Alert>
-        )}
-        {dueSoon > 0 && (
-          <Alert variant="warning" className="mt-4">
-            {dueSoon} vaccination{dueSoon > 1 ? 's are' : ' is'} due within the next 30 days.
-          </Alert>
-        )}
-
-        {pet.vaccinations.length === 0 ? (
+        {pet.vaccination_statuses.length === 0 ? (
           <p className="mt-4 rounded-xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500 dark:border-stone-600 dark:text-stone-400">
             No vaccination records on file.
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-stone-200 dark:divide-stone-700">
-            {pet.vaccinations.map((vaccination, index) => {
-              const style = statusStyles[vaccination.status]
-              return (
-                <li key={`${vaccination.name}-${index}`} className="flex items-center justify-between gap-3 py-3">
-                  <div>
-                    <p className="text-sm font-medium text-stone-900 dark:text-stone-100">{vaccination.name}</p>
-                    <p className="text-xs text-stone-500 dark:text-stone-400">
-                      Given {formatDate(vaccination.date_given)} · Next due {formatDate(vaccination.next_due)}
+            {(Object.keys(statusStyles) as VaccinationStatus[])
+              .filter((status) => statusCounts[status] > 0)
+              .map((status) => {
+                const style = statusStyles[status]
+                return (
+                  <li key={status} className="flex items-center justify-between gap-3 py-3">
+                    <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
+                      {statusCounts[status]} record{statusCounts[status] === 1 ? '' : 's'}
                     </p>
-                  </div>
-                  <Badge variant={style.variant}>{style.label}</Badge>
-                </li>
-              )
-            })}
+                    <Badge variant={style.variant}>{style.label}</Badge>
+                  </li>
+                )
+              })}
           </ul>
         )}
       </Card>

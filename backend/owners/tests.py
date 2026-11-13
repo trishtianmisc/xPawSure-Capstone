@@ -9,6 +9,7 @@ from django.utils import timezone
 from PIL import Image
 
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
+from audit_log.models import AuditLog
 from clinics.models import Clinic
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
@@ -25,7 +26,9 @@ SUPABASE_PICTURE_URL = (
     '/owner-images/abc123/avatar.jpg'
 )
 
-GET_FIELDS = {'id', 'user', 'clinic', 'address', 'profile_picture'}
+GET_FIELDS = {
+    'id', 'user', 'clinic', 'address', 'profile_picture', 'public_phone_consent',
+}
 USER_FIELDS = {'id', 'email', 'full_name', 'phone'}
 
 
@@ -87,6 +90,7 @@ class OwnerProfileGetTests(OwnerProfileBase):
         self.assertIsNone(response.data['clinic'])
         self.assertEqual(response.data['address'], '12 Old Road')
         self.assertEqual(response.data['profile_picture'], '')
+        self.assertFalse(response.data['public_phone_consent'])
         self.assertEqual(str(response.data['id']), str(self.owner.own_id))
 
     def test_get_requires_owner_role(self):
@@ -135,6 +139,54 @@ class OwnerProfileUpdateTests(OwnerProfileBase):
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['address'], '12 Old Road')
+
+    def test_owner_can_opt_in_to_public_phone_display(self):
+        response = self.client.put(
+            '/api/owner/profile/',
+            data=json.dumps({'public_phone_consent': True}),
+            content_type='application/json',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['public_phone_consent'])
+        self.owner.refresh_from_db()
+        self.assertTrue(self.owner.own_public_phone_consent)
+
+    def test_owner_cannot_opt_in_without_a_phone_number(self):
+        self.owner_user.usr_phone = ''
+        self.owner_user.save(update_fields=['usr_phone'])
+        response = self.client.put(
+            '/api/owner/profile/',
+            data=json.dumps({'public_phone_consent': True}),
+            content_type='application/json',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.own_public_phone_consent)
+
+    def test_phone_change_revokes_prior_public_phone_consent(self):
+        self.owner.own_public_phone_consent = True
+        self.owner.save(update_fields=['own_public_phone_consent'])
+        response = self.client.put(
+            '/api/auth/profile/',
+            data=json.dumps({
+                'first_name': 'Olga',
+                'last_name': 'Owner',
+                'phone': '+15557654321',
+            }),
+            content_type='application/json',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.own_public_phone_consent)
+
+        log = AuditLog.objects.get(
+            adl_record_id=str(self.owner.own_id),
+            adl_description__contains='consent revoked',
+        )
+        self.assertEqual(log.adl_ip_address, '127.0.0.1')
 
     @patch('owners.services.SupabaseStorageService.upload', return_value=SUPABASE_PICTURE_URL)
     def test_put_with_picture_uploads_and_saves_url(self, mock_upload):

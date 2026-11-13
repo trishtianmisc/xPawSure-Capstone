@@ -11,11 +11,13 @@ export interface OwnerProfile {
   clinic: { id: string; name: string } | null
   address: string
   profile_picture: string
+  public_phone_consent: boolean
 }
 
 export interface UpdateOwnerProfilePayload {
   address?: string
   profile_picture?: string | null
+  public_phone_consent?: boolean
 }
 
 export async function getOwnerProfile(): Promise<OwnerProfile> {
@@ -27,6 +29,9 @@ export async function updateOwnerProfile(payload: UpdateOwnerProfilePayload): Pr
   if (typeof payload.profile_picture === 'string') {
     const form = new FormData()
     if (payload.address !== undefined) form.append('address', payload.address)
+    if (payload.public_phone_consent !== undefined) {
+      form.append('public_phone_consent', String(payload.public_phone_consent))
+    }
     form.append('profile_picture', {
       uri: payload.profile_picture,
       name: 'avatar.jpg',
@@ -42,6 +47,9 @@ export async function updateOwnerProfile(payload: UpdateOwnerProfilePayload): Pr
   const body: UpdateOwnerProfilePayload = {}
   if (payload.address !== undefined) body.address = payload.address
   if (payload.profile_picture === null) body.profile_picture = null
+  if (payload.public_phone_consent !== undefined) {
+    body.public_phone_consent = payload.public_phone_consent
+  }
 
   const { data } = await http.put<OwnerProfile>('/owner/profile/', body)
   return data

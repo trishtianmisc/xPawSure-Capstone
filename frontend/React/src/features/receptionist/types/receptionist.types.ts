@@ -19,6 +19,8 @@ export interface ScreeningSummary {
   ais_source: 'MOCK' | 'DEVICE'
   ais_created_at: string
   ais_is_correct: boolean | null
+  /** Owner's questionnaire rows (display-only); null when absent. */
+  symptom_answers?: { question: string; answer: string }[] | null
 }
 
 export interface VetSlot {

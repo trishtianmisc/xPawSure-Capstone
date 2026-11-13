@@ -226,6 +226,7 @@ Owners may:
 - View prescription history (read-only)
 - View vaccination history
 - Add, edit, and delete their own self-reported vaccination records
+- Choose whether their phone number appears on public pet QR profiles
 - View AI screening history
 - Pay the clinic's consultation fee and then book an appointment
 
@@ -267,10 +268,14 @@ Scanning the QR code shows the pet's public profile without login.
 The public profile may only expose:
 
 - Pet identity: photo, name, breed, sex, birth date/age, color
-- Health alerts: vaccination status (`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE`)
+- Health alerts: vaccination status only (`OVERDUE`, `DUE_SOON`, `CURRENT`,
+  `NO_DUE_DATE`); do not expose vaccine names or administration/due dates
+- Owner contact number only when the owner has explicitly opted in; otherwise
+  return no number
 
-The public profile must never expose owner personal data (name, phone, email,
-address), microchip number, weight, or internal medical records.
+The public profile must never expose owner name, email, address, microchip
+number, weight, or internal medical records. Phone-sharing consent defaults to
+off, can be revoked by the owner, and is reset when their phone number changes.
 
 ---
 
@@ -454,6 +459,14 @@ and confidence. Display-ready answer rows are persisted with the screening
 stored answers are never read by or fed into prediction, confidence, ranking,
 review, or booking logic.
 
+The stored answer rows are visible to the pet's treatment team as supplementary
+display context: they are embedded as `symptom_answers` on the appointment
+payloads veterinarians and receptionists already use and rendered next to the
+AI screening result. Visibility follows existing appointment scoping —
+veterinarians only see their own appointments, receptionists only their
+clinic's — and receptionists may see the answers for booking/front-desk
+context. The answers remain display-only in those workflows too.
+
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
 
@@ -502,8 +515,10 @@ Every vaccination records
 
 Sources
 
-- Veterinarian-issued records are created by clinic staff during a Consultation and are immutable.
-- Owner-reported records are created by the pet owner from the mobile app (for vaccines given elsewhere).
+- Owners create vaccination records only through the mobile app; records are
+  owner-reported and may be unverified.
+- The vaccination feature has no clinic-staff create flow. Existing
+  veterinarian-issued records, if present, remain read-only to owners.
 - Owners may add, edit, and delete only their own reported records.
 
 Validation
@@ -585,6 +600,16 @@ Diagnosis
 Save Consultation
 
 The veterinarian may ignore AI recommendations.
+
+Display note: the two outputs are still requested, gated, saved, and recorded
+independently — "Display Both Results Separately" holds at the data level. On
+the mobile owner app neither the review-findings card nor the cross-analysis
+card is rendered on the result or screening-details screens; those slots show
+the veterinarian-approved Care Guidelines card (static, display-only
+content), selected only by the primary raw AI predicted class and never able to
+modify prediction, confidence, saved result, questionnaire answers, or
+booking. Stored screenings still carry both outputs independently in the
+database and API for audit; the veterinarian consult surfaces are unaffected.
 
 ---
 

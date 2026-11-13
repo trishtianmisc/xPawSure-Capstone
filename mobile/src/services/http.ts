@@ -24,6 +24,18 @@ async function clearTokens(): Promise<void> {
   await removeItem(STORAGE_REFRESH)
 }
 
+/**
+ * Notified when a refresh attempt fails and tokens are cleared, so the app
+ * can drop its cached session state. Handlers MUST be local-only (no HTTP
+ * calls) — otherwise they could re-enter this interceptor and loop.
+ */
+type SessionExpiredHandler = () => void
+let sessionExpiredHandler: SessionExpiredHandler | null = null
+
+export function setSessionExpiredHandler(handler: SessionExpiredHandler | null): void {
+  sessionExpiredHandler = handler
+}
+
 const http = axios.create({
   baseURL: API_URL,
   headers: { 'Content-Type': 'application/json' },
@@ -89,6 +101,8 @@ http.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null)
         await clearTokens()
+        // Local-only notification: never performs network I/O (see handler docs).
+        sessionExpiredHandler?.()
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false

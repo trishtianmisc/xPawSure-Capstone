@@ -23,7 +23,8 @@ EXPECTED_PUBLIC_FIELDS = {
     'age',
     'color',
     'profile_picture',
-    'vaccinations',
+    'owner_contact_number',
+    'vaccination_statuses',
 }
 
 
@@ -147,14 +148,43 @@ class PublicPetAPITest(TestCase):
         self.assertEqual(response.data['sex'], 'MALE')
         self.assertEqual(response.data['age'], 3)
         self.assertEqual(response.data['qr_code'], str(self.pet.pet_id))
+        self.assertIsNone(response.data['owner_contact_number'])
+
+    def test_public_profile_shows_phone_only_after_owner_consent(self):
+        self.user.usr_phone = '+15551234567'
+        self.user.save(update_fields=['usr_phone'])
+        self.owner_profile.own_public_phone_consent = True
+        self.owner_profile.save(update_fields=['own_public_phone_consent'])
+
+        response = self.client.get(self._url(self.pet.pet_qr_code))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['owner_contact_number'], '+15551234567')
+        self.assertNotIn('owner@example.com', response.content.decode())
+        self.assertNotIn('John Doe', response.content.decode())
+
+    def test_public_profile_hides_opted_in_phone_when_number_is_missing(self):
+        self.owner_profile.own_public_phone_consent = True
+        self.owner_profile.save(update_fields=['own_public_phone_consent'])
+        self.user.usr_phone = ''
+        self.user.save(update_fields=['usr_phone'])
+
+        response = self.client.get(self._url(self.pet.pet_qr_code))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data['owner_contact_number'])
 
     def test_never_exposes_owner_or_sensitive_fields(self):
         response = self.client.get(self._url(self.pet.pet_qr_code))
 
         self.assertEqual(response.status_code, 200)
-        forbidden = {'id', 'weight', 'microchip_number', 'qr_code_url', 'own_id', 'breed_id', 'created_at'}
+        forbidden = {
+            'id', 'weight', 'microchip_number', 'qr_code_url', 'own_id',
+            'breed_id', 'created_at',
+        }
         self.assertTrue(forbidden.isdisjoint(set(response.data.keys())))
         self.assertNotIn('CHIP-12345', response.content.decode())
+        self.assertNotIn('+15551234567', response.content.decode())
 
     def test_returns_404_for_unknown_qr_code(self):
         response = self.client.get(self._url('00000000-0000-0000-0000-000000000000'))
@@ -170,7 +200,7 @@ class PublicPetAPITest(TestCase):
         response = self.client.get(self._url(self.pet.pet_qr_code))
         self.assertEqual(response.status_code, 404)
 
-    def test_vaccination_alerts_sorted_by_urgency(self):
+    def test_public_profile_exposes_only_vaccination_statuses(self):
         today = date.today()
         for name, next_due in [
             ('Current shot', today + timedelta(days=200)),
@@ -187,16 +217,20 @@ class PublicPetAPITest(TestCase):
                 vac_next_due=next_due,
             )
 
+        # Owner-reported data is also summarized without exposing its details.
+        VaccinationRecord.objects.filter(vac_name='Overdue shot').update(vac_source='OWNER')
+
         response = self.client.get(self._url(self.pet.pet_qr_code))
 
         self.assertEqual(response.status_code, 200)
-        vaccinations = response.data['vaccinations']
-        self.assertEqual(len(vaccinations), 4)
         self.assertEqual(
-            [item['status'] for item in vaccinations],
+            response.data['vaccination_statuses'],
             ['OVERDUE', 'DUE_SOON', 'CURRENT', 'NO_DUE_DATE'],
         )
-        self.assertEqual(set(vaccinations[0].keys()), {'name', 'date_given', 'next_due', 'status'})
+        self.assertNotIn('vaccinations', response.data)
+        self.assertNotIn('Overdue shot', response.content.decode())
+        self.assertNotIn('next_due', response.content.decode())
+        self.assertNotIn('date_given', response.content.decode())
 
 
 class QRPublicUrlTest(TestCase):

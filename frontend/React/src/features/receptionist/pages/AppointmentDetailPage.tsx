@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
+import { SymptomAnswersList } from '../../../components/SymptomAnswersList'
 import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import { usePaymentsByAppointment } from '../../payments/hooks/usePayments'
 import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge'
@@ -330,6 +331,7 @@ export function AppointmentDetailPage() {
             <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
               Model {appointment.screening.ais_model_version} · {appointment.screening.ais_status.replace(/_/g, ' ')}
             </p>
+            <SymptomAnswersList rows={appointment.screening.symptom_answers} />
           </div>
         </section>
       )}

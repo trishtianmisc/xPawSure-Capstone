@@ -9,6 +9,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -39,11 +40,13 @@ export default function EditProfileScreen() {
       phone: '',
       address: '',
       profile_picture: undefined,
+      public_phone_consent: false,
     },
   })
 
   const styles = useMemo(() => createStyles(colors), [colors])
   const watchProfilePicture = watch('profile_picture')
+  const watchPhone = watch('phone')
 
   useEffect(() => {
     if (profile) {
@@ -53,6 +56,7 @@ export default function EditProfileScreen() {
         phone: profile.user.phone ?? '',
         address: profile.address ?? '',
         profile_picture: profile.profile_picture || undefined,
+        public_phone_consent: profile.public_phone_consent,
       })
     }
   }, [profile, user, reset])
@@ -71,6 +75,7 @@ export default function EditProfileScreen() {
         phone: data.phone ?? '',
         address: data.address ?? '',
         profile_picture: profilePicture,
+        public_phone_consent: Boolean(data.phone?.trim()) && data.public_phone_consent,
       },
       {
         onSuccess: async () => {
@@ -154,7 +159,12 @@ export default function EditProfileScreen() {
               <TextInput
                 keyboardType="phone-pad"
                 onBlur={onBlur}
-                onChangeText={onChange}
+                onChangeText={(nextPhone) => {
+                  onChange(nextPhone)
+                  if (nextPhone.trim() !== (profile?.user.phone ?? '').trim()) {
+                    setValue('public_phone_consent', false, { shouldDirty: true })
+                  }
+                }}
                 placeholder="Phone number"
                 placeholderTextColor={colors.textMuted}
                 style={[styles.input, errors.phone && styles.inputError]}
@@ -163,6 +173,32 @@ export default function EditProfileScreen() {
             )}
           />
           {errors.phone && <Text style={styles.fieldError}>{errors.phone.message}</Text>}
+
+          <View style={styles.consentRow}>
+            <View style={styles.consentCopy}>
+              <Text style={styles.consentTitle}>Show my phone on public pet QR profiles</Text>
+              <Text style={styles.consentHint}>
+                Anyone who scans one of your pets’ QR codes can see this number. Your email and address stay private.
+              </Text>
+              {!watchPhone?.trim() ? (
+                <Text style={styles.consentHint}>Add a phone number to enable public sharing.</Text>
+              ) : null}
+            </View>
+            <Controller
+              control={control}
+              name="public_phone_consent"
+              render={({ field: { value, onChange } }) => (
+                <Switch
+                  accessibilityLabel="Show my phone number on public pet QR profiles"
+                  disabled={!watchPhone?.trim()}
+                  onValueChange={onChange}
+                  thumbColor={value ? colors.primary : undefined}
+                  trackColor={{ false: colors.border, true: colors.primaryLight }}
+                  value={value}
+                />
+              )}
+            />
+          </View>
         </View>
 
         <View style={styles.section}>
@@ -253,6 +289,18 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   inputMultiline: { height: 90, paddingTop: 14, textAlignVertical: 'top' },
   inputError: { borderColor: colors.error },
   fieldError: { ...font.regular, color: colors.error, fontSize: 12, marginTop: 4 },
+  consentRow: {
+    alignItems: 'center',
+    borderTopColor: colors.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+    paddingTop: 14,
+  },
+  consentCopy: { flex: 1, gap: 4 },
+  consentTitle: { ...font.semibold, color: colors.text, fontSize: 13 },
+  consentHint: { ...font.regular, color: colors.textMuted, fontSize: 11, lineHeight: 16 },
   submitButton: {
     alignItems: 'center',
     backgroundColor: colors.primary,

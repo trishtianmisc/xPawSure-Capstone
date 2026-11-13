@@ -8,6 +8,10 @@ class OwnerProfile(models.Model):
     usr_id = models.OneToOneField('users.User', on_delete=models.CASCADE, db_column='USR_ID', related_name='owner_profile')
     own_address = models.TextField(null=True, blank=True, db_column='OWN_ADDRESS')
     own_profile_image = models.TextField(null=True, blank=True, db_column='OWN_PROFILE_IMAGE')
+    own_public_phone_consent = models.BooleanField(
+        default=False,
+        db_column='OWN_PUBLIC_PHONE_CONSENT',
+    )
     own_created_at = models.DateTimeField(auto_now_add=True, db_column='OWN_CREATED_AT')
     own_updated_at = models.DateTimeField(auto_now=True, db_column='OWN_UPDATED_AT')
 

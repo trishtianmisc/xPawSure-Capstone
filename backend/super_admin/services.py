@@ -15,6 +15,7 @@ from audit_log.services import AuditService
 from clinics.models import Clinic, ClinicStatus
 from consultations.models import Consultation
 from owners.models import OwnerProfile
+from owners.services import OwnerProfileService
 from payments.models import Payment, PaymentStatus
 from pets.models import Pet
 from prescriptions.models import Prescription
@@ -611,6 +612,7 @@ class SuperAdminOwnerService:
         return owner.pets.filter(pet_is_active=True, pet_deleted_at__isnull=True).count()
 
     @staticmethod
+    @transaction.atomic
     def update_contact(
         owner: OwnerProfile,
         data: dict,
@@ -623,6 +625,7 @@ class SuperAdminOwnerService:
         login identity and the role is fixed at registration.
         """
         user = owner.usr_id
+        old_phone = user.usr_phone
         old_values = {
             'first_name': user.usr_first_name,
             'last_name': user.usr_last_name,
@@ -657,6 +660,13 @@ class SuperAdminOwnerService:
             new_values=new_values,
             ip_address=ip_address,
         )
+
+        if old_phone != user.usr_phone:
+            OwnerProfileService.revoke_public_phone_consent(
+                owner,
+                user_id=user_id or '',
+                ip_address=ip_address or '',
+            )
         return owner
 
 

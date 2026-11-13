@@ -112,13 +112,6 @@ class PetResponseSerializer(serializers.ModelSerializer):
         ]
 
 
-class PublicVaccinationSerializer(serializers.Serializer):
-    name = serializers.CharField()
-    date_given = serializers.DateField()
-    next_due = serializers.DateField(allow_null=True)
-    status = serializers.ChoiceField(choices=STATUS_CHOICES)
-
-
 class PublicPetSerializer(serializers.Serializer):
     """Restricted payload exposed without authentication via the pet QR code."""
 
@@ -130,4 +123,7 @@ class PublicPetSerializer(serializers.Serializer):
     age = serializers.IntegerField(allow_null=True)
     color = serializers.CharField(allow_null=True)
     profile_picture = serializers.CharField(allow_null=True)
-    vaccinations = PublicVaccinationSerializer(many=True)
+    owner_contact_number = serializers.CharField(allow_null=True)
+    vaccination_statuses = serializers.ListField(
+        child=serializers.ChoiceField(choices=STATUS_CHOICES),
+    )

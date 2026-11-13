@@ -14,23 +14,19 @@ import {
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
-import { ClaudeReviewCard } from '../components/AnalysisCards'
+import { CareGuidelinesCard } from '../components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../components/SymptomSummaryCard'
 import { DISEASE_META, BOOKED_PILL } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
-import type { CrossAnalysisStatus } from '../types'
 
 /**
- * Read-only view of one stored screening log: what the on-device model and
- * the independent image review recorded. Booking never starts here — the
- * Book Appointment action lives only on the fresh scan result screen.
+ * Read-only view of one stored screening log: what the on-device model
+ * recorded, plus sample care guidelines keyed to the saved prediction.
+ * The image-validation gate, stored review, and cross-analysis data are
+ * kept on the backend for audit but are not rendered here.
+ * Booking never starts here — the Book Appointment action lives only on
+ * the fresh scan result screen.
  */
-
-const CROSS_META: Record<CrossAnalysisStatus, { label: string; color: string }> = {
-  COMPATIBLE: { label: 'Both analyses agree', color: '#2E5F9E' },
-  DIFFERENT: { label: 'The analyses differ', color: '#B25E09' },
-  INSUFFICIENT_EVIDENCE: { label: 'Not available', color: '#A0A0A0' },
-}
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -64,9 +60,6 @@ export default function ScreeningDetailsScreen() {
 
   const diseaseMeta = screening ? DISEASE_META[screening.disease_code] ?? null : null
   const diseaseColor: string = diseaseMeta?.color ?? colors.primary
-  const crossMeta = screening ? CROSS_META[screening.cross_analysis.status] : null
-  const showCrossAnalysis =
-    !!screening && screening.cross_analysis.status !== 'INSUFFICIENT_EVIDENCE'
   // Supplementary answers are absent on screenings saved without a
   // questionnaire or records that predate their storage — hide the section.
   const symptomRows = screening?.symptom_answers ?? []
@@ -142,30 +135,7 @@ export default function ScreeningDetailsScreen() {
               {metaRow('Source', 'On-device screening')}
             </View>
 
-            <Text style={styles.sectionLabel}>INDEPENDENT REVIEW</Text>
-            <ClaudeReviewCard
-              response={screening.claude.status === 'NOT_REQUESTED' ? null : screening.claude}
-              requestFailed={false}
-            />
-
-            {showCrossAnalysis && crossMeta ? (
-              <View style={styles.card}>
-                <View style={styles.crossHeader}>
-                  <MaterialCommunityIcons
-                    color={colors.primary}
-                    name="swap-horizontal"
-                    size={18}
-                  />
-                  <Text style={styles.crossTitle}>Cross-analysis</Text>
-                  <View style={[styles.crossBadge, { backgroundColor: colors.surfaceAlt }]}>
-                    <Text style={[styles.crossBadgeText, { color: crossMeta.color }]}>
-                      {crossMeta.label}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={styles.crossSummary}>{screening.cross_analysis.summary}</Text>
-              </View>
-            ) : null}
+            <CareGuidelinesCard prediction={screening.disease_code} />
 
             <SymptomSummaryCard
               rows={symptomRows}
@@ -181,8 +151,9 @@ export default function ScreeningDetailsScreen() {
               />
               <Text style={styles.infoText}>
                 AI-assisted screening does not replace professional veterinary diagnosis. The
-                on-device prediction and the independent image review are separate and are never
-                merged into one probability. Consult a vet for definitive results.
+                on-device prediction is the primary result and is never merged with any other
+                output into one probability. Care guidelines are general veterinarian-approved
+                guidance, not a prescription. Consult a veterinarian for definitive results.
               </Text>
             </View>
           </>
@@ -261,12 +232,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginLeft: 12,
     textAlign: 'right',
   },
-
-  crossHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  crossTitle: { ...font.bold, color: colors.text, fontSize: 15 },
-  crossBadge: { borderRadius: 999, marginLeft: 'auto', paddingHorizontal: 8, paddingVertical: 3 },
-  crossBadgeText: { ...font.bold, fontSize: 11 },
-  crossSummary: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
 
   infoCard: {
     alignItems: 'flex-start',
