@@ -449,6 +449,7 @@ export default function ResultScreen() {
             rows={symptomRows}
             answeredCount={answeredCount}
             totalQuestions={totalQuestions}
+            collapsible={true}
           />
         )}
 
