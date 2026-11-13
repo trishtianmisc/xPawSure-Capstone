@@ -7,7 +7,15 @@ import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { DetailLoadError } from '../components/DetailLoadError'
 import { FollowUpReviewCard } from '../components/FollowUpReviewCard'
-import { formatDateLong, formatDateTime, formatPhone, formatTime } from '../../../utils/format'
+import { VetRequestCard } from '../components/VetRequestCard'
+import {
+  CLINIC_TIME_ZONE,
+  formatDateLong,
+  formatDateTime,
+  formatPhone,
+  formatTime,
+  isFutureClinicDay,
+} from '../../../utils/format'
 
 function labelize(value: string): string {
   const lower = value.replace(/_/g, ' ').toLowerCase()
@@ -113,6 +121,9 @@ export function AppointmentDetailPage() {
   const isPast = scheduledMs < nowMs
   const pastBeyondGrace =
     isPast && nowMs - scheduledMs > GRACE_PERIOD_MINUTES * 60_000
+  // Backend enforces this; the button only pre-gates until the appointment's
+  // clinic-local date arrives.
+  const checkInTooEarly = isFutureClinicDay(appointment.apt_scheduled_at, nowMs)
 
   const canConfirm = appointment.apt_status === 'PENDING' && !isPast
   const canCheckIn =
@@ -202,7 +213,9 @@ export function AppointmentDetailPage() {
         )}
       </div>
 
-      
+      {appointment.vet_request && (
+        <VetRequestCard appointment={appointment} />
+      )}
 
       <FollowUpReviewCard appointment={appointment} />
 
@@ -335,7 +348,15 @@ export function AppointmentDetailPage() {
         {canCheckIn && (
           <button
             onClick={() => handleStatusChange('CHECKED_IN')}
-            disabled={updateStatus.isPending}
+            disabled={updateStatus.isPending || checkInTooEarly}
+            title={
+              checkInTooEarly
+                ? `Check-in opens on ${formatDateLong(
+                    appointment.apt_scheduled_at,
+                    CLINIC_TIME_ZONE,
+                  )}`
+                : undefined
+            }
             className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
           >
             Check In

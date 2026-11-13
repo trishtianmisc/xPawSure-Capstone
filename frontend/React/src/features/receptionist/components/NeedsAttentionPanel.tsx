@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { formatDateTime, isoDate } from '../../../utils/format'
 import { useAppointments } from '../hooks/useAppointments'
+import { useDashboardStats } from '../hooks/useDashboardStats'
 import { QuickStatusAction } from './QuickStatusAction'
 
 const GROUP_SIZE = 5
@@ -44,13 +45,15 @@ function MoreLink({ to, hidden }: { to: string; hidden: number }) {
 }
 
 /**
- * The receptionist's action list: pending confirmations for the next 7 days
- * and past-due rows still inside the no-show grace window. Rows share the
- * flat divide-and-hover layout of the appointments card. Hidden entirely
- * when there is nothing to act on; status actions refresh it in place
- * because every row mutation invalidates the appointments query key.
+ * The receptionist's action list: open veterinarian requests, pending
+ * confirmations for the next 7 days, and past-due rows still inside the
+ * no-show grace window. Rows share the flat divide-and-hover layout of
+ * the appointments card. Hidden entirely when there is nothing to act
+ * on; status actions refresh it in place because every row mutation
+ * invalidates the appointments query key.
  */
 export function NeedsAttentionPanel() {
+  const { data: stats } = useDashboardStats()
   const pendingQuery = useAppointments({
     status: 'PENDING',
     date_from: isoDate(),
@@ -64,12 +67,14 @@ export function NeedsAttentionPanel() {
     page_size: GROUP_SIZE,
   })
 
+  const vetRequestRows = (stats?.vet_requests ?? []).slice(0, GROUP_SIZE)
+  const vetRequestTotal = stats?.vet_requests?.length ?? 0
   const pendingRows = pendingQuery.data?.results ?? []
   const pendingTotal = pendingQuery.data?.total ?? 0
   const overdueRows = overdueQuery.data?.results ?? []
   const overdueTotal = overdueQuery.data?.total ?? 0
 
-  const total = pendingTotal + overdueTotal
+  const total = vetRequestTotal + pendingTotal + overdueTotal
   if (total === 0) return null
 
   return (
@@ -87,6 +92,45 @@ export function NeedsAttentionPanel() {
       </header>
 
       <div className="divide-y divide-stone-100 dark:divide-stone-800">
+        {vetRequestTotal > 0 && (
+          <div>
+            <GroupLabel
+              title={`${vetRequestTotal} open vet request${
+                vetRequestTotal === 1 ? '' : 's'
+              }`}
+              className="text-amber-700 dark:text-amber-400"
+            />
+            <div className="divide-y divide-stone-100 dark:divide-stone-800">
+              {vetRequestRows.map((request) => (
+                <Link
+                  key={request.apt_id}
+                  to={`/receptionist/appointments/${request.apt_id}`}
+                  data-apt-id={request.apt_id}
+                  className="flex items-center justify-between gap-3 px-5 py-3 transition hover:bg-stone-50 dark:hover:bg-stone-800/50"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-stone-900 dark:text-stone-100">
+                      {request.pet_name} — {request.owner_name ?? 'Unknown owner'}
+                    </p>
+                    <p className="truncate text-xs text-stone-500 dark:text-stone-400">
+                      {request.request_type === 'RESCHEDULE' ? 'Reschedule' : 'Cancel'} ·{' '}
+                      {formatDateTime(request.apt_scheduled_at)}
+                      {request.reason && ` · ${request.reason}`}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                    Open
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <MoreLink
+              to="/receptionist/appointments?requests=1"
+              hidden={vetRequestTotal - vetRequestRows.length}
+            />
+          </div>
+        )}
+
         {pendingTotal > 0 && (
           <div>
             <GroupLabel

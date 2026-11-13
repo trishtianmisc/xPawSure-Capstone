@@ -6,6 +6,8 @@ import {
   getAppointmentDetail,
   createAppointment,
   confirmFollowUp,
+  declineVetRequest,
+  rescheduleAppointment,
   updateAppointmentStatus,
 } from '../services/appointment.service'
 
@@ -28,6 +30,7 @@ export function useAppointments(params: {
   pet_id?: string
   search?: string
   overdue?: string
+  has_request?: string
   sort?: string
   page?: number
   page_size?: number
@@ -106,6 +109,44 @@ export function useUpdateAppointmentStatus() {
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointment', vars.aptId] })
       queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
       showToast(STATUS_TOAST[vars.status] ?? 'Appointment updated')
+    },
+    onError: (error) => {
+      showToast(apiErrorMessage(error), 'error')
+    },
+  })
+}
+
+export function useDeclineVetRequest() {
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
+  return useMutation({
+    mutationFn: ({ aptId, note }: { aptId: string; note: string }) =>
+      declineVetRequest(aptId, note),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointment', vars.aptId] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
+      showToast('Request declined')
+    },
+    onError: (error) => {
+      showToast(apiErrorMessage(error), 'error')
+    },
+  })
+}
+
+export function useRescheduleAppointment() {
+  const queryClient = useQueryClient()
+  const { showToast } = useToast()
+  return useMutation({
+    mutationFn: ({ aptId, slotId }: { aptId: string; slotId: string }) =>
+      rescheduleAppointment(aptId, slotId),
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointments'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'appointment', vars.aptId] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'slots'] })
+      queryClient.invalidateQueries({ queryKey: ['receptionist', 'schedule'] })
+      showToast('Appointment rescheduled')
     },
     onError: (error) => {
       showToast(apiErrorMessage(error), 'error')

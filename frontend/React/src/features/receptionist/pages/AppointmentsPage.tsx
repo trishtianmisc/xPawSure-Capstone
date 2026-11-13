@@ -58,6 +58,7 @@ export function AppointmentsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const attentionActive = searchParams.get('attention') === '1'
+  const requestsActive = searchParams.get('requests') === '1'
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(
     () => searchParams.get('status') ?? '',
@@ -86,6 +87,7 @@ export function AppointmentsPage() {
       date_to: dateTo || undefined,
       vet_id: vetFilter || undefined,
       overdue: attentionActive ? '1' : undefined,
+      has_request: requestsActive ? '1' : undefined,
       sort,
       page,
       page_size: 20,
@@ -97,6 +99,7 @@ export function AppointmentsPage() {
       dateTo,
       vetFilter,
       attentionActive,
+      requestsActive,
       sort,
       page,
     ],
@@ -110,7 +113,8 @@ export function AppointmentsPage() {
   const { data, isLoading, error, refetch, isFetching } = useAppointments(params)
 
   const hasActiveFilters = Boolean(
-    search || dateFrom || dateTo || statusFilter || vetFilter || attentionActive,
+    search || dateFrom || dateTo || statusFilter || vetFilter ||
+    attentionActive || requestsActive,
   )
 
   const clearFilters = () => {
@@ -217,6 +221,17 @@ export function AppointmentsPage() {
                 <span aria-hidden="true" className="text-sm leading-none">&times;</span>
               </button>
             )}
+
+            {requestsActive && (
+              <button
+                type="button"
+                onClick={() => { setSearchParams({}, { replace: true }); setPage(1) }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+              >
+                Vet requests
+                <span aria-hidden="true" className="text-sm leading-none">&times;</span>
+              </button>
+            )}
           </div>
         </Card>
 
@@ -290,7 +305,14 @@ export function AppointmentsPage() {
                         {labelize(apt.apt_type)}
                       </td>
                       <td className="px-5 py-4">
-                        <AppointmentStatusBadge status={apt.apt_status} />
+                        <div className="flex flex-col items-start gap-1.5">
+                          <AppointmentStatusBadge status={apt.apt_status} />
+                          {apt.has_open_request && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              Vet request
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">

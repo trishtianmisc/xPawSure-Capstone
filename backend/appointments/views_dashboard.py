@@ -30,7 +30,7 @@ class DashboardStatsView(APIView):
             stats['unpaid_completions'], many=True,
         )
 
-        return Response({
+        payload = {
             'today': stats['today'],
             'upcoming': stats['upcoming'],
             'total_owners': stats['total_owners'],
@@ -39,4 +39,11 @@ class DashboardStatsView(APIView):
             'unpaid_completions': unpaid_serializer.data,
             'needs_attention': stats['needs_attention'],
             'review_pending': stats['review_pending'],
-        })
+        }
+
+        # The vet request group carries the vet's reason text, which is
+        # receptionist-only; clinic admins never receive this key.
+        if request.user.usr_role == UserRole.RECEPTIONIST:
+            payload['vet_requests'] = stats['vet_requests']
+
+        return Response(payload)

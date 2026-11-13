@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { CLINIC_TIME_ZONE } from '../../../utils/format'
 import { useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import { QuickStatusAction } from './QuickStatusAction'
 
@@ -10,6 +11,18 @@ vi.mock('../hooks/useAppointments', () => ({
 
 const FUTURE = new Date(Date.now() + 3_600_000).toISOString()
 const PAST = new Date(Date.now() - 3_600_000).toISOString()
+
+function clinicTimestamp(offsetDays: number, time: string): string {
+  const day = new Date(Date.now() + offsetDays * 86_400_000).toLocaleDateString(
+    'en-CA',
+    { timeZone: CLINIC_TIME_ZONE },
+  )
+  return `${day}T${time}+08:00`
+}
+
+// Same clinic day, later than any realistic run time: check-in enabled.
+const TODAY_LATE = clinicTimestamp(0, '23:59:00')
+const TOMORROW = clinicTimestamp(1, '09:00:00')
 
 const mutate = vi.fn()
 
@@ -37,13 +50,29 @@ describe('QuickStatusAction', () => {
     expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
   })
 
-  it('offers Check in for a future CONFIRMED appointment', () => {
+  it('offers Check in later on the appointment date', () => {
     render(
-      <QuickStatusAction aptId="apt-2" status="CONFIRMED" scheduledAt={FUTURE} />,
+      <QuickStatusAction aptId="apt-2" status="CONFIRMED" scheduledAt={TODAY_LATE} />,
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Check in' }))
     expect(mutate).toHaveBeenCalledWith({ aptId: 'apt-2', status: 'CHECKED_IN' })
+  })
+
+  it('disables Check in before the appointment date', () => {
+    render(
+      <QuickStatusAction aptId="apt-2" status="CONFIRMED" scheduledAt={TOMORROW} />,
+    )
+
+    const button = screen.getByRole('button', { name: 'Check in' })
+    expect(button).toBeDisabled()
+    expect(button).toHaveAttribute(
+      'title',
+      expect.stringContaining('Check-in opens on'),
+    )
+
+    fireEvent.click(button)
+    expect(mutate).not.toHaveBeenCalled()
   })
 
   it('hides Check in when allowCheckIn is false', () => {

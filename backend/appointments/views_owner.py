@@ -10,9 +10,9 @@ from rest_framework.views import APIView
 from ai_screenings.models import AiScreening
 from appointments.models import Appointment, AppointmentStatus, SlotStatus, VetSlot
 from appointments.serializers import (
-    AppointmentDetailSerializer,
     AppointmentListSerializer,
     CreateAppointmentSerializer,
+    OwnerAppointmentDetailSerializer,
     OwnerClinicSerializer,
     VetSlotSerializer,
 )
@@ -322,7 +322,7 @@ class OwnerAppointmentListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = AppointmentDetailSerializer(appointment)
+        result = OwnerAppointmentDetailSerializer(appointment)
         return Response(result.data, status=status.HTTP_201_CREATED)
 
 
@@ -349,7 +349,7 @@ class OwnerAppointmentDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = OwnerAppointmentDetailSerializer(appointment)
         return Response(serializer.data)
 
 
@@ -459,5 +459,5 @@ class OwnerAppointmentCancelView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = OwnerAppointmentDetailSerializer(appointment)
         return Response(serializer.data)

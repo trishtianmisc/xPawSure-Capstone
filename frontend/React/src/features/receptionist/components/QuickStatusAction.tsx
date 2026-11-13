@@ -1,6 +1,11 @@
 import { useState } from 'react'
 
 import { Modal } from '../../../components/ui/Modal'
+import {
+  CLINIC_TIME_ZONE,
+  formatDateLong,
+  isFutureClinicDay,
+} from '../../../utils/format'
 import { useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import type { AppointmentStatus } from '../types/receptionist.types'
 
@@ -48,6 +53,9 @@ export function QuickStatusAction({
   const scheduledMs = new Date(scheduledAt).getTime()
   const isPast = scheduledMs < nowMs
   const pastBeyondGrace = isPast && nowMs - scheduledMs > GRACE_PERIOD_MINUTES * 60_000
+  // Backend enforces this; the button only pre-gates until the appointment's
+  // clinic-local date arrives.
+  const checkInTooEarly = isFutureClinicDay(scheduledAt, nowMs)
   const busy = updateStatus.isPending
 
   const canConfirm = status === 'PENDING' && !isPast
@@ -71,7 +79,12 @@ export function QuickStatusAction({
       {canCheckIn && (
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || checkInTooEarly}
+          title={
+            checkInTooEarly
+              ? `Check-in opens on ${formatDateLong(scheduledAt, CLINIC_TIME_ZONE)}`
+              : undefined
+          }
           onClick={() => updateStatus.mutate({ aptId, status: 'CHECKED_IN' })}
           className={CHECK_IN_CLASS}
         >

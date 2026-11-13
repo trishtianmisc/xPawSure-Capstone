@@ -39,6 +39,21 @@ export interface Vet {
   email: string
 }
 
+export type VetRequestType = 'RESCHEDULE' | 'CANCEL'
+export type VetRequestStatus = 'OPEN' | 'RESOLVED' | 'DECLINED'
+
+/** Vet-initiated request payload; receptionist/vet responses only. */
+export interface VetRequest {
+  type: VetRequestType
+  status: VetRequestStatus
+  reason: string | null
+  requested_by: string | null
+  requested_at: string | null
+  decline_note: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+}
+
 export interface Appointment {
   apt_id: string
   pet_id: string
@@ -58,6 +73,8 @@ export interface Appointment {
   apt_completed_at: string | null
   apt_cancelled_at: string | null
   apt_created_at: string
+  has_open_request?: boolean
+  vet_request?: VetRequest | null
 }
 
 export interface AppointmentDetail extends Appointment {
@@ -241,6 +258,17 @@ export interface NotificationListResponse {
   results: Notification[]
 }
 
+/** Dashboard group row; receptionist-only (never sent to clinic admins). */
+export interface VetRequestSummary {
+  apt_id: string
+  pet_name: string
+  owner_name: string | null
+  apt_scheduled_at: string
+  request_type: VetRequestType
+  reason: string
+  requested_at: string | null
+}
+
 export interface DashboardStats {
   today: {
     pending: number
@@ -261,6 +289,7 @@ export interface DashboardStats {
   unpaid_completions: Appointment[]
   needs_attention: number
   review_pending: number
+  vet_requests?: VetRequestSummary[]
 }
 
 export type SlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED'

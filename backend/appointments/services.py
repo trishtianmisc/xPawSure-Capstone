@@ -2,15 +2,24 @@ import logging
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models.functions import TruncDay
 from django.utils import timezone
 
-from appointments.models import Appointment, AppointmentStatus, AppointmentType, SlotStatus, VetSlot
+from appointments.models import (
+    Appointment,
+    AppointmentRequestStatus,
+    AppointmentRequestType,
+    AppointmentStatus,
+    AppointmentType,
+    SlotStatus,
+    VetSlot,
+)
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
 from clinics.models import ClinicOperatingHours, ClinicSettings
-from users.models import StaffPosition, StaffProfile, User
+from users.models import StaffPosition, StaffProfile, User, UserRole
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +142,40 @@ def _notify(user_id, title, message, ntf_type, ref_id=None):
         )
     except Exception as e:
         logger.warning('Notification failed: %s', e)
+
+
+def _assert_no_open_request(appointment):
+    if appointment.apt_request_status == AppointmentRequestStatus.OPEN:
+        raise InvalidRequestError(
+            'This appointment already has an open request. '
+            'Wait for the clinic to handle it before submitting another.',
+        )
+
+
+def _notify_request_submitted(appointment, verb):
+    """Neutral notice to every receptionist and clinic admin of the
+    appointment's clinic.
+
+    The message never contains the vet's reason text; it only says which
+    action was requested and when the appointment is scheduled.
+    """
+    from notifications.models import NotificationType
+
+    staff_ids = User.objects.filter(
+        usr_role__in=[UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN],
+        staffprofile__cln_id=appointment.cln_id_id,
+    ).values_list('usr_id', flat=True)
+    for uid in staff_ids:
+        _notify(
+            user_id=uid,
+            title=f'{verb} Requested',
+            message=(
+                f'{verb} requested for {appointment.pet_id.pet_name} on '
+                f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+            ),
+            ntf_type=NotificationType.SYSTEM,
+            ref_id=appointment.apt_id,
+        )
 
 
 DAY_MAP = {
@@ -876,6 +919,12 @@ class AppointmentService:
             raise InvalidTransitionError(
                 'Cannot confirm an appointment that has already passed.',
             )
+        if new_status == AppointmentStatus.CHECKED_IN:
+            apt_day = appointment.apt_scheduled_at.astimezone(tz).date()
+            if now.date() < apt_day:
+                raise InvalidTransitionError(
+                    'Cannot check in before the appointment date.',
+                )
         if new_status == AppointmentStatus.NO_SHOW and not is_past_due:
             raise InvalidTransitionError(
                 'Cannot mark an appointment as no-show before its '
@@ -892,6 +941,13 @@ class AppointmentService:
         elif new_status == AppointmentStatus.CANCELLED:
             appointment.apt_cancelled_at = now
             appointment.apt_cancellation_reason = cancellation_reason
+            # Acting on a vet's open request (cancel or reschedule) by
+            # cancelling the appointment resolves the request in the same
+            # atomic block as the status change.
+            if appointment.apt_request_status == AppointmentRequestStatus.OPEN:
+                appointment.apt_request_status = AppointmentRequestStatus.RESOLVED
+                appointment.apt_resolved_by_id = user_id
+                appointment.apt_resolved_at = now
 
         if new_status in (AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW):
             slot = getattr(appointment, 'vet_slot', None)
@@ -1071,17 +1127,221 @@ class AppointmentService:
         return summary
 
     @staticmethod
+    @transaction.atomic
+    def decline_request(apt_id, clinic_id, user_id, note):
+        """Receptionist declines a vet's open request; the appointment is untouched."""
+        from notifications.models import NotificationType
+
+        note = (note or '').strip()
+        if not note:
+            raise InvalidRequestError('A decline note is required.')
+        if len(note) > 200:
+            raise InvalidRequestError(
+                'The decline note must be 200 characters or fewer.',
+            )
+
+        try:
+            appointment = (
+                Appointment.objects.select_for_update(of=('self',)).select_related(
+                    'apt_requested_by',
+                ).get(
+                    apt_id=apt_id,
+                    cln_id_id=clinic_id,
+                    apt_deleted_at__isnull=True,
+                )
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.apt_request_status != AppointmentRequestStatus.OPEN:
+            raise InvalidRequestError('This appointment has no open request.')
+
+        appointment.apt_request_status = AppointmentRequestStatus.DECLINED
+        appointment.apt_decline_note = note
+        appointment.apt_resolved_by_id = user_id
+        appointment.apt_resolved_at = timezone.now()
+        appointment.save(
+            update_fields=[
+                'apt_request_status',
+                'apt_decline_note',
+                'apt_resolved_by',
+                'apt_resolved_at',
+                'apt_updated_at',
+            ],
+        )
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description=f'Request declined: {note}',
+            old_values={'apt_request_status': AppointmentRequestStatus.OPEN},
+            new_values={
+                'apt_request_status': AppointmentRequestStatus.DECLINED,
+                'apt_decline_note': note,
+                'apt_resolved_by': str(user_id),
+            },
+        )
+
+        # The requesting vet is the only other party who may see the note.
+        if appointment.apt_requested_by and appointment.apt_requested_by.usr_id:
+            _notify(
+                user_id=appointment.apt_requested_by.usr_id.usr_id,
+                title='Request Declined',
+                message=(
+                    f'The clinic declined your request for '
+                    f'{appointment.pet_id.pet_name} on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}. '
+                    f'Note: {note}'
+                ),
+                ntf_type=NotificationType.SYSTEM,
+                ref_id=appointment.apt_id,
+            )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
+    def reschedule_appointment(apt_id, clinic_id, slot_id, user_id):
+        """Receptionist moves an appointment to another slot of the same vet.
+
+        The appointment row and the target slot are both locked so two
+        receptionists can never take the same slot or resolve the same
+        request concurrently.
+        """
+        from notifications.models import NotificationType
+
+        try:
+            appointment = Appointment.objects.select_for_update().get(
+                apt_id=apt_id,
+                cln_id_id=clinic_id,
+                apt_deleted_at__isnull=True,
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.apt_status not in (
+            AppointmentStatus.PENDING,
+            AppointmentStatus.CONFIRMED,
+        ):
+            raise InvalidTransitionError(
+                'Only pending or confirmed appointments can be rescheduled.',
+            )
+
+        try:
+            slot = VetSlot.objects.select_for_update().get(vsl_id=slot_id)
+        except (VetSlot.DoesNotExist, ValidationError, ValueError):
+            raise SlotUnavailableError('That slot is no longer available.')
+
+        if (
+            slot.stf_id_id != appointment.stf_id_id
+            or slot.cln_id_id != appointment.cln_id_id
+        ):
+            raise InvalidRequestError(
+                "That slot does not belong to this appointment's veterinarian.",
+            )
+
+        if slot.vsl_status != SlotStatus.AVAILABLE or slot.vsl_appointment_id:
+            raise SlotUnavailableError('That slot is no longer available.')
+
+        tz = get_clinic_timezone(appointment.cln_id_id)
+        slot_start = timezone.make_aware(
+            datetime.combine(slot.vsl_date, slot.vsl_start_time), tz,
+        )
+        if slot_start < datetime.now(tz):
+            raise SlotUnavailableError('This slot is in the past.')
+
+        old_slot = getattr(appointment, 'vet_slot', None)
+        if old_slot is not None and old_slot.vsl_id != slot.vsl_id:
+            old_slot.vsl_appointment = None
+            old_slot.vsl_status = SlotStatus.AVAILABLE
+            old_slot.save(
+                update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'],
+            )
+
+        slot.vsl_appointment = appointment
+        slot.vsl_status = SlotStatus.BOOKED
+        slot.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
+
+        old_scheduled_at = appointment.apt_scheduled_at
+        appointment.apt_scheduled_at = slot_start
+
+        # Only a reschedule request is acted on by rescheduling; a cancel
+        # request stays open until it is cancelled or declined.
+        resolving = (
+            appointment.apt_request_status == AppointmentRequestStatus.OPEN
+            and appointment.apt_request_type == AppointmentRequestType.RESCHEDULE
+        )
+        if resolving:
+            appointment.apt_request_status = AppointmentRequestStatus.RESOLVED
+            appointment.apt_resolved_by_id = user_id
+            appointment.apt_resolved_at = timezone.now()
+
+        appointment.save()
+
+        new_values = {
+            'apt_scheduled_at': str(slot_start),
+            'old_slot': str(old_slot.vsl_id) if old_slot else None,
+            'new_slot': str(slot.vsl_id),
+        }
+        if resolving:
+            new_values['apt_request_status'] = AppointmentRequestStatus.RESOLVED
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Appointment rescheduled',
+            old_values={'apt_scheduled_at': str(old_scheduled_at)},
+            new_values=new_values,
+        )
+
+        owner_user_id = None
+        if appointment.pet_id and appointment.pet_id.own_id:
+            owner_user_id = appointment.pet_id.own_id.usr_id_id
+
+        if resolving:
+            # The vet's reason is never shown to the owner; this neutral
+            # explanation is only used when the reschedule resolves the
+            # vet's own request.
+            message = (
+                f'Your veterinarian is unavailable. Your appointment for '
+                f'{appointment.pet_id.pet_name} is now '
+                f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+            )
+        else:
+            message = (
+                f'Your appointment for {appointment.pet_id.pet_name} has been '
+                f'rescheduled to {appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+            )
+        _notify(
+            user_id=owner_user_id,
+            title='Appointment Rescheduled',
+            message=message,
+            ntf_type=NotificationType.SYSTEM,
+            ref_id=appointment.apt_id,
+        )
+
+        return appointment
+
+    @staticmethod
     def list_appointments(clinic_id, date=None, status=None, vet_id=None,
                           pet_id=None, search=None, date_from=None,
                           date_to=None, page=1, page_size=20, overdue=False,
-                          sort=''):
+                          sort='', has_request=False):
         # Statuses shown in this list (and the overdue filter) must be
         # current, so refresh past-due appointments for this clinic first.
         _reconcile_past_due(clinic_id)
         tz = get_clinic_timezone(clinic_id)
         qs = Appointment.objects.filter(
             cln_id_id=clinic_id, apt_deleted_at__isnull=True,
-        ).select_related('pet_id', 'stf_id__usr_id', 'apt_created_by')
+        ).select_related(
+            'pet_id', 'stf_id__usr_id', 'apt_created_by',
+            'apt_requested_by__usr_id',
+        )
 
         if date:
             day_start, day_end = _clinic_day_bounds(date, tz)
@@ -1112,6 +1372,10 @@ class AppointmentService:
             )
         if status:
             qs = qs.filter(apt_status=status)
+        if has_request:
+            qs = qs.filter(
+                apt_request_status=AppointmentRequestStatus.OPEN,
+            )
         if vet_id:
             qs = qs.filter(stf_id_id=vet_id)
         if pet_id:
@@ -1194,6 +1458,7 @@ class AppointmentService:
                 'pet_id', 'pet_id__own_id', 'pet_id__brd_id',
                 'stf_id__usr_id', 'cln_id', 'apt_created_by',
                 'apt_screening', 'apt_screening__dis_id',
+                'apt_requested_by__usr_id', 'apt_resolved_by',
             ).get(apt_id=apt_id)
         except Appointment.DoesNotExist:
             return None
@@ -1328,6 +1593,46 @@ class DashboardService:
             apt_deleted_at__isnull=True,
         ).count()
 
+        # Vet requests awaiting receptionist action: open requests on
+        # appointments that still exist (a cancelled/completed/no-show row
+        # can no longer be acted on). Soonest first so the panel's top rows
+        # are the ones to handle next. The reason text is receptionist-only;
+        # views_dashboard must not forward this key to clinic admins.
+        vet_requests = []
+        vet_request_rows = (
+            Appointment.objects.filter(
+                cln_id_id=clinic_id,
+                apt_request_status=AppointmentRequestStatus.OPEN,
+                apt_deleted_at__isnull=True,
+            )
+            .exclude(
+                apt_status__in=[
+                    AppointmentStatus.CANCELLED,
+                    AppointmentStatus.COMPLETED,
+                    AppointmentStatus.NO_SHOW,
+                ],
+            )
+            .select_related('pet_id__own_id__usr_id', 'apt_requested_by__usr_id')
+            .order_by('apt_scheduled_at')
+        )
+        for apt in vet_request_rows:
+            reason = apt.apt_cancellation_request_reason
+            if apt.apt_request_type == AppointmentRequestType.RESCHEDULE:
+                reason = apt.apt_reschedule_request_reason
+            owner_name = None
+            if apt.pet_id and apt.pet_id.own_id and apt.pet_id.own_id.usr_id:
+                u = apt.pet_id.own_id.usr_id
+                owner_name = f'{u.usr_first_name} {u.usr_last_name}'
+            vet_requests.append({
+                'apt_id': str(apt.apt_id),
+                'pet_name': apt.pet_id.pet_name,
+                'owner_name': owner_name,
+                'apt_scheduled_at': apt.apt_scheduled_at,
+                'request_type': apt.apt_request_type,
+                'reason': (reason or '')[:120],
+                'requested_at': apt.apt_requested_at,
+            })
+
         # The dashboard's "To confirm" card spans every future appointment,
         # not just today's, so it agrees with the appointments list the
         # receptionist compares it against. Past-due rows were just closed
@@ -1411,6 +1716,7 @@ class DashboardService:
             'review_pending': review_pending,
             'upcoming': upcoming,
             'unpaid_completions': unpaid_completions,
+            'vet_requests': vet_requests,
         }
 
 
@@ -1571,10 +1877,28 @@ class VetDashboardService:
         appointment = VetDashboardService._get_requestable_appointment(
             apt_id, stf_id, 'reschedule',
         )
+        _assert_no_open_request(appointment)
 
         appointment.apt_reschedule_request_reason = reason
+        appointment.apt_request_type = AppointmentRequestType.RESCHEDULE
+        appointment.apt_request_status = AppointmentRequestStatus.OPEN
+        appointment.apt_requested_by_id = stf_id
+        appointment.apt_requested_at = timezone.now()
+        appointment.apt_resolved_by = None
+        appointment.apt_resolved_at = None
+        appointment.apt_decline_note = None
         appointment.save(
-            update_fields=['apt_reschedule_request_reason', 'apt_updated_at'],
+            update_fields=[
+                'apt_reschedule_request_reason',
+                'apt_request_type',
+                'apt_request_status',
+                'apt_requested_by',
+                'apt_requested_at',
+                'apt_resolved_by',
+                'apt_resolved_at',
+                'apt_decline_note',
+                'apt_updated_at',
+            ],
         )
 
         _audit(
@@ -1584,8 +1908,14 @@ class VetDashboardService:
             table_name='APPOINTMENT',
             record_id=str(appointment.apt_id),
             description='Reschedule requested',
-            new_values={'apt_reschedule_request_reason': reason},
+            new_values={
+                'apt_reschedule_request_reason': reason,
+                'apt_request_type': AppointmentRequestType.RESCHEDULE,
+                'apt_request_status': AppointmentRequestStatus.OPEN,
+            },
         )
+
+        _notify_request_submitted(appointment, verb='Reschedule')
 
         return appointment
 
@@ -1599,10 +1929,28 @@ class VetDashboardService:
         appointment = VetDashboardService._get_requestable_appointment(
             apt_id, stf_id, 'cancellation',
         )
+        _assert_no_open_request(appointment)
 
         appointment.apt_cancellation_request_reason = reason
+        appointment.apt_request_type = AppointmentRequestType.CANCEL
+        appointment.apt_request_status = AppointmentRequestStatus.OPEN
+        appointment.apt_requested_by_id = stf_id
+        appointment.apt_requested_at = timezone.now()
+        appointment.apt_resolved_by = None
+        appointment.apt_resolved_at = None
+        appointment.apt_decline_note = None
         appointment.save(
-            update_fields=['apt_cancellation_request_reason', 'apt_updated_at'],
+            update_fields=[
+                'apt_cancellation_request_reason',
+                'apt_request_type',
+                'apt_request_status',
+                'apt_requested_by',
+                'apt_requested_at',
+                'apt_resolved_by',
+                'apt_resolved_at',
+                'apt_decline_note',
+                'apt_updated_at',
+            ],
         )
 
         _audit(
@@ -1612,8 +1960,14 @@ class VetDashboardService:
             table_name='APPOINTMENT',
             record_id=str(appointment.apt_id),
             description='Cancellation requested',
-            new_values={'apt_cancellation_request_reason': reason},
+            new_values={
+                'apt_cancellation_request_reason': reason,
+                'apt_request_type': AppointmentRequestType.CANCEL,
+                'apt_request_status': AppointmentRequestStatus.OPEN,
+            },
         )
+
+        _notify_request_submitted(appointment, verb='Cancellation')
 
         return appointment
 
@@ -1623,10 +1977,18 @@ class OwnerService:
     @staticmethod
     def list_owners(clinic_id=None, search=None, page=1, page_size=20):
         from owners.models import OwnerProfile
+        from pets.models import Pet
 
-        qs = OwnerProfile.objects.filter(
-            pets__isnull=False,
-        ).distinct().select_related('usr_id')
+        if clinic_id is not None:
+            # Clinic-scoped directory: only owners whose pets are clinic
+            # patients (same rule as the Patients tab).
+            qs = OwnerProfile.objects.filter(
+                pets__in=filter_clinic_patients(Pet.objects.all(), clinic_id),
+            ).distinct().select_related('usr_id')
+        else:
+            qs = OwnerProfile.objects.filter(
+                pets__isnull=False,
+            ).distinct().select_related('usr_id')
 
         if search:
             from django.db import models as db_models

@@ -3,6 +3,8 @@ from django.urls import path
 from appointments.views import (
     AppointmentDetailView,
     AppointmentListCreateView,
+    AppointmentRequestDeclineView,
+    AppointmentRescheduleView,
     AppointmentVolumeView,
     AvailableSlotsView,
     BulkBlockSlotsView,
@@ -44,6 +46,8 @@ urlpatterns = [
     path('appointments/volume/', AppointmentVolumeView.as_view(), name='appointment-volume'),
     path('appointments/<uuid:apt_id>/', AppointmentDetailView.as_view(), name='appointment-detail'),
     path('appointments/<uuid:apt_id>/confirm-follow-up/', ConfirmFollowUpView.as_view(), name='appointment-confirm-follow-up'),
+    path('appointments/<uuid:apt_id>/request/decline/', AppointmentRequestDeclineView.as_view(), name='appointment-request-decline'),
+    path('appointments/<uuid:apt_id>/reschedule/', AppointmentRescheduleView.as_view(), name='appointment-reschedule'),
     path('dashboard/stats/', DashboardStatsView.as_view(), name='receptionist-dashboard-stats'),
     path('veterinarian/dashboard/', VetDashboardView.as_view(), name='veterinarian-dashboard'),
     path('veterinarian/appointments/', VetAppointmentListView.as_view(), name='veterinarian-appointment-list'),

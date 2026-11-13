@@ -7,12 +7,21 @@ import {
   useAppointments,
   useUpdateAppointmentStatus,
 } from '../hooks/useAppointments'
-import type { Appointment, AppointmentStatus } from '../types/receptionist.types'
+import { useDashboardStats } from '../hooks/useDashboardStats'
+import type {
+  Appointment,
+  AppointmentStatus,
+  DashboardStats,
+} from '../types/receptionist.types'
 import { NeedsAttentionPanel } from './NeedsAttentionPanel'
 
 vi.mock('../hooks/useAppointments', () => ({
   useAppointments: vi.fn(),
   useUpdateAppointmentStatus: vi.fn(),
+}))
+
+vi.mock('../hooks/useDashboardStats', () => ({
+  useDashboardStats: vi.fn(),
 }))
 
 const NOW = Date.now()
@@ -91,12 +100,23 @@ function renderPanel() {
   )
 }
 
+function mockStats(vetRequests: DashboardStats['vet_requests']) {
+  vi.mocked(useDashboardStats).mockReturnValue({
+    data: vetRequests === undefined ? undefined : { vet_requests: vetRequests },
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+    isFetching: false,
+  } as unknown as ReturnType<typeof useDashboardStats>)
+}
+
 describe('NeedsAttentionPanel', () => {
   beforeEach(() => {
     vi.mocked(useUpdateAppointmentStatus).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
     } as unknown as ReturnType<typeof useUpdateAppointmentStatus>)
+    mockStats(undefined)
     mockQueries({ pending: [], overdue: [] })
   })
 
@@ -183,5 +203,50 @@ describe('NeedsAttentionPanel', () => {
 
     expect(screen.queryByRole('button', { name: 'Review payments' })).toBeNull()
     expect(screen.queryByText(/completed without payment/)).toBeNull()
+  })
+
+  it('lists open vet requests with a link to the appointment', () => {
+    mockStats([
+      {
+        apt_id: 'req-1',
+        pet_name: 'Rex',
+        owner_name: 'Olivia Owner',
+        apt_scheduled_at: SOON,
+        request_type: 'RESCHEDULE',
+        reason: 'Surgery conflict',
+        requested_at: SOON,
+      },
+    ])
+
+    renderPanel()
+
+    const row = screen.getByRole('link', { name: /Surgery conflict/ })
+    expect(row).toHaveAttribute('href', '/receptionist/appointments/req-1')
+    expect(screen.getByText('1 open vet request')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Needs attention · 1' }),
+    ).toBeInTheDocument()
+  })
+
+  it('caps the vet request group and links to the filtered list', () => {
+    mockStats(
+      Array.from({ length: 6 }, (_, index) => ({
+        apt_id: `req-${index}`,
+        pet_name: `Pet ${index}`,
+        owner_name: 'Olivia Owner',
+        apt_scheduled_at: SOON,
+        request_type: 'CANCEL' as const,
+        reason: 'Conflict',
+        requested_at: SOON,
+      })),
+    )
+
+    renderPanel()
+
+    expect(screen.getByText('6 open vet requests')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /\+1 more/ })).toHaveAttribute(
+      'href',
+      '/receptionist/appointments?requests=1',
+    )
   })
 })

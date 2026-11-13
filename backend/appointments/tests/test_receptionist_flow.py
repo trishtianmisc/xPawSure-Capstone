@@ -96,6 +96,16 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
         confirmed = self._patch_status(apt_id, 'CONFIRMED')
         self.assertEqual(confirmed.status_code, 200, confirmed.data)
 
+        # The fixture books tomorrow; move the appointment onto today so
+        # the appointment-date check-in gate allows the transition.
+        mnl = ZoneInfo('Asia/Manila')
+        today_nine = datetime.combine(
+            datetime.now(mnl).date(), time(9, 0), tzinfo=mnl,
+        )
+        Appointment.objects.filter(apt_id=apt_id).update(
+            apt_scheduled_at=today_nine,
+        )
+
         checked_in = self._patch_status(apt_id, 'CHECKED_IN')
         self.assertEqual(checked_in.status_code, 200, checked_in.data)
         self.assertEqual(checked_in.data['apt_status'], 'CHECKED_IN')
@@ -254,6 +264,40 @@ class PastDueAppointmentTests(OwnerBookingBase):
         self.assertIn('before its scheduled time', response.data['detail'])
         apt.refresh_from_db()
         self.assertEqual(apt.apt_status, AppointmentStatus.CONFIRMED)
+
+    def test_check_in_before_appointment_date_returns_400(self):
+        mnl = ZoneInfo('Asia/Manila')
+        apt = self._apt(
+            AppointmentStatus.CONFIRMED,
+            datetime.now(mnl) + timedelta(days=1),
+        )
+
+        response = self._patch(apt.apt_id, 'CHECKED_IN')
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(
+            response.data['detail'],
+            'Cannot check in before the appointment date.',
+        )
+        apt.refresh_from_db()
+        self.assertEqual(apt.apt_status, AppointmentStatus.CONFIRMED)
+        self.assertIsNone(apt.apt_checked_in_at)
+
+    def test_check_in_on_appointment_date_returns_200(self):
+        mnl = ZoneInfo('Asia/Manila')
+        # Same clinic day, later than the current time: the gate is the
+        # date, not the time of day.
+        apt = self._apt(
+            AppointmentStatus.CONFIRMED,
+            datetime.now(mnl).replace(hour=23, minute=59, second=0, microsecond=0),
+        )
+
+        response = self._patch(apt.apt_id, 'CHECKED_IN')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        apt.refresh_from_db()
+        self.assertEqual(apt.apt_status, AppointmentStatus.CHECKED_IN)
+        self.assertIsNotNone(apt.apt_checked_in_at)
 
     def test_close_past_due_handles_past_due_appointments(self):
         mnl = ZoneInfo('Asia/Manila')
