@@ -117,22 +117,34 @@ On-device classifier (TensorFlow.js):
 - Returns the predicted condition, confidence score, top N predictions, and
   model version
 
-Both results are displayed separately. The backend still records its
-deterministic cross-analysis for audit and history — the fresh result screen
-does not display it, while a stored screening's read-only details screen shows
-the recorded summary. Agreement is not confirmation.
+Both results are still processed separately. The backend records its
+deterministic cross-analysis for audit and history only — it is no longer
+displayed on any active mobile screen (neither the fresh result screen nor the
+stored screening's details screen). Agreement is not confirmation. The
+image-validation gate still runs and its outcome appears in the
+image-validation UI, but the review findings card ("Independent Image Review")
+is also no longer rendered; that slot now shows the veterinarian-approved Care
+Guidelines card.
 
 When the classifier reports `DISEASE_DETECTED`, the owner may answer a
 supplementary symptom questionnaire (adaptive question order; answers may
 influence which questions are asked next, but never the result). The result
-screen presents:
+screen presents, in order:
 
 - **AI Preliminary Screening Result** — the raw on-device prediction as the
   sole primary result, with its top-3 confidence list
+- **Care Guidelines** — veterinarian-approved care steps selected only by the
+  primary raw AI predicted class (never by questionnaire answers), labeled
+  "Veterinarian-Approved Guidance"; the content is general guidance, not a
+  diagnosis or prescription, and a missing or unsupported predicted class
+  shows a general veterinary consultation message instead
 - **Symptom Summary · Supplementary** — the plain questionnaire answers,
   labeled as context that does not change the AI prediction
-- **Independent Review** — the Claude image-validation findings, shown
-  separately
+
+The care-guideline content lives in
+`mobile/features/screening/data/careGuidelines.ts` (display-only, separate
+from AI model logic) so it can be updated without touching components or AI
+code.
 
 Saving persists the raw AI prediction and confidence plus the display-only
 `symptom_answers` rows (shown on the result and details screens); the stored
@@ -141,7 +153,8 @@ answers are never read back into the AI path.
 If the gate rejects the photo, the UI shows the explanation and an option to
 upload another image; no prediction is shown. If the gate fails, the classifier
 is not run and a retry/error message is shown. If the classifier fails after
-approval, no prediction is fabricated and the Claude findings remain visible.
+approval, no prediction is fabricated and the image-validation outcome remains
+visible.
 The user may then book a veterinary appointment; saving uploads the single image
 and both outputs after consent.
 
@@ -506,8 +519,12 @@ Supplementary questionnaire (adaptive order) → answers shown on the result
 screen and details screen as a symptom summary, stored only as display rows
 (`symptom_answers`); they never modify the displayed or saved prediction
 
-The app displays the review separately. Cross-analysis is not displayed on the
-mobile result screen.
+The review findings card is no longer rendered on the mobile result or
+details screens — those slots show the veterinarian-approved Care Guidelines
+card instead. Cross-analysis is likewise no longer rendered on
+any mobile screen. The gate itself, its eligibility outcome, and the stored
+review/cross-analysis records are unchanged and remain available through the
+API for audit.
 
 The model file is bundled with the application and updated through app store
 releases. The classifier itself works offline, but image screening now requires

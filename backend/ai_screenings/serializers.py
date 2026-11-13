@@ -100,6 +100,11 @@ class ScreeningSummarySerializer(serializers.ModelSerializer):
     cross_analysis_status = serializers.CharField(
         source='ais_cross_analysis_status', read_only=True,
     )
+    # Supplementary display rows for the treatment team (vet/receptionist
+    # appointment surfaces). Read-only display context; never feeds AI logic.
+    symptom_answers = serializers.JSONField(
+        source='ais_symptom_answers', read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = AiScreening
@@ -107,6 +112,7 @@ class ScreeningSummarySerializer(serializers.ModelSerializer):
             'ais_id', 'disease', 'ais_confidence', 'ais_model_version',
             'ais_status', 'ais_source', 'ais_is_correct', 'ais_created_at',
             'image_url', 'claude_status', 'cross_analysis_status',
+            'symptom_answers',
         ]
         read_only_fields = fields
 

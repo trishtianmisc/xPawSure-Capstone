@@ -31,6 +31,8 @@ ios/build/
 *.sqlite
 *.sqlite3
 data/
+# Source code (mock care-guideline content), not local storage
+!mobile/features/screening/data/
 uploads/
 
 # Logs and temporary files

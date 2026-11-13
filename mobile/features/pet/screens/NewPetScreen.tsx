@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { BirthDateField } from '../components/BirthDateField'
 import { BreedPicker } from '../components/BreedPicker'
 import { PhotoPicker } from '../components/PhotoPicker'
 import { useCreatePet } from '../hooks/useCreatePet'
@@ -152,17 +153,16 @@ export default function NewPetScreen() {
           <Controller
             control={control}
             name="date_of_birth"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                onBlur={onBlur}
-                onChangeText={onChange}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                value={value}
+            render={({ field: { onChange, value } }) => (
+              <BirthDateField
+                onChange={onChange}
+                value={value ?? ''}
               />
             )}
           />
+          {errors.date_of_birth && (
+            <Text style={styles.fieldError}>{errors.date_of_birth.message}</Text>
+          )}
 
           <Text style={styles.label}>Weight (kg)</Text>
           <Controller

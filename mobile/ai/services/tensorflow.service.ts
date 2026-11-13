@@ -4,9 +4,11 @@ import { Asset } from 'expo-asset'
 import { File } from 'expo-file-system'
 
 import { MODEL_INFO } from '../constants/diseases'
-import type { ModelInfo, Prediction, ScreeningResult, ScreeningResultState } from '../types/ai.types'
+import type { ModelInfo, Prediction, ScreeningResult } from '../types/ai.types'
 import { SCREENING_THRESHOLDS, SCREENING_STATE_MESSAGES } from '../constants/diseases'
 import { Normalization, Rescaling } from './customLayers'
+import { determineScreeningState } from './screeningState'
+import { validateWeightsSize } from './weightsValidation'
 
 tf.serialization.registerClass(Normalization)
 tf.serialization.registerClass(Rescaling)
@@ -45,6 +47,7 @@ export async function loadModel(): Promise<void> {
       const weightsUri = weightsAsset[0].localUri
       const weightsFile = new File(weightsUri!)
       const weightsBytes = await weightsFile.bytes()
+      validateWeightsSize(weightsBytes.byteLength)
       console.log(`[TF] weights loaded in ${Date.now() - weightsStart}ms`)
 
       const parseStart = Date.now()
@@ -116,16 +119,6 @@ export async function preprocessImage(
   return expanded
 }
 
-function computeShannonEntropy(probs: Float32Array): number {
-  let entropy = 0
-  for (let i = 0; i < probs.length; i++) {
-    if (probs[i] > 0) {
-      entropy -= probs[i] * Math.log2(probs[i])
-    }
-  }
-  return entropy
-}
-
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
   let dotProduct = 0
   let normA = 0
@@ -136,34 +129,6 @@ function cosineSimilarity(a: Float32Array, b: Float32Array): number {
     normB += b[i] * b[i]
   }
   return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB))
-}
-
-function determineScreeningState(predictions: Prediction[], featureSimilarity: number): {
-  state: ScreeningResultState
-  stateMessage: string
-} {
-  const sorted = [...predictions].sort((a, b) => b.confidence - a.confidence)
-  const top1 = sorted[0].confidence / 100
-  const top2 = sorted[1].confidence / 100
-  const margin = top1 - top2
-
-  const probs = new Float32Array(predictions.map(p => p.confidence / 100))
-  const entropy = computeShannonEntropy(probs)
-
-  console.log(`[TF SCREENING] Top1=${(top1 * 100).toFixed(1)}% Top2=${(top2 * 100).toFixed(1)}% Margin=${(margin * 100).toFixed(1)}% Entropy=${entropy.toFixed(3)} Similarity=${featureSimilarity.toFixed(3)}`)
-
-  if (featureSimilarity >= SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH) {
-    console.log(`[TF SCREENING] DISEASE_DETECTED: similarity ${featureSimilarity.toFixed(3)} >= ${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH} threshold (high confidence skin region)`)
-    return { state: 'DISEASE_DETECTED', stateMessage: SCREENING_STATE_MESSAGES.DISEASE_DETECTED.message }
-  }
-
-  if (featureSimilarity < SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN) {
-    console.log(`[TF SCREENING] NOT_SKIN_IMAGE: similarity ${featureSimilarity.toFixed(3)} < ${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN} threshold`)
-    return { state: 'NOT_SKIN_IMAGE', stateMessage: SCREENING_STATE_MESSAGES.NOT_SKIN_IMAGE.message }
-  }
-
-  console.log(`[TF SCREENING] UNCERTAIN: similarity ${featureSimilarity.toFixed(3)} in overlap zone [${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_MIN}, ${SCREENING_THRESHOLDS.FEATURE_SIMILARITY_HIGH})`)
-  return { state: 'UNCERTAIN', stateMessage: SCREENING_STATE_MESSAGES.UNCERTAIN.message }
 }
 
 export async function runInference(

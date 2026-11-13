@@ -22,6 +22,7 @@ import { usePets } from '../../../../features/pet/hooks/usePets'
 import type { ScreeningResult } from '../../../../ai/types/ai.types'
 import { analyzeScreeningImage } from '../../../../src/services/screening'
 import { isClaudeValidationApproved } from '../../../../features/screening/comparison'
+import { classifyReviewOutcome } from '../../../../features/screening/reviewOutcome'
 import type { ClaudeAnalysisResponse } from '../../../../features/screening/types'
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { prepareImageForInference } from '../../../../ai/services/imagePreprocess'
@@ -169,7 +170,14 @@ export default function CaptureScreen() {
         return
       }
 
-      if (claudeResponse.status !== 'OK' || !claudeResponse.result) {
+      // NOT_CONFIGURED is the only non-OK status allowed to continue: the
+      // backend has no review key, so no gate exists. The classifier still
+      // runs, the result page shows a warning banner, and saving stays
+      // disabled because the response carries no token. Every other failure
+      // (timeout, rate limit, malformed, provider error) aborts screening.
+      const outcome = classifyReviewOutcome(claudeResponse.status, !!claudeResponse.result)
+
+      if (outcome === 'abort') {
         setAnalysisError(
           claudeResponse.detail ||
             'The photo could not be validated, so the on-device screening was not run. Please try again.',
@@ -178,43 +186,46 @@ export default function CaptureScreen() {
       }
 
       const gate = claudeResponse.result
-      if (
-        !IMAGE_SUITABILITY_VALUES.has(gate.image_suitability) ||
-        !SCREENING_ELIGIBILITY_VALUES.has(gate.screening_eligibility) ||
-        typeof gate.screening_message !== 'string' ||
-        !gate.screening_message.trim() ||
-        !Array.isArray(gate.visible_features) ||
-        !gate.image_quality ||
-        typeof gate.image_quality.adequate !== 'boolean' ||
-        !Array.isArray(gate.image_quality.observations) ||
-        !gate.condition_assessment
-      ) {
-        setAnalysisError(
-          'The photo validation response was incomplete, so the on-device screening ' +
-            'was not run. Please try again.',
-        )
-        return
-      }
+      if (outcome === 'run-gate') {
+        if (
+          !gate ||
+          !IMAGE_SUITABILITY_VALUES.has(gate.image_suitability) ||
+          !SCREENING_ELIGIBILITY_VALUES.has(gate.screening_eligibility) ||
+          typeof gate.screening_message !== 'string' ||
+          !gate.screening_message.trim() ||
+          !Array.isArray(gate.visible_features) ||
+          !gate.image_quality ||
+          typeof gate.image_quality.adequate !== 'boolean' ||
+          !Array.isArray(gate.image_quality.observations) ||
+          !gate.condition_assessment
+        ) {
+          setAnalysisError(
+            'The photo validation response was incomplete, so the on-device screening ' +
+              'was not run. Please try again.',
+          )
+          return
+        }
 
-      if (!isClaudeValidationApproved(claudeResponse)) {
-        router.push({
-          pathname: '/(owner)/pets/screening/result',
-          params: {
-            imageUri,
-            petId: selectedPet.id,
-            petName: selectedPet.name,
-            predictions: '[]',
-            modelVersion: '',
-            inferenceTimeMs: '0',
-            state: 'INVALID_IMAGE',
-            stateMessage: gate.screening_message,
-            deviceFailed: 'false',
-            classifierSkipped: 'true',
-            claude: JSON.stringify(claudeResponse),
-            claudeRequestFailed: 'false',
-          },
-        })
-        return
+        if (!isClaudeValidationApproved(claudeResponse)) {
+          router.push({
+            pathname: '/(owner)/pets/screening/result',
+            params: {
+              imageUri,
+              petId: selectedPet.id,
+              petName: selectedPet.name,
+              predictions: '[]',
+              modelVersion: '',
+              inferenceTimeMs: '0',
+              state: 'INVALID_IMAGE',
+              stateMessage: gate.screening_message,
+              deviceFailed: 'false',
+              classifierSkipped: 'true',
+              claude: JSON.stringify(claudeResponse),
+              claudeRequestFailed: 'false',
+            },
+          })
+          return
+        }
       }
 
       setAnalysisPhase('classifying')
@@ -571,12 +582,13 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     aspectRatio: 1.25,
     backgroundColor: colors.surfaceAlt,
     borderColor: colors.borderLight,
-    borderRadius: 20,
+    borderRadius: 14,
     borderStyle: 'dashed',
     borderWidth: 1.5,
     marginBottom: 12,
     overflow: 'hidden',
     position: 'relative',
+    width: '100%',
   },
   previewImage: { height: '100%', width: '100%' },
   previewPlaceholder: {

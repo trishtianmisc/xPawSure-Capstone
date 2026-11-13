@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 
 import { queryClient } from '../lib/queryClient'
 import * as authService from '../services/auth'
+import { setSessionExpiredHandler } from '../services/http'
 import { getItem, removeItem, setItem } from '../utils/storage'
 
 interface User {
@@ -50,6 +51,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .finally(() => setIsLoading(false))
+  }, [])
+
+  // Refresh failed and http.ts already cleared the tokens. Drop the cached
+  // session so the UI cannot stay "logged in" with dead credentials.
+  // Loop-safety: this handler performs only local storage/state work — no
+  // HTTP calls — so it can never re-enter the refresh interceptor. setUser(null)
+  // on an already-null user is a React no-op.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      queryClient.clear()
+      void removeItem(STORAGE_USER)
+      void removeItem('xpawsure_access_token')
+      void removeItem('xpawsure_refresh_token')
+      setUser(null)
+    }
+    setSessionExpiredHandler(handleSessionExpired)
+    return () => setSessionExpiredHandler(null)
   }, [])
 
   const login = async (email: string, password: string): Promise<User> => {

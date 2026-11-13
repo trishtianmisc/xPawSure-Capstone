@@ -19,7 +19,7 @@ import { font } from '../../../../src/theme/typography'
 import type { Prediction, ScreeningResultState } from '../../../../ai/types/ai.types'
 import { SCREENING_STATE_MESSAGES } from '../../../../ai/constants/diseases'
 import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
-import { ClaudeReviewCard } from '../../../../features/screening/components/AnalysisCards'
+import { CareGuidelinesCard } from '../../../../features/screening/components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../../../../features/screening/components/SymptomSummaryCard'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
 import { buildScreeningSavePayload } from '../../../../features/screening/savePayload'
@@ -165,13 +165,12 @@ export default function ResultScreen() {
 
   const deviceFailed = params.deviceFailed === 'true'
   const classifierSkipped = params.classifierSkipped === 'true'
-  const claudeRequestFailed = params.claudeRequestFailed === 'true'
 
   const screeningState: ScreeningResultState | null = deviceFailed || classifierSkipped
     ? null
     : RESULT_STATES.includes(params.state as ScreeningResultState)
       ? (params.state as ScreeningResultState)
-      : 'DISEASE_DETECTED'
+      : 'UNCERTAIN'
 
   const predictions: Prediction[] = useMemo(() => {
     try {
@@ -218,6 +217,10 @@ export default function ResultScreen() {
   const [savedId, setSavedId] = useState<string | null>(null)
 
   const claudeResponse = useMemo(() => parseClaude(params.claude), [params.claude])
+  // Backend had no review key: classifier output is preview-only and must
+  // never be savable. canBook already enforces this (no claude token), the
+  // banner makes the limitation visible.
+  const reviewNotConfigured = claudeResponse?.status === 'NOT_CONFIGURED'
   const gateFindings = classifierSkipped ? claudeResponse?.result ?? null : null
   const gateMeta = gateFindings ? GATE_META[gateFindings.image_suitability] : null
   const sorted = useMemo(
@@ -254,7 +257,8 @@ export default function ResultScreen() {
     }
     // Sole primary result: the persisted prediction and confidence come
     // exclusively from the raw on-device AI output (`top`). Questionnaire
-    // answers are never part of the save payload.
+    // answers are persisted only as supplementary display rows
+    // (`symptom_answers`) and can never influence prediction or confidence.
     if (!top) return
     setSaveError(false)
     createScreening.mutate(
@@ -265,6 +269,7 @@ export default function ResultScreen() {
         imageUri: params.imageUri,
         claudeToken: claudeResponse?.token || undefined,
         device: Platform.OS,
+        symptomAnswers: symptomRows.length > 0 ? symptomRows : undefined,
       }),
       {
         onSuccess: (created) => {
@@ -334,6 +339,18 @@ export default function ResultScreen() {
           </View>
         </View>
 
+        {reviewNotConfigured && (
+          <View
+            accessibilityRole="alert"
+            style={[styles.infoCard, { backgroundColor: '#F39C1218', borderColor: '#F39C1240', borderWidth: 1 }]}
+          >
+            <MaterialCommunityIcons color="#F39C12" name="alert-circle-outline" size={16} />
+            <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+              Backend image review not configured — this result is a preview and cannot be saved.
+            </Text>
+          </View>
+        )}
+
         {classifierSkipped && gateFindings && gateMeta && (
           <>
             <Text style={styles.sectionLabel}>IMAGE VALIDATION</Text>
@@ -380,8 +397,8 @@ export default function ResultScreen() {
               On-device analysis unavailable
             </Text>
             <Text style={styles.stateMessage}>
-              No prediction was produced, so none is shown. The image review below is
-              displayed on its own and is not a diagnosis.
+              No prediction was produced, so none is shown. The screening result is
+              not a diagnosis. Please consult a veterinarian.
             </Text>
           </View>
         )}
@@ -423,11 +440,16 @@ export default function ResultScreen() {
           </>
         )}
 
+        {!deviceFailed && (
+          <CareGuidelinesCard prediction={top?.disease ?? null} />
+        )}
+
         {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (
           <SymptomSummaryCard
             rows={symptomRows}
             answeredCount={answeredCount}
             totalQuestions={totalQuestions}
+            collapsible={true}
           />
         )}
 
@@ -443,14 +465,11 @@ export default function ResultScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionLabel}>INDEPENDENT REVIEW</Text>
-        <ClaudeReviewCard response={claudeResponse} requestFailed={claudeRequestFailed} />
-
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
           <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
           <Text style={styles.infoText}>
             {classifierSkipped || deviceFailed
-              ? 'The image review was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
+              ? 'Image validation was used to decide whether on-device screening was appropriate. It is not a diagnosis. Consult a vet for definitive results.'
               : 'AI-assisted screening is preliminary and does not replace professional veterinary diagnosis. The on-device AI result is the primary prediction. Questionnaire answers are supplementary and never modify the AI prediction or confidence. Consult a vet for definitive results.'}
           </Text>
         </View>

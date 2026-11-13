@@ -8,6 +8,7 @@ import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
 import { formatTime, localDateStr } from '../../../features/vet/lib/format'
+import { filterAppointmentsForMonth } from '../../../features/vet/lib/schedule'
 import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'
 
 const TABS = ['Day', 'Week', 'Month'] as const
@@ -373,28 +374,33 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
 
 function MonthView({ styles, appointments, onAppointmentPress }: AppointmentViewProps) {
   const [selectedMonth, setSelectedMonth] = useState(CURRENT_MONTH)
+  const [viewYear, setViewYear] = useState(CURRENT_YEAR)
 
   const monthAppointments: ScheduleMonthAppointment[] = useMemo(() => {
-    return appointments
-      .filter((apt) => {
-        const d = new Date(apt.apt_scheduled_at)
-        return d.getMonth() === selectedMonth && d.getFullYear() === CURRENT_YEAR
-      })
-      .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
-      .map((apt) => {
-        const d = new Date(apt.apt_scheduled_at)
-        return {
-          ...toDayItem(apt),
-          date: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
-        }
-      })
-  }, [appointments, selectedMonth])
+    return filterAppointmentsForMonth(appointments, selectedMonth, viewYear).map((apt) => {
+      const d = new Date(apt.apt_scheduled_at)
+      return {
+        ...toDayItem(apt),
+        date: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
+      }
+    })
+  }, [appointments, selectedMonth, viewYear])
 
   return (
     <>
+      <View style={styles.monthNav}>
+        <Pressable onPress={() => setViewYear(viewYear - 1)} style={styles.navArrow}>
+          <Text style={styles.navArrowText}>{'<'}</Text>
+        </Pressable>
+        <Text style={styles.monthTitle}>{viewYear}</Text>
+        <Pressable onPress={() => setViewYear(viewYear + 1)} style={styles.navArrow}>
+          <Text style={styles.navArrowText}>{'>'}</Text>
+        </Pressable>
+      </View>
+
       <View style={styles.monthGrid}>
         {MONTHS.map((m, index) => {
-          const isCurrent = index === CURRENT_MONTH
+          const isCurrent = index === CURRENT_MONTH && viewYear === CURRENT_YEAR
           const isSelected = index === selectedMonth
           return (
             <Pressable
@@ -409,7 +415,7 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
               <Text
                 style={[
                   styles.monthCellText,
-                  isCurrent && !isSelected && styles.monthCellTextCurrent,
+                  isCurrent && styles.monthCellTextCurrent,
                   isSelected && styles.monthCellTextSelected,
                 ]}
               >
@@ -418,6 +424,10 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
             </Pressable>
           )
         })}
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{MONTHS_FULL[selectedMonth]} {viewYear}</Text>
       </View>
 
       <View style={styles.sectionHeader}>

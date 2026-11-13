@@ -2,7 +2,7 @@
 
 Status: Automated logic checks pass. Manual device verification is PENDING.
 
-Last automated run: October 27, 2026.
+Last automated run: November 2026.
 
 Scope (single-photo, AI-only primary result):
 
@@ -10,7 +10,10 @@ Scope (single-photo, AI-only primary result):
 - Claude independent image-validation gate (one review request per run)
 - Adaptive 12-question supplementary questionnaire with early stopping
 - Result screen: AI Preliminary Screening Result as the sole primary result,
-  Top-3 list, Symptom Summary (supplementary), Independent Review card
+  Top-3 list, Care Guidelines (veterinarian-approved static care steps),
+  Symptom Summary (supplementary). The Independent Review card was
+  removed from the active results UI; the gate and stored review data are
+  unchanged.
 - Save / Save-and-Book with a payload that contains only raw AI values
 - Booking gating
 
@@ -23,7 +26,7 @@ Run from `mobile/`:
 | Command | Result |
 | --- | --- |
 | `npx tsc --noEmit` | PASS — exit 0, no diagnostics |
-| `npm test` (test:screening + test:appointment) | PASS — 22 tests, 0 failures (16 screening incl. `resultNavigationParams.test.ts` and `savePayload.test.ts` with its `symptom_answers` cases, 6 appointment) |
+| `npm test` (test:screening + test:appointment + test:payment) | PASS — 47 tests, 0 failures (37 screening incl. `careGuidelines.test.ts` for guideline selection/isolation and details-screen cross-analysis/review removal, `savePayload.test.ts` with its `symptom_answers` cases, 6 appointment, 4 payment) |
 | `npm run test:bayesian` | PASS — `Bayesian refinement tests passed` (retained library) |
 | `npm run test:adaptive` | PASS — `Adaptive questionnaire tests passed` |
 | `npm run test:summary` | PASS — `summary logic tests passed` (retained library) |
@@ -40,7 +43,7 @@ Jest and React Native Testing Library are not configured, so there are no compon
 
 1. From `mobile/`, launch the project's normal Expo development setup on a device with camera and photo-library access.
 2. Sign in as an owner with at least one pet.
-3. Backend access is required for the image-validation review and the save-and-book path. Real review calls need a valid `ANTHROPIC_API_KEY` in the backend `.env`; without it, photos report `NOT_CONFIGURED` and no screening runs.
+3. Backend access is required for the image-validation review and the save-and-book path. Real review calls need a valid `ANTHROPIC_API_KEY` in the backend `.env`; without it, photos report `NOT_CONFIGURED` and the app shows a preview-only screening: the on-device classifier runs, the result page displays a warning banner, and saving and booking stay disabled. Other review failures (timeout, rate limit, provider error) still abort the screening.
 4. Keep the backend reachable from the device (`EXPO_PUBLIC_API_URL` in `mobile/.env` must point at the machine's current LAN IP).
 
 ## Manual Scenarios
@@ -99,9 +102,10 @@ Expected:
 
 - Section `AI PRELIMINARY SCREENING RESULT` shows one `Predicted Condition` card with a single percentage labeled `model confidence` and the note that it is raw on-device output.
 - The `Top 3 Predictions` list shows exactly three AI predictions (or fewer when the model returned fewer).
+- Section `CARE GUIDELINES` appears between the Top-3 list and the symptom summary, shows the `Veterinarian-Approved Guidance` badge, and its condition title matches the primary predicted class (Allergic Dermatitis, Bacterial Infection, Fungal Infection, Hotspot, or Mange) with a `Care Steps` list; a missing/unsupported class shows the general "Consult a Veterinarian" message instead.
 - Section `SYMPTOM SUMMARY · SUPPLEMENTARY` lists the answered questions with their selected option labels, headed `Your questionnaire answers (X of 12)`, and states the answers do not change the AI prediction.
 - No `QUESTIONNAIRE-ONLY`, `COMBINED`, `Answer-Only`, or `Adjusted` card exists anywhere on the screen.
-- `INDEPENDENT REVIEW` shows the Claude findings card separately.
+- No `INDEPENDENT REVIEW` section or Claude findings card exists on the screen.
 - The bottom disclaimer says the on-device AI result is the primary prediction and questionnaire answers never modify it.
 - The header row reads `One photo · image validation and on-device model`.
 
@@ -175,7 +179,7 @@ Steps:
 Expected:
 
 - The result shows `On-device analysis unavailable`; no prediction is fabricated.
-- The Independent Review card remains visible.
+- No Care Guidelines card is shown (the device-failed path hides it), and the message states the result is not a diagnosis.
 - Save and Book are unavailable.
 
 Status: NOT TESTED.
@@ -192,7 +196,7 @@ Steps:
 Expected:
 
 - Malformed JSON values are treated as empty data; the symptom summary section is hidden when no answers exist.
-- An unknown screening state falls back to `DISEASE_DETECTED` rendering only when predictions exist.
+- An unknown screening state falls back to the `UNCERTAIN` (Unable to Determine) state card.
 - `Scan Again` still navigates.
 
 Status: NOT TESTED.
@@ -210,7 +214,7 @@ Steps:
 Expected:
 
 - Text wraps without clipping; Save/Book/Scan Again remain reachable.
-- Sections are announced in order (AI result, symptom summary, independent review, disclaimer).
+- Sections are announced in order (AI result, care guidelines, symptom summary, disclaimer).
 
 Status: NOT TESTED.
 
@@ -227,9 +231,9 @@ Steps:
 Expected:
 
 - The details screen shows `SYMPTOM SUMMARY · SUPPLEMENTARY` with `Your questionnaire answers (X of 12)`, the stored question/answer rows, and the supplementary note — matching the result screen's section.
-- The section appears after the cross-analysis card and before the disclaimers.
+- The section appears after the Care Guidelines card and before the disclaimers; no Cross-analysis card is rendered anywhere on the details screen.
 - A screening without stored answers shows no symptom section at all (no empty card, no placeholder).
-- The AI card, cross-analysis, and review sections are unchanged; stored answers never alter them.
+- The AI card and Care Guidelines (selected from the saved primary AI prediction, never the questionnaire) are unchanged; stored answers never alter them. The review findings card and cross-analysis card do not appear on this screen.
 
 Status: NOT TESTED.
 
@@ -241,7 +245,7 @@ Status: NOT TESTED.
 - Questionnaire answers never modify the displayed or saved prediction; they reach the backend only as the display-only `symptom_answers` rows.
 - Adaptive question ordering and early-stopping evaluation still run (internal only); `test:adaptive` passes.
 - The `engine.ts`, `summary.ts`, bayesian refinement code, and their test scripts remain in the repository untouched (cleanup deferred).
-- Top-3 AI list, Image Validation card, Independent Review card, state cards, Save/Book/`alreadySaved`/`scanAgain` behavior unchanged.
+- Top-3 AI list, Image Validation card, Care Guidelines card (veterinarian-approved static content, selected only by the primary raw AI predicted class; questionnaire answers cannot select or change it; it can never modify prediction, confidence, saved result, or booking), state cards, Save/Book/`alreadySaved`/`scanAgain` behavior unchanged. The Independent Review card and the Cross-analysis card no longer appear on any active results or details UI; the Claude gate, `claude_token` save wiring, the API's stored review/cross-analysis fields, and backend comparison logic are unchanged.
 - Backend contract, migrations, and database history unchanged by this refactor; `ai_screenings` passes 75/75 on a test database built from this working tree (shared-DB drift on the team's Supabase instance noted under Automated Verification).
 - No mode-specific results or stopping metadata are sent to the backend; questionnaire answers travel only in the display-only `symptom_answers` field.
 - One additive database field was introduced (`symptom_answers` / `AIS_SYMPTOM_ANSWERS`, migration `ai_screenings.0008`, nullable); no other API surface changed and the field stays optional for legacy clients.
@@ -249,7 +253,7 @@ Status: NOT TESTED.
 
 ## Sign-off
 
-Automated logic verification: PASS on October 28, 2026 (tsc clean; 22 mobile tests; bayesian/adaptive/summary suites all pass; backend `ai_screenings` 75/75 on a test database built from this working tree).
+Automated logic verification: PASS on November 2026 (tsc clean; 47 mobile tests incl. care-guideline selection/isolation and details-screen cross-analysis/review removal checks; bayesian/adaptive/summary suites all pass; backend `ai_screenings` 75/75 on a test database built from this working tree).
 
 Device-level UI verification: PENDING.
 

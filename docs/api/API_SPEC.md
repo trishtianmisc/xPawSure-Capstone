@@ -879,6 +879,14 @@ That voids the checkout only; the appointment stays `CONFIRMATION` until it is
 paid or auto-cancelled at the scheduled time. The owner cannot cancel a
 `CONFIRMATION` follow-up itself.
 
+When the appointment has a linked screening, the payload embeds a `screening`
+summary object (`ais_id`, `disease`, `ais_confidence`, `ais_model_version`,
+`ais_status`, `ais_source`, `ais_is_correct`, `ais_created_at`, `image_url`,
+`claude_status`, `cross_analysis_status`, and `symptom_answers`). The
+`symptom_answers` field carries the owner's questionnaire rows as display-only
+context for the treatment team and is `null` when absent; it can never
+influence the AI fields.
+
 ---
 
 ## PATCH /api/appointments/{id}/
@@ -972,7 +980,9 @@ appointments are excluded from all three.
 Query parameters: `start_date`, `end_date` (optional `YYYY-MM-DD`; `400` for invalid
 values or when `start_date` is after `end_date`). Returns the vet's own appointments as
 appointment summaries (each includes `apt_reschedule_request_reason` and
-`apt_cancellation_request_reason`).
+`apt_cancellation_request_reason`). Each summary embeds the same `screening`
+object as `GET /api/appointments/{id}/`, including the display-only
+`symptom_answers` rows.
 
 ---
 
@@ -1825,6 +1835,11 @@ screening; cancelling that appointment returns it to `false`.
 context only. It is `null` when the screening was saved without answers or
 predates the column; stored rows never influence prediction, confidence,
 review, or booking.
+
+`cross_analysis` is deterministic audit data computed at save time from the
+two independent outputs. The mobile app no longer renders it (the API field is
+retained for backward compatibility, audit, and future tooling); agreement is
+never treated as confirmation.
 
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
