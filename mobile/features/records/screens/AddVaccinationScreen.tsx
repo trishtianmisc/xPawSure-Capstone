@@ -33,7 +33,7 @@ export default function AddVaccinationScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const { user } = useAuth()
-  const params = useLocalSearchParams<{ petId?: string }>()
+  const params = useLocalSearchParams<{ petId?: string; seriesId?: string; name?: string }>()
   const pets = usePets(user?.id ?? undefined)
   const createVaccination = useCreateVaccination()
 
@@ -46,14 +46,13 @@ export default function AddVaccinationScreen() {
     resolver: zodResolver(vaccinationSchema),
     defaultValues: {
       pet_id: typeof params.petId === 'string' ? params.petId : '',
-      name: '',
+      name: typeof params.name === 'string' ? params.name : '',
       brand: '',
       batch_no: '',
-      dose: '',
-      route: 'SUBCUTANEOUS',
+      veterinarian: '',
+      series_id: typeof params.seriesId === 'string' ? params.seriesId : undefined,
       date_given: localToday(),
       next_due: '',
-      notes: '',
     },
   })
 
@@ -103,9 +102,13 @@ export default function AddVaccinationScreen() {
           >
             <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
           </Pressable>
-          <Text style={styles.headerTitle}>Record Vaccination</Text>
+          <Text style={styles.headerTitle}>
+            {params.seriesId ? 'Record Next Dose' : 'Record Vaccination'}
+          </Text>
           <Text style={styles.headerHint}>
-            Log a vaccine your pet received.
+            {params.seriesId
+              ? 'Add a dose to this vaccine series.'
+              : 'Log a vaccine your pet received.'}
           </Text>
         </View>
 
@@ -119,7 +122,8 @@ export default function AddVaccinationScreen() {
           isPending={createVaccination.isPending}
           onSubmit={form.handleSubmit(onSubmit)}
           pets={petOptions}
-          submitLabel="Save Record"
+          vaccineNameLocked={typeof params.seriesId === 'string'}
+          submitLabel={params.seriesId ? 'Save Next Dose' : 'Save Record'}
         />
         </View>
       </ScrollView>

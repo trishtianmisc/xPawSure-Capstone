@@ -56,7 +56,7 @@ export function VaccinationRow({
     <RowShell
       title={record.name}
       meta={`Given ${formatDate(record.date_given)}`}
-      badge={<VaccinationStatusPill nextDue={record.next_due} />}
+      badge={<VaccinationStatusPill isLatest={record.is_latest_in_series} nextDue={record.next_due} />}
       onPress={onPress}
     />
   )

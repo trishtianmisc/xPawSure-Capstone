@@ -43,8 +43,10 @@ class VaccinationRecord(models.Model):
     vac_name = models.CharField(max_length=255, db_column='VAC_NAME')
     vac_brand = models.CharField(max_length=255, null=True, blank=True, db_column='VAC_BRAND')
     vac_batch_no = models.CharField(max_length=100, null=True, blank=True, db_column='VAC_BATCH_NO')
-    vac_dose = models.CharField(max_length=100, db_column='VAC_DOSE')
-    vac_route = models.CharField(max_length=20, choices=VaccinationRoute.choices, db_column='VAC_ROUTE')
+    vac_veterinarian_name = models.CharField(max_length=255, null=True, blank=True, db_column='VAC_VETERINARIAN_NAME')
+    vac_series_id = models.UUIDField(default=uuid.uuid4, db_column='VAC_SERIES_ID')
+    vac_dose = models.CharField(max_length=100, null=True, blank=True, db_column='VAC_DOSE')
+    vac_route = models.CharField(max_length=20, choices=VaccinationRoute.choices, null=True, blank=True, db_column='VAC_ROUTE')
     vac_date_given = models.DateField(db_column='VAC_DATE_GIVEN')
     vac_next_due = models.DateField(null=True, blank=True, db_column='VAC_NEXT_DUE')
     vac_notes = models.TextField(null=True, blank=True, db_column='VAC_NOTES')
@@ -61,6 +63,7 @@ class VaccinationRecord(models.Model):
             models.Index(fields=['con_id'], name='idx_vac_consultation'),
             models.Index(fields=['stf_id'], name='idx_vac_veterinarian'),
             models.Index(fields=['vac_next_due'], name='idx_vac_next_due'),
+            models.Index(fields=['pet_id', 'vac_series_id'], name='idx_vac_pet_series'),
         ]
 
     def __str__(self):

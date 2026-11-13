@@ -39,11 +39,9 @@ export default function EditVaccinationScreen() {
       name: '',
       brand: '',
       batch_no: '',
-      dose: '',
-      route: 'SUBCUTANEOUS',
+      veterinarian: '',
       date_given: '',
       next_due: '',
-      notes: '',
     },
   })
 
@@ -54,11 +52,10 @@ export default function EditVaccinationScreen() {
         name: record.name,
         brand: record.brand ?? '',
         batch_no: record.batch_no ?? '',
-        dose: record.dose,
-        route: record.route as VaccinationFormValues['route'],
+        veterinarian: record.veterinarian ?? '',
+        series_id: record.series_id,
         date_given: record.date_given,
         next_due: record.next_due ?? '',
-        notes: record.notes ?? '',
       })
     }
   }, [record, form])

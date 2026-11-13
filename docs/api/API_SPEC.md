@@ -385,6 +385,9 @@ The public QR profile exposes status values only; it never exposes vaccination
 names, administration dates, or due dates. Statuses are sorted by urgency:
 `OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
 Each array item is one of `OVERDUE`, `DUE_SOON`, `CURRENT`, or `NO_DUE_DATE`.
+Statuses are computed from only the latest dose in each vaccine series, so a
+newly recorded dose clears the prior dose's overdue status while preserving the
+old dose in vaccination history.
 
 ---
 
@@ -1668,11 +1671,17 @@ Query params:
   list; invalid UUID returns 400.
 
 Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
-name, brand, batch_no, dose, route, date_given, next_due, notes, source,
-created_at }, ordered by date_given descending.
+name, brand, batch_no, series_id, dose, route, date_given, next_due, notes,
+source, created_at, is_latest_in_series }, ordered by date_given descending.
 
 - source is "VET" (veterinarian-issued) or "OWNER" (owner-reported).
-- veterinarian and consultation_id are null for owner-reported records.
+- veterinarian is the linked staff veterinarian on clinic records, or the
+  optional owner-entered free-text name on owner-reported records. Consultation
+  ID is null for owner-reported records.
+- `series_id` groups doses for one pet. `is_latest_in_series` identifies the
+  newest dose; due status is based only on that dose. Older doses remain in
+  history but no longer contribute an overdue status after a newer dose is
+  recorded.
 
 ---
 
@@ -1698,16 +1707,22 @@ Request:
   "pet_id": "uuid",
   "name": "Rabies",
   "brand": "Nobivac (optional)",
-  "batch_no": "B-123 (optional)",
-  "dose": "1 ml",
-  "route": "SUBCUTANEOUS",
+  "batch_no": "LOT-123 (optional)",
+  "veterinarian": "Dr. Example (optional)",
+  "series_id": "uuid (optional; use to record another dose in an existing series)",
   "date_given": "2026-09-30",
-  "next_due": "2027-09-30 (optional)",
-  "notes": "optional"
+  "next_due": "2027-09-30 (optional)"
 }
 
-Validation errors (400): missing required fields, unknown route, date_given in
-the future, next_due before date_given. Unknown or foreign pet returns 404.
+Dose, route, and notes are accepted as optional legacy fields but are not
+collected by the current owner app. If `series_id` is omitted, a normalized
+same-pet vaccine-name match reuses the existing series; otherwise a new series
+is created. A supplied series must already belong to the selected pet.
+
+Validation errors (400): missing required fields, date_given in the future,
+next_due before date_given, or a series that does not belong to the selected pet.
+The new dose date cannot precede the latest recorded dose in the selected series.
+Unknown or foreign pet returns 404.
 
 Response (201): Vaccination object as above.
 

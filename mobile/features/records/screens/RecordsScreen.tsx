@@ -189,7 +189,7 @@ export default function RecordsScreen() {
         title={record.name}
         meta={record.source === 'OWNER' ? 'Reported by you' : (record.veterinarian ?? undefined)}
         footer={`Given ${formatDate(record.date_given)}`}
-        badge={<VaccinationStatusPill nextDue={record.next_due} />}
+        badge={<VaccinationStatusPill isLatest={record.is_latest_in_series} nextDue={record.next_due} />}
         onPress={() => router.push(`/(owner)/records/vaccinations/${record.id}`)}
       />
     ))

@@ -350,13 +350,12 @@ function Sections({ history }: { history: PetHistory }) {
                   <th className={TH}>Vaccine</th>
                   <th className={TH}>Given on</th>
                   <th className={TH}>Next due</th>
-                  <th className={`${TH} hidden sm:table-cell`}>Dose</th>
                   <th className={`${TH} hidden md:table-cell`}>Given by</th>
                 </tr>
               </thead>
               <tbody>
                 {history.vaccinations.map((vac) => {
-                  const badge = dueBadge(vac.next_due)
+                  const badge = vac.is_latest_in_series ? dueBadge(vac.next_due) : null
                   return (
                     <tr key={vac.id} className={ROW}>
                       <td className={TD}>
@@ -386,7 +385,6 @@ function Sections({ history }: { history: PetHistory }) {
                           )}
                         </div>
                       </td>
-                      <td className={`${TD} hidden sm:table-cell`}>{vac.dose}</td>
                       <td className={`${TD} hidden md:table-cell`}>{vac.veterinarian ?? '—'}</td>
                     </tr>
                   )

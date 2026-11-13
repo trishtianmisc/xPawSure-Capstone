@@ -361,15 +361,23 @@ class ClinicAdminPatientListTests(ClinicAdminPatientBase):
         for pet in (overdue, due_soon, current, no_due):
             self._appointment(pet, AppointmentStatus.COMPLETED)
 
-        self._vaccination(overdue, today - timedelta(days=1))
+        previous_dose = self._vaccination(overdue, today - timedelta(days=1))
+        VaccinationRecord.objects.create(
+            pet_id=overdue,
+            vac_name='Rabies',
+            vac_date_given=today,
+            vac_next_due=today + timedelta(days=60),
+            vac_series_id=previous_dose.vac_series_id,
+            vac_source=VaccinationSource.OWNER,
+        )
         self._vaccination(due_soon, today + timedelta(days=10))
         self._vaccination(current, today + timedelta(days=60))
         self._vaccination(no_due, None)
 
         expected = {
-            'overdue': ['Overdue Vacc'],
+            'overdue': [],
             'due_soon': ['Due Soon Vacc'],
-            'up_to_date': ['Current Vacc', 'No Due Vacc'],
+            'up_to_date': ['Current Vacc', 'No Due Vacc', 'Overdue Vacc'],
             'none_recorded': ['Rex'],
         }
         for status_value, names in expected.items():
@@ -712,7 +720,7 @@ class ClinicAdminPatientDetailTests(ClinicAdminPatientBase):
         )
 
         now_date = datetime.now(MNL).date()
-        VaccinationRecord.objects.create(
+        previous_dose = VaccinationRecord.objects.create(
             pet_id=self.patient,
             con_id=own_consultation,
             stf_id=self.vet,
@@ -723,6 +731,14 @@ class ClinicAdminPatientDetailTests(ClinicAdminPatientBase):
             vac_next_due=now_date - timedelta(days=1),
             vac_source=VaccinationSource.VET,
             vac_notes='VAC-SECRET',
+        )
+        VaccinationRecord.objects.create(
+            pet_id=self.patient,
+            vac_name='Rabies',
+            vac_date_given=now_date,
+            vac_next_due=now_date + timedelta(days=365),
+            vac_series_id=previous_dose.vac_series_id,
+            vac_source=VaccinationSource.OWNER,
         )
         VaccinationRecord.objects.create(
             pet_id=self.patient,
@@ -763,9 +779,9 @@ class ClinicAdminPatientDetailTests(ClinicAdminPatientBase):
 
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['summary']['consultations'], 1)
-        self.assertEqual(response.data['summary']['vaccinations'], 2)
+        self.assertEqual(response.data['summary']['vaccinations'], 3)
         self.assertEqual(response.data['summary']['ai_screenings'], 2)
-        self.assertEqual(response.data['vaccination_status'], 'overdue')
+        self.assertEqual(response.data['vaccination_status'], 'up_to_date')
         self.assertEqual(
             set(response.data['vaccinations'][0].keys()),
             {'name', 'date_given', 'next_due'},
