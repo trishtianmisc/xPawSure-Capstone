@@ -238,26 +238,6 @@ export interface UpdatePetPayload {
   pet_microchip_no?: string | null
 }
 
-export interface Notification {
-  ntf_id: string
-  ntf_title: string
-  ntf_message: string
-  ntf_type: string
-  ntf_is_read: boolean
-  ntf_reference_table: string | null
-  ntf_reference_id: string | null
-  ntf_created_at: string
-  ntf_read_at: string | null
-}
-
-export interface NotificationListResponse {
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
-  results: Notification[]
-}
-
 /** Dashboard group row; receptionist-only (never sent to clinic admins). */
 export interface VetRequestSummary {
   apt_id: string

@@ -2566,12 +2566,24 @@ All other endpoints are shared between web and mobile.
 
 # 14. Notification Endpoints
 
-Requires authentication. Allowed roles: Owner, Receptionist (Veterinarians receive 403).
-Users can only read or modify their own notifications (foreign ids return 404).
+Requires authentication. Allowed roles: Owner, Receptionist, Veterinarian,
+Clinic Admin. Users can only read or modify their own notifications
+(foreign ids return 404).
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
 AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+
+Clinic admins receive `SYSTEM` notifications for: vet reschedule/cancel request
+submission (neutral body, reason text never included), veterinary license expiry
+warnings (T-30 `License Expiring Soon` / T-7 `License Expiring This Week`, active
+vets only, absolute dates), staff account activated/deactivated (actor excluded),
+and failed staff credentials emails (staff name only — never credentials).
+
+For clinic-admin callers, the list and unread-count endpoints lazily run an
+idempotent license-expiry scan first (clinic-local "today", guarded by a clinic
+row lock) so warnings are always present when the bell is opened; a scan failure
+never fails the request.
 
 ## GET /api/notifications/
 

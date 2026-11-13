@@ -4,7 +4,7 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import { useTheme } from '../../../context/ThemeContext'
 import { useAuth } from '../../auth/context/AuthContext'
 import { roleLabel } from '../../../utils/roles'
-import { NotificationDropdown } from './NotificationDropdown'
+import { NotificationDropdown } from '../../notifications/components/NotificationDropdown'
 
 interface NavItem {
   label: string
@@ -210,7 +210,7 @@ export function ReceptionistLayout() {
 
           <div className="flex items-center gap-3 ml-auto">
             {/* Notification bell */}
-            <NotificationDropdown />
+            <NotificationDropdown basePath="/receptionist" />
 
             {/* Theme toggle */}
             <button

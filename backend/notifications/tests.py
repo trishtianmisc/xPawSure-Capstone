@@ -1,8 +1,13 @@
+from datetime import datetime, timedelta, timezone as dt_timezone
+from unittest import mock
+
 from django.test import TestCase
 
+from appointments.services import get_clinic_timezone
+from clinics.models import Clinic, ClinicStatus
 from notifications.models import Notification, NotificationType
 from notifications.services import NotificationService
-from users.models import User, UserRole
+from users.models import StaffProfile, StaffPosition, User, UserRole
 
 PASSWORD = 'TestPass123!'
 OWNER_EMAIL = 'ntfowner@example.com'
@@ -139,9 +144,14 @@ class NotificationListTests(NotificationBase):
             'Other owner notification',
         )
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_is_allowed_and_sees_own_only(self):
+        # Vets receive declined-request notices, so they may list their own
+        # notifications; they still never see other users' rows.
         response = self.client.get('/api/notifications/', **self._auth(VET_EMAIL))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 0)
+        titles = [item['ntf_title'] for item in response.data['results']]
+        self.assertNotIn('Other owner notification', titles)
 
     def test_receptionist_is_allowed(self):
         response = self.client.get('/api/notifications/', **self._auth(RECEPTIONIST_EMAIL))
@@ -170,12 +180,13 @@ class NotificationUnreadCountTests(NotificationBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['unread_count'], 1)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_count_scoped_to_own(self):
         response = self.client.get(
             '/api/notifications/unread-count/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['unread_count'], 0)
 
 
 class NotificationMarkReadTests(NotificationBase):
@@ -230,12 +241,14 @@ class NotificationMarkReadTests(NotificationBase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_cannot_mark_foreign_notification(self):
         response = self.client.patch(
             f'/api/notifications/{self.owner_notification.ntf_id}/read/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
+        self.owner_notification.refresh_from_db()
+        self.assertFalse(self.owner_notification.ntf_is_read)
 
 
 class NotificationMarkAllReadTests(NotificationBase):
@@ -269,9 +282,257 @@ class NotificationMarkAllReadTests(NotificationBase):
         )
         self.assertEqual(response.data['unread_count'], 0)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_mark_all_scoped_to_own(self):
         response = self.client.patch(
             '/api/notifications/read-all/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.owner_notification.refresh_from_db()
+        self.assertFalse(self.owner_notification.ntf_is_read)
+
+
+class ClinicAdminScanBase(NotificationBase):
+    """Fixtures: one clinic with two admins, a receptionist and a vet,
+    plus an unrelated clinic with its own admin."""
+
+    def setUp(self):
+        super().setUp()
+        self.clinic = Clinic.objects.create(
+            cln_name='Scan Clinic',
+            cln_email='scan@example.com',
+            cln_status=ClinicStatus.ACTIVE,
+        )
+        self.other_clinic = Clinic.objects.create(
+            cln_name='Other Scan Clinic',
+            cln_email='other-scan@example.com',
+            cln_status=ClinicStatus.ACTIVE,
+        )
+
+        self.admin_user = self._create_user(
+            'scan-admin@example.com', UserRole.CLINIC_ADMIN, 'Ada', 'Admin',
+        )
+        StaffProfile.objects.create(
+            usr_id=self.admin_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+        self.peer_admin = self._create_user(
+            'scan-peer@example.com', UserRole.CLINIC_ADMIN, 'Ben', 'Boss',
+        )
+        StaffProfile.objects.create(
+            usr_id=self.peer_admin,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+        self.other_admin = self._create_user(
+            'scan-other-admin@example.com', UserRole.CLINIC_ADMIN, 'Ola', 'Other',
+        )
+        StaffProfile.objects.create(
+            usr_id=self.other_admin,
+            cln_id=self.other_clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+
+        self.desk_user = self._create_user(
+            'scan-desk@example.com', UserRole.RECEPTIONIST, 'Rita', 'Desk',
+        )
+        StaffProfile.objects.create(
+            usr_id=self.desk_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        self.vet_user = self._create_user(
+            'scan-vet@example.com', UserRole.VETERINARIAN, 'Vic', 'Vet',
+        )
+        self.vet_profile = StaffProfile.objects.create(
+            usr_id=self.vet_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+
+    @staticmethod
+    def _clinic_today(clinic_id):
+        return datetime.now(get_clinic_timezone(clinic_id)).date()
+
+    def _set_license(self, days_from_today):
+        self.vet_profile.stf_license_expiration_date = (
+            self._clinic_today(self.clinic.cln_id) + timedelta(days=days_from_today)
+        )
+        self.vet_profile.save(update_fields=['stf_license_expiration_date'])
+        return self.vet_profile.stf_license_expiration_date
+
+    def _title_count(self, user, title):
+        return Notification.objects.filter(
+            usr_id_id=user.usr_id, ntf_title=title,
+        ).count()
+
+    def _any_license_warnings(self):
+        return Notification.objects.filter(
+            ntf_title__in=['License Expiring Soon', 'License Expiring This Week'],
+        )
+
+
+class ClinicAdminPermissionTests(ClinicAdminScanBase):
+
+    def test_clinic_admin_can_list_notifications(self):
+        response = self.client.get(
+            '/api/notifications/', **self._auth('scan-admin@example.com'),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    def test_clinic_admin_can_read_unread_count(self):
+        response = self.client.get(
+            '/api/notifications/unread-count/',
+            **self._auth('scan-admin@example.com'),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['unread_count'], 0)
+
+    def test_list_without_expiring_license_creates_nothing(self):
+        self.client.get('/api/notifications/', **self._auth('scan-admin@example.com'))
+        self.assertFalse(self._any_license_warnings().exists())
+
+
+class LicenseExpiryScanTests(ClinicAdminScanBase):
+
+    def test_scan_notifies_every_clinic_admin_only(self):
+        self._set_license(10)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+        self.assertEqual(self._title_count(self.peer_admin, 'License Expiring Soon'), 1)
+        self.assertFalse(self._any_license_warnings().filter(
+            usr_id_id__in=[
+                self.other_admin.usr_id, self.desk_user.usr_id, self.vet_user.usr_id,
+            ],
+        ).exists())
+
+    def test_warning_carries_staff_ref_and_absolute_date(self):
+        expiry = self._set_license(10)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        ntf = Notification.objects.get(
+            usr_id_id=self.admin_user.usr_id,
+            ntf_title='License Expiring Soon',
+        )
+        self.assertEqual(ntf.ntf_type, NotificationType.SYSTEM)
+        self.assertEqual(ntf.ntf_reference_table, 'STAFF')
+        self.assertEqual(str(ntf.ntf_reference_id), str(self.vet_user.usr_id))
+        self.assertIn('Vic Vet', ntf.ntf_message)
+        self.assertIn(str(expiry), ntf.ntf_message)
+        self.assertIn('expires on', ntf.ntf_message)
+
+    def test_five_days_left_only_creates_urgent_warning(self):
+        self._set_license(5)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring This Week'), 1)
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 0)
+
+    def test_twenty_five_days_left_only_creates_thirty_day_warning(self):
+        self._set_license(25)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring This Week'), 0)
+
+    def test_license_beyond_window_creates_nothing(self):
+        self._set_license(35)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertFalse(self._any_license_warnings().exists())
+
+    def test_expired_license_creates_nothing(self):
+        self._set_license(-1)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertFalse(self._any_license_warnings().exists())
+
+    def test_inactive_vet_is_skipped(self):
+        self._set_license(10)
+        self.vet_user.usr_is_active = False
+        self.vet_user.save(update_fields=['usr_is_active'])
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertFalse(self._any_license_warnings().exists())
+
+    def test_repeated_scans_do_not_duplicate_warnings(self):
+        self._set_license(10)
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+        self.assertEqual(self._title_count(self.peer_admin, 'License Expiring Soon'), 1)
+
+    def test_two_vets_get_one_warning_each(self):
+        self._set_license(10)
+        other_vet_user = self._create_user(
+            'scan-vet2@example.com', UserRole.VETERINARIAN, 'Vera', 'Two',
+        )
+        StaffProfile.objects.create(
+            usr_id=other_vet_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+            stf_license_expiration_date=(
+                self._clinic_today(self.clinic.cln_id) + timedelta(days=3)
+            ),
+        )
+
+        NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring This Week'), 1)
+
+    def test_scan_uses_clinic_local_date_for_thresholds(self):
+        # 22:00 UTC on Jan 1 is already Jan 2 in Asia/Manila. An expiry that
+        # is 30 days away by clinic date is 31 days away by UTC date, so a
+        # UTC-based scan would wrongly skip this warning.
+        utc_now = datetime(2026, 1, 1, 22, 0, tzinfo=dt_timezone.utc)
+        tz = get_clinic_timezone(self.clinic.cln_id)
+        clinic_today = utc_now.astimezone(tz).date()
+        self.assertNotEqual(clinic_today, utc_now.date())
+        self.vet_profile.stf_license_expiration_date = clinic_today + timedelta(days=30)
+        self.vet_profile.save(update_fields=['stf_license_expiration_date'])
+
+        with mock.patch('notifications.services.datetime') as fake_dt:
+            fake_dt.now.side_effect = lambda target_tz: utc_now.astimezone(target_tz)
+            NotificationService.ensure_license_expiry_warnings(self.clinic.cln_id)
+
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+
+
+class LazyScanOnReadTests(ClinicAdminScanBase):
+
+    def test_list_and_unread_count_create_warning_once(self):
+        self._set_license(10)
+        admin_auth = self._auth('scan-admin@example.com')
+
+        first_list = self.client.get('/api/notifications/', **admin_auth)
+        count = self.client.get('/api/notifications/unread-count/', **admin_auth)
+        second_list = self.client.get('/api/notifications/', **admin_auth)
+
+        self.assertEqual(first_list.status_code, 200, first_list.data)
+        titles = [r['ntf_title'] for r in first_list.data['results']]
+        self.assertIn('License Expiring Soon', titles)
+        self.assertEqual(count.data['unread_count'], 1)
+        self.assertEqual(self._title_count(self.admin_user, 'License Expiring Soon'), 1)
+
+    def test_receptionist_read_does_not_run_scan(self):
+        self._set_license(10)
+
+        response = self.client.get(
+            '/api/notifications/', **self._auth('scan-desk@example.com'),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(self._any_license_warnings().exists())

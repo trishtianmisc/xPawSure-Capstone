@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { formatRelativeTime } from '../../../utils/format'
 import {
@@ -11,10 +12,15 @@ import {
 /**
  * Header bell with a working dropdown: recent notifications, per-item
  * mark-as-read, and mark-all. The list only fetches once opened.
+ *
+ * `basePath` is the caller's route root: appointment notifications deep-link
+ * to `{basePath}/appointments/{id}` and staff notifications (license,
+ * account events) to `{basePath}/staff/{id}`.
  */
-export function NotificationDropdown() {
+export function NotificationDropdown({ basePath }: { basePath: string }) {
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   const { data: unreadData } = useUnreadCount()
   const { data, isLoading } = useNotifications(
     { page_size: 10 },
@@ -39,6 +45,21 @@ export function NotificationDropdown() {
 
   const unreadCount = unreadData?.unread_count ?? 0
   const notifications = data?.results ?? []
+
+  function openReference(notification: {
+    ntf_reference_table: string | null
+    ntf_reference_id: string | null
+  }) {
+    const ref = notification.ntf_reference_id
+    if (!ref) return
+    if (notification.ntf_reference_table === 'APPOINTMENT') {
+      navigate(`${basePath}/appointments/${ref}`)
+      setOpen(false)
+    } else if (notification.ntf_reference_table === 'STAFF') {
+      navigate(`${basePath}/staff/${ref}`)
+      setOpen(false)
+    }
+  }
 
   return (
     <div ref={containerRef} className="relative">
@@ -105,6 +126,7 @@ export function NotificationDropdown() {
                         if (!notification.ntf_is_read) {
                           markRead.mutate(notification.ntf_id)
                         }
+                        openReference(notification)
                       }}
                       className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-stone-50 dark:hover:bg-stone-700/50 ${
                         notification.ntf_is_read ? '' : 'bg-amber-50/50 dark:bg-amber-900/10'

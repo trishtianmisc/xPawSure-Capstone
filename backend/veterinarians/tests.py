@@ -1,9 +1,14 @@
+from types import SimpleNamespace
+from unittest import mock
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from clinics.models import Clinic
+from notifications.models import Notification, NotificationType
 from users.models import StaffProfile, StaffPosition, User, UserRole
+from veterinarians.tasks import send_veterinarian_welcome_email
 
 
 class VeterinarianAPITestCase(APITestCase):
@@ -409,3 +414,53 @@ class VeterinarianAPITestCase(APITestCase):
         user = User.objects.get(usr_email='john.doe@test.com')
         self.assertTrue(user.usr_must_change_password)
         self.assertTrue(user.check_password(response.data['temp_password']))
+
+
+class VeterinarianWelcomeEmailTests(VeterinarianAPITestCase):
+    """Failed vet credentials emails notify the clinic's admins by name only."""
+
+    def _send(self, **overrides):
+        kwargs = {
+            'email': 'vera.vet@test.com',
+            'first_name': 'Vera',
+            'last_name': 'Vet',
+            'clinic_name': 'Test Clinic',
+            'temp_password': 'SECRET-TEMP-PW-456',
+            'login_url': 'http://localhost:5173/login',
+            'support_email': 'support@xpawsure.test',
+            'clinic_id': self.clinic.cln_id,
+            'staff_user_id': self.admin_user.usr_id,
+        }
+        kwargs.update(overrides)
+        return send_veterinarian_welcome_email(**kwargs)
+
+    def test_failed_vet_welcome_email_notifies_clinic_admins(self):
+        with mock.patch(
+            'veterinarians.tasks.send_templated_email',
+            return_value=SimpleNamespace(success=False, error='SMTP down'),
+        ):
+            sent = self._send()
+
+        self.assertFalse(sent)
+        notifs = Notification.objects.filter(
+            ntf_title='Credentials Email Failed',
+            usr_id_id=self.admin_user.usr_id,
+        )
+        self.assertEqual(notifs.count(), 1)
+        ntf = notifs.get()
+        self.assertIn('Vera Vet', ntf.ntf_message)
+        self.assertIn('Resend Welcome', ntf.ntf_message)
+        self.assertNotIn('SECRET-TEMP-PW-456', ntf.ntf_message)
+        self.assertNotIn('vera.vet@test.com', ntf.ntf_message)
+        self.assertEqual(ntf.ntf_reference_table, 'STAFF')
+        self.assertEqual(str(ntf.ntf_reference_id), str(self.admin_user.usr_id))
+
+    def test_successful_vet_welcome_email_creates_no_notification(self):
+        with mock.patch(
+            'veterinarians.tasks.send_templated_email',
+            return_value=SimpleNamespace(success=True, error=None),
+        ):
+            sent = self._send()
+
+        self.assertTrue(sent)
+        self.assertFalse(Notification.objects.exists())
