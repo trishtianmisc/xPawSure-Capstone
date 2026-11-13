@@ -1,4 +1,5 @@
 import { Badge } from '../../../../components/ui'
+import { formatDateTime } from '../../../../utils/format'
 import { drilldownService } from '../services/drilldown.service'
 
 import { ReadTab } from './ReadTab'
@@ -36,7 +37,7 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
         {
           key: 'scheduled_at',
           label: 'Scheduled',
-          render: (row) => new Date(row.scheduled_at).toLocaleString(),
+          render: (row) => formatDateTime(row.scheduled_at),
         },
       ]}
       emptyMessage="No appointments at this clinic yet."

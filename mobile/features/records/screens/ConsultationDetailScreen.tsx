@@ -5,17 +5,14 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { useConsultation } from '../hooks/useConsultation'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function formatDateOnly(value: string): string {
@@ -159,7 +156,7 @@ export default function ConsultationDetailScreen() {
                 name="calendar-blank-outline"
                 size={15}
               />
-              <Text style={styles.metaText}>{formatDate(consultation.created_at)}</Text>
+              <Text style={styles.metaText}>{formatLongDate(consultation.created_at)}</Text>
             </View>
             <View style={styles.metaRow}>
               <MaterialCommunityIcons color={colors.textMuted} name="stethoscope" size={15} />

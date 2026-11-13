@@ -1,4 +1,5 @@
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 import json
 
 from django.test import TestCase
@@ -10,6 +11,7 @@ from appointments.services import CLINIC_TIMEZONE
 from clinics.models import Clinic
 from consultations.models import Consultation
 from owners.models import OwnerProfile
+from payments.models import Payment, PaymentMethod, PaymentProvider, PaymentStatus
 from pets.models import Breed, Pet, Sex
 from prescriptions.models import Prescription
 from users.models import StaffPosition, StaffProfile, User, UserRole
@@ -230,6 +232,53 @@ class VetDashboardStatsTests(VetDashboardBase):
             stats['pending'] + stats['completed'],
         )
 
+    def test_today_stats_group_today_appointments_by_stage(self):
+        self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CHECKED_IN, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.PENDING, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CANCELLED, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.NO_SHOW, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.tomorrow_9am,
+        )
+        self._make_appointment(
+            self.other_vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self.client.get(
+            '/api/veterinarian/dashboard/',
+            {'date': timezone.localdate().isoformat()},
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        today_stats = response.data['stats']['today_stats']
+        self.assertEqual(today_stats, {
+            'total': 5,
+            'confirmed': 2,
+            'ongoing': 2,
+            'completed': 1,
+        })
+
     def test_today_consultations_exclude_pending_and_other_vets(self):
         confirmed = self._make_appointment(
             self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
@@ -263,6 +312,48 @@ class VetDashboardStatsTests(VetDashboardBase):
             self.assertNotEqual(row['apt_status'], 'PENDING')
         self.assertEqual(rows[0]['pet_name'], 'Max')
 
+    def test_upcoming_consultations_include_active_statuses_from_today_forward(self):
+        confirmed = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_1pm,
+        )
+        checked_in = self._make_appointment(
+            self.vet, AppointmentStatus.CHECKED_IN, self.today_1pm,
+        )
+        in_progress = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_1pm,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_9am,
+        )
+        self._make_appointment(
+            self.vet, AppointmentStatus.PENDING, self.today_1pm,
+        )
+        tomorrow = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.tomorrow_9am,
+        )
+        self._make_appointment(
+            self.other_vet, AppointmentStatus.CONFIRMED, self.today_1pm,
+        )
+
+        response = self.client.get(
+            '/api/veterinarian/dashboard/',
+            {'date': timezone.localdate().isoformat()},
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+
+        rows = response.data['upcoming_consultations']
+        self.assertEqual(len(rows), 4)
+        apt_ids = {row['apt_id'] for row in rows}
+        self.assertIn(str(confirmed.apt_id), apt_ids)
+        self.assertIn(str(checked_in.apt_id), apt_ids)
+        self.assertIn(str(in_progress.apt_id), apt_ids)
+        self.assertEqual(rows[-1]['apt_id'], str(tomorrow.apt_id))
+        self.assertEqual(
+            {row['apt_status'] for row in rows},
+            {'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS'},
+        )
+
     def test_invalid_date_is_rejected(self):
         response = self.client.get(
             '/api/veterinarian/dashboard/',
@@ -289,6 +380,24 @@ class VetAppointmentListTests(VetDashboardBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['apt_id'], str(mine.apt_id))
+
+    def test_list_exposes_pet_profile_image(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        self.pet.pet_profile_image = 'https://example.com/max.jpg'
+        self.pet.save(update_fields=['pet_profile_image'])
+
+        response = self.client.get(
+            '/api/veterinarian/appointments/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        row = next(
+            item for item in response.data
+            if item['apt_id'] == str(appointment.apt_id)
+        )
+        self.assertEqual(row['pet_profile_image'], 'https://example.com/max.jpg')
 
     def test_list_filters_by_date_range(self):
         today = timezone.localdate()
@@ -453,6 +562,96 @@ class VetAppointmentDetailTests(VetDashboardBase):
         self.assertEqual(response.data['pet_color'], 'Black')
         self.assertEqual(response.data['owner_name'], 'Olivia Owner')
 
+    def test_vet_can_read_pet_profile_image(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        self.pet.pet_profile_image = 'https://example.com/max.jpg'
+        self.pet.save(update_fields=['pet_profile_image'])
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['pet_profile_image'], 'https://example.com/max.jpg')
+
+    def test_appointment_detail_exposes_payment_provider_ref(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        Payment.objects.create(
+            pay_reference='PAY-123',
+            cln_id=self.clinic,
+            own_id=self.pet.own_id,
+            apt_id=appointment,
+            pay_amount=Decimal('250.00'),
+            pay_method=PaymentMethod.CASH,
+            pay_provider=PaymentProvider.CASH,
+            pay_status=PaymentStatus.PAID,
+            pay_provider_ref='PROV-REF-123',
+        )
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['payment_provider_ref'], 'PROV-REF-123')
+
+    def test_appointment_detail_exposes_screening_symptom_answers(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        disease, _ = Disease.objects.get_or_create(
+            dis_name='Fungal', defaults={'dis_code': 'FUNG'},
+        )
+        rows = [
+            {'question': 'Is the skin itchy?', 'answer': 'Yes'},
+            {'question': 'Is there hair loss?', 'answer': 'No'},
+        ]
+        screening = AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=disease,
+            ais_confidence=87.50,
+            ais_model_version='v1.0',
+            ais_symptom_answers=rows,
+        )
+        appointment.apt_screening = screening
+        appointment.save(update_fields=['apt_screening'])
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['screening']['symptom_answers'], rows)
+
+    def test_appointment_detail_returns_null_symptom_answers_without_questionnaire(self):
+        appointment = self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+        disease, _ = Disease.objects.get_or_create(
+            dis_name='Mange', defaults={'dis_code': 'MANG'},
+        )
+        screening = AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=disease,
+            ais_confidence=70.00,
+            ais_model_version='v1.0',
+        )
+        appointment.apt_screening = screening
+        appointment.save(update_fields=['apt_screening'])
+
+        response = self.client.get(
+            f'/api/appointments/{appointment.apt_id}/',
+            **self._auth(VET_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(response.data['screening']['symptom_answers'])
+
     def test_vet_cannot_read_other_vets_appointment(self):
         appointment = self._make_appointment(
             self.other_vet, AppointmentStatus.CONFIRMED, self.today_9am,
@@ -555,6 +754,150 @@ class VetSymptomAnswersVisibilityTests(VetDashboardBase):
         )
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['screening']['symptom_answers'], self.ROWS)
+
+
+class VetPetConsultationHistoryTests(VetDashboardBase):
+
+    def _make_consultation(self, appointment, vet, diagnosis='Dermatitis'):
+        return Consultation.objects.create(
+            apt_id=appointment,
+            stf_id=vet,
+            con_diagnosis=diagnosis,
+        )
+
+    def _history_url(self, pet=None):
+        return f'/api/veterinarian/pets/{(pet or self.pet).pet_id}/history/'
+
+    def test_returns_clinic_consultations_for_pet(self):
+        own_appointment = self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_9am,
+        )
+        own_appointment.apt_checked_in_at = self.today_9am
+        own_appointment.apt_completed_at = self.today_1pm
+        own_appointment.save(update_fields=['apt_checked_in_at', 'apt_completed_at'])
+        own_consultation = self._make_consultation(own_appointment, self.vet)
+        other_appointment = self._make_appointment(
+            self.other_vet, AppointmentStatus.COMPLETED, self.today_1pm,
+        )
+        other_consultation = self._make_consultation(
+            other_appointment, self.other_vet, 'Allergy',
+        )
+
+        response = self.client.get(
+            self._history_url(), **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['pet']['pet_id'], str(self.pet.pet_id))
+        self.assertEqual(response.data['pet']['pet_name'], 'Max')
+        self.assertEqual(response.data['pet']['pet_species'], 'Pug')
+        self.assertEqual(
+            {row['id'] for row in response.data['consultations']},
+            {str(own_consultation.con_id), str(other_consultation.con_id)},
+        )
+        own_row = next(
+            row for row in response.data['consultations']
+            if row['id'] == str(own_consultation.con_id)
+        )
+        self.assertIsNotNone(own_row['scheduled_at'])
+        self.assertIsNotNone(own_row['checked_in_at'])
+        self.assertIsNotNone(own_row['completed_at'])
+
+    def test_excludes_consultations_from_other_clinics(self):
+        own_appointment = self._make_appointment(
+            self.vet, AppointmentStatus.COMPLETED, self.today_9am,
+        )
+        self._make_consultation(own_appointment, self.vet)
+
+        other_clinic = Clinic.objects.create(cln_name='Other Paws Clinic')
+        foreign_appointment = Appointment.objects.create(
+            pet_id=self.pet,
+            cln_id=other_clinic,
+            stf_id=self.other_vet,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.COMPLETED,
+            apt_scheduled_at=self.today_1pm,
+            apt_created_by=self.other_vet_user,
+        )
+        self._make_consultation(foreign_appointment, self.other_vet, 'Foreign')
+
+        response = self.client.get(
+            self._history_url(), **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['consultations']), 1)
+        self.assertEqual(
+            response.data['consultations'][0]['diagnosis'], 'Dermatitis',
+        )
+
+    def test_returns_empty_list_when_pet_has_no_consultations(self):
+        self._make_appointment(
+            self.vet, AppointmentStatus.CONFIRMED, self.today_9am,
+        )
+
+        response = self.client.get(
+            self._history_url(), **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['consultations'], [])
+
+    def test_excludes_consultations_from_unfinished_appointments(self):
+        in_progress = self._make_appointment(
+            self.vet, AppointmentStatus.IN_PROGRESS, self.today_9am,
+        )
+        self._make_consultation(in_progress, self.vet, 'Ongoing')
+
+        response = self.client.get(
+            self._history_url(), **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['consultations'], [])
+
+    def test_returns_404_for_pet_outside_clinic(self):
+        other_clinic = Clinic.objects.create(cln_name='Other Paws Clinic')
+        other_owner_user = self._create_user(
+            'other-owner@example.com', UserRole.OWNER, 'Owen', 'Owner',
+        )
+        other_owner = OwnerProfile.objects.create(usr_id=other_owner_user)
+        other_pet = Pet.objects.create(
+            own_id=other_owner,
+            brd_id=self.breed,
+            pet_name='Rex',
+            pet_sex=Sex.MALE,
+        )
+        Appointment.objects.create(
+            pet_id=other_pet,
+            cln_id=other_clinic,
+            stf_id=self.other_vet,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.COMPLETED,
+            apt_scheduled_at=self.today_9am,
+            apt_created_by=self.other_vet_user,
+        )
+
+        response = self.client.get(
+            self._history_url(other_pet), **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 404, response.data)
+
+    def test_returns_404_for_unknown_pet(self):
+        response = self.client.get(
+            '/api/veterinarian/pets/00000000-0000-0000-0000-000000000000/history/',
+            **self._auth(VET_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 404, response.data)
+
+    def test_receptionist_cannot_read_pet_history(self):
+        response = self.client.get(
+            self._history_url(), **self._auth(RECEPTIONIST_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 403)
 
 
 class VetCancellationTests(VetDashboardBase):
@@ -1112,6 +1455,7 @@ class VetPrescriptionSaveTests(VetDashboardBase):
                     'frequency': 'Twice daily',
                     'duration': '14 days',
                     'route': 'TOPICAL',
+                    'quantity': 1,
                     'notes': 'Apply to affected area',
                 },
                 {
@@ -1157,6 +1501,24 @@ class VetPrescriptionSaveTests(VetDashboardBase):
     def test_invalid_route_returns_400(self):
         payload = self._payload()
         payload['items'][0]['route'] = 'SMOKED'
+
+        response = self._post(payload)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Prescription.objects.filter(con_id=self.consultation).exists())
+
+    def test_missing_quantity_returns_400(self):
+        payload = self._payload()
+        del payload['items'][0]['quantity']
+
+        response = self._post(payload)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Prescription.objects.filter(con_id=self.consultation).exists())
+
+    def test_non_positive_quantity_returns_400(self):
+        payload = self._payload()
+        payload['items'][0]['quantity'] = 0
 
         response = self._post(payload)
 

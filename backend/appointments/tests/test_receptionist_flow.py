@@ -81,6 +81,18 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
             ).exists(),
         )
 
+    def test_desk_booking_notifies_assigned_vet_as_confirmed(self):
+        slot = self._get_slots()[0]
+
+        response = self._receptionist_create(slot['vsl_id'])
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertTrue(
+            self._notifications(
+                self.vet_user, NotificationType.APPOINTMENT_CONFIRMED,
+            ).filter(ntf_reference_id=response.data['apt_id']).exists(),
+        )
+
     def test_owner_booking_still_starts_pending(self):
         slot = self._get_slots()[0]
 
@@ -104,6 +116,25 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
         appointment = Appointment.objects.get(apt_id=apt_id)
         self.assertEqual(appointment.apt_status, AppointmentStatus.CHECKED_IN)
         self.assertIsNotNone(appointment.apt_checked_in_at)
+
+    def test_check_in_notifies_assigned_vet_patient_is_ready(self):
+        created = self._book()
+        apt_id = created.data['apt_id']
+        self.assertEqual(self._patch_status(apt_id, 'CONFIRMED').status_code, 200)
+        self.assertTrue(
+            self._notifications(
+                self.vet_user, NotificationType.APPOINTMENT_CONFIRMED,
+            ).filter(ntf_reference_id=apt_id).exists(),
+        )
+
+        response = self._patch_status(apt_id, 'CHECKED_IN')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(
+            self._notifications(
+                self.vet_user, NotificationType.CONSULTATION_AVAILABLE,
+            ).filter(ntf_reference_id=apt_id).exists(),
+        )
 
     def test_same_clinic_receptionist_can_read_detail(self):
         created = self._book()

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 import { Card } from '../../../../components/ui'
 import { PageHero } from '../../../receptionist/components/PageHero'
+import { CLINIC_TIME_ZONE, clinicDateKey, clinicToday, formatTime } from '../../../../utils/format'
 import { WeeklyCalendar } from '../components/WeeklyCalendar'
 import { useVetScheduleAppointments } from '../hooks/useVetAppointments'
 import type { VetAppointmentSummary } from '../types/dashboard.types'
@@ -40,10 +41,16 @@ function startOfWeek(date: Date): Date {
   return result
 }
 
-function formatClock(date: Date): string {
-  const meridiem = date.getHours() >= 12 ? 'PM' : 'AM'
-  const hours = date.getHours() % 12 || 12
-  return `${hours}:${pad2(date.getMinutes())} ${meridiem}`
+function clinicClock(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: CLINIC_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((entry) => entry.type === type)?.value ?? '00'
+  return `${part('hour')}:${part('minute')}`
 }
 
 function toSlot(apt: VetAppointmentSummary): ScheduleSlot | null {
@@ -53,18 +60,18 @@ function toSlot(apt: VetAppointmentSummary): ScheduleSlot | null {
   const end = new Date(scheduled.getTime() + SLOT_DURATION_MIN * 60_000)
   return {
     id: apt.apt_id,
-    date: toDateKey(scheduled),
+    date: clinicDateKey(scheduled),
     pet_name: apt.pet_name,
-    start_time: `${pad2(scheduled.getHours())}:${pad2(scheduled.getMinutes())}`,
-    end_time: `${pad2(end.getHours())}:${pad2(end.getMinutes())}`,
-    time_label: formatClock(scheduled),
+    start_time: clinicClock(scheduled),
+    end_time: clinicClock(end),
+    time_label: formatTime(scheduled),
     status: apt.apt_status,
   }
 }
 
 export function SchedulePage() {
   const navigate = useNavigate()
-  const [anchorDate, setAnchorDate] = useState(() => new Date())
+  const [anchorDate, setAnchorDate] = useState(() => clinicToday())
 
   const weekStart = useMemo(() => startOfWeek(anchorDate), [anchorDate])
   const weekDays = useMemo(
@@ -101,7 +108,7 @@ export function SchedulePage() {
     const [year, month] = value.split('-').map(Number)
     if (!year || !month) return
 
-    const today = new Date()
+    const today = clinicToday()
     if (today.getFullYear() === year && today.getMonth() === month - 1) {
       setAnchorDate(today)
       return
@@ -113,8 +120,8 @@ export function SchedulePage() {
     'flex items-center gap-1 rounded-lg border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-600 transition hover:bg-stone-100 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800'
 
   return (
-    <div className="p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-7xl px-6 py-6">
+      <div className="space-y-6">
         <PageHero
           title="Schedule"
           subtitle="View your weekly appointments and consultation slots."

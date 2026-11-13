@@ -5,6 +5,7 @@ import { Alert, Badge, Button, Card } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
 import { useDebounce } from '../../../../hooks/useDebounce'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDate } from '../../../../utils/format'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { useAdminAction, useClinicAdmins } from '../hooks/useAdmins'
 
@@ -182,7 +183,7 @@ export function AdminsPage() {
                           <Badge variant={STATUS_VARIANTS[status] ?? 'default'}>{status}</Badge>
                         </td>
                         <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                          {admin.last_login ? new Date(admin.last_login).toLocaleDateString() : 'Never'}
+                          {admin.last_login ? formatDate(admin.last_login) : 'Never'}
                         </td>
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-1">

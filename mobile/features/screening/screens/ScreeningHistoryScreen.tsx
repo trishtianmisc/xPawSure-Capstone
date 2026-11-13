@@ -5,16 +5,9 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { BOOKED_PILL } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 export default function ScreeningHistoryScreen() {
   const router = useRouter()

@@ -5,10 +5,9 @@ import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, Safe
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
-import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
-import { SymptomSummaryCard } from '../../../features/screening/components/SymptomSummaryCard'
 import { ConsultationSummary } from '../../../features/vet/components/ConsultationSummary'
 import { PrescriptionSummary } from '../../../features/vet/components/PrescriptionSummary'
+import { SymptomAnswersCard } from '../../../features/vet/components/SymptomAnswersCard'
 import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment'
@@ -157,7 +156,21 @@ export default function VetConsultationDetailScreen() {
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Pet Name</Text>
-                <Text style={styles.infoValue}>{detail.pet_name}</Text>
+                <View style={styles.petNameActions}>
+                  <Text numberOfLines={1} style={[styles.infoValue, styles.petNameValue]}>{detail.pet_name}</Text>
+                  <Pressable
+                    accessibilityHint="Opens this pet's previous consultations at your clinic"
+                    accessibilityRole="button"
+                    onPress={() =>
+                      router.push(
+                        `/(vet)/pet-history?petId=${encodeURIComponent(detail.pet_id)}&aptId=${encodeURIComponent(detail.apt_id)}`,
+                      )
+                    }
+                    style={styles.historyButton}
+                  >
+                    <Text style={styles.historyButtonText}>View consultation history</Text>
+                  </Pressable>
+                </View>
               </View>
               <View style={styles.infoDivider} />
               <View style={styles.infoRow}>
@@ -200,13 +213,7 @@ export default function VetConsultationDetailScreen() {
                   </Text>
                 </View>
 
-                <SymptomSummaryCard
-                  rows={detail.screening.symptom_answers ?? []}
-                  answeredCount={(detail.screening.symptom_answers ?? []).length}
-                  totalQuestions={KNOWLEDGE.questions.length}
-                  title="Owner's questionnaire answers"
-                  note="Supplementary context reported by the owner. These answers do not change the AI prediction or confidence."
-                />
+                <SymptomAnswersCard rows={detail.screening.symptom_answers ?? []} />
               </>
             )}
 
@@ -215,7 +222,7 @@ export default function VetConsultationDetailScreen() {
             )}
 
             {showCompletedRecords && detail.prescription && (
-              <PrescriptionSummary prescription={detail.prescription} />
+              <PrescriptionSummary appointment={detail} prescription={detail.prescription} />
             )}
 
             {(detail.apt_reschedule_request_reason || detail.apt_cancellation_request_reason) && (
@@ -439,6 +446,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
   infoLabel: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
   infoValue: { ...font.bold, color: colors.text, fontSize: 14 },
+  petNameActions: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 8, marginLeft: 12 },
+  petNameValue: { flexShrink: 1 },
+  historyButton: { backgroundColor: colors.primaryLight, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  historyButtonText: { ...font.bold, color: colors.primary, fontSize: 11 },
   infoDivider: { height: 1, backgroundColor: colors.border },
 
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },

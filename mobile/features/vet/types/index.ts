@@ -9,6 +9,11 @@ export type AppointmentStatus =
 
 export type ConsultationTab = 'TODAY' | 'UPCOMING' | 'COMPLETED' | 'CANCELLED'
 
+export interface VetScreeningAnswer {
+  question: string
+  answer: string
+}
+
 export interface VetScreeningSummary {
   ais_id: string
   disease: string
@@ -18,7 +23,7 @@ export interface VetScreeningSummary {
   ais_source: string
   ais_created_at: string
   /** Owner's questionnaire rows (display-only); null when absent. */
-  symptom_answers?: { question: string; answer: string }[] | null
+  symptom_answers?: VetScreeningAnswer[] | null
   image_url?: string | null
 }
 
@@ -30,10 +35,15 @@ export interface VetAppointment {
   pet_species?: string | null
   pet_sex?: string | null
   pet_birth_date?: string | null
+  pet_weight?: string | null
+  pet_color?: string | null
   owner_name: string | null
   owner_phone?: string | null
   vet_name: string | null
+  vet_license_number?: string | null
   clinic_name?: string | null
+  clinic_address?: string | null
+  clinic_phone?: string | null
   apt_type: string
   apt_status: AppointmentStatus
   apt_scheduled_at: string
@@ -62,6 +72,15 @@ export interface VetConsultationInfo {
   created_at: string
 }
 
+export interface VetPetConsultationHistory {
+  pet: {
+    pet_id: string
+    pet_name: string
+    pet_species: string | null
+  }
+  consultations: VetConsultationInfo[]
+}
+
 export interface VetPrescriptionItemInfo {
   id: string
   medicine_name: string
@@ -80,6 +99,7 @@ export interface VetPrescriptionInfo {
   pet_id: string
   pet_name: string
   veterinarian: string
+  vet_license_number?: string | null
   instructions: string | null
   items: VetPrescriptionItemInfo[]
   created_at: string

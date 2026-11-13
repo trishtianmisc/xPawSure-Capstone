@@ -2,11 +2,14 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
 import { apiErrorMessage } from '../../../utils/error'
-import { formatClockTime } from '../../../utils/format'
+import { clinicToday, formatClockTime } from '../../../utils/format'
 import type { SlotStatus } from '../types/receptionist.types'
 
 function formatDate(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -106,7 +109,7 @@ function SlotCell({
 export function SchedulePage() {
   const navigate = useNavigate()
   const { vetId } = useParams<{ vetId: string }>()
-  const today = useMemo(() => new Date(), [])
+  const today = useMemo(() => clinicToday(), [])
   const [rangeStart, setRangeStart] = useState(() => today)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [generateStartDate, setGenerateStartDate] = useState(() => formatDateInput(today))

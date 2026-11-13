@@ -20,6 +20,7 @@ from appointments.views_vet import (
     VetAppointmentRescheduleRequestView,
     VetAppointmentStartView,
     VetDashboardView,
+    VetPetConsultationHistoryView,
 )
 from appointments.views_owner import (
     OwnerAppointmentCancelView,
@@ -47,6 +48,7 @@ urlpatterns = [
     path('dashboard/stats/', DashboardStatsView.as_view(), name='receptionist-dashboard-stats'),
     path('veterinarian/dashboard/', VetDashboardView.as_view(), name='veterinarian-dashboard'),
     path('veterinarian/appointments/', VetAppointmentListView.as_view(), name='veterinarian-appointment-list'),
+    path('veterinarian/pets/<uuid:pet_id>/history/', VetPetConsultationHistoryView.as_view(), name='veterinarian-pet-history'),
     path('veterinarian/appointments/<uuid:apt_id>/start/', VetAppointmentStartView.as_view(), name='veterinarian-appointment-start'),
     path('veterinarian/appointments/<uuid:apt_id>/request-reschedule/', VetAppointmentRescheduleRequestView.as_view(), name='veterinarian-appointment-request-reschedule'),
     path('veterinarian/appointments/<uuid:apt_id>/request-cancel/', VetAppointmentCancelRequestView.as_view(), name='veterinarian-appointment-request-cancel'),

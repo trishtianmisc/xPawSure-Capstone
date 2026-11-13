@@ -42,6 +42,14 @@ class NotificationBase(TestCase):
         self.owner_read_notification.ntf_is_read = True
         self.owner_read_notification.save(update_fields=['ntf_is_read'])
 
+        self.vet_notification = NotificationService.create_notification(
+            self.vet_user.usr_id,
+            'New appointment confirmed',
+            'A patient has a confirmed appointment.',
+            NotificationType.APPOINTMENT_CONFIRMED,
+            ref_table='APPOINTMENT',
+        )
+
         NotificationService.create_notification(
             self.other_user.usr_id,
             'Other owner notification',
@@ -139,9 +147,14 @@ class NotificationListTests(NotificationBase):
             'Other owner notification',
         )
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_is_allowed(self):
         response = self.client.get('/api/notifications/', **self._auth(VET_EMAIL))
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(
+            response.data['results'][0]['ntf_title'],
+            'New appointment confirmed',
+        )
 
     def test_receptionist_is_allowed(self):
         response = self.client.get('/api/notifications/', **self._auth(RECEPTIONIST_EMAIL))
@@ -170,12 +183,13 @@ class NotificationUnreadCountTests(NotificationBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['unread_count'], 1)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_is_allowed(self):
         response = self.client.get(
             '/api/notifications/unread-count/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['unread_count'], 1)
 
 
 class NotificationMarkReadTests(NotificationBase):
@@ -230,12 +244,13 @@ class NotificationMarkReadTests(NotificationBase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_can_mark_own_notification_read(self):
         response = self.client.patch(
-            f'/api/notifications/{self.owner_notification.ntf_id}/read/',
+            f'/api/notifications/{self.vet_notification.ntf_id}/read/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data['ntf_is_read'])
 
 
 class NotificationMarkAllReadTests(NotificationBase):
@@ -269,9 +284,11 @@ class NotificationMarkAllReadTests(NotificationBase):
         )
         self.assertEqual(response.data['unread_count'], 0)
 
-    def test_veterinarian_is_forbidden(self):
+    def test_veterinarian_can_mark_all_own_notifications_read(self):
         response = self.client.patch(
             '/api/notifications/read-all/',
             **self._auth(VET_EMAIL),
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.vet_notification.refresh_from_db()
+        self.assertTrue(self.vet_notification.ntf_is_read)

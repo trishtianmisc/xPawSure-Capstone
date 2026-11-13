@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { useOwners } from '../hooks/useOwners'
+import { formatDate } from '../../../utils/format'
 
 export function OwnersPage() {
   const [search, setSearch] = useState('')
@@ -69,7 +70,7 @@ export function OwnersPage() {
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">{owner.phone ?? '—'}</td>
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">{owner.pet_count}</td>
                   <td className="px-4 py-3 text-sm text-stone-600 dark:text-stone-400">
-                    {new Date(owner.own_created_at).toLocaleDateString()}
+                    {formatDate(owner.own_created_at)}
                   </td>
                 </tr>
               ))

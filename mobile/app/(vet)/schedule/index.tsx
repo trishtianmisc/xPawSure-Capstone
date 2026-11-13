@@ -8,7 +8,7 @@ import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
 import { formatTime, localDateStr } from '../../../features/vet/lib/format'
-import { filterAppointmentsForMonth } from '../../../features/vet/lib/schedule'
+import { manilaDateKey, manilaDateParts, manilaToday } from '../../../src/utils/datetime'
 import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'
 
 const TABS = ['Day', 'Week', 'Month'] as const
@@ -16,7 +16,7 @@ const WEEKDAYS = ['Sun', 'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-const NOW = new Date()
+const NOW = manilaToday()
 const TODAY = NOW.getDate()
 const CURRENT_MONTH = NOW.getMonth()
 const CURRENT_YEAR = NOW.getFullYear()
@@ -166,7 +166,7 @@ function DayView({ styles, appointments, onAppointmentPress }: AppointmentViewPr
   const appointmentsByDate = useMemo(() => {
     const map = new Map<string, ScheduleDayAppointment[]>()
     for (const apt of appointments) {
-      const key = localDateStr(new Date(apt.apt_scheduled_at))
+      const key = manilaDateKey(apt.apt_scheduled_at)
       const list = map.get(key) ?? []
       list.push(toDayItem(apt))
       map.set(key, list)
@@ -307,7 +307,7 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
       date.setDate(start.getDate() + i)
       const dateStr = localDateStr(date)
       const dayAppointments = appointments
-        .filter((apt) => localDateStr(new Date(apt.apt_scheduled_at)) === dateStr)
+        .filter((apt) => manilaDateKey(apt.apt_scheduled_at) === dateStr)
         .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
         .map(toDayItem)
       days.push({
@@ -377,13 +377,19 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
   const [viewYear, setViewYear] = useState(CURRENT_YEAR)
 
   const monthAppointments: ScheduleMonthAppointment[] = useMemo(() => {
-    return filterAppointmentsForMonth(appointments, selectedMonth, viewYear).map((apt) => {
-      const d = new Date(apt.apt_scheduled_at)
-      return {
-        ...toDayItem(apt),
-        date: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
-      }
-    })
+    return appointments
+      .filter((apt) => {
+        const { year, month } = manilaDateParts(new Date(apt.apt_scheduled_at))
+        return month - 1 === selectedMonth && year === viewYear
+      })
+      .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
+      .map((apt) => {
+        const { month, day } = manilaDateParts(new Date(apt.apt_scheduled_at))
+        return {
+          ...toDayItem(apt),
+          date: `${MONTHS[month - 1]} ${day}`,
+        }
+      })
   }, [appointments, selectedMonth, viewYear])
 
   return (

@@ -6,6 +6,7 @@ import { useDebounce } from '../../../hooks/useDebounce'
 import { usePets } from '../hooks/usePets'
 import { PageHero } from '../components/PageHero'
 import { apiErrorMessage } from '../../../utils/error'
+import { formatDate } from '../../../utils/format'
 
 const INPUT_CLASSES =
   'rounded-md border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40'
@@ -110,7 +111,7 @@ export function PetsPage() {
                         {pet.weight ? `${pet.weight} kg` : '—'}
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(pet.created_at).toLocaleDateString()}
+                        {formatDate(pet.created_at)}
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <Link

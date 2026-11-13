@@ -7,7 +7,9 @@ from notifications.serializers import NotificationSerializer
 from notifications.services import NotificationService
 from users.models import UserRole
 
-IsNotificationRecipient = HasRole(UserRole.OWNER, UserRole.RECEPTIONIST)
+IsNotificationRecipient = HasRole(
+    UserRole.OWNER, UserRole.RECEPTIONIST, UserRole.VETERINARIAN,
+)
 
 
 class NotificationListView(APIView):

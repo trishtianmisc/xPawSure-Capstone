@@ -135,6 +135,19 @@ def _notify(user_id, title, message, ntf_type, ref_id=None):
         logger.warning('Notification failed: %s', e)
 
 
+def _notify_assigned_vet(appointment, *, title, message, ntf_type):
+    staff = getattr(appointment, 'stf_id', None)
+    if not staff:
+        return
+    _notify(
+        user_id=staff.usr_id_id,
+        title=title,
+        message=message,
+        ntf_type=ntf_type,
+        ref_id=appointment.apt_id,
+    )
+
+
 DAY_MAP = {
     0: 'MON',
     1: 'TUE',
@@ -575,6 +588,16 @@ class AppointmentService:
                 ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
                 ref_id=appointment.apt_id,
             )
+            _notify_assigned_vet(
+                appointment,
+                title='New Appointment Confirmed',
+                message=(
+                    f'{pet.pet_name} has a confirmed appointment on '
+                    f'{slot.vsl_date} at '
+                    f'{slot.vsl_start_time.strftime("%H:%M")}.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+            )
         else:
             _notify(
                 user_id=pet.own_id.usr_id_id,
@@ -708,6 +731,16 @@ class AppointmentService:
                 ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
                 ref_id=appointment.apt_id,
             )
+            _notify_assigned_vet(
+                appointment,
+                title='New Appointment Confirmed',
+                message=(
+                    f'{appointment.pet_id.pet_name} has a confirmed '
+                    f'follow-up appointment on '
+                    f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+            )
         else:
             _notify(
                 user_id=owner_user_id,
@@ -828,6 +861,16 @@ class AppointmentService:
             ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
             ref_id=appointment.apt_id,
         )
+        _notify_assigned_vet(
+            appointment,
+            title='New Appointment Confirmed',
+            message=(
+                f'{appointment.pet_id.pet_name} has a confirmed follow-up '
+                f'appointment on '
+                f'{appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+            ),
+            ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+        )
 
         return appointment
 
@@ -922,6 +965,25 @@ class AppointmentService:
                 ),
                 ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
                 ref_id=appointment.apt_id,
+            )
+            _notify_assigned_vet(
+                appointment,
+                title='New Appointment Confirmed',
+                message=(
+                    f'{appointment.pet_id.pet_name} has a confirmed appointment '
+                    f'on {appointment.apt_scheduled_at:%Y-%m-%d at %H:%M}.'
+                ),
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+            )
+        elif new_status == AppointmentStatus.CHECKED_IN:
+            _notify_assigned_vet(
+                appointment,
+                title='Patient Checked In',
+                message=(
+                    f'{appointment.pet_id.pet_name} has checked in and is '
+                    f'ready for consultation.'
+                ),
+                ntf_type=NotificationType.CONSULTATION_AVAILABLE,
             )
         elif new_status == AppointmentStatus.CANCELLED:
             if old_status != AppointmentStatus.REVIEW:
@@ -1357,7 +1419,7 @@ class VetDashboardService:
         *UPCOMING_STATUSES,
         AppointmentStatus.COMPLETED,
     )
-    ACTIVE_TODAY_STATUSES = MONTH_TOTAL_STATUSES
+    UPCOMING_LIST_LIMIT = 10
 
     @staticmethod
     def _vet_appointments(stf_id):
@@ -1376,6 +1438,20 @@ class VetDashboardService:
 
         qs = VetDashboardService._vet_appointments(stf_id)
 
+        today_qs = qs.filter(apt_scheduled_at__date=ref_date)
+        today_confirmed = today_qs.filter(
+            apt_status=AppointmentStatus.CONFIRMED,
+        ).count()
+        today_ongoing = today_qs.filter(
+            apt_status__in=[
+                AppointmentStatus.CHECKED_IN,
+                AppointmentStatus.IN_PROGRESS,
+            ],
+        ).count()
+        today_completed = today_qs.filter(
+            apt_status=AppointmentStatus.COMPLETED,
+        ).count()
+
         return {
             'consultations_this_month': qs.filter(
                 apt_status__in=VetDashboardService.MONTH_TOTAL_STATUSES,
@@ -1392,6 +1468,12 @@ class VetDashboardService:
                 apt_scheduled_at__date__gte=month_start,
                 apt_scheduled_at__date__lte=month_end,
             ).count(),
+            'today_stats': {
+                'total': today_confirmed + today_ongoing + today_completed,
+                'confirmed': today_confirmed,
+                'ongoing': today_ongoing,
+                'completed': today_completed,
+            },
         }
 
     @staticmethod
@@ -1400,13 +1482,28 @@ class VetDashboardService:
             VetDashboardService._vet_appointments(stf_id)
             .filter(
                 apt_scheduled_at__date=ref_date,
-                apt_status__in=VetDashboardService.ACTIVE_TODAY_STATUSES,
+                apt_status__in=VetDashboardService.MONTH_TOTAL_STATUSES,
             )
             .select_related(
                 'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
                 'stf_id__usr_id', 'apt_screening__dis_id',
             )
             .order_by('apt_scheduled_at')
+        )
+
+    @staticmethod
+    def get_upcoming_appointments(stf_id, ref_date):
+        return list(
+            VetDashboardService._vet_appointments(stf_id)
+            .filter(
+                apt_scheduled_at__date__gte=ref_date,
+                apt_status__in=VetDashboardService.UPCOMING_STATUSES,
+            )
+            .select_related(
+                'pet_id', 'pet_id__brd_id', 'pet_id__own_id__usr_id',
+                'stf_id__usr_id', 'apt_screening__dis_id',
+            )
+            .order_by('apt_scheduled_at')[:VetDashboardService.UPCOMING_LIST_LIMIT]
         )
 
     @staticmethod
@@ -1425,6 +1522,37 @@ class VetDashboardService:
         if end_date is not None:
             qs = qs.filter(apt_scheduled_at__date__lte=end_date)
         return list(qs.order_by('-apt_scheduled_at'))
+
+    @staticmethod
+    def get_pet_consultation_history(pet_id, clinic_id):
+        from consultations.models import Consultation
+        from pets.models import Pet
+
+        try:
+            pet = Pet.objects.select_related('brd_id').get(
+                pet_id=pet_id,
+                pet_is_active=True,
+                pet_deleted_at__isnull=True,
+            )
+        except Pet.DoesNotExist:
+            return None
+
+        if not pet.appointments.filter(
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        ).exists():
+            return None
+
+        consultations = Consultation.objects.filter(
+            apt_id__pet_id=pet,
+            apt_id__cln_id_id=clinic_id,
+            apt_id__apt_status=AppointmentStatus.COMPLETED,
+            apt_id__apt_deleted_at__isnull=True,
+        ).select_related(
+            'stf_id__usr_id', 'apt_id__pet_id',
+        ).order_by('-con_created_at')
+
+        return {'pet': pet, 'consultations': list(consultations)}
 
     @staticmethod
     @transaction.atomic

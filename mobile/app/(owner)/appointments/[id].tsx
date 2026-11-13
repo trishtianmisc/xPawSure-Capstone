@@ -16,6 +16,7 @@ import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { formatDate, formatDateTime, formatTime, manilaDateParts } from '../../../src/utils/datetime'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -132,24 +133,20 @@ export default function AppointmentDetailScreen() {
     appointment.apt_type === 'FOLLOW_UP' &&
     appointment.apt_status === 'CONFIRMATION'
 
-  const scheduledDate = new Date(appointment.apt_scheduled_at)
-  const weekday = scheduledDate.toLocaleDateString(undefined, { weekday: 'short' })
-  const dayNumber = scheduledDate.getDate()
-  const monthYear = scheduledDate.toLocaleDateString(undefined, {
+  const weekday = formatDate(appointment.apt_scheduled_at, { weekday: 'short' })
+  const dayNumber = manilaDateParts(new Date(appointment.apt_scheduled_at)).day
+  const monthYear = formatDate(appointment.apt_scheduled_at, {
     month: 'long',
     year: 'numeric',
   })
-  const timeText = scheduledDate.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
-  const bookedOn = new Date(appointment.apt_created_at).toLocaleDateString(undefined, {
+  const timeText = formatTime(appointment.apt_scheduled_at)
+  const bookedOn = formatDate(appointment.apt_created_at, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
   const paidOn = payment?.paid_at
-    ? new Date(payment.paid_at).toLocaleString(undefined, {
+    ? formatDateTime(payment.paid_at, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',

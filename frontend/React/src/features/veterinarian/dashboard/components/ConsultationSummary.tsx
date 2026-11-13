@@ -1,15 +1,11 @@
+import type { ReactNode } from 'react'
+
 import type { ScreeningSummary, VetConsultationInfo } from '../types/dashboard.types'
 import { formatDate } from '../../../../utils/format'
+import { DetailCell, DetailRowGroup, DetailSection } from './DetailSection'
 
-function Row({ label, value }: { label: string; value: string | null | undefined }) {
-  return (
-    <div className="flex items-start justify-between gap-6">
-      <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">{label}</dt>
-      <dd className="text-right text-sm font-semibold text-stone-900 dark:text-stone-100">
-        {value?.trim() ? value : '—'}
-      </dd>
-    </div>
-  )
+function displayValue(value: string | null | undefined): string {
+  return value?.trim() ? value : '—'
 }
 
 function normalize(value: string): string {
@@ -35,20 +31,29 @@ export function ConsultationSummary({
   screening?: ScreeningSummary | null
 }) {
   const aiMatch = matchesAiScreening(screening, consultation.diagnosis)
+  const preferredFollowUp = consultation.follow_up_target_date
+    ? formatDate(`${consultation.follow_up_target_date}T00:00:00`)
+    : null
 
-  return (
-    <div className="mb-6 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-      <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-        Consultation
-      </h2>
-      <dl className="space-y-3">
-        <Row label="Diagnosis" value={consultation.diagnosis} />
-        {screening && (
-          <div className="flex items-center justify-between gap-6">
-            <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">
-              Diagnosis Agreement
-            </dt>
-            <dd>
+  const cells: Array<{ label: string; value: ReactNode }> = [
+    {
+      label: 'Diagnosis',
+      value: (
+        <>
+          {displayValue(consultation.diagnosis)}
+          {consultation.specific_disease && (
+            <span className="mt-1 block text-xs font-normal text-stone-500 dark:text-stone-400">
+              Specific disease: {consultation.specific_disease}
+            </span>
+          )}
+        </>
+      ),
+    },
+    ...(screening
+      ? [
+          {
+            label: 'Diagnosis Agreement',
+            value: (
               <span
                 className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   aiMatch
@@ -58,28 +63,62 @@ export function ConsultationSummary({
               >
                 {aiMatch ? 'Matched' : 'Not matched'}
               </span>
-            </dd>
-          </div>
-        )}
-        <Row label="Chief complaint" value={consultation.chief_complaint} />
-        <Row label="Observations" value={consultation.objective} />
-        <Row label="Notes" value={consultation.notes} />
-        <Row
-          label="Follow-up"
-          value={consultation.follow_up_required ? 'Needed' : 'Not needed'}
-        />
-        {consultation.follow_up_required && (
-          <Row
-            label="Preferred follow-up"
-            value={formatDate(
-              consultation.follow_up_target_date
-                ? `${consultation.follow_up_target_date}T00:00:00`
-                : null,
-            )}
-          />
-        )}
-        <Row label="Veterinarian" value={consultation.veterinarian} />
-      </dl>
-    </div>
+            ),
+          },
+        ]
+      : []),
+    {
+      label: 'Chief complaint',
+      value: displayValue(consultation.chief_complaint),
+    },
+    {
+      label: 'Observations',
+      value: displayValue(consultation.objective),
+    },
+    {
+      label: 'Notes',
+      value: displayValue(consultation.notes),
+    },
+    {
+      label: 'Follow-up',
+      value: (
+        <>
+          {consultation.follow_up_required ? 'Needed' : 'Not needed'}
+          {consultation.follow_up_required && preferredFollowUp && (
+            <span className="mt-1 block text-xs font-normal text-stone-500 dark:text-stone-400">
+              Preferred follow-up: {preferredFollowUp}
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      label: 'Veterinarian',
+      value: displayValue(consultation.veterinarian),
+    },
+  ]
+
+  const rows: Array<Array<{ label: string; value: ReactNode }>> = []
+  for (let index = 0; index < cells.length; index += 2) {
+    rows.push(cells.slice(index, index + 2))
+  }
+
+  return (
+    <DetailSection title="Consultation">
+      {rows.map((row) => {
+        const [first, second] = row
+        return (
+          <DetailRowGroup key={first.label}>
+            <DetailCell
+              className={second ? undefined : 'sm:col-span-2'}
+              divider={Boolean(second)}
+              label={first.label}
+              value={first.value}
+            />
+            {second && <DetailCell label={second.label} value={second.value} />}
+          </DetailRowGroup>
+        )
+      })}
+    </DetailSection>
   )
 }

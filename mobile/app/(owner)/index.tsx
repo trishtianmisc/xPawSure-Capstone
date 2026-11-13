@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
 import { font } from '../../src/theme/typography'
+import { formatDate, formatTime, manilaDateParts, manilaHour } from '../../src/utils/datetime'
 import { StatusPill } from '../../features/appointment/components/StatusPill'
 import { useMyAppointments } from '../../features/appointment/hooks/useMyAppointments'
 import { usePets } from '../../features/pet/hooks/usePets'
@@ -14,7 +15,7 @@ import { BOOKED_PILL } from '../../features/screening/constants'
 import { useAllScreenings } from '../../features/screening/hooks/useAllScreenings'
 
 function formatScreeningDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  return formatDate(iso, { day: 'numeric', month: 'short' })
 }
 
 export default function HomeScreen() {
@@ -31,9 +32,9 @@ export default function HomeScreen() {
     isError: screeningsError,
   } = useAllScreenings()
 
-  const hour = new Date().getHours()
+  const hour = manilaHour()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-  const today = new Date().toLocaleDateString(undefined, {
+  const today = formatDate(new Date(), {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
@@ -68,7 +69,7 @@ export default function HomeScreen() {
 
   const scheduled = nextAppointment ? new Date(nextAppointment.apt_scheduled_at) : null
   const upcomingLabel = scheduled
-    ? scheduled.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    ? formatTime(scheduled)
     : null
 
   return (
@@ -119,15 +120,15 @@ export default function HomeScreen() {
           {nextAppointment && scheduled ? (
             <Pressable
               accessibilityHint="Opens the appointment details"
-              accessibilityLabel={`Appointment for ${nextAppointment.pet_name} on ${scheduled.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}`}
+              accessibilityLabel={`Appointment for ${nextAppointment.pet_name} on ${formatDate(nextAppointment.apt_scheduled_at, { weekday: 'long', day: 'numeric', month: 'long' })}`}
               accessibilityRole="button"
               onPress={() => router.push(`/(owner)/appointments/${nextAppointment.apt_id}`)}
               style={styles.appointmentCard}
             >
               <View style={styles.dateBlock}>
-                <Text style={styles.dateDay}>{scheduled.getDate()}</Text>
+                <Text style={styles.dateDay}>{manilaDateParts(scheduled).day}</Text>
                 <Text style={styles.dateWeekday}>
-                  {scheduled.toLocaleDateString(undefined, { weekday: 'short' })}
+                  {formatDate(nextAppointment.apt_scheduled_at, { weekday: 'short' })}
                 </Text>
               </View>
               <View style={styles.appointmentBody}>
