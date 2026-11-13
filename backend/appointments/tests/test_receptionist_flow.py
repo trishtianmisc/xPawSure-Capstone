@@ -137,6 +137,14 @@ class ReceptionistAppointmentFlowTests(OwnerBookingBase):
             ).filter(ntf_reference_id=apt_id).exists(),
         )
 
+        mnl = ZoneInfo('Asia/Manila')
+        today_nine = datetime.combine(
+            datetime.now(mnl).date(), time(9, 0), tzinfo=mnl,
+        )
+        Appointment.objects.filter(apt_id=apt_id).update(
+            apt_scheduled_at=today_nine,
+        )
+
         response = self._patch_status(apt_id, 'CHECKED_IN')
 
         self.assertEqual(response.status_code, 200, response.data)

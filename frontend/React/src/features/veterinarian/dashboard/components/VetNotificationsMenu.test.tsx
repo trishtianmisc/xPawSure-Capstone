@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { Notification } from '../../../receptionist/types/receptionist.types'
+import type { Notification } from '../../../notifications/types/notification.types'
 import {
   useMarkAllVetNotificationsRead,
   useMarkVetNotificationRead,

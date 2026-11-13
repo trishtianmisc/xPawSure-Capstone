@@ -5,7 +5,7 @@ import {
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
-} from '../../../receptionist/services/notification.service'
+} from '../../../notifications/services/notification.service'
 
 const QUERY_KEY = ['veterinarian', 'notifications']
 

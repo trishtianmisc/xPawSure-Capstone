@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { formatDateTime } from '../../../../utils/format'
-import type { Notification } from '../../../receptionist/types/receptionist.types'
+import type { Notification } from '../../../notifications/types/notification.types'
 import {
   useMarkAllVetNotificationsRead,
   useMarkVetNotificationRead,

@@ -682,7 +682,11 @@ describe('SchedulePage clinic days', () => {
     renderPage()
     fireEvent.click(screen.getByRole('button', { name: 'Generate Slots' }))
 
-    expect(screen.getByDisplayValue('2026-10-02')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('2026-10-08')).toBeInTheDocument()
+    const heading = screen.getByRole('heading', { name: 'Generate Slots' })
+    const overlay = heading.closest('.fixed') as HTMLElement
+    const dateInputs = overlay.querySelectorAll<HTMLInputElement>('input[type="date"]')
+    expect(dateInputs).toHaveLength(2)
+    expect(dateInputs[0].value).toBe('2026-10-02')
+    expect(dateInputs[1].value).toBe('2026-10-08')
   })
 })

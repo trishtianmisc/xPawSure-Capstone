@@ -188,6 +188,7 @@ class VetRequestSubmitTests(VetRequestHandlingBase):
         self.assertFalse(
             Notification.objects.filter(
                 usr_id_id=self.vet_user.usr_id,
+                ntf_type=NotificationType.SYSTEM,
                 ntf_reference_id=apt_id,
             ).exists(),
         )
