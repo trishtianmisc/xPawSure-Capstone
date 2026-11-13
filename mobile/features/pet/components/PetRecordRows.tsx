@@ -6,7 +6,7 @@ import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import type { ConsultationRecord, VaccinationRecordItem } from '../../../src/services/records'
 import { VaccinationStatusPill } from '../../records/components/VaccinationStatusPill'
-import { BOOKED_PILL } from '../../screening/constants'
+import { screeningStatusPill } from '../../screening/constants'
 import type { Screening } from '../../screening/types'
 
 function formatDate(iso: string): string {
@@ -87,16 +87,17 @@ export function ScreeningRow({
 }) {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
+  const statusPill = screeningStatusPill(screening.is_consulted, screening.is_booked)
 
   return (
     <RowShell
       title={screening.disease}
       meta={`${screening.ais_confidence}% confidence · ${formatDate(screening.ais_created_at)}`}
       badge={
-        screening.is_booked ? (
-          <View style={[styles.statusPill, { backgroundColor: BOOKED_PILL.bg }]}>
-            <Text style={[styles.statusPillText, { color: BOOKED_PILL.fg }]}>
-              {BOOKED_PILL.label}
+        statusPill ? (
+          <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+            <Text style={[styles.statusPillText, { color: statusPill.fg }]}>
+              {statusPill.label}
             </Text>
           </View>
         ) : null

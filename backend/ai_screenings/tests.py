@@ -388,6 +388,14 @@ class ScreeningBookingFlagTests(OwnerScreeningBase):
         first = self._list_first()
         self.assertIs(first['is_booked'], False)
 
+    def test_is_booked_false_when_only_appointment_is_deleted(self):
+        screening = self._make_screening()
+        appointment = self._book(screening)
+        Appointment.objects.filter(pk=appointment.pk).update(apt_deleted_at=timezone.now())
+
+        first = self._list_first()
+        self.assertIs(first['is_booked'], False)
+
 
 class ScreeningModelTests(OwnerScreeningBase):
 

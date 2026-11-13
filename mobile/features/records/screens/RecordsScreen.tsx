@@ -11,6 +11,9 @@ import type {
   VaccinationRecordItem,
 } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
+import { screeningStatusPill } from '../../screening/constants'
+import { useAllScreenings } from '../../screening/hooks/useAllScreenings'
+import type { ScreeningListResponse } from '../../screening/types'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useConsultations } from '../hooks/useConsultations'
 import { usePrescriptions } from '../hooks/usePrescriptions'
@@ -22,10 +25,16 @@ const TABS: { value: RecordsTab; label: string }[] = [
   { value: 'consultations', label: 'Consults' },
   { value: 'prescriptions', label: 'Meds' },
   { value: 'vaccinations', label: 'Vaccines' },
+  { value: 'screenings', label: 'Scans' },
 ]
 
 function parseTab(value: string | string[] | undefined): RecordsTab | null {
-  if (value === 'consultations' || value === 'prescriptions' || value === 'vaccinations') {
+  if (
+    value === 'consultations'
+    || value === 'prescriptions'
+    || value === 'vaccinations'
+    || value === 'screenings'
+  ) {
     return value
   }
   return null
@@ -98,12 +107,14 @@ export default function RecordsScreen() {
       void queryClient.invalidateQueries({ queryKey: ['consultations'] })
       void queryClient.invalidateQueries({ queryKey: ['prescriptions'] })
       void queryClient.invalidateQueries({ queryKey: ['vaccinations'] })
+      void queryClient.invalidateQueries({ queryKey: ['screenings'] })
     }, [queryClient, router]),
   )
 
   const consultations = useConsultations()
   const prescriptions = usePrescriptions()
   const vaccinations = useVaccinations()
+  const screenings = useAllScreenings()
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -112,6 +123,7 @@ export default function RecordsScreen() {
         queryClient.invalidateQueries({ queryKey: ['consultations'] }),
         queryClient.invalidateQueries({ queryKey: ['prescriptions'] }),
         queryClient.invalidateQueries({ queryKey: ['vaccinations'] }),
+        queryClient.invalidateQueries({ queryKey: ['screenings'] }),
       ])
     } finally {
       setRefreshing(false)
@@ -120,18 +132,21 @@ export default function RecordsScreen() {
 
   const active = tab === 'consultations' ? consultations
     : tab === 'prescriptions' ? prescriptions
-      : vaccinations
+      : tab === 'vaccinations' ? vaccinations
+        : screenings
   const { data, isError, isLoading } = active
 
   const emptyText =
     tab === 'consultations' ? 'No consultation records yet.'
       : tab === 'prescriptions' ? 'No prescriptions yet.'
-        : 'No vaccination records yet.'
+        : tab === 'vaccinations' ? 'No vaccination records yet.'
+          : 'No screenings yet.'
 
   const emptyIcon =
     tab === 'consultations' ? 'clipboard-text-outline'
       : tab === 'prescriptions' ? 'pill'
-        : 'needle'
+        : tab === 'vaccinations' ? 'needle'
+          : 'image-search-outline'
 
   const renderList = () => {
     if (isLoading) {
@@ -178,6 +193,33 @@ export default function RecordsScreen() {
           onPress={() => router.push(`/(owner)/records/prescriptions/${record.id}`)}
         />
       ))
+    }
+
+    if (tab === 'screenings') {
+      const items = (data as ScreeningListResponse | undefined)?.results ?? []
+      if (items.length === 0) return renderEmpty()
+      return items.map((screening) => {
+        const statusPill = screeningStatusPill(screening.is_consulted, screening.is_booked)
+        return (
+          <RecordCard
+            key={screening.ais_id}
+            petName={screening.pet_name}
+            title={screening.disease}
+            meta={`${screening.ais_confidence}% confidence`}
+            footer={formatDate(screening.ais_created_at)}
+            badge={statusPill ? (
+              <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+                <Text style={[styles.statusPillText, { color: statusPill.fg }]}>
+                  {statusPill.label}
+                </Text>
+              </View>
+            ) : undefined}
+            onPress={() =>
+              router.push({ pathname: '/(owner)/screenings/[id]', params: { id: screening.ais_id } })
+            }
+          />
+        )
+      })
     }
 
     const items = (data as VaccinationRecordItem[] | undefined) ?? []
@@ -309,6 +351,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   meta: { ...font.regular, color: colors.textSecondary, fontSize: 13 },
   cardFooter: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   dateText: { ...font.semibold, color: colors.textSecondary, fontSize: 13 },
+  statusPill: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  statusPillText: { ...font.bold, fontSize: 11 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },
   emptyState: {
     alignItems: 'center',

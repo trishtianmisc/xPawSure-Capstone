@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
+import { useLocalSearchParams } from 'expo-router'
 import { useMemo } from 'react'
 import {
   ActivityIndicator,
@@ -16,8 +16,11 @@ import { font } from '../../../src/theme/typography'
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
 import { CareGuidelinesCard } from '../components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../components/SymptomSummaryCard'
-import { DISEASE_META, BOOKED_PILL } from '../constants'
-import { useAllScreenings } from '../hooks/useAllScreenings'
+import { DISEASE_META, screeningStatusPill } from '../constants'
+import { useScreening } from '../hooks/useScreening'
+import { useScreeningDetailBack } from '../hooks/useScreeningDetailBack'
+import { useMedicalRecordLinks } from '../../records/hooks/useMedicalRecordLinks'
+import { consultationLinkLabel } from '../../records/lib/medicalRecordLinks'
 
 /**
  * Read-only view of one stored screening log: what the on-device model
@@ -39,27 +42,18 @@ function formatDateTime(iso: string): string {
 }
 
 export default function ScreeningDetailsScreen() {
-  const router = useRouter()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data, isLoading, isError } = useAllScreenings()
-  const { id } = useLocalSearchParams<{ id?: string }>()
-
-  const screening = useMemo(
-    () => (id ? data?.results.find((current) => current.ais_id === id) : undefined),
-    [data, id],
-  )
-
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back()
-    } else {
-      router.replace('/(owner)/screenings')
-    }
-  }
+  const { id, fromConsultation } = useLocalSearchParams<{ id?: string; fromConsultation?: string }>()
+  const { data: screening, isLoading, isError } = useScreening(id)
+  const handleBack = useScreeningDetailBack(fromConsultation)
+  const { viewConsultation } = useMedicalRecordLinks()
 
   const diseaseMeta = screening ? DISEASE_META[screening.disease_code] ?? null : null
   const diseaseColor: string = diseaseMeta?.color ?? colors.primary
+  const statusPill = screening
+    ? screeningStatusPill(screening.is_consulted, screening.is_booked)
+    : null
   // Supplementary answers are absent on screenings saved without a
   // questionnaire or records that predate their storage — hide the section.
   const symptomRows = screening?.symptom_answers ?? []
@@ -74,7 +68,7 @@ export default function ScreeningDetailsScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Pressable onPress={handleBack} style={styles.headerBack}>
+        <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={handleBack} style={styles.headerBack}>
           <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
         </Pressable>
         <Text style={styles.headerTitle}>Screening Details</Text>
@@ -108,10 +102,10 @@ export default function ScreeningDetailsScreen() {
 
               <View style={styles.titleRow}>
                 <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
-                {screening.is_booked ? (
-                  <View style={[styles.statusPill, { backgroundColor: BOOKED_PILL.bg }]}>
-                    <Text style={[styles.statusPillText, { color: BOOKED_PILL.fg }]}>
-                      {BOOKED_PILL.label}
+                {statusPill ? (
+                  <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+                    <Text style={[styles.statusPillText, { color: statusPill.fg }]}>
+                      {statusPill.label}
                     </Text>
                   </View>
                 ) : null}
@@ -134,6 +128,25 @@ export default function ScreeningDetailsScreen() {
               {screening.ais_device ? metaRow('Device', screening.ais_device) : null}
               {metaRow('Source', 'On-device screening')}
             </View>
+
+            {(screening.linked_consultations ?? []).map((consultation) => (
+              <Pressable
+                key={consultation.kind}
+                accessibilityLabel={consultationLinkLabel(consultation.kind)}
+                accessibilityRole="button"
+                onPress={() => viewConsultation(screening.ais_id, consultation.id, fromConsultation)}
+                style={styles.consultationLink}
+              >
+                <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={24} />
+                <View style={styles.consultationCopy}>
+                  <Text style={styles.consultationTitle}>{consultationLinkLabel(consultation.kind)}</Text>
+                  <Text style={styles.consultationMeta}>
+                    {formatDateTime(consultation.created_at)} · {consultation.veterinarian}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={20} />
+              </Pressable>
+            ))}
 
             <CareGuidelinesCard prediction={screening.disease_code} />
 
@@ -164,6 +177,20 @@ export default function ScreeningDetailsScreen() {
 }
 
 const createStyles = (colors: AppColors) => StyleSheet.create({
+  consultationLink: {
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+    padding: 16,
+  },
+  consultationCopy: { flex: 1, gap: 4 },
+  consultationTitle: { ...font.bold, color: colors.primary, fontSize: 15 },
+  consultationMeta: { ...font.regular, color: colors.textSecondary, fontSize: 12 },
   screen: { backgroundColor: colors.surface, flex: 1 },
   content: { gap: 4, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 10 },
   statusState: { alignItems: 'center', justifyContent: 'center', minHeight: 160 },

@@ -3,6 +3,7 @@ import re
 from decimal import Decimal
 
 from django.db import transaction
+from django.db.models import F, Prefetch
 
 from ai_screenings.claude_service import (
     IMAGE_SUITABILITY_SUITABLE,
@@ -15,6 +16,7 @@ from ai_screenings.models import (
 )
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
+from appointments.models import Appointment, AppointmentStatus, AppointmentType
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,72 @@ def _normalize(text: str) -> str:
 
 
 class ScreeningService:
+
+    @staticmethod
+    def _consultation_appointments():
+        # The appointment FK is the visit history. con_id on a screening is
+        # comparison metadata and may change when a follow-up reuses the scan.
+        return Appointment.objects.filter(
+            apt_deleted_at__isnull=True,
+            consultation__isnull=False,
+            pet_id_id=F('apt_screening__pet_id_id'),
+        ).select_related('consultation__stf_id__usr_id').order_by(
+            '-consultation__con_created_at', '-consultation__con_id',
+        )
+
+    @staticmethod
+    def with_consultation_links(queryset):
+        return queryset.prefetch_related(Prefetch(
+            'appointments',
+            queryset=ScreeningService._consultation_appointments(),
+            to_attr='linked_consultation_appointments',
+        ))
+
+    @staticmethod
+    def linked_consultations(screening: AiScreening) -> list[dict]:
+        """At most two links per scan: the original visit plus a finished follow-up.
+
+        Follow-up visits reuse the same scan, so a scan can accumulate several
+        consultations. Only the earliest (original) visit is always linked; a
+        follow-up is exposed only once its appointment is COMPLETED, so an
+        unfinished follow-up is never linked.
+        """
+        appointments = getattr(screening, 'linked_consultation_appointments', None)
+        if appointments is None:
+            appointments = ScreeningService._consultation_appointments().filter(
+                apt_screening=screening,
+            )
+        appointments = list(appointments)
+        if not appointments:
+            return []
+
+        # Ordered newest-first by consultation date, so the last entry is the
+        # earliest (original) visit.
+        original = appointments[-1].consultation
+        links = [{'kind': 'ORIGINAL', 'consultation': original}]
+
+        follow_up = next(
+            (
+                appointment.consultation
+                for appointment in appointments
+                if appointment.apt_type == AppointmentType.FOLLOW_UP
+                and appointment.apt_status == AppointmentStatus.COMPLETED
+            ),
+            None,
+        )
+        if follow_up is not None and follow_up.pk != original.pk:
+            links.append({'kind': 'FOLLOW_UP', 'consultation': follow_up})
+
+        return links
+
+    @staticmethod
+    def get_for_owner(screening_id, owner_profile):
+        return ScreeningService.with_consultation_links(
+            AiScreening.objects.filter(
+                ais_id=screening_id,
+                pet_id__own_id=owner_profile,
+            ).select_related('dis_id', 'pet_id', 'image'),
+        ).first()
 
     @staticmethod
     def resolve_disease(prediction: str) -> Disease:

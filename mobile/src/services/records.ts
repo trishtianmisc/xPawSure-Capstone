@@ -3,6 +3,7 @@ import { http } from './http'
 export interface ConsultationRecord {
   id: string
   appointment_id: string
+  screening_id: string | null
   pet_id: string
   pet_name: string
   veterinarian: string

@@ -140,6 +140,8 @@ export interface PetListResponse {
 export interface ConsultationRecord {
   id: string
   appointment_id: string
+  /** The visit's scan, resolved through its appointment; null when unlinked. */
+  screening_id: string | null
   pet_id: string
   pet_name: string
   veterinarian: string

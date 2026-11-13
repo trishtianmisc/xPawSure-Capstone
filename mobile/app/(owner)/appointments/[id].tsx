@@ -124,6 +124,9 @@ export default function AppointmentDetailScreen() {
 
   const presentation = STATUS_PRESENTATION[appointment.apt_status]
   const canCancel = CANCELLABLE_STATUSES.includes(appointment.apt_status)
+  // The veterinarian's record is only surfaced once the visit is completed.
+  const consultation =
+    appointment.apt_status === 'COMPLETED' ? appointment.consultation : null
   const payment = paymentsData ? pickAppointmentPayment(paymentsData.results) : null
   const paymentPresentation = payment ? PAYMENT_PRESENTATION[payment.status] : null
   // A paid follow-up becomes CONFIRMED, so this card is only for the window
@@ -257,6 +260,37 @@ export default function AppointmentDetailScreen() {
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>REASON FOR VISIT</Text>
             <Text style={styles.reasonText}>{appointment.apt_reason}</Text>
+          </View>
+        ) : null}
+
+        {/* Consultation record */}
+        {consultation ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>CONSULTATION</Text>
+            <InfoRow icon="stethoscope" label="Diagnosis" value={consultation.diagnosis} />
+            {consultation.specific_disease ? (
+              <InfoRow
+                icon="tag-outline"
+                label="Specific"
+                value={consultation.specific_disease}
+              />
+            ) : null}
+            <InfoRow
+              icon="account-check-outline"
+              label="Veterinarian"
+              value={consultation.veterinarian}
+            />
+            <Pressable
+              accessibilityHint="Opens the consultation record"
+              accessibilityLabel="View consultation record"
+              accessibilityRole="button"
+              hitSlop={6}
+              onPress={() => router.navigate(`/(owner)/records/consultations/${consultation.id}`)}
+              style={styles.linkRow}
+            >
+              <Text style={styles.linkText}>View consultation record</Text>
+              <MaterialCommunityIcons color={colors.primary} name="chevron-right" size={16} />
+            </Pressable>
           </View>
         ) : null}
 

@@ -239,6 +239,31 @@ owner-stated reason, which the record then displays.
 
 Owners may cancel appointments.
 
+### Consultation and screening history links
+
+Consultation details show **View Screening** only when the visit's appointment
+links to a screening for that pet. Screening details load by ID through
+`GET /api/owner/screenings/{id}/`, not by searching a paginated history list.
+They show up to two links, each with its date and veterinarian: **View
+Consultation** for the scan's original visit, and **View Follow-up Consultation**
+for a follow-up visit that reused the same scan — the follow-up link appears only
+once that appointment is completed. No link is shown for a booking without a
+recorded consultation. Opening a link back to the source record returns to it
+rather than repeatedly stacking copies. Records and Screenings are sibling tab
+stacks, so these returns go through `router.navigate`, which crosses tabs and
+reuses the existing screen; `router.dismissTo` dispatches `POP_TO`, which only
+the focused stack handles and is otherwise dropped. Both screen-header and
+Android hardware Back return to the originating record when opened this way.
+Predictions remain separate from the veterinarian's diagnosis; these are
+read-only navigation links, not a new review or diagnosis workflow.
+
+A completed appointment also shows a **Consultation** card on its detail screen
+with the diagnosis, the specific disease when recorded, and the veterinarian,
+plus a **View consultation record** link into
+`/(owner)/records/consultations/{id}`. The card appears only once the appointment
+is `COMPLETED`, so a consultation the veterinarian is still writing is never
+surfaced.
+
 ---
 
 ## Payments (Receipts)
@@ -285,12 +310,16 @@ card:
 
 ## View Medical History
 
-Owners may view their pets' medical history, including:
+Owners may view their pets' medical history from the **Records** tab, which has
+four sections: **Consults**, **Meds**, **Vaccines**, and **Scans**.
 
 - Consultation records (read-only)
 - Prescription records (read-only)
 - Vaccination records
-- AI screening history
+- AI screening history (**Scans**), listing every scan with its prediction,
+  confidence, date, and a status pill — **Booked** while an appointment is still
+  open, **Consulted** once that visit is completed with a consultation; tapping a
+  scan opens its details
 
 Owners cannot edit consultation or prescription records.
 
@@ -300,7 +329,7 @@ Prescription details include a **Save / Share PDF** action. The PDF is generated
 
 Prescription details also include a **View as Image** action. It renders the prescription document on-device, captures it as a PNG with `react-native-view-shot`, and opens a full-screen preview. The preview offers **Download Image**, which requests photo-library access and saves the PNG with `expo-media-library`. The image is generated and stored only on the device; no prescription image is uploaded to the server.
 
-Owner records and appointments refresh when the screen gains focus, when the app returns to the foreground from the background, and when the owner pulls to refresh. These refreshes invalidate the owner consultation, prescription, vaccination, and appointment queries so newly created records appear without signing out or clearing the app cache.
+Owner records and appointments refresh when the screen gains focus, when the app returns to the foreground from the background, and when the owner pulls to refresh. These refreshes invalidate the owner consultation, prescription, vaccination, screening, and appointment queries so newly created records appear without signing out or clearing the app cache.
 
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 

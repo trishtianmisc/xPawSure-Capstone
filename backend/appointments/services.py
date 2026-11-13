@@ -1671,7 +1671,7 @@ class ReceptionistPetService:
             apt_id__cln_id_id=clinic_id,
             apt_id__apt_deleted_at__isnull=True,
         ).select_related(
-            'stf_id__usr_id', 'apt_id',
+            'stf_id__usr_id', 'apt_id', 'apt_id__apt_screening',
         ).order_by('-con_created_at')
 
         prescriptions = Prescription.objects.filter(
