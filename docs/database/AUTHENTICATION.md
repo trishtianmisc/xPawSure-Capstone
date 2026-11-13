@@ -205,6 +205,7 @@ They interact with clinics through appointments.
 | USR_ID | UUID | FK → USER |
 | OWN_ADDRESS | TEXT | NULL |
 | OWN_PROFILE_IMAGE | TEXT | NULL |
+| OWN_PUBLIC_PHONE_CONSENT | BOOLEAN | NOT NULL, DEFAULT FALSE |
 | OWN_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | OWN_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 
@@ -225,6 +226,8 @@ Owners cannot modify prescriptions.
 Owners cannot modify veterinarian-issued vaccination records.
 
 Owners may add, edit, and delete their own reported vaccination records.
+
+Owners may choose whether their phone number appears on public pet QR profiles. Consent defaults off and resets when the phone number changes.
 
 ---
 

@@ -190,8 +190,12 @@ The database is divided into the following modules.
 - Consultations are created only after an Appointment.
 - AI Screening is a preliminary assessment only.
 - Veterinarian-issued medical records are immutable.
-- Only Veterinarians may create Consultations, Prescriptions, and veterinarian-issued Vaccination Records.
-- Owners may view medical records and may add, edit, and delete their own reported vaccination records.
+- Only Veterinarians may create Consultations and Prescriptions.
+- Only owners using the mobile application may create new vaccination records;
+  owners may edit or delete only their own reported records. Existing
+  veterinarian-issued records remain read-only to owners.
+- Owner phone numbers appear on public pet QR profiles only with explicit
+  owner-profile consent; consent defaults off and resets when the number changes.
 - When the clinic charges a consultation fee, an Appointment may only be created from a PAID Payment, and one Payment funds exactly one Appointment.
 - Super Admin has cross-clinic access.
 

@@ -226,6 +226,7 @@ Owners may:
 - View prescription history (read-only)
 - View vaccination history
 - Add, edit, and delete their own self-reported vaccination records
+- Choose whether their phone number appears on public pet QR profiles
 - View AI screening history
 - Pay the clinic's consultation fee and then book an appointment
 
@@ -267,10 +268,14 @@ Scanning the QR code shows the pet's public profile without login.
 The public profile may only expose:
 
 - Pet identity: photo, name, breed, sex, birth date/age, color
-- Health alerts: vaccination status (`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE`)
+- Health alerts: vaccination status only (`OVERDUE`, `DUE_SOON`, `CURRENT`,
+  `NO_DUE_DATE`); do not expose vaccine names or administration/due dates
+- Owner contact number only when the owner has explicitly opted in; otherwise
+  return no number
 
-The public profile must never expose owner personal data (name, phone, email,
-address), microchip number, weight, or internal medical records.
+The public profile must never expose owner name, email, address, microchip
+number, weight, or internal medical records. Phone-sharing consent defaults to
+off, can be revoked by the owner, and is reset when their phone number changes.
 
 ---
 
@@ -510,8 +515,10 @@ Every vaccination records
 
 Sources
 
-- Veterinarian-issued records are created by clinic staff during a Consultation and are immutable.
-- Owner-reported records are created by the pet owner from the mobile app (for vaccines given elsewhere).
+- Owners create vaccination records only through the mobile app; records are
+  owner-reported and may be unverified.
+- The vaccination feature has no clinic-staff create flow. Existing
+  veterinarian-issued records, if present, remain read-only to owners.
 - Owners may add, edit, and delete only their own reported records.
 
 Validation

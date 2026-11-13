@@ -6,6 +6,7 @@ export const profileSchema = z.object({
   phone: z.string().max(30, 'Phone must be 30 characters or less').optional(),
   address: z.string().max(500, 'Address must be 500 characters or less').optional(),
   profile_picture: z.string().optional(),
+  public_phone_consent: z.boolean(),
 })
 
 export type ProfileFormValues = z.infer<typeof profileSchema>

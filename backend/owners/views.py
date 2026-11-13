@@ -47,7 +47,10 @@ class OwnerProfileView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = OwnerProfileUpdateSerializer(data=request.data)
+        serializer = OwnerProfileUpdateSerializer(
+            data=request.data,
+            context={'profile': profile},
+        )
         serializer.is_valid(raise_exception=True)
 
         profile = OwnerProfileService.update_profile(

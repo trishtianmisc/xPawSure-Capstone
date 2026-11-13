@@ -1,5 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
@@ -128,11 +128,28 @@ class ProfileSerializer(serializers.Serializer):
         except ObjectDoesNotExist:
             return None
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         instance.usr_first_name = validated_data.get('first_name', instance.usr_first_name)
         instance.usr_last_name = validated_data.get('last_name', instance.usr_last_name)
-        instance.usr_phone = validated_data.get('phone', instance.usr_phone)
+        new_phone = validated_data.get('phone', instance.usr_phone)
+        phone_changed = new_phone != instance.usr_phone
+        instance.usr_phone = new_phone
         instance.save(update_fields=['usr_first_name', 'usr_last_name', 'usr_phone', 'usr_updated_at'])
+        if phone_changed and instance.usr_role == UserRole.OWNER:
+            from owners.services import OwnerProfileService
+
+            try:
+                owner_profile = instance.owner_profile
+            except ObjectDoesNotExist:
+                owner_profile = None
+            if owner_profile is not None:
+                OwnerProfileService.revoke_public_phone_consent(
+                    owner_profile,
+                    user_id=str(instance.usr_id),
+                    ip_address=self.context.get('request').META.get('REMOTE_ADDR', '')
+                    if self.context.get('request') else '',
+                )
         return instance
 
     def to_representation(self, instance):
