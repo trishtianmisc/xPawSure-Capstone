@@ -6,8 +6,17 @@ import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAp
 import { usePaymentsByAppointment } from '../../payments/hooks/usePayments'
 import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import { DetailLoadError } from '../components/DetailLoadError'
 import { FollowUpReviewCard } from '../components/FollowUpReviewCard'
-import { formatDateLong, formatDateTime, formatPhone, formatTime } from '../../../utils/format'
+import { VetRequestCard } from '../components/VetRequestCard'
+import {
+  CLINIC_TIME_ZONE,
+  formatDateLong,
+  formatDateTime,
+  formatPhone,
+  formatTime,
+  isFutureClinicDay,
+} from '../../../utils/format'
 
 function labelize(value: string): string {
   const lower = value.replace(/_/g, ' ').toLowerCase()
@@ -50,7 +59,7 @@ const GRACE_PERIOD_MINUTES = 60
 export function AppointmentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: appointment, isLoading, error } = useAppointmentDetail(id ?? '')
+  const { data: appointment, isLoading, error, refetch, isFetching } = useAppointmentDetail(id ?? '')
   const { data: payments, isLoading: paymentsLoading } = usePaymentsByAppointment(id ?? '')
   const payment = payments?.results?.[0]
   const updateStatus = useUpdateAppointmentStatus()
@@ -73,9 +82,13 @@ export function AppointmentDetailPage() {
 
   if (error || !appointment) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center p-6">
-        <p className="text-sm text-stone-500">Appointment not found</p>
-      </div>
+      <DetailLoadError
+        entity="Appointment"
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        onBack={() => navigate(-1)}
+      />
     )
   }
 
@@ -109,6 +122,9 @@ export function AppointmentDetailPage() {
   const isPast = scheduledMs < nowMs
   const pastBeyondGrace =
     isPast && nowMs - scheduledMs > GRACE_PERIOD_MINUTES * 60_000
+  // Backend enforces this; the button only pre-gates until the appointment's
+  // clinic-local date arrives.
+  const checkInTooEarly = isFutureClinicDay(appointment.apt_scheduled_at, nowMs)
 
   const canConfirm = appointment.apt_status === 'PENDING' && !isPast
   const canCheckIn =
@@ -198,7 +214,9 @@ export function AppointmentDetailPage() {
         )}
       </div>
 
-      
+      {appointment.vet_request && (
+        <VetRequestCard appointment={appointment} />
+      )}
 
       <FollowUpReviewCard appointment={appointment} />
 
@@ -332,7 +350,15 @@ export function AppointmentDetailPage() {
         {canCheckIn && (
           <button
             onClick={() => handleStatusChange('CHECKED_IN')}
-            disabled={updateStatus.isPending}
+            disabled={updateStatus.isPending || checkInTooEarly}
+            title={
+              checkInTooEarly
+                ? `Check-in opens on ${formatDateLong(
+                    appointment.apt_scheduled_at,
+                    CLINIC_TIME_ZONE,
+                  )}`
+                : undefined
+            }
             className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"
           >
             Check In

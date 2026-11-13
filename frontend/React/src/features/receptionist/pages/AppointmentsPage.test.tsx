@@ -5,11 +5,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppointments } from '../hooks/useAppointments'
 import { AppointmentsPage } from './AppointmentsPage'
 
-vi.mock('../hooks/useAppointments', () => ({ useAppointments: vi.fn() }))
+vi.mock('../hooks/useAppointments', () => ({
+  useAppointments: vi.fn(),
+  useUpdateAppointmentStatus: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+}))
+vi.mock('../hooks/useAvailableSlots', () => ({
+  useVetScheduleList: vi.fn(() => ({
+    data: { vets: [{ stf_id: 'stf-1', full_name: 'Vera Vet' }] },
+    isLoading: false,
+    error: null,
+  })),
+}))
 
-function renderPage() {
+function renderPage(initialEntries: string[] = ['/']) {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <AppointmentsPage />
     </MemoryRouter>,
   )
@@ -85,5 +98,63 @@ describe('AppointmentsPage date & time sorting', () => {
         '-apt_scheduled_at',
       )
     })
+  })
+})
+
+describe('AppointmentsPage vet requests', () => {
+  beforeEach(() => {
+    vi.mocked(useAppointments).mockReturnValue({
+      data: {
+        total: 1,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        results: [appointmentRow],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useAppointments>)
+  })
+
+  it('shows a Vet request badge only on rows with an open request', () => {
+    vi.mocked(useAppointments).mockReturnValue({
+      data: {
+        total: 1,
+        page: 1,
+        page_size: 20,
+        total_pages: 1,
+        results: [{ ...appointmentRow, has_open_request: true }],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useAppointments>)
+
+    renderPage()
+
+    expect(screen.getByText('Vet request')).toBeInTheDocument()
+  })
+
+  it('omits the badge when the row has no open request', () => {
+    renderPage()
+
+    expect(screen.queryByText('Vet request')).toBeNull()
+  })
+
+  it('sends has_request=1 and shows the chip with ?requests=1', () => {
+    renderPage(['/receptionist/appointments?requests=1'])
+
+    expect(vi.mocked(useAppointments).mock.lastCall?.[0]?.has_request).toBe('1')
+    expect(screen.getByRole('button', { name: /Vet requests/ })).toBeInTheDocument()
+  })
+
+  it('does not send has_request by default', () => {
+    renderPage()
+
+    expect(vi.mocked(useAppointments).mock.lastCall?.[0]?.has_request).toBeUndefined()
+    expect(screen.queryByRole('button', { name: /Vet requests/ })).toBeNull()
   })
 })

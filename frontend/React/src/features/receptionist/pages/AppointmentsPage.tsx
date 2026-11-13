@@ -4,8 +4,10 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { useAppointments } from '../hooks/useAppointments'
+import { useVetScheduleList } from '../hooks/useAvailableSlots'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { PageHero } from '../components/PageHero'
+import { QuickStatusAction } from '../components/QuickStatusAction'
 import { formatDateTime } from '../../../utils/format'
 import { apiErrorMessage } from '../../../utils/error'
 
@@ -56,27 +58,51 @@ export function AppointmentsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const attentionActive = searchParams.get('attention') === '1'
+  const requestsActive = searchParams.get('requests') === '1'
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState(
     () => searchParams.get('status') ?? '',
   )
-  const [dateFilter, setDateFilter] = useState('')
+  const [dateFrom, setDateFrom] = useState(
+    () => searchParams.get('date_from') ?? '',
+  )
+  const [dateTo, setDateTo] = useState(
+    () => searchParams.get('date_to') ?? '',
+  )
+  const [vetFilter, setVetFilter] = useState(
+    () => searchParams.get('vet_id') ?? '',
+  )
   const [page, setPage] = useState(1)
   const [sort, setSort] = useState('-apt_scheduled_at')
 
   const debouncedSearch = useDebounce(search, 300)
+  const { data: vetListData } = useVetScheduleList()
+  const vets = vetListData?.vets ?? []
 
   const params = useMemo(
     () => ({
       search: debouncedSearch || undefined,
       status: statusFilter || undefined,
-      date: dateFilter || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      vet_id: vetFilter || undefined,
       overdue: attentionActive ? '1' : undefined,
+      has_request: requestsActive ? '1' : undefined,
       sort,
       page,
       page_size: 20,
     }),
-    [debouncedSearch, statusFilter, dateFilter, attentionActive, sort, page],
+    [
+      debouncedSearch,
+      statusFilter,
+      dateFrom,
+      dateTo,
+      vetFilter,
+      attentionActive,
+      requestsActive,
+      sort,
+      page,
+    ],
   )
 
   const toggleDateTimeSort = () => {
@@ -86,7 +112,20 @@ export function AppointmentsPage() {
 
   const { data, isLoading, error, refetch, isFetching } = useAppointments(params)
 
-  const hasActiveFilters = Boolean(search || dateFilter || statusFilter || attentionActive)
+  const hasActiveFilters = Boolean(
+    search || dateFrom || dateTo || statusFilter || vetFilter ||
+    attentionActive || requestsActive,
+  )
+
+  const clearFilters = () => {
+    setSearch('')
+    setDateFrom('')
+    setDateTo('')
+    setStatusFilter('')
+    setVetFilter('')
+    setSearchParams({}, { replace: true })
+    setPage(1)
+  }
 
   return (
     <div className="p-6">
@@ -96,15 +135,6 @@ export function AppointmentsPage() {
           <PageHero
             title="Appointments"
             subtitle="Schedule, confirm, and track patient visits."
-            // actions={
-            //   <button
-            //     className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
-            //     onClick={() => navigate('/receptionist/appointments/new')}
-            //     type="button"
-            //   >
-            //     + New Appointment
-            //   </button>
-            // }
           />
         </div>
 
@@ -132,11 +162,18 @@ export function AppointmentsPage() {
             </div>
 
             <input
-              className={`${INPUT_CLASSES} w-44 shrink-0`}
+              className={`${INPUT_CLASSES} w-40 shrink-0`}
               type="date"
-              value={dateFilter}
-              onChange={(e) => { setDateFilter(e.target.value); setPage(1) }}
-              aria-label="Filter by date"
+              value={dateFrom}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+              aria-label="Filter from date"
+            />
+            <input
+              className={`${INPUT_CLASSES} w-40 shrink-0`}
+              type="date"
+              value={dateTo}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+              aria-label="Filter to date"
             />
 
             <select
@@ -150,6 +187,30 @@ export function AppointmentsPage() {
               ))}
             </select>
 
+            <select
+              className={`${INPUT_CLASSES} shrink-0`}
+              value={vetFilter}
+              onChange={(e) => { setVetFilter(e.target.value); setPage(1) }}
+              aria-label="Filter by veterinarian"
+            >
+              <option value="">All veterinarians</option>
+              {vets.map((vet) => (
+                <option key={vet.stf_id} value={vet.stf_id}>
+                  {vet.full_name}
+                </option>
+              ))}
+            </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-stone-300 px-3 py-2.5 text-sm font-medium text-stone-600 transition hover:bg-stone-100 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+              >
+                Clear
+              </button>
+            )}
+
             {attentionActive && (
               <button
                 type="button"
@@ -157,6 +218,17 @@ export function AppointmentsPage() {
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 dark:border-orange-700 dark:bg-orange-900/30 dark:text-orange-300"
               >
                 Needs attention
+                <span aria-hidden="true" className="text-sm leading-none">&times;</span>
+              </button>
+            )}
+
+            {requestsActive && (
+              <button
+                type="button"
+                onClick={() => { setSearchParams({}, { replace: true }); setPage(1) }}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 transition hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+              >
+                Vet requests
                 <span aria-hidden="true" className="text-sm leading-none">&times;</span>
               </button>
             )}
@@ -233,15 +305,23 @@ export function AppointmentsPage() {
                         {labelize(apt.apt_type)}
                       </td>
                       <td className="px-5 py-4">
-                        <AppointmentStatusBadge status={apt.apt_status} />
+                        <div className="flex flex-col items-start gap-1.5">
+                          <AppointmentStatusBadge status={apt.apt_status} />
+                          {apt.has_open_request && (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                              Vet request
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          {/* <QuickStatusAction
+                          <QuickStatusAction
                             aptId={apt.apt_id}
                             status={apt.apt_status}
-                            updateStatus={updateStatus}
-                          /> */}
+                            scheduledAt={apt.apt_scheduled_at}
+                            allowCheckIn={false}
+                          />
                           <Link
                             to={`/receptionist/appointments/${apt.apt_id}`}
                             className="rounded-lg px-3 py-1.5 text-sm font-medium text-amber-700 transition hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-900/20"

@@ -1,11 +1,12 @@
 import { useParams, useNavigate, Link } from 'react-router-dom'
 
+import { DetailLoadError } from '../components/DetailLoadError'
 import { useOwnerDetail } from '../hooks/useOwners'
 
 export function OwnerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { data: owner, isLoading, error } = useOwnerDetail(id ?? '')
+  const { data: owner, isLoading, error, refetch, isFetching } = useOwnerDetail(id ?? '')
 
   if (isLoading) {
     return (
@@ -18,9 +19,13 @@ export function OwnerDetailPage() {
 
   if (error || !owner) {
     return (
-      <div className="flex min-h-[400px] items-center justify-center p-6">
-        <p className="text-sm text-stone-500">Owner not found</p>
-      </div>
+      <DetailLoadError
+        entity="Owner"
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        onBack={() => navigate(-1)}
+      />
     )
   }
 

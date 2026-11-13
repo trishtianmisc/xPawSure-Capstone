@@ -6,21 +6,25 @@ import {
   markAllNotificationsRead,
 } from '../services/notification.service'
 
-export function useNotifications(params: {
-  unread_only?: boolean
-  page?: number
-  page_size?: number
-}) {
+export function useNotifications(
+  params: {
+    unread_only?: boolean
+    page?: number
+    page_size?: number
+  },
+  options?: { enabled?: boolean },
+) {
   return useQuery({
-    queryKey: ['receptionist', 'notifications', params],
+    queryKey: ['notifications', 'list', params],
     queryFn: () => listNotifications(params),
     staleTime: 15_000,
+    enabled: options?.enabled ?? true,
   })
 }
 
 export function useUnreadCount() {
   return useQuery({
-    queryKey: ['receptionist', 'notifications', 'unread-count'],
+    queryKey: ['notifications', 'unread-count'],
     queryFn: getUnreadCount,
     staleTime: 15_000,
   })
@@ -31,7 +35,7 @@ export function useMarkNotificationRead() {
   return useMutation({
     mutationFn: markNotificationRead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receptionist', 'notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }
@@ -41,7 +45,7 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: markAllNotificationsRead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receptionist', 'notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })
 }

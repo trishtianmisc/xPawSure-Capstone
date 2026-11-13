@@ -15,7 +15,7 @@ export function VetScheduleListPage() {
         <div className="mb-8">
           <PageHero
             title="Vet Schedule"
-            subtitle="Select a veterinarian to view their schedule."
+            subtitle="Select a veterinarian to view today's availability and schedule."
           />
         </div>
 
@@ -60,7 +60,7 @@ export function VetScheduleListPage() {
             </svg>
             <h3 className="mt-4 text-lg font-semibold text-stone-600 dark:text-stone-400">No veterinarians found</h3>
             <p className="mt-1 text-sm text-stone-400 dark:text-stone-500">
-              Add veterinarians to your clinic to manage their schedules.
+              There are no veterinarians at this clinic yet.
             </p>
           </div>
         ) : (

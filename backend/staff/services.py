@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from audit_log.models import AuditAction
 from audit_log.services import AuditService
+from notifications.services import NotificationService
 from staff.tasks import send_staff_welcome_email
 from clinics.models import Clinic
 from users.models import StaffPosition, StaffProfile, User, UserRole
@@ -125,6 +126,8 @@ class StaffService:
             login_url=login_url,
             clinic_name=clinic.cln_name,
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=user.usr_id,
         ))
 
         return {
@@ -202,6 +205,17 @@ class StaffService:
             new_values={'is_active': False},
             ip_address=ip_address,
         )
+        NotificationService.notify_clinic_admins(
+            staff.cln_id_id,
+            title='Staff Account Deactivated',
+            message=(
+                f'The account for {user.usr_first_name} '
+                f'{user.usr_last_name} was deactivated.'
+            ),
+            ref_table='STAFF',
+            ref_id=user.usr_id,
+            exclude_user_id=user_id,
+        )
 
     @staticmethod
     def activate_staff(staff: StaffProfile, user_id: str | None = None, ip_address: str | None = None) -> None:
@@ -217,6 +231,17 @@ class StaffService:
             description=f'Staff member activated: {user.usr_email}',
             new_values={'is_active': True},
             ip_address=ip_address,
+        )
+        NotificationService.notify_clinic_admins(
+            staff.cln_id_id,
+            title='Staff Account Activated',
+            message=(
+                f'The account for {user.usr_first_name} '
+                f'{user.usr_last_name} was activated.'
+            ),
+            ref_table='STAFF',
+            ref_id=user.usr_id,
+            exclude_user_id=user_id,
         )
 
     @staticmethod
@@ -248,6 +273,8 @@ class StaffService:
             login_url=login_url,
             clinic_name=clinic.cln_name,
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=user.usr_id,
         ))
 
     @staticmethod
@@ -279,6 +306,8 @@ class StaffService:
             login_url=login_url,
             clinic_name=clinic.cln_name,
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=user.usr_id,
         ))
         return {'temp_password': temp_password}
 

@@ -39,3 +39,14 @@ export function apiErrorCode(error: unknown): string | undefined {
   const code = (data as Record<string, unknown>).code
   return typeof code === 'string' ? code : undefined
 }
+
+/**
+ * True when the server answered 404 — the record genuinely does not exist.
+ * Distinguishes "not found" from transient failures so callers can offer a
+ * retry instead of a dead end.
+ */
+export function isNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const response = (error as Error & { response?: { status?: number } }).response
+  return response?.status === 404
+}

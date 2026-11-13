@@ -41,6 +41,21 @@ export interface Vet {
   email: string
 }
 
+export type VetRequestType = 'RESCHEDULE' | 'CANCEL'
+export type VetRequestStatus = 'OPEN' | 'RESOLVED' | 'DECLINED'
+
+/** Vet-initiated request payload; receptionist/vet responses only. */
+export interface VetRequest {
+  type: VetRequestType
+  status: VetRequestStatus
+  reason: string | null
+  requested_by: string | null
+  requested_at: string | null
+  decline_note: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+}
+
 export interface Appointment {
   apt_id: string
   pet_id: string
@@ -60,6 +75,8 @@ export interface Appointment {
   apt_completed_at: string | null
   apt_cancelled_at: string | null
   apt_created_at: string
+  has_open_request?: boolean
+  vet_request?: VetRequest | null
 }
 
 export interface AppointmentDetail extends Appointment {
@@ -223,24 +240,15 @@ export interface UpdatePetPayload {
   pet_microchip_no?: string | null
 }
 
-export interface Notification {
-  ntf_id: string
-  ntf_title: string
-  ntf_message: string
-  ntf_type: string
-  ntf_is_read: boolean
-  ntf_reference_table: string | null
-  ntf_reference_id: string | null
-  ntf_created_at: string
-  ntf_read_at: string | null
-}
-
-export interface NotificationListResponse {
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
-  results: Notification[]
+/** Dashboard group row; receptionist-only (never sent to clinic admins). */
+export interface VetRequestSummary {
+  apt_id: string
+  pet_name: string
+  owner_name: string | null
+  apt_scheduled_at: string
+  request_type: VetRequestType
+  reason: string
+  requested_at: string | null
 }
 
 export interface DashboardStats {
@@ -253,11 +261,17 @@ export interface DashboardStats {
     no_show: number
     total: number
   }
+  upcoming: {
+    pending: number
+    confirmed: number
+  }
   total_owners: number
   total_pets: number
   recent_appointments: Appointment[]
+  unpaid_completions: Appointment[]
   needs_attention: number
   review_pending: number
+  vet_requests?: VetRequestSummary[]
 }
 
 export type SlotStatus = 'AVAILABLE' | 'BOOKED' | 'BLOCKED'
@@ -275,6 +289,7 @@ export interface ScheduleSlot {
   vsl_start_time: string
   vsl_end_time: string
   status: SlotStatus
+  is_past: boolean
   appointment: ScheduleAppointment | null
 }
 
@@ -305,6 +320,8 @@ export interface GenerateSlotsPayload {
 export interface GenerateSlotsResponse {
   generated: boolean
   slots_created: number
+  already_existed: number
+  skipped_dates: { date: string; reason: string }[]
 }
 
 export interface VetTodaySummary {
@@ -338,4 +355,5 @@ export interface UpdateSlotStatusResponse {
 export interface BlockRemainingResponse {
   blocked: number
   skipped_booked: number
+  skipped_passed: number
 }

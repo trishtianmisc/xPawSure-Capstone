@@ -1,5 +1,5 @@
 import http from '../../../services/http'
-import type { NotificationListResponse } from '../types/receptionist.types'
+import type { NotificationListResponse } from '../types/notification.types'
 
 export async function listNotifications(params: {
   unread_only?: boolean

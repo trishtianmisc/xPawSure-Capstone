@@ -72,6 +72,8 @@ class VeterinarianService:
             temp_password=temp_password,
             login_url=f'{settings.FRONTEND_URL}/login',
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=user.usr_id,
         ))
 
         staff._temp_password = temp_password

@@ -1,75 +1,97 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../../auth/context/AuthContext'
 import { useDashboardStats } from '../hooks/useDashboardStats'
-import { useUpcomingAppointments } from '../hooks/useUpcomingAppointments'
-import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
-import { formatDate, formatDateTime, formatTime } from '../../../utils/format'
+import { AppointmentsCard } from '../components/AppointmentsCard'
+import { CheckInModal } from '../components/CheckInModal'
+import { NeedsAttentionPanel } from '../components/NeedsAttentionPanel'
+import { PageHero } from '../components/PageHero'
+
+type StatTone = 'amber' | 'sky' | 'emerald' | 'violet'
+
+const TONE_CLASSES: Record<StatTone, string> = {
+  amber:
+    'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400',
+  sky: 'bg-sky-50 text-sky-700 dark:bg-sky-900/20 dark:text-sky-400',
+  emerald:
+    'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400',
+  violet:
+    'bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400',
+}
 
 function StatCard({
+  scope,
   label,
   value,
   icon,
+  tone,
   subValue,
 }: {
+  scope: 'Today' | 'Upcoming'
   label: string
   value: number | string
   icon: string
+  tone: StatTone
   subValue?: string
 }) {
   return (
     <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
-      <div className="flex items-center gap-4">
-        <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-amber-50 dark:bg-amber-900/20">
-          <svg className="size-6 text-amber-700 dark:text-amber-400" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-          </svg>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-stone-500 dark:text-stone-400">{label}</p>
-          <p className="text-2xl font-bold text-stone-900 dark:text-stone-100">{value}</p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span
+            data-scope={scope}
+            className="inline-block rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:bg-stone-800 dark:text-stone-400"
+          >
+            {scope}
+          </span>
+          <p className="mt-2.5 text-sm font-medium text-stone-500 dark:text-stone-400">
+            {label}
+          </p>
+          <p className="mt-1 text-3xl font-bold leading-none text-stone-900 dark:text-stone-100">
+            {value}
+          </p>
           {subValue && (
-            <p className="text-xs font-medium text-stone-400 dark:text-stone-500">{subValue}</p>
+            <p className="mt-2 text-xs font-medium text-stone-400 dark:text-stone-500">
+              {subValue}
+            </p>
           )}
+        </div>
+        <div
+          className={`grid size-10 shrink-0 place-items-center rounded-lg ${TONE_CLASSES[tone]}`}
+        >
+          <svg
+            className="size-5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.75}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d={icon}
+            />
+          </svg>
         </div>
       </div>
     </div>
   )
 }
 
-function ListSkeleton() {
-  return (
-    <>
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="px-5 py-3">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
-          <div className="mt-2 h-3 w-1/3 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
-        </div>
-      ))}
-    </>
-  )
-}
-
 export function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { data: stats, isLoading, error } = useDashboardStats()
-  const {
-    upcoming,
-    nextUp,
-    isLoading: appointmentsLoading,
-    error: appointmentsError,
-    refetch: refetchAppointments,
-  } = useUpcomingAppointments()
+  const { data: stats, isLoading, error, refetch: refetchStats } = useDashboardStats()
+  const [checkInOpen, setCheckInOpen] = useState(false)
 
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="mb-6 h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-        <div className="mb-8 h-24 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+        <div className="mb-8 h-28 animate-pulse rounded-md bg-stone-200 dark:bg-stone-800" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+            <div key={i} className="h-32 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
           ))}
         </div>
       </div>
@@ -82,7 +104,7 @@ export function DashboardPage() {
         <div className="text-center">
           <p className="text-sm text-stone-500 dark:text-stone-400">Failed to load dashboard</p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => refetchStats()}
             className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
           >
             Retry
@@ -94,78 +116,52 @@ export function DashboardPage() {
 
   return (
     <div className="p-6">
-      <h1 className="mb-6 text-2xl font-bold text-stone-900 dark:text-stone-100">
-        Welcome back, {user?.first_name}
-      </h1>
-
-      {/* Up Next */}
-      <div className="mb-8 rounded-xl border border-amber-300 bg-amber-50 p-5 shadow-sm dark:border-amber-800 dark:bg-amber-900/20">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-              Up Next
-            </p>
-            {appointmentsLoading ? (
-              <div className="mt-2 h-5 w-64 max-w-full animate-pulse rounded bg-amber-200 dark:bg-amber-800/40" />
-            ) : appointmentsError ? (
-              <p className="mt-1 text-sm font-medium text-stone-600 dark:text-stone-300">
-                Unable to load today&apos;s schedule
-              </p>
-            ) : nextUp ? (
-              <>
-                <p className="mt-1 truncate text-lg font-bold text-stone-900 dark:text-stone-100">
-                  {nextUp.pet_name} — {nextUp.owner_name ?? 'Unknown owner'}
-                </p>
-                <p className="text-sm text-stone-600 dark:text-stone-300">
-                  {nextUp.vet_name ?? 'Unassigned'} ·{' '}
-                  {formatTime(nextUp.apt_scheduled_at) || formatDate(nextUp.apt_scheduled_at)}
-                </p>
-              </>
-            ) : (
-              <p className="mt-1 text-sm font-medium text-stone-600 dark:text-stone-300">
-                No more appointments today
-              </p>
-            )}
-          </div>
-          <div className="grid size-12 shrink-0 place-items-center rounded-xl bg-amber-100 dark:bg-amber-900/30">
-            <svg
-              className="size-6 text-amber-700 dark:text-amber-400"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              viewBox="0 0 24 24"
+      <div className="mb-8">
+        <PageHero
+          title={`Welcome back, ${user?.first_name}`}
+          subtitle="Here's what needs your attention today."
+          actions={
+            <button
+              type="button"
+              onClick={() => setCheckInOpen(true)}
+              className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-600"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-        </div>
+              Check in patient
+            </button>
+          }
+        />
       </div>
 
-      {/* Today's Stats */}
+      {/* Key stats — scope chip on each card says whether the count is
+          today-only or spans upcoming days */}
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Today's Appointments"
+          scope="Today"
+          label="Appointments"
           value={stats?.today.total ?? 0}
+          tone="amber"
           icon="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
         />
         <StatCard
-          label="Pending"
-          value={stats?.today.pending ?? 0}
-          subValue={`${stats?.today.confirmed ?? 0} Confirmed`}
+          scope="Upcoming"
+          label="To confirm"
+          value={stats?.upcoming.pending ?? 0}
+          subValue={`${stats?.upcoming.confirmed ?? 0} confirmed`}
+          tone="sky"
           icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
         />
         <StatCard
-          label="Checked In"
+          scope="Today"
+          label="Checked in"
           value={stats?.today.checked_in ?? 0}
+          tone="emerald"
           icon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
         />
         <StatCard
+          scope="Today"
           label="Completed"
           value={stats?.today.completed ?? 0}
+          tone="violet"
           icon="M5 13l4 4L19 7"
         />
       </div>
@@ -179,7 +175,7 @@ export function DashboardPage() {
         >
           <span className="flex min-w-0 items-center gap-3">
             <svg
-              className="size-5 shrink-0 text-amber-600 dark:text-amber-400"
+              className="size-5 text-amber-600 dark:text-amber-400"
               fill="none"
               stroke="currentColor"
               strokeWidth={1.75}
@@ -204,102 +200,13 @@ export function DashboardPage() {
         </button>
       )}
 
-      {/* Needs attention */}
-      {(stats?.needs_attention ?? 0) > 0 && (
-        <button
-          type="button"
-          onClick={() => navigate('/receptionist/appointments?attention=1')}
-          className="mb-8 flex w-full items-center justify-between gap-4 rounded-xl border border-orange-300 bg-orange-50 px-5 py-3.5 text-left transition hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-900/20 dark:hover:bg-orange-900/30"
-        >
-          <span className="flex min-w-0 items-center gap-3">
-            <svg
-              className="size-5 shrink-0 text-orange-600 dark:text-orange-400"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-2.13-3.374-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-              />
-            </svg>
-            <span className="min-w-0 truncate text-sm font-semibold text-orange-800 dark:text-orange-300">
-              {stats?.needs_attention ?? 0} past-due appointment
-              {(stats?.needs_attention ?? 0) === 1 ? '' : 's'} need
-              {(stats?.needs_attention ?? 0) === 1 ? 's' : ''} attention
-            </span>
-          </span>
-          <span className="shrink-0 text-sm font-bold text-orange-700 dark:text-orange-400">
-            Review →
-          </span>
-        </button>
-      )}
+      {/* Action list: pending confirmations and past-due rows */}
+      <NeedsAttentionPanel />
 
-      {/* Totals */}
-      {/* <div className="mb-8 grid gap-4 sm:grid-cols-2">
-        <StatCard
-          label="Total Owners"
-          value={stats?.total_owners ?? 0}
-          icon="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-        />
-        <StatCard
-          label="Total Pets"
-          value={stats?.total_pets ?? 0}
-          icon="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
-        />
-      </div> */}
+      {/* Today's queue and future appointments in one tabbed card */}
+      <AppointmentsCard />
 
-      {/* Upcoming Appointments */}
-      <div className="rounded-xl border border-stone-200 bg-white shadow-sm dark:border-stone-800 dark:bg-stone-900">
-        <div className="border-b border-stone-200 px-5 py-4 dark:border-stone-800">
-          <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">Upcoming Appointments</h2>
-        </div>
-        <div className="divide-y divide-stone-100 dark:divide-stone-800">
-          {appointmentsLoading ? (
-            <ListSkeleton />
-          ) : appointmentsError ? (
-            <div className="px-5 py-8 text-center">
-              <p className="text-sm text-stone-500 dark:text-stone-400">Failed to load appointments</p>
-              <button
-                onClick={() => refetchAppointments()}
-                className="mt-3 rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
-              >
-                Retry
-              </button>
-            </div>
-          ) : upcoming.length > 0 ? (
-            upcoming.map((apt) => (
-              <div
-                key={apt.apt_id}
-                onClick={() => navigate(`/receptionist/appointments/${apt.apt_id}`)}
-                className="flex cursor-pointer items-center justify-between px-5 py-3 hover:bg-stone-50 dark:hover:bg-stone-800/50"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-stone-900 dark:text-stone-100">
-                    {apt.pet_name} — {apt.owner_name ?? 'Unknown'}
-                  </p>
-                  <p className="text-xs text-stone-500 dark:text-stone-400">
-                    {apt.vet_name ?? 'Unassigned'} · {formatDateTime(apt.apt_scheduled_at)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <AppointmentStatusBadge status={apt.apt_status} />
-                  <span className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
-                    View
-                  </span>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="px-5 py-8 text-center text-sm text-stone-500 dark:text-stone-400">
-              No upcoming appointments
-            </p>
-          )}
-        </div>
-      </div>
+      <CheckInModal open={checkInOpen} onClose={() => setCheckInOpen(false)} />
     </div>
   )
 }

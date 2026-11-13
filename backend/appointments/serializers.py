@@ -5,10 +5,57 @@ from ai_screenings.serializers import (
     ClinicAdminScreeningSummarySerializer,
     ScreeningSummarySerializer,
 )
-from appointments.models import Appointment, AppointmentType, VetSlot
+from appointments.models import (
+    Appointment,
+    AppointmentRequestStatus,
+    AppointmentRequestType,
+    AppointmentType,
+    VetSlot,
+)
 from clinics.models import Clinic
 from consultations.serializers import ConsultationResponseSerializer
 from prescriptions.serializers import PrescriptionResponseSerializer
+
+
+def _vet_request_block(obj):
+    """The vet's request payload for receptionist/vet responses only.
+
+    Never serialize this into owner or clinic-admin responses: the reason
+    text is visible only to receptionists and the requesting vet. Legacy
+    rows that carry reason text but predate the lifecycle columns
+    (apt_request_type is NULL) report no request.
+    """
+    if not obj.apt_request_type:
+        return None
+
+    requested_by = None
+    if obj.apt_requested_by and obj.apt_requested_by.usr_id:
+        u = obj.apt_requested_by.usr_id
+        requested_by = f'{u.usr_first_name} {u.usr_last_name}'
+
+    resolved_by = None
+    if obj.apt_resolved_by:
+        u = obj.apt_resolved_by
+        resolved_by = f'{u.usr_first_name} {u.usr_last_name}'
+
+    reason = obj.apt_cancellation_request_reason
+    if obj.apt_request_type == AppointmentRequestType.RESCHEDULE:
+        reason = obj.apt_reschedule_request_reason
+
+    return {
+        'type': obj.apt_request_type,
+        'status': obj.apt_request_status,
+        'reason': reason,
+        'requested_by': requested_by,
+        'requested_at': obj.apt_requested_at,
+        'decline_note': obj.apt_decline_note,
+        'resolved_by': resolved_by,
+        'resolved_at': obj.apt_resolved_at,
+    }
+
+
+def _has_open_request(obj):
+    return obj.apt_request_status == AppointmentRequestStatus.OPEN
 
 
 class OwnerClinicSerializer(serializers.ModelSerializer):
@@ -71,7 +118,6 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             'apt_reason', 'created_by_name', 'screening',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_created_at',
-            'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
         ]
 
     def get_pet_species(self, obj):
@@ -97,6 +143,29 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         return None
 
 
+class ReceptionistAppointmentListSerializer(AppointmentListSerializer):
+    """Receptionist list rows: base fields plus the vet request block.
+
+    Owners, clinic admins and vets all share AppointmentListSerializer,
+    which never carries the request reason; this subclass is the only list
+    serializer that does.
+    """
+
+    has_open_request = serializers.SerializerMethodField()
+    vet_request = serializers.SerializerMethodField()
+
+    class Meta(AppointmentListSerializer.Meta):
+        fields = AppointmentListSerializer.Meta.fields + [
+            'has_open_request', 'vet_request',
+        ]
+
+    def get_has_open_request(self, obj):
+        return _has_open_request(obj)
+
+    def get_vet_request(self, obj):
+        return _vet_request_block(obj)
+
+
 class AppointmentDetailSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_breed = serializers.SerializerMethodField()
@@ -120,6 +189,11 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     screening = ScreeningSummarySerializer(source='apt_screening', read_only=True)
     consultation = serializers.SerializerMethodField()
     prescription = serializers.SerializerMethodField()
+    # Vet request block: detail is served to receptionists and the
+    # requesting vet only. Owners use OwnerAppointmentDetailSerializer,
+    # which strips these fields together with the raw reason columns.
+    vet_request = serializers.SerializerMethodField()
+    has_open_request = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -137,6 +211,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
+            'vet_request', 'has_open_request',
         ]
 
     def get_consultation_fee(self, obj):
@@ -201,13 +276,40 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             return f'{u.usr_first_name} {u.usr_last_name}'
         return None
 
+    def get_vet_request(self, obj):
+        return _vet_request_block(obj)
+
+    def get_has_open_request(self, obj):
+        return _has_open_request(obj)
+
+
+class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):
+    """Owner-facing detail: never carries the vet's request data.
+
+    Strips the raw reason columns, the vet_request block and the
+    has_open_request flag; everything else matches the receptionist
+    detail the owner already receives today.
+    """
+
+    class Meta(AppointmentDetailSerializer.Meta):
+        fields = [
+            f for f in AppointmentDetailSerializer.Meta.fields
+            if f not in {
+                'apt_reschedule_request_reason',
+                'apt_cancellation_request_reason',
+                'vet_request',
+                'has_open_request',
+            }
+        ]
+
 
 class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
     """Read-only appointment summary for Clinic Admin oversight.
 
     Narrower than the receptionist detail: no consultation, prescription, or
     other clinical records, and no owner contact details. Adds who booked the
-    appointment (by role) and who/when the current status was set.
+    appointment (by role) and who/when the current status was set. The vet's
+    request reason is receptionist/vet-only and is never included here.
     """
 
     created_by_role = serializers.SerializerMethodField()
@@ -226,7 +328,6 @@ class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
             'status_change',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
-            'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
             'apt_created_at',
         ]
 
@@ -269,6 +370,7 @@ class ScheduleSlotSerializer(serializers.Serializer):
     vsl_start_time = serializers.CharField()
     vsl_end_time = serializers.CharField()
     status = serializers.CharField()
+    is_past = serializers.BooleanField()
     appointment = ScheduleAppointmentSerializer(allow_null=True)
 
 

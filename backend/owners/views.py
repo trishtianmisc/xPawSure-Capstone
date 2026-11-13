@@ -67,6 +67,19 @@ class OwnerListView(APIView):
 
     def get(self, request):
         search = request.query_params.get('search')
+
+        # Owners are platform-wide by default (the booking and registration
+        # pickers search every owner). `scope=clinic` limits the directory to
+        # owners with a patient record at the receptionist's own clinic.
+        clinic_id = None
+        if request.query_params.get('scope') == 'clinic':
+            clinic_id = _get_clinic_id(request)
+            if clinic_id is None:
+                return Response(
+                    {'detail': 'Staff profile not found.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         try:
             page = max(int(request.query_params.get('page', 1) or 1), 1)
         except (ValueError, TypeError):
@@ -77,6 +90,7 @@ class OwnerListView(APIView):
             page_size = 20
 
         data = OwnerService.list_owners(
+            clinic_id=clinic_id,
             search=search,
             page=page,
             page_size=page_size,

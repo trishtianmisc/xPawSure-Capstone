@@ -5,7 +5,12 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from appointments.models import AppointmentStatus, SlotStatus
+from appointments.models import (
+    AppointmentRequestStatus,
+    AppointmentStatus,
+    SlotStatus,
+    VetSlot,
+)
 from appointments.serializers import (
     AppointmentDetailSerializer,
     AppointmentListSerializer,
@@ -13,10 +18,12 @@ from appointments.serializers import (
     ConfirmFollowUpSerializer,
     CreateAppointmentSerializer,
     GenerateSlotsSerializer,
+    ReceptionistAppointmentListSerializer,
     VetSlotSerializer,
 )
 from appointments.services import (
     AppointmentService,
+    InvalidRequestError,
     InvalidTransitionError,
     SlotUnavailableError,
     VetSlotService,
@@ -150,6 +157,7 @@ class AppointmentListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         overdue = request.query_params.get('overdue') in ('1', 'true', 'True')
+        has_request = request.query_params.get('has_request') in ('1', 'true', 'True')
         apt_status = request.query_params.get('status')
         vet_id = request.query_params.get('vet_id')
         pet_id = request.query_params.get('pet_id')
@@ -193,9 +201,17 @@ class AppointmentListCreateView(APIView):
             page_size=page_size,
             overdue=overdue,
             sort=sort,
+            has_request=has_request,
         )
 
-        serializer = AppointmentListSerializer(data['results'], many=True)
+        # The vet request block (including the reason) is receptionist-only;
+        # clinic admins share the base list, which never carries it.
+        if request.user.usr_role == UserRole.CLINIC_ADMIN:
+            serializer = AppointmentListSerializer(data['results'], many=True)
+        else:
+            serializer = ReceptionistAppointmentListSerializer(
+                data['results'], many=True,
+            )
         return Response({
             'total': data['total'],
             'page': data['page'],
@@ -425,6 +441,16 @@ class AppointmentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # A receptionist cancelling while a vet request is open is acting on
+        # that request: give the cancellation a neutral, owner-safe reason
+        # (the stored text may be shown to the owner) when none was supplied.
+        if (
+            new_status == AppointmentStatus.CANCELLED
+            and not cancellation_reason
+            and appointment.apt_request_status == AppointmentRequestStatus.OPEN
+        ):
+            cancellation_reason = 'Cancelled by clinic'
+
         try:
             appointment = AppointmentService.update_status(
                 apt_id=apt_id,
@@ -442,6 +468,81 @@ class AppointmentDetailView(APIView):
                 {'detail': str(e)},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        serializer = AppointmentDetailSerializer(appointment)
+        return Response(serializer.data)
+
+
+class AppointmentRequestDeclineView(APIView):
+    """Receptionist declines a vet's open request without touching the appointment."""
+
+    permission_classes = [IsReceptionist]
+
+    def post(self, request, apt_id):
+        from users.models import StaffProfile
+
+        staff = StaffProfile.objects.filter(usr_id=request.user).first()
+        if staff is None or staff.cln_id_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = AppointmentService.decline_request(
+                apt_id=apt_id,
+                clinic_id=staff.cln_id_id,
+                user_id=request.user.usr_id,
+                note=request.data.get('note', ''),
+            )
+        except InvalidRequestError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = AppointmentDetailSerializer(appointment)
+        return Response(serializer.data)
+
+
+class AppointmentRescheduleView(APIView):
+    """Receptionist moves an appointment to another slot of the same vet."""
+
+    permission_classes = [IsReceptionist]
+
+    def post(self, request, apt_id):
+        from users.models import StaffProfile
+
+        slot_id = request.data.get('slot_id')
+        if not slot_id:
+            return Response(
+                {'detail': 'slot_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        staff = StaffProfile.objects.filter(usr_id=request.user).first()
+        if staff is None or staff.cln_id_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = AppointmentService.reschedule_appointment(
+                apt_id=apt_id,
+                clinic_id=staff.cln_id_id,
+                slot_id=slot_id,
+                user_id=request.user.usr_id,
+            )
+        # A stale or foreign slot is reported as a plain 400 (not 409) so
+        # the receptionist sees a clear "pick another slot" message.
+        except SlotUnavailableError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidRequestError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidTransitionError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
+        except ValueError as e:
+            return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
         serializer = AppointmentDetailSerializer(appointment)
         return Response(serializer.data)
@@ -626,21 +727,46 @@ class GenerateSlotsView(APIView):
             )
 
         total_created = 0
+        already_existed = 0
+        skipped_dates = []
+        skipped_seen = set()
         num_days = (end_date - start_date).days + 1
 
         for vet in vets:
             for i in range(num_days):
                 date = start_date + timedelta(days=i)
+                # get_or_generate_slots returns the existing set untouched, so
+                # count before and after to report only what this call created.
+                before = VetSlot.objects.filter(
+                    cln_id_id=staff.cln_id_id,
+                    stf_id=vet.stf_id,
+                    vsl_date=date,
+                ).count()
                 slots = VetSlotService.get_or_generate_slots(
                     clinic_id=staff.cln_id_id,
                     vet_id=vet.stf_id,
                     date=date,
                 )
-                total_created += slots.count()
+                after = slots.count()
+                if after == 0:
+                    # No operating hours / closed that day (clinic-wide, so a
+                    # date is reported once even when generating for all vets).
+                    date_key = date.isoformat()
+                    if date_key not in skipped_seen:
+                        skipped_seen.add(date_key)
+                        skipped_dates.append({
+                            'date': date_key,
+                            'reason': 'clinic_closed',
+                        })
+                    continue
+                total_created += after - before
+                already_existed += before
 
         return Response({
             'generated': True,
             'slots_created': total_created,
+            'already_existed': already_existed,
+            'skipped_dates': skipped_dates,
         })
 
 

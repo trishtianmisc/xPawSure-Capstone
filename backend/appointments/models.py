@@ -23,6 +23,17 @@ class AppointmentStatus(models.TextChoices):
     NO_SHOW = 'NO_SHOW', 'No Show'
 
 
+class AppointmentRequestType(models.TextChoices):
+    RESCHEDULE = 'RESCHEDULE', 'Reschedule'
+    CANCEL = 'CANCEL', 'Cancel'
+
+
+class AppointmentRequestStatus(models.TextChoices):
+    OPEN = 'OPEN', 'Open'
+    RESOLVED = 'RESOLVED', 'Resolved'
+    DECLINED = 'DECLINED', 'Declined'
+
+
 class SlotStatus(models.TextChoices):
     AVAILABLE = 'AVAILABLE', 'Available'
     BOOKED = 'BOOKED', 'Booked'
@@ -44,6 +55,13 @@ class Appointment(models.Model):
     apt_cancellation_reason = models.TextField(null=True, blank=True, db_column='APT_CANCELLATION_REASON')
     apt_reschedule_request_reason = models.TextField(null=True, blank=True, db_column='APT_RESCHEDULE_REQUEST_REASON')
     apt_cancellation_request_reason = models.TextField(null=True, blank=True, db_column='APT_CANCELLATION_REQUEST_REASON')
+    apt_request_type = models.CharField(max_length=20, choices=AppointmentRequestType.choices, null=True, blank=True, db_column='APT_REQUEST_TYPE')
+    apt_request_status = models.CharField(max_length=20, choices=AppointmentRequestStatus.choices, null=True, blank=True, db_column='APT_REQUEST_STATUS')
+    apt_requested_by = models.ForeignKey('users.StaffProfile', on_delete=models.SET_NULL, null=True, blank=True, related_name='requested_appointments', db_column='APT_REQUESTED_BY')
+    apt_requested_at = models.DateTimeField(null=True, blank=True, db_column='APT_REQUESTED_AT')
+    apt_resolved_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='resolved_appointment_requests', db_column='APT_RESOLVED_BY')
+    apt_resolved_at = models.DateTimeField(null=True, blank=True, db_column='APT_RESOLVED_AT')
+    apt_decline_note = models.TextField(null=True, blank=True, db_column='APT_DECLINE_NOTE')
     apt_created_at = models.DateTimeField(auto_now_add=True, db_column='APT_CREATED_AT')
     apt_updated_at = models.DateTimeField(auto_now=True, db_column='APT_UPDATED_AT')
     apt_deleted_at = models.DateTimeField(null=True, blank=True, db_index=True, db_column='APT_DELETED_AT')

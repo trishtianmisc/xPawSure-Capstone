@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -7,13 +9,42 @@ from notifications.serializers import NotificationSerializer
 from notifications.services import NotificationService
 from users.models import UserRole
 
-IsNotificationRecipient = HasRole(UserRole.OWNER, UserRole.RECEPTIONIST)
+logger = logging.getLogger(__name__)
+
+# Owners, receptionists and veterinarians read their own notices. Clinic
+# admins receive operational notices (vet reschedule/cancel requests, license
+# warnings, staff account changes) and read them from the header bell.
+IsNotificationRecipient = HasRole(
+    UserRole.OWNER,
+    UserRole.RECEPTIONIST,
+    UserRole.VETERINARIAN,
+    UserRole.CLINIC_ADMIN,
+)
+
+
+def _run_license_scan(user):
+    """Best-effort, idempotent license-expiry warnings for clinic admins.
+
+    Lazy on-read: every list/unread-count call from a clinic admin first
+    ensures T-30/T-7 warnings exist. A scan failure must never break the
+    bell endpoints, so it is logged and swallowed.
+    """
+    if getattr(user, 'usr_role', None) != UserRole.CLINIC_ADMIN:
+        return
+    staff = getattr(user, 'staffprofile', None)
+    if staff is None or staff.cln_id_id is None:
+        return
+    try:
+        NotificationService.ensure_license_expiry_warnings(staff.cln_id_id)
+    except Exception:
+        logger.warning('License expiry scan failed', exc_info=True)
 
 
 class NotificationListView(APIView):
     permission_classes = [IsNotificationRecipient]
 
     def get(self, request):
+        _run_license_scan(request.user)
         unread_only = request.query_params.get('unread_only', 'false').lower() == 'true'
         try:
             page = max(int(request.query_params.get('page', 1) or 1), 1)
@@ -45,6 +76,7 @@ class NotificationUnreadCountView(APIView):
     permission_classes = [IsNotificationRecipient]
 
     def get(self, request):
+        _run_license_scan(request.user)
         count = NotificationService.get_unread_count(request.user.usr_id)
         return Response({'unread_count': count})
 

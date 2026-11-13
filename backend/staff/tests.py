@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
+from unittest import mock
 
 from django.urls import reverse
 from django.utils import timezone
@@ -9,8 +11,10 @@ from ai_screenings.models import AiScreening, Disease
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from clinics.models import Clinic, ClinicStatus
 from consultations.models import Consultation
+from notifications.models import Notification, NotificationType
 from owners.models import OwnerProfile
 from pets.models import Pet, Sex
+from staff.tasks import send_staff_welcome_email
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 
@@ -1298,3 +1302,212 @@ class StaffActivityEndpointTests(StaffAPITestCase):
             **self._auth_header(self.vet_user),
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class StaffAccountNotificationTests(StaffAPITestCase):
+    """Activate/deactivate fan out to the clinic's other admins only."""
+
+    def setUp(self):
+        super().setUp()
+        self.peer_admin = User.objects.create(
+            usr_email='peer_admin@test.com',
+            usr_first_name='Peer',
+            usr_last_name='Admin',
+            usr_role=UserRole.CLINIC_ADMIN,
+        )
+        self.peer_admin.set_password(self.password)
+        self.peer_admin.save()
+        StaffProfile.objects.create(
+            usr_id=self.peer_admin,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.CLINIC_ADMIN,
+        )
+
+        self.desk_user = User.objects.create(
+            usr_email='desk_notify@test.com',
+            usr_first_name='Desk',
+            usr_last_name='Notify',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=self.desk_user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        self.target = User.objects.create(
+            usr_email='target_staff@test.com',
+            usr_first_name='Target',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=self.target,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        self.inactive_target = User.objects.create(
+            usr_email='inactive_staff@test.com',
+            usr_first_name='Inactive',
+            usr_last_name='Staff',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=False,
+        )
+        StaffProfile.objects.create(
+            usr_id=self.inactive_target,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+    def _action_url(self, staff_id, action):
+        return reverse('staff-action', args=[staff_id, action])
+
+    def _account_notifs(self, user, title):
+        return Notification.objects.filter(usr_id_id=user.usr_id, ntf_title=title)
+
+    def test_deactivate_notifies_peer_admin_but_not_actor(self):
+        response = self.client.post(
+            self._action_url(str(self.target.usr_id), 'deactivate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        notifs = self._account_notifs(
+            self.peer_admin, 'Staff Account Deactivated',
+        )
+        self.assertEqual(notifs.count(), 1)
+        ntf = notifs.get()
+        self.assertIn('Target Staff', ntf.ntf_message)
+        self.assertIn('was deactivated', ntf.ntf_message)
+        self.assertEqual(ntf.ntf_type, NotificationType.SYSTEM)
+        self.assertEqual(ntf.ntf_reference_table, 'STAFF')
+        self.assertEqual(str(ntf.ntf_reference_id), str(self.target.usr_id))
+
+        self.assertFalse(
+            self._account_notifs(self.clinic_admin, 'Staff Account Deactivated').exists(),
+        )
+        self.assertFalse(
+            self._account_notifs(self.other_admin, 'Staff Account Deactivated').exists(),
+        )
+        self.assertFalse(
+            self._account_notifs(self.desk_user, 'Staff Account Deactivated').exists(),
+        )
+
+    def test_activate_notifies_peer_admins(self):
+        response = self.client.post(
+            self._action_url(str(self.inactive_target.usr_id), 'activate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        notifs = self._account_notifs(self.peer_admin, 'Staff Account Activated')
+        self.assertEqual(notifs.count(), 1)
+        self.assertIn('Inactive Staff', notifs.get().ntf_message)
+        self.assertFalse(
+            self._account_notifs(self.clinic_admin, 'Staff Account Activated').exists(),
+        )
+        self.assertFalse(
+            self._account_notifs(self.other_admin, 'Staff Account Activated').exists(),
+        )
+
+    def test_repeated_deactivate_and_activate_each_notify_once(self):
+        self.client.post(
+            self._action_url(str(self.target.usr_id), 'deactivate'),
+            format='json', **self._auth_header(self.clinic_admin),
+        )
+        self.client.post(
+            self._action_url(str(self.target.usr_id), 'activate'),
+            format='json', **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(
+            self._account_notifs(self.peer_admin, 'Staff Account Deactivated').count(), 1,
+        )
+        self.assertEqual(
+            self._account_notifs(self.peer_admin, 'Staff Account Activated').count(), 1,
+        )
+
+
+class CredentialsEmailFailureTests(StaffAPITestCase):
+    """A failed welcome email notifies clinic admins by name only."""
+
+    def setUp(self):
+        super().setUp()
+        self.new_staff = User.objects.create(
+            usr_email='jane.cruz@test.com',
+            usr_first_name='Jane',
+            usr_last_name='Cruz',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+
+    def _send(self, **overrides):
+        kwargs = {
+            'email': 'jane.cruz@test.com',
+            'first_name': 'Jane',
+            'last_name': 'Cruz',
+            'role': 'RECEPTIONIST',
+            'temp_password': 'SECRET-TEMP-PW-123',
+            'login_url': 'http://localhost:5173/login',
+            'clinic_name': 'Test Clinic',
+            'support_email': 'support@xpawsure.test',
+            'clinic_id': self.clinic.cln_id,
+            'staff_user_id': self.new_staff.usr_id,
+        }
+        kwargs.update(overrides)
+        return send_staff_welcome_email(**kwargs)
+
+    def _failure_notifs(self):
+        return Notification.objects.filter(ntf_title='Credentials Email Failed')
+
+    def test_failure_notifies_admins_with_name_only(self):
+        with mock.patch(
+            'staff.tasks.send_templated_email',
+            return_value=SimpleNamespace(success=False, error='SMTP down'),
+        ):
+            sent = self._send()
+
+        self.assertFalse(sent)
+        notifs = self._failure_notifs()
+        self.assertEqual(notifs.count(), 1)
+        ntf = notifs.get()
+        self.assertEqual(ntf.usr_id_id, self.clinic_admin.usr_id)
+        self.assertEqual(ntf.ntf_type, NotificationType.SYSTEM)
+        self.assertEqual(ntf.ntf_reference_table, 'STAFF')
+        self.assertEqual(str(ntf.ntf_reference_id), str(self.new_staff.usr_id))
+        self.assertIn('Jane Cruz', ntf.ntf_message)
+        self.assertIn('Resend Welcome', ntf.ntf_message)
+        self.assertNotIn('SECRET-TEMP-PW-123', ntf.ntf_message)
+        self.assertNotIn('jane.cruz@test.com', ntf.ntf_message)
+
+    def test_exception_during_send_notifies_and_never_raises(self):
+        with mock.patch(
+            'staff.tasks.send_templated_email',
+            side_effect=RuntimeError('boom'),
+        ):
+            sent = self._send()
+
+        self.assertFalse(sent)
+        self.assertEqual(self._failure_notifs().count(), 1)
+
+    def test_success_creates_no_notification(self):
+        with mock.patch(
+            'staff.tasks.send_templated_email',
+            return_value=SimpleNamespace(success=True, error=None),
+        ):
+            sent = self._send()
+
+        self.assertTrue(sent)
+        self.assertFalse(self._failure_notifs().exists())
+
+    def test_failure_without_clinic_context_is_silent(self):
+        with mock.patch(
+            'staff.tasks.send_templated_email',
+            return_value=SimpleNamespace(success=False, error='SMTP down'),
+        ):
+            sent = self._send(clinic_id=None)
+
+        self.assertFalse(sent)
+        self.assertFalse(Notification.objects.exists())

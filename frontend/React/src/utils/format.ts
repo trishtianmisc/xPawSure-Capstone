@@ -64,6 +64,31 @@ export function formatDate(
   })
 }
 
+/** Local calendar date as `YYYY-MM-DD` for date query params. */
+export function isoDate(date: Date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * True when the appointment's clinic-local calendar day is after the
+ * clinic-local day of `atMs` — check-in is not yet allowed. Mirrors the
+ * backend appointment-date gate in appointments/services.py.
+ */
+export function isFutureClinicDay(scheduledAt: string, atMs: number): boolean {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CLINIC_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return (
+    formatter.format(new Date(scheduledAt)) > formatter.format(new Date(atMs))
+  )
+}
+
 export function formatDateLong(
   value: string | Date | null | undefined,
   timeZone?: string,

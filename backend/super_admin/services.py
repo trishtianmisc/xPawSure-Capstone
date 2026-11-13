@@ -315,6 +315,8 @@ class ClinicAdminService:
             login_url=login_url,
             clinic_name=clinic.cln_name,
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=user.usr_id,
         ))
 
         return {
@@ -375,6 +377,8 @@ class ClinicAdminService:
             login_url=login_url,
             clinic_name=clinic.cln_name,
             support_email=settings.SUPPORT_EMAIL,
+            clinic_id=clinic.cln_id,
+            staff_user_id=admin_user.usr_id,
         ))
 
         return {'email_sent': clinic.cln_email is not None}

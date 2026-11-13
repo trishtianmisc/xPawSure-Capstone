@@ -471,11 +471,17 @@ Response shape is unchanged.
 
 Requires authentication. Receptionist.
 
-Owner directory. Owners are platform-wide (not attached to one clinic), so the
-list is not clinic-filtered. `pet_count` counts only the owner's active pets that
-have an appointment at the receptionist's clinic.
+Owner directory. Owners are platform-wide (not attached to one clinic), so by
+default the list is not clinic-filtered. `pet_count` counts only the owner's
+active pets that have an appointment at the receptionist's clinic.
 
-Query parameters: `search`, `page`, `page_size`
+Query parameters: `search`, `scope`, `page`, `page_size`
+
+- `scope=clinic`: only owners whose pets are clinic patients (same rule as
+  `GET /api/receptionist/pets/`). Used by the receptionist Owners tab, so it
+  never lists owners with no record at that clinic. The booking and patient
+  registration pickers omit it to search every owner.
+- A receptionist without a staff profile gets `400` when `scope=clinic`.
 
 ## GET /api/owners/{id}/
 
@@ -681,6 +687,10 @@ Query parameters:
 - overdue (`1`/`true`): only past-due appointments (status `PENDING` or `CONFIRMED`
   with `apt_scheduled_at` already in the past). Used by the receptionist dashboard's
   "Needs attention" indicator; additive, combines with the other filters.
+- has_request (`1`/`true`): only appointments with a vet request on record
+  (`apt_request_type` not null). Used by the receptionist appointments page
+  "Vet requests" filter; additive. Legacy rows without a recorded request are
+  never matched.
 - sort: `apt_scheduled_at` (oldest first) or `-apt_scheduled_at` (newest first,
   default). Unknown values fall back to the default. Ordering is applied in SQL
   before pagination, with `apt_id` as a tie-breaker.
@@ -689,6 +699,11 @@ Notes:
 
 - `GET /api/appointments/` is read-only for Clinic Admin; creating appointments
   remains receptionist-only (`POST` returns `403` for Clinic Admin).
+- Receptionist list rows include `has_open_request` (bool) and `vet_request`
+  (`{ type, status, reason, requested_by, requested_at, decline_note }` or
+  `null`). Other list consumers never receive the request block. The request
+  `reason` is the vet's recorded reason text and is visible only to
+  receptionists and the requesting veterinarian — never to owners.
 
 ---
 
@@ -705,6 +720,12 @@ review" card. `today.pending` counts only upcoming `PENDING` appointments;
 past-due ones surface through `needs_attention` instead of double-counting in
 Pending/Confirmed.
 
+`vet_requests` lists the clinic's open veterinarian requests (one entry per
+appointment with `apt_request_status = OPEN`), newest requested first, capped
+at 5. Each entry is `{ apt_id, pet_name, type, requested_by, requested_at }`.
+The key is included only for `RECEPTIONIST` callers; Clinic Admin responses
+omit it. It drives the receptionist dashboard's "open vet request" group.
+
 `total_pets` is the canonical clinic-patient count: distinct active,
 non-deleted pets with at least one non-deleted appointment at the clinic whose
 status is not `CANCELLED` or `NO_SHOW`. `total_owners` is the number of owners
@@ -713,6 +734,19 @@ visits count once; a pet whose only appointments were cancelled or no-show does
 not count. The clinic admin "Total Patients" KPI, the receptionist
 `GET /api/receptionist/pets/` directory, and the future clinic admin Patients
 page must all use this definition.
+
+`upcoming` counts every `PENDING` and `CONFIRMED` appointment scheduled from
+now onward (clinic-local), regardless of day, so the dashboard's "To confirm"
+card agrees with the appointments list the receptionist compares it against;
+past-due rows are excluded here and surface through `needs_attention` instead.
+
+`unpaid_completions` lists up to 10 `COMPLETED` appointments from the last 7
+days (by scheduled time, clinic-local) with no `PAID` payment linked through
+`APT_ID`, newest first. The list is empty when the clinic's consultation fee
+is `0`, because every completion would otherwise be flagged. The field remains
+for API consumers; the receptionist dashboard no longer renders a
+"completed without payment" row, because no endpoint records a payment
+against an already-completed appointment.
 
 Refresh on read: overdue statuses are refreshed on reads. This endpoint and
 `GET /api/appointments/` run `AppointmentService.close_past_due(clinic_id)`
@@ -813,6 +847,14 @@ details. Beyond the shared appointment fields it adds:
 - `screening`: narrower AI summary exposing the final condition only, with
   `vet_diagnosis` and `reviewed_at` (the veterinarian's recorded outcome).
   `null` when no screening is linked. No clinical notes are exposed.
+
+Receptionist and veterinarian responses include the vet request block:
+`has_open_request` (bool) and `vet_request` (`{ type, status, reason,
+requested_by, requested_at, decline_note }`, `null` when none). The owner
+detail response strips the block, both reason columns, and
+`has_open_request`; owners never see a vet's request reason or a decline
+note. Legacy appointments with no recorded request (`apt_request_type`
+null) report `vet_request: null`.
 
 ---
 
@@ -917,6 +959,10 @@ Time-based rules (clinic timezone "now"):
 
 - Confirming a `PENDING` appointment whose scheduled time has passed returns `400`:
   `{ "detail": "Cannot confirm an appointment that has already passed." }`
+- Checking in before the appointment's calendar date returns `400`:
+  `{ "detail": "Cannot check in before the appointment date." }`. Check-in is
+  allowed at any time on the appointment's date, even before the scheduled
+  slot time.
 - Marking `NO_SHOW` before the scheduled time returns `400`:
   `{ "detail": "Cannot mark an appointment as no-show before its scheduled time." }`
 - `NO_SHOW` is allowed immediately once the scheduled time has passed (no grace
@@ -940,6 +986,60 @@ Time-based rules (clinic timezone "now"):
 Requires authentication.
 
 Soft delete.
+
+---
+
+## POST /api/appointments/{id}/request/decline/
+
+Requires authentication. Receptionist. Declines an open veterinarian request
+without changing the appointment itself.
+
+Request body:
+
+- note (required): 1-200 characters
+
+Responses:
+
+- 200: appointment detail with `vet_request.status = DECLINED` and
+  `vet_request.decline_note` set
+- 400: missing/blank/over-long note, no open request, or no staff profile
+- 403: caller is not a receptionist
+- 404: unknown appointment, or the appointment belongs to another clinic
+
+The decline is recorded in the audit log (actor + note), and the requesting
+veterinarian receives a neutral notification — the note text is never placed
+in the notification body.
+
+---
+
+## POST /api/appointments/{id}/reschedule/
+
+Requires authentication. Receptionist. Moves an appointment to another
+available slot of the same veterinarian.
+
+Request body:
+
+- slot_id (required): UUID of the target slot
+
+Responses:
+
+- 200: appointment detail with the new `apt_scheduled_at`. When the
+  appointment had an OPEN `RESCHEDULE` request, that request is resolved in
+  the same transaction (an OPEN `CANCEL` request is left open); otherwise the
+  appointment keeps its current request state.
+- 400: missing `slot_id`, slot already booked/stale/not for this vet
+  ("That slot is no longer available."), appointment not in `PENDING`/
+  `CONFIRMED`, or no staff profile
+- 403: caller is not a receptionist
+- 404: unknown appointment or slot
+- 409: appointment status does not allow rescheduling
+
+The appointment and the target slot are locked together
+(`select_for_update`) so two concurrent moves cannot take the same slot. A
+stale slot is reported as `400` (not `409`) so the receptionist can simply
+pick another slot. The move is audited with the old and new scheduled times.
+
+---
 
 ## GET /api/appointments/volume/
 
@@ -1010,7 +1110,7 @@ when the appointment is not in a startable status.
 ## POST /api/veterinarian/appointments/{id}/request-reschedule/
 
 Requires the appointment to be `CONFIRMED`. Records the reason without changing
-`apt_status`.
+`apt_status`. Only one open request is allowed per appointment.
 
 Request body:
 
@@ -1018,9 +1118,14 @@ Request body:
 
 Response (200): Appointment detail with `apt_reschedule_request_reason` set.
 
+On submission every receptionist and clinic admin of the appointment's clinic
+receives a neutral `SYSTEM` notification (`Reschedule Requested`,
+`ntf_reference_table = APPOINTMENT`); the reason text is never included.
+
 Responses:
 
-- 400: missing/blank reason, or the caller has no staff profile
+- 400: missing/blank reason, the caller has no staff profile, or the
+  appointment already has an open request
 - 403: appointment belongs to another veterinarian, or caller is not a veterinarian
 - 404: unknown appointment
 - 409: appointment is not `CONFIRMED`
@@ -1030,7 +1135,8 @@ Responses:
 ## POST /api/veterinarian/appointments/{id}/request-cancel/
 
 Requires the appointment to be `CONFIRMED`. Records the reason without changing
-`apt_status`; cancellation is a request, not a direct cancellation.
+`apt_status`; cancellation is a request, not a direct cancellation. Only one
+open request is allowed per appointment.
 
 Request body:
 
@@ -1038,9 +1144,14 @@ Request body:
 
 Response (200): Appointment detail with `apt_cancellation_request_reason` set.
 
+On submission every receptionist and clinic admin of the appointment's clinic
+receives a neutral `SYSTEM` notification (`Cancellation Requested`,
+`ntf_reference_table = APPOINTMENT`); the reason text is never included.
+
 Responses:
 
-- 400: missing/blank reason, or the caller has no staff profile
+- 400: missing/blank reason, the caller has no staff profile, or the
+  appointment already has an open request
 - 403: appointment belongs to another veterinarian, or caller is not a veterinarian
 - 404: unknown appointment
 - 409: appointment is not `CONFIRMED`
@@ -1322,6 +1433,7 @@ Response (200):
               "vsl_start_time": "09:00",
               "vsl_end_time": "09:30",
               "status": "AVAILABLE",
+              "is_past": false,
               "appointment": null
             }
           ]
@@ -1330,6 +1442,8 @@ Response (200):
     }
   ]
 }
+
+`is_past` is computed against the clinic timezone (not the caller's clock): true when the slot's date is before today, or it is today and the slot has already started. The schedule grid, its block-confirmation counts, and the block-remaining endpoint share this clock.
 
 ---
 
@@ -1378,8 +1492,15 @@ Response (200):
 
 {
   "generated": true,
-  "slots_created": 96
+  "slots_created": 96,
+  "already_existed": 16,
+  "skipped_dates": [
+    { "date": "2026-09-20", "reason": "clinic_closed" }
+  ]
 }
+
+- `slots_created` counts only slots created by this call; slots that already existed for the vet/date are reported in `already_existed`.
+- `skipped_dates` lists dates where nothing could be generated (no operating hours / clinic closed), deduplicated across vets. The only `reason` value is `clinic_closed`.
 
 ---
 
@@ -1414,7 +1535,7 @@ Errors:
 
 Receptionist only.
 
-Blocks all available slots for a vet on a specific date. Skips booked slots.
+Blocks the remaining available slots for a vet on a specific date. Skips booked slots and slots that have already started (clinic timezone), so "rest of today" never touches passed slots.
 
 Query params:
 
@@ -1424,7 +1545,8 @@ Response (200):
 
 {
   "blocked": 12,
-  "skipped_booked": 3
+  "skipped_booked": 3,
+  "skipped_passed": 2
 }
 
 ---
@@ -2478,12 +2600,24 @@ All other endpoints are shared between web and mobile.
 
 # 14. Notification Endpoints
 
-Requires authentication. Allowed roles: Owner, Receptionist (Veterinarians receive 403).
-Users can only read or modify their own notifications (foreign ids return 404).
+Requires authentication. Allowed roles: Owner, Receptionist, Veterinarian,
+Clinic Admin. Users can only read or modify their own notifications
+(foreign ids return 404).
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
 AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+
+Clinic admins receive `SYSTEM` notifications for: vet reschedule/cancel request
+submission (neutral body, reason text never included), veterinary license expiry
+warnings (T-30 `License Expiring Soon` / T-7 `License Expiring This Week`, active
+vets only, absolute dates), staff account activated/deactivated (actor excluded),
+and failed staff credentials emails (staff name only — never credentials).
+
+For clinic-admin callers, the list and unread-count endpoints lazily run an
+idempotent license-expiry scan first (clinic-local "today", guarded by a clinic
+row lock) so warnings are always present when the bell is opened; a scan failure
+never fails the request.
 
 ## GET /api/notifications/
 

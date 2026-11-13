@@ -14,6 +14,7 @@ export async function listAppointments(params: {
   pet_id?: string
   search?: string
   overdue?: string
+  has_request?: string
   sort?: string
   page?: number
   page_size?: number
@@ -52,6 +53,26 @@ export async function confirmFollowUp(
   slotId: string,
 ): Promise<AppointmentDetail> {
   const { data } = await http.post(`/appointments/${aptId}/confirm-follow-up/`, {
+    slot_id: slotId,
+  })
+  return data
+}
+
+export async function declineVetRequest(
+  aptId: string,
+  note: string,
+): Promise<AppointmentDetail> {
+  const { data } = await http.post(`/appointments/${aptId}/request/decline/`, {
+    note,
+  })
+  return data
+}
+
+export async function rescheduleAppointment(
+  aptId: string,
+  slotId: string,
+): Promise<AppointmentDetail> {
+  const { data } = await http.post(`/appointments/${aptId}/reschedule/`, {
     slot_id: slotId,
   })
   return data
