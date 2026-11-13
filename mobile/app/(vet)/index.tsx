@@ -9,7 +9,8 @@ import { font } from '../../src/theme/typography'
 import { usePullToRefresh } from '../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetDashboard } from '../../features/vet/hooks/useVetDashboard'
-import { formatAppointmentStatus, formatTime, localDateStr } from '../../features/vet/lib/format'
+import { formatAppointmentStatus, formatTime } from '../../features/vet/lib/format'
+import { formatDate, manilaDateKey } from '../../src/utils/datetime'
 import type { AppointmentStatus } from '../../features/vet/types'
 
 const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
@@ -41,7 +42,7 @@ export default function VetHomeScreen() {
   const { colors, isDark } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const statStyles = STAT_STYLES[isDark ? 'dark' : 'light']
-  const { data, isLoading, isError, refetch } = useVetDashboard(localDateStr())
+  const { data, isLoading, isError, refetch } = useVetDashboard(manilaDateKey())
   const { refreshing, onRefresh } = usePullToRefresh(refetch)
   useRefreshVetOnFocus('dashboard')
   const firstName = user?.first_name || 'Vet'
@@ -56,10 +57,7 @@ export default function VetHomeScreen() {
     status: apt.apt_status,
   }))
 
-  const monthStr = new Date().toLocaleDateString('en-US', {
-    month: 'long',
-    year: 'numeric',
-  })
+  const monthStr = formatDate(new Date(), { month: 'long', year: 'numeric' })
 
   return (
     <SafeAreaView style={styles.safeArea}>

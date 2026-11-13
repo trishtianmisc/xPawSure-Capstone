@@ -9,6 +9,7 @@ import { useNotifications } from '../../../features/notification/hooks/useNotifi
 import type { OwnerNotification } from '../../../features/notification/types'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDateTime } from '../../../src/utils/datetime'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -28,8 +29,7 @@ const TYPE_ICONS: Record<string, IconName> = {
 }
 
 function formatTime(iso: string): string {
-  const date = new Date(iso)
-  return date.toLocaleString(undefined, {
+  return formatDateTime(iso, {
     day: 'numeric',
     month: 'short',
     hour: 'numeric',

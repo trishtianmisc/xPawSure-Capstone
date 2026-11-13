@@ -9,6 +9,7 @@ import { useMyAppointments } from '../../../features/appointment/hooks/useMyAppo
 import type { AppointmentListItem } from '../../../features/appointment/types'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDate, formatTime, manilaDateParts } from '../../../src/utils/datetime'
 
 const ACTIVE_STATUSES = ['CONFIRMATION', 'PENDING', 'CONFIRMED', 'CHECKED_IN', 'IN_PROGRESS']
 type Tab = 'upcoming' | 'history'
@@ -23,14 +24,10 @@ function AppointmentRow({
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  const scheduled = new Date(appointment.apt_scheduled_at)
-  const weekday = scheduled.toLocaleDateString(undefined, { weekday: 'short' })
-  const day = scheduled.getDate()
-  const month = scheduled.toLocaleDateString(undefined, { month: 'short' })
-  const time = scheduled.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+  const weekday = formatDate(appointment.apt_scheduled_at, { weekday: 'short' })
+  const day = manilaDateParts(new Date(appointment.apt_scheduled_at)).day
+  const month = formatDate(appointment.apt_scheduled_at, { month: 'short' })
+  const time = formatTime(appointment.apt_scheduled_at)
 
   return (
     <Pressable

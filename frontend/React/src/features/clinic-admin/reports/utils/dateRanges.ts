@@ -1,3 +1,5 @@
+import { clinicToday } from '../../../../utils/format'
+
 export interface DateWindow {
   date_from: string
   date_to: string
@@ -22,7 +24,7 @@ function parseISODate(value: string): Date {
   return new Date(year, month - 1, day)
 }
 
-export function defaultWindow(now = new Date()): DateWindow {
+export function defaultWindow(now = clinicToday()): DateWindow {
   const to = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const from = new Date(to)
   from.setDate(from.getDate() - (DEFAULT_WINDOW_DAYS - 1))

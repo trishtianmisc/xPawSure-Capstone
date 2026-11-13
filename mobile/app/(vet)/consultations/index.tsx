@@ -7,7 +7,8 @@ import { font } from '../../../src/theme/typography'
 import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
-import { formatAppointmentStatus, formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
+import { formatAppointmentStatus, formatShortDate, formatTime } from '../../../features/vet/lib/format'
+import { manilaDateKey } from '../../../src/utils/datetime'
 import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'
 
 const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED', 'CANCELLED']
@@ -34,17 +35,17 @@ export default function VetConsultationListScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(refetch)
   useRefreshVetOnFocus('appointments')
   const appointments = data ?? []
-  const todayStr = localDateStr()
+  const todayStr = manilaDateKey()
 
   const filtered = useMemo(() => {
     if (activeTab === 'TODAY') {
       return appointments
-        .filter((a) => localDateStr(new Date(a.apt_scheduled_at)) === todayStr && !INACTIVE.includes(a.apt_status))
+        .filter((a) => manilaDateKey(a.apt_scheduled_at) === todayStr && !INACTIVE.includes(a.apt_status))
         .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
     }
     if (activeTab === 'UPCOMING') {
       return appointments
-        .filter((a) => localDateStr(new Date(a.apt_scheduled_at)) > todayStr && !INACTIVE.includes(a.apt_status))
+        .filter((a) => manilaDateKey(a.apt_scheduled_at) > todayStr && !INACTIVE.includes(a.apt_status))
         .sort((a, b) => a.apt_scheduled_at.localeCompare(b.apt_scheduled_at))
     }
     if (activeTab === 'CANCELLED') {

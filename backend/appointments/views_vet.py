@@ -14,6 +14,7 @@ from appointments.services import (
     InvalidTransitionError,
     VetDashboardService,
 )
+from consultations.serializers import VetConsultationHistorySerializer
 from core.permissions import IsVeterinarian
 from users.models import StaffProfile
 
@@ -68,6 +69,10 @@ class VetDashboardView(APIView):
                 VetDashboardService.get_today_appointments(staff.stf_id, ref_date),
                 many=True,
             ).data,
+            'upcoming_consultations': AppointmentListSerializer(
+                VetDashboardService.get_upcoming_appointments(staff.stf_id, ref_date),
+                many=True,
+            ).data,
         })
 
 
@@ -104,6 +109,39 @@ class VetAppointmentListView(APIView):
             end_date=end_date,
         )
         return Response(AppointmentListSerializer(appointments, many=True).data)
+
+
+class VetPetConsultationHistoryView(APIView):
+    permission_classes = [IsVeterinarian]
+
+    def get(self, request, pet_id):
+        staff = _get_staff(request.user)
+        if staff is None or staff.cln_id_id is None:
+            return Response(
+                {'detail': 'Staff profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        history = VetDashboardService.get_pet_consultation_history(
+            pet_id, staff.cln_id_id,
+        )
+        if history is None:
+            return Response(
+                {'detail': 'Pet not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        pet = history['pet']
+        return Response({
+            'pet': {
+                'pet_id': str(pet.pet_id),
+                'pet_name': pet.pet_name,
+                'pet_species': pet.brd_id.brd_name if pet.brd_id else None,
+            },
+            'consultations': VetConsultationHistorySerializer(
+                history['consultations'], many=True,
+            ).data,
+        })
 
 
 class VetAppointmentStartView(APIView):

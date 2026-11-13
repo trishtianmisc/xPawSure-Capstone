@@ -19,11 +19,11 @@ import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { manilaDateKey } from '../../../src/utils/datetime'
 import { usePets } from '../../pet/hooks/usePets'
 import { VaccinationForm } from '../components/VaccinationForm'
 import { useCreateVaccination } from '../hooks/useCreateVaccination'
 import {
-  localToday,
   toVaccinationPayload,
   vaccinationSchema,
   type VaccinationFormValues,
@@ -51,7 +51,7 @@ export default function AddVaccinationScreen() {
       batch_no: '',
       dose: '',
       route: 'SUBCUTANEOUS',
-      date_given: localToday(),
+      date_given: manilaDateKey(),
       next_due: '',
       notes: '',
     },

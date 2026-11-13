@@ -1,11 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { PageHero } from '../../../receptionist/components/PageHero'
-import { SymptomAnswersList } from '../../../../components/SymptomAnswersList'
+import { clinicToday, formatDateTime } from '../../../../utils/format'
 import { ConsultationSummary } from '../components/ConsultationSummary'
+import { DetailCell, DetailRowGroup, DetailSection } from '../components/DetailSection'
 import { PrescriptionSummary } from '../components/PrescriptionSummary'
+import { SymptomAnswersCard } from '../components/SymptomAnswersCard'
 import {
   useAppointmentDetail,
   useRequestCancellation,
@@ -13,20 +15,10 @@ import {
   useStartConsultation,
 } from '../hooks/useVetAppointments'
 
-function formatDateTime(iso: string): string {
-  const date = new Date(iso).toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-  const time = new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-  return `${date} · ${time}`
-}
-
 function ageFromBirthDate(birthDate: string | null): string {
   if (!birthDate) return '—'
   const birth = new Date(birthDate)
-  const now = new Date()
+  const now = clinicToday()
   let years = now.getFullYear() - birth.getFullYear()
   const monthDiff = now.getMonth() - birth.getMonth()
   if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) years -= 1
@@ -34,8 +26,46 @@ function ageFromBirthDate(birthDate: string | null): string {
   return `${years} yr${years === 1 ? '' : 's'}`
 }
 
+function PetAvatar({ src, name }: { src: string | null; name: string }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <span className="m-2 inline-flex size-28 shrink-0 items-center justify-center rounded-2xl bg-white/15 text-white ring-2 ring-white/20">
+        <svg className="size-12" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
+        </svg>
+      </span>
+    )
+  }
+
+  return (
+    <img
+      alt={name}
+      className="m-2 size-28 shrink-0 rounded-2xl object-cover ring-2 ring-white/20"
+      onError={() => setFailed(true)}
+      src={src}
+    />
+  )
+}
+
 function ScreeningImage({ src, alt }: { src: string | null; alt: string }) {
   const [failed, setFailed] = useState(false)
+  const [zoomed, setZoomed] = useState(false)
+
+  useEffect(() => {
+    if (!zoomed) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setZoomed(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [zoomed])
 
   if (!src || failed) {
     return (
@@ -47,12 +77,54 @@ function ScreeningImage({ src, alt }: { src: string | null; alt: string }) {
   }
 
   return (
-    <img
-      alt={alt}
-      className="size-28 shrink-0 rounded-xl object-cover"
-      onError={() => setFailed(true)}
-      src={src}
-    />
+    <>
+      <button
+        aria-label={`Zoom ${alt} screening image`}
+        className="group shrink-0 cursor-zoom-in overflow-hidden rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700"
+        onClick={() => setZoomed(true)}
+        type="button"
+      >
+        <img
+          alt={alt}
+          className="size-28 rounded-xl object-cover transition group-hover:brightness-90"
+          onError={() => setFailed(true)}
+          src={src}
+        />
+      </button>
+      {zoomed && (
+        <div
+          aria-label="AI screening image preview"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setZoomed(false)}
+          role="dialog"
+        >
+          <button
+            aria-label="Close image preview"
+            className="absolute right-4 top-4 grid size-10 place-items-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            onClick={() => setZoomed(false)}
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              className="size-6"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <img
+            alt={alt}
+            className="max-h-[85vh] max-w-full rounded-md object-contain"
+            onClick={(event) => event.stopPropagation()}
+            src={src}
+          />
+        </div>
+      )}
+    </>
   )
 }
 
@@ -179,11 +251,10 @@ export function AppointmentDetailPage() {
               appointment.pet_sex === 'MALE' ? 'Male' : appointment.pet_sex === 'FEMALE' ? 'Female' : '—'
             }`}
             avatar={
-              <span className="inline-flex size-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-white ring-2 ring-white/20">
-                <svg className="size-7" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
-                </svg>
-              </span>
+              <PetAvatar
+                name={appointment.pet_name}
+                src={appointment.pet_profile_image}
+              />
             }
             meta={
               <>
@@ -192,85 +263,103 @@ export function AppointmentDetailPage() {
                     {appointment.clinic_name}
                   </span>
                 )}
-                {appointment.vet_name && (
-                  <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
-                    {appointment.vet_name}
-                  </span>
-                )}
               </>
+            }
+            actions={
+              <button
+                className="self-start text-sm font-semibold text-amber-100 underline decoration-amber-100/60 underline-offset-4 transition hover:text-white hover:decoration-white"
+                onClick={() =>
+                  navigate(
+                    `/veterinarian/pets/${appointment.pet_id}/history?apt=${appointment.apt_id}`,
+                  )
+                }
+                type="button"
+              >
+                View consultation history
+              </button>
             }
           />
         </div>
 
         {/* Appointment */}
-        <div className="mb-5 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-            Appointment
-          </h2>
-          <dl className="space-y-3">
-            <div className="flex items-center justify-between">
-              <dt className="text-sm text-stone-500 dark:text-stone-400">Date &amp; Time</dt>
-              <dd className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                {formatDateTime(appointment.apt_scheduled_at)}
-              </dd>
-            </div>
-            <div className="flex items-center justify-between">
-              <dt className="text-sm text-stone-500 dark:text-stone-400">Status</dt>
-              <dd>
-                <AppointmentStatusBadge status={appointment.apt_status} />
-              </dd>
-            </div>
-          <div className="flex items-center justify-between">
-            <dt className="text-sm text-stone-500 dark:text-stone-400">Ref. No</dt>
-            <dd className="text-sm text-stone-400 dark:text-stone-500">Not yet added</dd>
-          </div>
+        <DetailSection title="Appointment Details">
+          <DetailRowGroup>
+            <DetailCell divider label="Owner" value={appointment.owner_name ?? '—'} />
+            <DetailCell label="Contact info" value={appointment.owner_phone ?? '—'} />
+          </DetailRowGroup>
+          <DetailRowGroup>
+            <DetailCell
+              divider
+              label="Booked time"
+              value={formatDateTime(appointment.apt_created_at)}
+            />
+            <DetailCell
+              label="Scheduled"
+              value={formatDateTime(appointment.apt_scheduled_at)}
+            />
+          </DetailRowGroup>
+          {(appointment.apt_checked_in_at || appointment.apt_completed_at) && (
+            <DetailRowGroup>
+              {appointment.apt_checked_in_at && appointment.apt_completed_at ? (
+                <>
+                  <DetailCell
+                    divider
+                    label="Checked in"
+                    value={formatDateTime(appointment.apt_checked_in_at)}
+                  />
+                  <DetailCell
+                    label="Completed"
+                    value={formatDateTime(appointment.apt_completed_at)}
+                  />
+                </>
+              ) : (
+                <DetailCell
+                  className="sm:col-span-2"
+                  label={appointment.apt_checked_in_at ? 'Checked in' : 'Completed'}
+                  value={formatDateTime(
+                    appointment.apt_checked_in_at ?? appointment.apt_completed_at,
+                  )}
+                />
+              )}
+            </DetailRowGroup>
+          )}
+          <DetailRowGroup>
+            <DetailCell
+              divider
+              label="Status"
+              value={<AppointmentStatusBadge status={appointment.apt_status} />}
+            />
+            <DetailCell
+              label="Ref. No"
+              value={appointment.payment_provider_ref ?? 'Not yet added'}
+            />
+          </DetailRowGroup>
           {appointment.apt_reschedule_request_reason && (
-            <div className="flex items-center justify-between gap-4">
-              <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">Reschedule request</dt>
-              <dd className="text-right text-sm font-semibold text-amber-800 dark:text-amber-500">
-                {appointment.apt_reschedule_request_reason}
-              </dd>
-            </div>
+            <DetailCell
+              label="Reschedule request"
+              value={
+                <span className="text-amber-800 dark:text-amber-500">
+                  {appointment.apt_reschedule_request_reason}
+                </span>
+              }
+            />
           )}
           {appointment.apt_cancellation_request_reason && (
-            <div className="flex items-center justify-between gap-4">
-              <dt className="shrink-0 text-sm text-stone-500 dark:text-stone-400">Cancellation request</dt>
-              <dd className="text-right text-sm font-semibold text-red-700 dark:text-red-400">
-                {appointment.apt_cancellation_request_reason}
-              </dd>
-            </div>
+            <DetailCell
+              label="Cancellation request"
+              value={
+                <span className="text-red-700 dark:text-red-400">
+                  {appointment.apt_cancellation_request_reason}
+                </span>
+              }
+            />
           )}
-        </dl>
-      </div>
-
-      {/* Owner */}
-      <div className="mb-5 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-        <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-          Owner
-        </h2>
-        <dl className="space-y-3">
-          <div className="flex items-center justify-between">
-            <dt className="text-sm text-stone-500 dark:text-stone-400">Name</dt>
-            <dd className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {appointment.owner_name ?? '—'}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between">
-            <dt className="text-sm text-stone-500 dark:text-stone-400">Contact info</dt>
-            <dd className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {appointment.owner_phone ?? '—'}
-            </dd>
-          </div>
-        </dl>
-      </div>
+        </DetailSection>
 
       {/* AI Screening */}
       {appointment.screening && (
-        <div className="mb-6 rounded-md border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-700 dark:bg-stone-800">
-          <h2 className="mb-4 text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-            AI Screening
-          </h2>
-          <div className="flex items-start gap-4">
+        <DetailSection title="AI Screening">
+          <div className="flex items-start gap-4 p-4">
             <ScreeningImage
               alt={appointment.screening.disease}
               src={appointment.screening.image_url ?? null}
@@ -288,8 +377,11 @@ export function AppointmentDetailPage() {
               </p>
             </div>
           </div>
-          <SymptomAnswersList rows={appointment.screening.symptom_answers} />
-        </div>
+        </DetailSection>
+      )}
+
+      {appointment.screening && (
+        <SymptomAnswersCard rows={appointment.screening.symptom_answers ?? []} />
       )}
 
       {/* Consultation */}

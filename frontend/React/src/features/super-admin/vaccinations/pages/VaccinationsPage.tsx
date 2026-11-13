@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
 import { useDebounce } from '../../../../hooks/useDebounce'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDate } from '../../../../utils/format'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../../clinics/services/clinic.service'
 import { useVaccinations } from '../hooks/useVaccinations'
@@ -146,7 +147,7 @@ export function VaccinationsPage() {
                   {data.results.map((record) => (
                     <tr key={record.id} className="transition hover:bg-amber-50/50 dark:hover:bg-amber-900/10">
                       <td className="whitespace-nowrap px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(record.date_given).toLocaleDateString()}
+                        {formatDate(record.date_given)}
                       </td>
                       <td className="px-5 py-4">
                         <p className="font-medium text-stone-800 dark:text-stone-200">{record.name}</p>
@@ -158,7 +159,7 @@ export function VaccinationsPage() {
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">{record.owner_name || '—'}</td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">{record.veterinarian || '—'}</td>
                       <td className="whitespace-nowrap px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {record.next_due ? new Date(record.next_due).toLocaleDateString() : '—'}
+                        {record.next_due ? formatDate(record.next_due) : '—'}
                       </td>
                       <td className="px-5 py-4">
                         <Badge variant={record.source === 'VET' ? 'success' : 'default'}>

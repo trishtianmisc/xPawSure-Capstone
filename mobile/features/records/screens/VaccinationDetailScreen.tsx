@@ -7,17 +7,14 @@ import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { formatDate } from '../../../src/utils/datetime'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useDeleteVaccination } from '../hooks/useDeleteVaccination'
 import { useVaccination } from '../hooks/useVaccination'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function DetailRow({ label, value }: { label: string; value: string | null }) {
@@ -121,7 +118,7 @@ export default function VaccinationDetailScreen() {
           </View>
           <Text style={styles.petName}>{vaccination.pet_name}</Text>
           <Text style={styles.meta}>
-            Given {formatDate(vaccination.date_given)}{vetLabel ? ` · ${vetLabel}` : ''}
+            Given {formatLongDate(vaccination.date_given)}{vetLabel ? ` · ${vetLabel}` : ''}
           </Text>
         </View>
 
@@ -132,7 +129,7 @@ export default function VaccinationDetailScreen() {
           <DetailRow label="Route" value={vaccination.route} />
           <DetailRow
             label="Next Due"
-            value={vaccination.next_due ? formatDate(vaccination.next_due) : null}
+            value={vaccination.next_due ? formatLongDate(vaccination.next_due) : null}
           />
         </View>
 

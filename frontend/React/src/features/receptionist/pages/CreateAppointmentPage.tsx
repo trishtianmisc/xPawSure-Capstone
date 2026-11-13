@@ -7,6 +7,7 @@ import { useToast } from '../../../components/ui/ToastContext'
 import { useCancelPayment, useCreateCheckout, usePayment } from '../../payments/hooks/usePayments'
 import type { Payment, PaymentMethod } from '../../payments/types/payment.types'
 import { apiErrorCode } from '../../../utils/error'
+import { clinicDateKey } from '../../../utils/format'
 import { useCreateAppointment } from '../hooks/useAppointments'
 import { useAvailableSlots, useVetsForDate } from '../hooks/useAvailableSlots'
 import { useClinicSettings } from '../hooks/useClinicSettings'
@@ -198,7 +199,7 @@ export function CreateAppointmentPage() {
     resetPendingPayment()
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = clinicDateKey()
 
   return (
     <div className="p-6">

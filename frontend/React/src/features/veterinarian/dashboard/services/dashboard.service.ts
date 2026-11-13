@@ -1,4 +1,5 @@
 import http from '../../../../services/http'
+import { clinicDateKey } from '../../../../utils/format'
 import type {
   ConsultationFormValues,
   PrescriptionSavePayload,
@@ -6,20 +7,14 @@ import type {
   VetAppointmentSummary,
   VetConsultationInfo,
   VetDashboardData,
+  VetPetConsultationHistory,
   VetPrescriptionInfo,
 } from '../types/dashboard.types'
-
-function localToday(): string {
-  const now = new Date()
-  const month = `${now.getMonth() + 1}`.padStart(2, '0')
-  const day = `${now.getDate()}`.padStart(2, '0')
-  return `${now.getFullYear()}-${month}-${day}`
-}
 
 export const dashboardService = {
   async get(): Promise<VetDashboardData> {
     const { data } = await http.get('/veterinarian/dashboard/', {
-      params: { date: localToday() },
+      params: { date: clinicDateKey() },
     })
     return data
   },
@@ -36,6 +31,13 @@ export const dashboardService = {
 
   async getAppointmentDetail(aptId: string): Promise<VetAppointmentDetail> {
     const { data } = await http.get<VetAppointmentDetail>(`/appointments/${aptId}/`)
+    return data
+  },
+
+  async getPetConsultationHistory(petId: string): Promise<VetPetConsultationHistory> {
+    const { data } = await http.get<VetPetConsultationHistory>(
+      `/veterinarian/pets/${petId}/history/`,
+    )
     return data
   },
 

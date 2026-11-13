@@ -11,6 +11,7 @@ import type {
   VaccinationRecordItem,
 } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useConsultations } from '../hooks/useConsultations'
 import { usePrescriptions } from '../hooks/usePrescriptions'
@@ -29,14 +30,6 @@ function parseTab(value: string | string[] | undefined): RecordsTab | null {
     return value
   }
   return null
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
 }
 
 function RecordCard({

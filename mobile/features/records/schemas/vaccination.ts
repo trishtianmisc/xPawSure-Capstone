@@ -1,15 +1,9 @@
 import { z } from 'zod'
 
 import type { VaccinationWritePayload } from '../../../src/services/records'
+import { manilaDateKey } from '../../../src/utils/datetime'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
-
-export function localToday(): string {
-  const d = new Date()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${month}-${day}`
-}
 
 export const vaccinationSchema = z
   .object({
@@ -23,7 +17,7 @@ export const vaccinationSchema = z
       .string()
       .min(1, 'Date given is required')
       .regex(ISO_DATE, 'Use YYYY-MM-DD format')
-      .refine((value) => value <= localToday(), 'Date cannot be in the future'),
+      .refine((value) => value <= manilaDateKey(), 'Date cannot be in the future'),
     next_due: z
       .string()
       .optional()

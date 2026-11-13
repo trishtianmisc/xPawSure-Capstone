@@ -47,6 +47,23 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         return str(prescription.prs_id)
 
 
+class VetConsultationHistorySerializer(ConsultationResponseSerializer):
+    scheduled_at = serializers.DateTimeField(
+        source='apt_id.apt_scheduled_at', read_only=True,
+    )
+    checked_in_at = serializers.DateTimeField(
+        source='apt_id.apt_checked_in_at', read_only=True, allow_null=True,
+    )
+    completed_at = serializers.DateTimeField(
+        source='apt_id.apt_completed_at', read_only=True, allow_null=True,
+    )
+
+    class Meta(ConsultationResponseSerializer.Meta):
+        fields = ConsultationResponseSerializer.Meta.fields + [
+            'scheduled_at', 'checked_in_at', 'completed_at',
+        ]
+
+
 class ConsultationCreateSerializer(serializers.Serializer):
     appointment_id = serializers.UUIDField()
     chief_complaint = serializers.CharField(required=False, allow_blank=True, default='')

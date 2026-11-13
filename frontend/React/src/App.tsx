@@ -50,6 +50,7 @@ const VetDashboardPage = lazy(() => import('./features/veterinarian/dashboard/pa
 const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationsPage').then(m => ({ default: m.ConsultationsPage })))
 const VetAppointmentDetailPage = lazy(() => import('./features/veterinarian/dashboard/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
+const VetConsultationHistoryPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationHistoryPage').then(m => ({ default: m.ConsultationHistoryPage })))
 const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
 const VetPrescriptionPreviewPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPreviewPage').then(m => ({ default: m.PrescriptionPreviewPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
@@ -181,10 +182,18 @@ function App() {
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
 
-          <Route element={<VetDashboardLayout />} path="/veterinarian">
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['VETERINARIAN']}>
+                <VetDashboardLayout />
+              </ProtectedRoute>
+            }
+            path="/veterinarian"
+          >
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
             <Route element={<VetAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<VetConsultationHistoryPage />} path="pets/:petId/history" />
             <Route element={<VetPrescriptionPreviewPage />} path="appointments/:id/prescription/preview" />
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
