@@ -440,8 +440,8 @@ export default function ResultScreen() {
           </>
         )}
 
-        {!deviceFailed && (
-          <CareGuidelinesCard prediction={top?.disease ?? null} />
+        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && top && (
+          <CareGuidelinesCard prediction={top.disease} />
         )}
 
         {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (

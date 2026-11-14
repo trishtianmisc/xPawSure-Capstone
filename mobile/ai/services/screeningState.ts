@@ -9,10 +9,10 @@ import type { Prediction, ScreeningResultState } from '../types/ai.types'
  *
  * Rules (similarity-only decision):
  * - No predictions → UNCERTAIN (never a positive result).
- * - Feature similarity ≥ 0.50 → DISEASE_DETECTED, regardless of the
+ * - Feature similarity ≥ 0.30 → DISEASE_DETECTED, regardless of the
  *   classifier's confidence. Confidence stays display/log metadata only.
  * - Feature similarity < 0.10 → NOT_SKIN_IMAGE.
- * - Feature similarity in [0.10, 0.50) → UNCERTAIN.
+ * - Feature similarity in [0.10, 0.30) → UNCERTAIN.
  *
  * Pure: questionnaire answers and the Claude review never reach this function;
  * it only reads the classifier's own predictions and feature similarity.

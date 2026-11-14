@@ -137,6 +137,13 @@ describe('results UI no longer renders the Independent Image Review', () => {
     assert.ok(careIndex < symptomIndex, 'care guidelines must render before symptom summary')
   })
 
+  it('only shows disease-specific care guidelines for a detected result', () => {
+    assert.match(
+      resultSource,
+      /screeningState === 'DISEASE_DETECTED' && top && \(\s*<CareGuidelinesCard prediction=\{top\.disease\} \/>/,
+    )
+  })
+
   it('result.tsx keeps the claude gate and save payload wiring intact', () => {
     assert.match(resultSource, /claudeResponse\?\.token/)
     assert.match(resultSource, /claudeToken:/)

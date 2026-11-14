@@ -10,7 +10,7 @@ export const SCREENING_THRESHOLDS = {
   IMAGE_MIN_VARIANCE: 30,
   IMAGE_MIN_COLOR_STD: 5,
   FEATURE_SIMILARITY_MIN: 0.10,
-  FEATURE_SIMILARITY_HIGH: 0.50,
+  FEATURE_SIMILARITY_HIGH: 0.30,
 } as const
 
 export const SCREENING_STATE_MESSAGES: Record<ScreeningResultState, { title: string; message: string }> = {

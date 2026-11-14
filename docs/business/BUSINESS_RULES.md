@@ -630,10 +630,13 @@ independently — "Display Both Results Separately" holds at the data level. On
 the mobile owner app neither the review-findings card nor the cross-analysis
 card is rendered on the result or screening-details screens; those slots show
 the veterinarian-approved Care Guidelines card (static, display-only
-content), selected only by the primary raw AI predicted class and never able to
-modify prediction, confidence, saved result, questionnaire answers, or
-booking. Stored screenings still carry both outputs independently in the
-database and API for audit; the veterinarian consult surfaces are unaffected.
+content). On the fresh screening result screen it is shown only when the
+screening state is `DISEASE_DETECTED` and a primary prediction exists; uncertain
+and rejected results do not show disease-specific guidance. The content is
+selected by the primary raw AI prediction and never modifies prediction,
+confidence, saved result, questionnaire answers, or booking. Stored screenings
+still carry both outputs independently in the database and API for audit; the
+veterinarian consult surfaces are unaffected.
 
 ---
 
