@@ -22,6 +22,13 @@ class AuthService:
             return None
 
     @staticmethod
+    def _profile_picture(user: User) -> str:
+        try:
+            return user.staffprofile.stf_profile_image or ''
+        except ObjectDoesNotExist:
+            return ''
+
+    @staticmethod
     def login(email: str, password: str, ip_address: str = '', device: str = '') -> dict:
         try:
             user = User.objects.get(usr_email__iexact=email, usr_deleted_at__isnull=True)
@@ -66,6 +73,7 @@ class AuthService:
                 'phone': user.usr_phone or '',
                 'must_change_password': user.usr_must_change_password,
                 'clinic_name': AuthService._clinic_name(user),
+                'profile_picture': AuthService._profile_picture(user),
             },
         }
 

@@ -3,10 +3,13 @@ from unittest import mock
 
 from django.test import TestCase
 
+from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from appointments.services import get_clinic_timezone
 from clinics.models import Clinic, ClinicStatus
 from notifications.models import Notification, NotificationType
 from notifications.services import NotificationService
+from owners.models import OwnerProfile
+from pets.models import Pet, Sex
 from users.models import StaffProfile, StaffPosition, User, UserRole
 
 PASSWORD = 'TestPass123!'
@@ -18,6 +21,7 @@ RECEPTIONIST_EMAIL = 'ntfdesk@example.com'
 SERIALIZED_FIELDS = {
     'ntf_id', 'ntf_title', 'ntf_message', 'ntf_type', 'ntf_is_read',
     'ntf_reference_table', 'ntf_reference_id', 'ntf_created_at', 'ntf_read_at',
+    'pet_name', 'pet_profile_image', 'appointment_scheduled_at',
 }
 
 
@@ -31,12 +35,29 @@ class NotificationBase(TestCase):
             RECEPTIONIST_EMAIL, UserRole.RECEPTIONIST, 'Rita', 'Desk',
         )
 
+        clinic = Clinic.objects.create(cln_name='Notification Clinic')
+        owner = OwnerProfile.objects.create(usr_id=self.owner_user)
+        self.pet = Pet.objects.create(
+            own_id=owner,
+            pet_name='Max',
+            pet_sex=Sex.MALE,
+            pet_profile_image='https://example.com/max.png',
+        )
+        self.appointment = Appointment.objects.create(
+            pet_id=self.pet,
+            cln_id=clinic,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.CONFIRMED,
+            apt_scheduled_at=datetime.now(dt_timezone.utc) + timedelta(days=1),
+        )
+
         self.owner_notification = NotificationService.create_notification(
             self.owner_user.usr_id,
             'Appointment confirmed',
             'Your appointment has been confirmed.',
             NotificationType.APPOINTMENT_CONFIRMED,
             ref_table='APPOINTMENT',
+            ref_id=self.appointment.apt_id,
         )
         self.owner_read_notification = NotificationService.create_notification(
             self.owner_user.usr_id,
@@ -91,6 +112,34 @@ class NotificationListTests(NotificationBase):
         )
         titles = [item['ntf_title'] for item in response.data['results']]
         self.assertNotIn('Other owner notification', titles)
+
+    def test_list_includes_pet_details_for_appointment_notifications(self):
+        response = self.client.get('/api/notifications/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+
+        item = next(
+            notification
+            for notification in response.data['results']
+            if notification['ntf_title'] == 'Appointment confirmed'
+        )
+        self.assertEqual(item['pet_name'], 'Max')
+        self.assertEqual(
+            item['pet_profile_image'],
+            'https://example.com/max.png',
+        )
+        self.assertEqual(
+            item['appointment_scheduled_at'],
+            self.appointment.apt_scheduled_at.isoformat(),
+        )
+
+        other = next(
+            notification
+            for notification in response.data['results']
+            if notification['ntf_title'] == 'Appointment reminder'
+        )
+        self.assertIsNone(other['pet_name'])
+        self.assertIsNone(other['pet_profile_image'])
+        self.assertIsNone(other['appointment_scheduled_at'])
 
     def test_list_unread_only_filter(self):
         response = self.client.get(
@@ -290,6 +339,36 @@ class NotificationMarkAllReadTests(NotificationBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.owner_notification.refresh_from_db()
         self.assertFalse(self.owner_notification.ntf_is_read)
+
+
+class NotificationClearTests(NotificationBase):
+
+    def test_clear_removes_only_own_notifications(self):
+        response = self.client.delete(
+            '/api/notifications/',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['detail'], 'All notifications cleared.')
+
+        self.assertFalse(
+            Notification.objects.filter(usr_id_id=self.owner_user.usr_id).exists(),
+        )
+        self.assertTrue(
+            Notification.objects.filter(usr_id_id=self.other_user.usr_id).exists(),
+        )
+
+    def test_clear_resets_unread_count(self):
+        self.client.delete('/api/notifications/', **self._auth(OWNER_EMAIL))
+        response = self.client.get(
+            '/api/notifications/unread-count/',
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.data['unread_count'], 0)
+
+    def test_clear_requires_authentication(self):
+        response = self.client.delete('/api/notifications/')
+        self.assertIn(response.status_code, (401, 403))
 
 
 class ClinicAdminScanBase(NotificationBase):

@@ -109,6 +109,7 @@
 | STAFF_PROFILE | USR_ID | User ID (FK → USER) | UUID | NOT NULL |
 | STAFF_PROFILE | CLN_ID | Clinic ID (FK → CLINIC) | UUID | NOT NULL |
 | STAFF_PROFILE | STF_LICENSE_NUMBER | Professional license number (for vets) | VARCHAR | NULL |
+| STAFF_PROFILE | STF_PROFILE_IMAGE | Public URL of the staff profile photo | TEXT | NULL |
 | STAFF_PROFILE | STF_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | STAFF_PROFILE | STF_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 

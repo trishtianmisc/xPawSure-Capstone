@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
-import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Alert, Image, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { ActivityIndicator, Alert, BackHandler, Image, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
@@ -13,19 +13,11 @@ import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetO
 import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment'
 import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
 import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
-import { ageFromBirthDate, formatAppointmentStatus, formatShortDate, formatTime } from '../../../features/vet/lib/format'
-import type { AppointmentStatus } from '../../../features/vet/types'
+import { VetPetHero } from '../../../features/vet/components/VetPetHero'
+import { formatAppointmentStatus, formatNumericDateTime, formatShortDate, formatTime } from '../../../features/vet/lib/format'
+import { getDiagnosisAgreement } from '../../../features/vet/lib/screeningMatch'
+import { APPOINTMENT_STATUS_COLORS } from '../../../features/vet/lib/statusColors'
 import { apiErrorMessage } from '../../../src/utils/error'
-
-const STATUS_BADGE_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
-  PENDING: { bg: '#FDEBD0', text: '#E67E22' },
-  CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
-  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
-  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
-  COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
-  CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
-  NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
-}
 
 export default function VetConsultationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -46,13 +38,55 @@ export default function VetConsultationDetailScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
+  const [screeningImageFailed, setScreeningImageFailed] = useState(false)
 
+  const diagnosisAgreement = getDiagnosisAgreement(
+    detail?.screening,
+    detail?.consultation?.diagnosis,
+  )
   const canRequest =
     detail?.apt_status === 'CONFIRMED' &&
     !detail.apt_reschedule_request_reason &&
     !detail.apt_cancellation_request_reason
   const showCompletedRecords = detail?.apt_status === 'COMPLETED'
   const requesting = requestReschedule.isPending || requestCancel.isPending
+
+  const goToConsultations = () => {
+    router.dismissTo('/(vet)/consultations')
+  }
+
+  const openConsultationHistory = () => {
+    if (!detail) return
+    router.push(
+      `/(vet)/pet-history?petId=${encodeURIComponent(detail.pet_id)}&aptId=${encodeURIComponent(detail.apt_id)}`,
+    )
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (
+          showRescheduleForm ||
+          showCancelForm ||
+          showRescheduleReview ||
+          showCancelReview ||
+          showSuccessModal
+        ) {
+          return false
+        }
+        router.dismissTo('/(vet)/consultations')
+        return true
+      })
+      return () => subscription.remove()
+    }, [
+      router,
+      showCancelForm,
+      showCancelReview,
+      showRescheduleForm,
+      showRescheduleReview,
+      showSuccessModal,
+    ]),
+  )
 
   const handleRescheduleContinue = () => {
     if (!rescheduleReason.trim()) {
@@ -102,7 +136,14 @@ export default function VetConsultationDetailScreen() {
     )
   }
 
-  const statusStyle = detail ? STATUS_BADGE_COLORS[detail.apt_status] : STATUS_BADGE_COLORS.PENDING
+  const statusStyle = detail ? APPOINTMENT_STATUS_COLORS[detail.apt_status] : APPOINTMENT_STATUS_COLORS.PENDING
+
+  const renderCell = (label: string, value: ReactNode, divider = false) => (
+    <View style={[styles.detailCell, divider && styles.detailCellDivider]}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      {typeof value === 'string' ? <Text style={styles.detailValue}>{value}</Text> : value}
+    </View>
+  )
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -119,7 +160,12 @@ export default function VetConsultationDetailScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        <Pressable onPress={() => router.back()} style={styles.backRow}>
+        <Pressable
+          accessibilityLabel="Back to consultations"
+          accessibilityRole="button"
+          onPress={goToConsultations}
+          style={styles.backRow}
+        >
           <View style={styles.backLeft}>
             <MaterialCommunityIcons color={colors.text} name="chevron-left" size={22} />
             <Text style={styles.backText}>Appointment Detail</Text>
@@ -134,83 +180,117 @@ export default function VetConsultationDetailScreen() {
           </View>
         ) : (
           <>
+            <VetPetHero
+              breed={detail.pet_breed}
+              imageUrl={detail.pet_profile_image}
+              onHistoryPress={openConsultationHistory}
+              petName={detail.pet_name}
+            />
+
+            <Text style={styles.infoSectionTitle}>Appointment Details</Text>
             <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Status</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
-                    {formatAppointmentStatus(detail.apt_status)}
-                  </Text>
+              <View style={styles.detailRow}>
+                {renderCell('Owner', detail.owner_name ?? '—', true)}
+                {renderCell('Contact info', detail.owner_phone ?? '—')}
+              </View>
+              <View style={[styles.detailRow, styles.detailRowDivider]}>
+                {renderCell('Booked time', formatNumericDateTime(detail.apt_created_at), true)}
+                {renderCell('Scheduled', formatNumericDateTime(detail.apt_scheduled_at))}
+              </View>
+              {detail.apt_checked_in_at ? (
+                <View style={[styles.detailRow, styles.detailRowDivider]}>
+                  {renderCell('Checked in', formatNumericDateTime(detail.apt_checked_in_at), true)}
+                  {renderCell(
+                    'Completed',
+                    detail.apt_completed_at
+                      ? formatNumericDateTime(detail.apt_completed_at)
+                      : 'Not yet done',
+                  )}
                 </View>
+              ) : null}
+              <View style={[styles.detailRow, styles.detailRowDivider]}>
+                {renderCell(
+                  'Status',
+                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
+                      {formatAppointmentStatus(detail.apt_status)}
+                    </Text>
+                  </View>,
+                  true,
+                )}
+                {renderCell('Ref. No', detail.payment_provider_ref ?? 'Not yet added')}
               </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Date of appointment</Text>
-                <Text style={styles.infoValue}>{formatShortDate(detail.apt_scheduled_at)}</Text>
-              </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Time</Text>
-                <Text style={styles.infoValue}>{formatTime(detail.apt_scheduled_at)}</Text>
-              </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Pet Name</Text>
-                <View style={styles.petNameActions}>
-                  <Text numberOfLines={1} style={[styles.infoValue, styles.petNameValue]}>{detail.pet_name}</Text>
-                  <Pressable
-                    accessibilityHint="Opens this pet's previous consultations at your clinic"
-                    accessibilityRole="button"
-                    onPress={() =>
-                      router.push(
-                        `/(vet)/pet-history?petId=${encodeURIComponent(detail.pet_id)}&aptId=${encodeURIComponent(detail.apt_id)}`,
-                      )
-                    }
-                    style={styles.historyButton}
-                  >
-                    <Text style={styles.historyButtonText}>View consultation history</Text>
-                  </Pressable>
+              {detail.apt_reschedule_request_reason && (
+                <View style={[styles.detailRow, styles.detailRowDivider]}>
+                  {renderCell(
+                    'Reschedule request',
+                    <Text style={[styles.detailValue, styles.detailValueWarning]}>
+                      {detail.apt_reschedule_request_reason}
+                    </Text>,
+                  )}
                 </View>
-              </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Breed</Text>
-                <Text style={styles.infoValue}>{detail.pet_breed ?? '—'}</Text>
-              </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Age</Text>
-                <Text style={styles.infoValue}>{ageFromBirthDate(detail.pet_birth_date)}</Text>
-              </View>
-              <View style={styles.infoDivider} />
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Owner</Text>
-                <Text style={styles.infoValue}>{detail.owner_name ?? '—'}</Text>
-              </View>
+              )}
+              {detail.apt_cancellation_request_reason && (
+                <View style={[styles.detailRow, styles.detailRowDivider]}>
+                  {renderCell(
+                    'Cancellation request',
+                    <Text style={[styles.detailValue, styles.detailValueDanger]}>
+                      {detail.apt_cancellation_request_reason}
+                    </Text>,
+                  )}
+                </View>
+              )}
             </View>
 
             {detail.screening && (
               <>
-                <Text style={styles.sectionTitle}>AI Screening Analysis</Text>
+                <Text style={styles.infoSectionTitle}>AI Screening Result</Text>
 
                 <View style={styles.screeningCard}>
-                  {detail.screening.image_url ? (
+                  {detail.screening.image_url && !screeningImageFailed ? (
                     <Image
                       source={{ uri: detail.screening.image_url }}
                       style={styles.screeningImage}
                       resizeMode="cover"
+                      accessibilityLabel="Skin screening photo"
+                      onError={() => setScreeningImageFailed(true)}
                     />
                   ) : (
                     <View style={styles.screeningImagePlaceholder}>
                       <MaterialCommunityIcons color={colors.textMuted} name="image-outline" size={40} />
                     </View>
                   )}
-                  <Text style={styles.screeningLabel}>Final Assessment</Text>
-                  <Text style={styles.screeningPrediction}>{detail.screening.disease}</Text>
-                  <Text style={styles.screeningDesc}>
-                    {Math.round(Number(detail.screening.ais_confidence))}% confidence · Model{' '}
-                    {detail.screening.ais_model_version}
-                  </Text>
+                  <View style={styles.screeningAssessmentRow}>
+                    <View style={styles.screeningAssessmentCopy}>
+                      <Text style={styles.screeningLabel}>Final Assessment</Text>
+                      <Text style={styles.screeningPrediction}>{detail.screening.disease}</Text>
+                      <Text style={styles.screeningDesc}>
+                        {Math.round(Number(detail.screening.ais_confidence))}% confidence
+                      </Text>
+                    </View>
+                    {diagnosisAgreement !== null ? (
+                      <View style={styles.agreementBlock}>
+                        <Text style={styles.agreementLabel}>Diagnosis Agreement</Text>
+                        <View
+                          style={[
+                            styles.agreementPill,
+                            {
+                              backgroundColor: diagnosisAgreement ? '#D5F5E3' : '#FADBD8',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.agreementPillText,
+                              { color: diagnosisAgreement ? '#27AE60' : '#E74C3C' },
+                            ]}
+                          >
+                            {diagnosisAgreement ? 'Matched' : 'Not matched'}
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
 
                 <SymptomAnswersCard rows={detail.screening.symptom_answers ?? []} />
@@ -218,26 +298,14 @@ export default function VetConsultationDetailScreen() {
             )}
 
             {showCompletedRecords && detail.consultation && (
-              <ConsultationSummary consultation={detail.consultation} screening={detail.screening} />
+              <>
+                <Text style={styles.infoSectionTitle}>Consultation</Text>
+                <ConsultationSummary consultation={detail.consultation} showTitle={false} />
+              </>
             )}
 
             {showCompletedRecords && detail.prescription && (
               <PrescriptionSummary appointment={detail} prescription={detail.prescription} />
-            )}
-
-            {(detail.apt_reschedule_request_reason || detail.apt_cancellation_request_reason) && (
-              <View style={styles.requestCard}>
-                {detail.apt_reschedule_request_reason && (
-                  <Text style={styles.requestText}>
-                    Reschedule request: {detail.apt_reschedule_request_reason}
-                  </Text>
-                )}
-                {detail.apt_cancellation_request_reason && (
-                  <Text style={styles.requestText}>
-                    Cancellation request: {detail.apt_cancellation_request_reason}
-                  </Text>
-                )}
-              </View>
             )}
 
             {canRequest && (
@@ -419,7 +487,7 @@ export default function VetConsultationDetailScreen() {
             <Text style={styles.modalMessage}>Your request has been submitted successfully. You will be notified once it is reviewed.</Text>
             <Pressable style={styles.successBtn} onPress={() => {
               setShowSuccessModal(false)
-              router.push('/(vet)/consultations')
+              goToConsultations()
             }}>
               <Text style={styles.successBtnText}>OK</Text>
             </Pressable>
@@ -437,20 +505,35 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   backRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   backLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   backText: { ...font.bold, color: colors.text, fontSize: 17 },
-  statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadge: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
   statusBadgeText: { ...font.bold, fontSize: 11 },
 
   loading: { marginVertical: 40 },
 
-  infoCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  infoLabel: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
-  infoValue: { ...font.bold, color: colors.text, fontSize: 14 },
-  petNameActions: { alignItems: 'center', flexDirection: 'row', flexShrink: 1, gap: 8, marginLeft: 12 },
-  petNameValue: { flexShrink: 1 },
-  historyButton: { backgroundColor: colors.primaryLight, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
-  historyButtonText: { ...font.bold, color: colors.primary, fontSize: 11 },
-  infoDivider: { height: 1, backgroundColor: colors.border },
+  infoSectionTitle: {
+    ...font.bold,
+    color: colors.textMuted,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  infoCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.borderLight,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  detailRow: { flexDirection: 'row' },
+  detailRowDivider: { borderTopColor: colors.border, borderTopWidth: 1 },
+  detailCell: { flex: 1, minWidth: 0, padding: 14 },
+  detailCellDivider: { borderRightColor: colors.border, borderRightWidth: 1 },
+  detailLabel: { ...font.medium, color: colors.textSecondary, fontSize: 11 },
+  detailValue: { ...font.semibold, color: colors.text, fontSize: 13, lineHeight: 18, marginTop: 3 },
+  detailValueWarning: { color: '#B45309' },
+  detailValueDanger: { color: colors.error },
 
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },
   rescheduleBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
@@ -458,17 +541,19 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
   cancelText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
 
-  sectionTitle: { ...font.bold, color: colors.text, fontSize: 17, marginBottom: 14 },
-
-  screeningCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: colors.borderLight },
+  screeningCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight },
   screeningImage: { width: '100%', height: 160, borderRadius: 12, backgroundColor: colors.surfaceAlt, marginBottom: 14 },
   screeningImagePlaceholder: { alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, height: 120, justifyContent: 'center', marginBottom: 14 },
-  screeningLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 12, marginBottom: 4 },
+  screeningAssessmentRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  screeningAssessmentCopy: { flex: 1, minWidth: 0 },
+  screeningLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 12, marginBottom: 4, textTransform: 'uppercase' },
   screeningPrediction: { ...font.extrabold, color: colors.primary, fontSize: 16, marginBottom: 6 },
   screeningDesc: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  agreementBlock: { alignItems: 'flex-end', flexShrink: 0, paddingTop: 2 },
+  agreementLabel: { ...font.semibold, color: colors.textSecondary, fontSize: 10, marginBottom: 5, textAlign: 'right' },
+  agreementPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  agreementPillText: { ...font.bold, fontSize: 12 },
 
-  requestCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight, gap: 6 },
-  requestText: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },

@@ -225,6 +225,9 @@ SUPABASE_STORAGE_BUCKET_CLINIC_IMAGES = env('SUPABASE_STORAGE_BUCKET_CLINIC_IMAG
 SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES = env(
     'SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES', default='screening-images',
 )
+SUPABASE_STORAGE_BUCKET_STAFF_IMAGES = env(
+    'SUPABASE_STORAGE_BUCKET_STAFF_IMAGES', default='owner-images',
+)
 
 # Claude Vision image review. Only the Django backend calls Anthropic; the
 # on-device EfficientNet classifier remains independent and never sends

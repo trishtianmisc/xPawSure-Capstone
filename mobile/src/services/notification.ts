@@ -20,3 +20,8 @@ export async function markAllNotificationsRead(): Promise<{ detail: string }> {
   const { data } = await http.patch('/notifications/read-all/')
   return data
 }
+
+export async function clearNotifications(): Promise<{ detail: string }> {
+  const { data } = await http.delete('/notifications/')
+  return data
+}

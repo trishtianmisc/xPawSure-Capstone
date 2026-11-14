@@ -1,27 +1,17 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { useMemo } from 'react'
-import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
 import { font } from '../../src/theme/typography'
+import { VetAppointmentCard } from '../../features/vet/components/VetAppointmentCard'
 import { usePullToRefresh } from '../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetDashboard } from '../../features/vet/hooks/useVetDashboard'
-import { formatAppointmentStatus, formatTime } from '../../features/vet/lib/format'
+import { formatTime } from '../../features/vet/lib/format'
 import { formatDate, manilaDateKey } from '../../src/utils/datetime'
-import type { AppointmentStatus } from '../../features/vet/types'
-
-const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
-  PENDING: { bg: '#FDEBD0', text: '#E67E22' },
-  CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
-  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
-  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
-  COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
-  CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
-  NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
-}
 
 const STAT_STYLES = {
   light: {
@@ -53,11 +43,12 @@ export default function VetHomeScreen() {
     time: formatTime(apt.apt_scheduled_at),
     pet_name: apt.pet_name,
     breed: apt.pet_breed ?? apt.pet_species ?? '',
-    owner_name: apt.owner_name ?? '',
+    pet_profile_image: apt.pet_profile_image ?? null,
     status: apt.apt_status,
   }))
 
-  const monthStr = formatDate(new Date(), { month: 'long', year: 'numeric' })
+  const todayStr = formatDate(new Date(), { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+  const pendingToday = stats ? stats.today_stats.confirmed + stats.today_stats.ongoing : 0
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -83,25 +74,25 @@ export default function VetHomeScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <MaterialCommunityIcons color={colors.primary} name="calendar-check" size={18} />
-            <Text style={styles.summaryTitle}>Monthly Summary</Text>
+            <Text style={styles.summaryTitle}>Today&apos;s Summary</Text>
           </View>
-          <Text style={styles.summaryDate}>{monthStr}</Text>
+          <Text style={styles.summaryDate}>{todayStr}</Text>
           {isLoading ? (
             <ActivityIndicator color={colors.primary} style={styles.loading} />
           ) : isError || !stats ? (
-            <Text style={styles.emptyText}>Unable to load monthly summary.</Text>
+            <Text style={styles.emptyText}>Unable to load today&apos;s summary.</Text>
           ) : (
             <View style={styles.statsRow}>
               <View style={[styles.statBox, { backgroundColor: statStyles.consultations.bg }]}>
-                <Text style={[styles.statValue, { color: statStyles.consultations.text }]}>{stats.consultations_this_month}</Text>
+                <Text style={[styles.statValue, { color: statStyles.consultations.text }]}>{stats.today_stats.total}</Text>
                 <Text style={[styles.statLabel, { color: statStyles.consultations.text }]}>Consultations</Text>
               </View>
               <View style={[styles.statBox, { backgroundColor: statStyles.upcoming.bg }]}>
-                <Text style={[styles.statValue, { color: statStyles.upcoming.text }]}>{stats.pending}</Text>
+                <Text style={[styles.statValue, { color: statStyles.upcoming.text }]}>{pendingToday}</Text>
                 <Text style={[styles.statLabel, { color: statStyles.upcoming.text }]}>Upcoming</Text>
               </View>
               <View style={[styles.statBox, { backgroundColor: statStyles.completed.bg }]}>
-                <Text style={[styles.statValue, { color: statStyles.completed.text }]}>{stats.completed}</Text>
+                <Text style={[styles.statValue, { color: statStyles.completed.text }]}>{stats.today_stats.completed}</Text>
                 <Text style={[styles.statLabel, { color: statStyles.completed.text }]}>Completed</Text>
               </View>
             </View>
@@ -119,33 +110,17 @@ export default function VetHomeScreen() {
             <Text style={styles.emptyText}>No appointments scheduled for today.</Text>
           </View>
         ) : (
-          schedule.map((item) => {
-            const statusStyle = STATUS_COLORS[item.status]
-            return (
-              <Pressable
-                key={item.id}
-                onPress={() => router.push(`/(vet)/consultations/${item.id}`)}
-                style={({ pressed }) => [styles.scheduleCard, pressed && styles.scheduleCardPressed]}
-              >
-                <View style={styles.scheduleTimeCol}>
-                  <Text style={styles.scheduleTime}>{item.time}</Text>
-                </View>
-                <View style={styles.scheduleDivider} />
-                <View style={styles.scheduleInfoCol}>
-                  <View style={styles.schedulePetRow}>
-                    <Text style={styles.schedulePetName} numberOfLines={1}>{item.pet_name}</Text>
-                    {!!item.breed && <Text style={styles.scheduleBreed} numberOfLines={1}> | {item.breed}</Text>}
-                  </View>
-                <Text style={styles.scheduleOwner}>{item.owner_name}</Text>
-              </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
-                    {formatAppointmentStatus(item.status)}
-                  </Text>
-                </View>
-              </Pressable>
-            )
-          })
+          schedule.map((item) => (
+            <VetAppointmentCard
+              breed={item.breed}
+              imageUrl={item.pet_profile_image}
+              key={item.id}
+              meta={item.time}
+              onPress={() => router.push(`/(vet)/consultations/${item.id}`)}
+              petName={item.pet_name}
+              status={item.status}
+            />
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
@@ -172,20 +147,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   sectionTitle: { ...font.bold, color: colors.text, fontSize: 17 },
-
-  scheduleCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.borderLight },
-  scheduleCardPressed: { opacity: 0.7 },
-  scheduleTimeCol: { width: 70 },
-  scheduleTime: { ...font.bold, color: colors.text, fontSize: 13 },
-  scheduleDivider: { width: 3, alignSelf: 'stretch', backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12, marginVertical: 2 },
-  scheduleInfoCol: { flex: 1 },
-  schedulePetRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
-  schedulePetName: { ...font.bold, color: colors.text, fontSize: 15 },
-  scheduleBreed: { ...font.regular, color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-  scheduleOwner: { ...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
-
-  statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, marginLeft: 8 },
-  statusBadgeText: { fontSize: 11, fontWeight: '700' },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { color: colors.textSecondary, fontSize: 14, textAlign: 'center' },
