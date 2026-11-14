@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { Button, Card } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
@@ -21,6 +21,7 @@ import {
   paidRangeError,
   type PaymentsCsvFilters,
 } from '../utils/exportPaymentsCsv'
+import { parsePaymentsUrlFilters } from '../utils/paymentUrlFilters'
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '', label: 'All statuses' },
@@ -47,12 +48,18 @@ export function ClinicAdminPaymentsPage() {
   const { user } = useAuth()
   const { showToast } = useToast()
   const settings = useClinicSettings()
+  // Deep links (e.g. from Reports & Analytics) pre-filter the list; values
+  // are validated on the way in so a crafted URL can never reach the API,
+  // and changes are written back with replace so filter tweaks never stack
+  // up history entries.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [urlFilters] = useState(() => parsePaymentsUrlFilters(searchParams))
 
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(urlFilters.status)
   const [method, setMethod] = useState('')
-  const [paidFrom, setPaidFrom] = useState('')
-  const [paidTo, setPaidTo] = useState('')
+  const [paidFrom, setPaidFrom] = useState(urlFilters.paid_from)
+  const [paidTo, setPaidTo] = useState(urlFilters.paid_to)
   const [page, setPage] = useState(1)
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -81,12 +88,34 @@ export function ClinicAdminPaymentsPage() {
     search || status || method || paidFrom || paidTo,
   )
 
-  function changeFilter(setter: (value: string) => void) {
+  function changeFilter(
+    setter: (value: string) => void,
+    urlKey?: 'status' | 'paid_from' | 'paid_to',
+  ) {
     return (value: string) => {
       setter(value)
       setPage(1)
       setExportError(null)
+      if (urlKey) syncParams({ [urlKey]: value })
     }
+  }
+
+  function syncParams(patch: {
+    status?: string
+    paid_from?: string
+    paid_to?: string
+  }) {
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous)
+        for (const [key, value] of Object.entries(patch)) {
+          if (value) next.set(key, value)
+          else next.delete(key)
+        }
+        return next
+      },
+      { replace: true },
+    )
   }
 
   function clearFilters() {
@@ -97,6 +126,7 @@ export function ClinicAdminPaymentsPage() {
     setPaidTo('')
     setPage(1)
     setExportError(null)
+    setSearchParams({}, { replace: true })
   }
 
   async function handleExport() {
@@ -173,7 +203,7 @@ export function ClinicAdminPaymentsPage() {
             <select
               aria-label="Filter by status"
               className={INPUT_CLASSES}
-              onChange={(event) => changeFilter(setStatus)(event.target.value)}
+              onChange={(event) => changeFilter(setStatus, 'status')(event.target.value)}
               value={status}
             >
               {STATUS_FILTERS.map((option) => (
@@ -206,7 +236,9 @@ export function ClinicAdminPaymentsPage() {
                   aria-label="Paid from"
                   className={`${INPUT_CLASSES} w-40`}
                   max={paidTo || undefined}
-                  onChange={(event) => changeFilter(setPaidFrom)(event.target.value)}
+                  onChange={(event) =>
+                    changeFilter(setPaidFrom, 'paid_from')(event.target.value)
+                  }
                   type="date"
                   value={paidFrom}
                 />
@@ -218,7 +250,9 @@ export function ClinicAdminPaymentsPage() {
                   aria-label="Paid to"
                   className={`${INPUT_CLASSES} w-40`}
                   min={paidFrom || undefined}
-                  onChange={(event) => changeFilter(setPaidTo)(event.target.value)}
+                  onChange={(event) =>
+                    changeFilter(setPaidTo, 'paid_to')(event.target.value)
+                  }
                   type="date"
                   value={paidTo}
                 />

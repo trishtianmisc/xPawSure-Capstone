@@ -39,6 +39,9 @@ export interface VetWorkloadRow {
   total: number
   completed: number
   no_shows: number
+  // Fixed two-decimal string: PAID payments in the window attributed to this
+  // vet through the payment's appointment (same rule as the revenue KPI).
+  revenue: string
   avg_per_day: number
 }
 
@@ -90,4 +93,13 @@ export interface ReportRevenue {
   previous_revenue: string
   date_from: string
   date_to: string
+  // Zero-filled buckets across the range: daily YYYY-MM-DD keys up to 31
+  // days, monthly YYYY-MM keys beyond. amount is a fixed two-decimal string
+  // and the sum of the series always equals `revenue`.
+  series: RevenueSeriesPoint[]
+}
+
+export interface RevenueSeriesPoint {
+  date: string
+  amount: string
 }

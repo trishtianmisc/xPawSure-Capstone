@@ -12,6 +12,7 @@ import { aggregateSeries, type Granularity } from '../utils/granularity'
 import { AppointmentsOverTimeChart } from './AppointmentsOverTimeChart'
 import { PatientDemographicsCard } from './PatientDemographicsCard'
 import { ReportKPIRows } from './ReportKPIRows'
+import { RevenueOverTimeChart } from './RevenueOverTimeChart'
 import { ScreeningsAnalyticsCard } from './ScreeningsAnalyticsCard'
 import { StatusBreakdownChart } from './StatusBreakdownChart'
 import { VetWorkloadTable } from './VetWorkloadTable'
@@ -26,6 +27,8 @@ interface PrintableReportProps {
   revenue?: ReportRevenue
   rangeLabel: string
   days: number
+  // Preset-aware "vs previous ..." wording, identical to the screen.
+  comparisonLabel: string
   vetLabel: string
   vetSelected: boolean
   generatedAt: Date | null
@@ -33,6 +36,7 @@ interface PrintableReportProps {
   granularity: Granularity
   agreementRate: number | null
   previousAgreementRate: number | null
+  paymentsHref: string
 }
 
 // Paper-first document rendered off-screen (left: -9999px) instead of
@@ -51,6 +55,7 @@ export function PrintableReport({
   revenue,
   rangeLabel,
   days,
+  comparisonLabel,
   vetLabel,
   vetSelected,
   generatedAt,
@@ -58,6 +63,7 @@ export function PrintableReport({
   granularity,
   agreementRate,
   previousAgreementRate,
+  paymentsHref,
 }: PrintableReportProps) {
   return (
     <div
@@ -118,7 +124,7 @@ export function PrintableReport({
               previous={summary.previous}
               agreementRate={agreementRate}
               previousAgreementRate={previousAgreementRate}
-              days={days}
+              comparisonLabel={comparisonLabel}
               vetSelected={vetSelected}
               revenue={revenue}
             />
@@ -136,6 +142,15 @@ export function PrintableReport({
           <section className="print-section">
             <StatusBreakdownChart data={appointments.by_status} />
           </section>
+
+          {revenue && (
+            <section className="print-section">
+              <RevenueOverTimeChart
+                series={revenue.series}
+                paymentsHref={paymentsHref}
+              />
+            </section>
+          )}
 
           <section className="print-section">
             <PatientDemographicsCard report={patients} />

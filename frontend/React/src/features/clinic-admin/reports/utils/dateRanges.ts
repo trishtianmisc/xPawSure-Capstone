@@ -3,10 +3,16 @@ export interface DateWindow {
   date_to: string
 }
 
-// The backend defaults to the last 30 clinic-local days when no dates are
-// sent. The page always sends explicit dates so the comparison label and the
-// CSV filename have concrete values, so the client mirrors that same span.
-export const DEFAULT_WINDOW_DAYS = 30
+export type RangePreset =
+  | 'today'
+  | 'this-month'
+  | 'this-year'
+  | 'last-30'
+  | 'custom'
+
+// The page only resolves fixed presets itself; 'custom' keeps whatever window
+// the date inputs already hold, so presetWindow never sees it.
+export type FixedRangePreset = Exclude<RangePreset, 'custom'>
 
 const MS_PER_DAY = 86_400_000
 
@@ -22,11 +28,50 @@ function parseISODate(value: string): Date {
   return new Date(year, month - 1, day)
 }
 
-export function defaultWindow(now = new Date()): DateWindow {
-  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const from = new Date(to)
-  from.setDate(from.getDate() - (DEFAULT_WINDOW_DAYS - 1))
-  return { date_from: toISODate(from), date_to: toISODate(to) }
+// en-CA formats as YYYY-MM-DD, so the clinic's "today" is a plain calendar
+// string that never depends on the browser's own timezone. Mirrors the
+// backend's datetime.now(get_clinic_timezone(...)).date() default window.
+function clinicToday(timeZone: string, now: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now)
+}
+
+export function presetWindow(
+  preset: FixedRangePreset,
+  timeZone: string,
+  now = new Date(),
+): DateWindow {
+  const to = parseISODate(clinicToday(timeZone, now))
+  switch (preset) {
+    case 'today':
+      return { date_from: toISODate(to), date_to: toISODate(to) }
+    case 'this-year':
+      // Year-to-date: Jan 1 through today, never future zero days.
+      return { date_from: `${to.getFullYear()}-01-01`, date_to: toISODate(to) }
+    case 'last-30': {
+      const from = new Date(to)
+      from.setDate(from.getDate() - 29)
+      return { date_from: toISODate(from), date_to: toISODate(to) }
+    }
+    case 'this-month':
+      return {
+        date_from: `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-01`,
+        date_to: toISODate(to),
+      }
+  }
+}
+
+// The baseline behind "vs previous ..." is always the equal-length window
+// immediately before the range (the API's previous_window), never a calendar
+// month or year, so only day-count wording is honest. Today is exactly one
+// day, which reads as "vs yesterday".
+export function comparisonLabel(preset: RangePreset, days: number): string {
+  if (preset === 'today') return 'vs yesterday'
+  return `vs previous ${days} day${days === 1 ? '' : 's'}`
 }
 
 // Equal-length window immediately before the requested one: Oct 1-8 (8 days)

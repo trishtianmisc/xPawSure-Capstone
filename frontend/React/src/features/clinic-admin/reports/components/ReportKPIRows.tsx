@@ -136,7 +136,10 @@ interface ReportKPIRowsProps {
   previous: SummaryCounts
   agreementRate: number | null
   previousAgreementRate: number | null
-  days: number
+  // Preset-aware wording for the equal-length baseline ("vs previous 13
+  // days", "vs yesterday", ...), computed by the page so the printable
+  // report and the screen always agree.
+  comparisonLabel: string
   vetSelected: boolean
   revenue?: ReportRevenue
   revenueLoading?: boolean
@@ -149,14 +152,14 @@ export function ReportKPIRows({
   previous,
   agreementRate,
   previousAgreementRate,
-  days,
+  comparisonLabel,
   vetSelected,
   revenue,
   revenueLoading,
   revenueError,
   onRevenueRetry,
 }: ReportKPIRowsProps) {
-  const comparison = `vs previous ${days} day${days === 1 ? '' : 's'}`
+  const comparison = comparisonLabel
 
   return (
     <div>

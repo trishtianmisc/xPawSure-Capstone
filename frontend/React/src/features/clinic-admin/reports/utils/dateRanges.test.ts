@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  DEFAULT_WINDOW_DAYS,
-  defaultWindow,
+  comparisonLabel,
   formatRange,
   formatShortDate,
+  presetWindow,
   previousWindow,
   toISODate,
   windowDays,
@@ -17,18 +17,86 @@ describe('toISODate', () => {
   })
 })
 
-describe('defaultWindow', () => {
-  it('spans DEFAULT_WINDOW_DAYS ending today', () => {
-    const window = defaultWindow(new Date(2026, 9, 26))
-    expect(window.date_to).toBe('2026-10-26')
-    expect(window.date_from).toBe('2026-09-27')
-    expect(windowDays(window.date_from, window.date_to)).toBe(DEFAULT_WINDOW_DAYS)
+describe('presetWindow', () => {
+  // 12:00Z on Oct 26 is already Oct 26 evening in Manila: the clinic's
+  // calendar day, not the browser's UTC day, must decide the window.
+  const NOW = new Date('2026-10-26T12:00:00Z')
+  const TZ = 'Asia/Manila'
+
+  it('resolves Today to a single clinic-local day', () => {
+    expect(presetWindow('today', TZ, NOW)).toEqual({
+      date_from: '2026-10-26',
+      date_to: '2026-10-26',
+    })
   })
 
-  it('is inclusive across a month boundary', () => {
-    const window = defaultWindow(new Date(2026, 2, 3))
-    expect(window.date_from).toBe('2026-02-02')
-    expect(window.date_to).toBe('2026-03-03')
+  it('resolves This month from the 1st through today with no future days', () => {
+    expect(presetWindow('this-month', TZ, NOW)).toEqual({
+      date_from: '2026-10-01',
+      date_to: '2026-10-26',
+    })
+  })
+
+  it('resolves This year as year-to-date, never a full calendar year', () => {
+    expect(presetWindow('this-year', TZ, NOW)).toEqual({
+      date_from: '2026-01-01',
+      date_to: '2026-10-26',
+    })
+  })
+
+  it('resolves Last 30 days as exactly 30 inclusive days ending today', () => {
+    const window = presetWindow('last-30', TZ, NOW)
+    expect(window).toEqual({ date_from: '2026-09-27', date_to: '2026-10-26' })
+    expect(windowDays(window.date_from, window.date_to)).toBe(30)
+  })
+
+  it('uses the clinic timezone, not the browser or UTC day', () => {
+    // 20:00Z on Nov 1 is already Nov 2 in Manila (UTC+8).
+    const lateUtc = new Date('2026-11-01T20:00:00Z')
+    expect(presetWindow('today', TZ, lateUtc).date_to).toBe('2026-11-02')
+    expect(presetWindow('this-month', TZ, lateUtc)).toEqual({
+      date_from: '2026-11-01',
+      date_to: '2026-11-02',
+    })
+    expect(presetWindow('this-year', TZ, lateUtc).date_from).toBe('2026-01-01')
+    expect(presetWindow('last-30', TZ, lateUtc).date_from).toBe('2026-10-04')
+  })
+
+  it('handles year-to-date across a leap-year boundary', () => {
+    expect(
+      presetWindow('this-year', TZ, new Date('2028-01-01T12:00:00Z')),
+    ).toEqual({ date_from: '2028-01-01', date_to: '2028-01-01' })
+    // 2028 is a leap year: Feb 1 + 29 inclusive days lands on Mar 1.
+    expect(
+      presetWindow('last-30', TZ, new Date('2028-03-01T12:00:00Z')),
+    ).toEqual({ date_from: '2028-02-01', date_to: '2028-03-01' })
+  })
+})
+
+describe('comparisonLabel', () => {
+  it('calls the single-day baseline yesterday', () => {
+    expect(comparisonLabel('today', 1)).toBe('vs yesterday')
+  })
+
+  it('counts days for equal-length windows of any preset', () => {
+    expect(comparisonLabel('this-month', 28)).toBe('vs previous 28 days')
+    expect(comparisonLabel('this-year', 299)).toBe('vs previous 299 days')
+    expect(comparisonLabel('last-30', 30)).toBe('vs previous 30 days')
+    expect(comparisonLabel('custom', 8)).toBe('vs previous 8 days')
+  })
+
+  it('never claims a calendar month or year for the baseline', () => {
+    for (const [preset, days] of [
+      ['this-month', 31],
+      ['this-year', 366],
+      ['custom', 30],
+    ] as const) {
+      expect(comparisonLabel(preset, days)).not.toMatch(/month|year/)
+    }
+  })
+
+  it('uses singular day wording for a one-day custom range', () => {
+    expect(comparisonLabel('custom', 1)).toBe('vs previous 1 day')
   })
 })
 

@@ -1,8 +1,9 @@
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Avg, Count, Exists, Min, OuterRef, Q, Sum
+from django.db.models.functions import TruncDay, TruncMonth
 from django.utils import timezone
 
 from ai_screenings.models import AiScreening, ScreeningStatus
@@ -67,6 +68,58 @@ def previous_window(date_from, date_to):
     prev_to = date_from - timedelta(days=1)
     prev_from = prev_to - timedelta(days=length - 1)
     return prev_from, prev_to
+
+
+def _revenue_series(payments, tz, date_from, date_to):
+    """Zero-filled PAID-revenue buckets across the window.
+
+    Daily buckets for ranges up to 31 days, calendar months beyond, so a
+    yearly view stays readable. Bucket boundaries are clinic-local
+    (TruncDay/TruncMonth with tzinfo) - never a bare __date lookup, which
+    would bucket in the global UTC timezone. Every bucket in the range is
+    returned with amount "0.00" when empty: a skipped day would make the
+    chart's line draw straight across the dip and hide it.
+    """
+    span = (date_to - date_from).days + 1
+    monthly = span > 31
+    bucket = TruncMonth('pay_paid_at', tzinfo=tz) if monthly else TruncDay(
+        'pay_paid_at', tzinfo=tz,
+    )
+    rows = (
+        payments.annotate(bucket=bucket)
+        .values('bucket')
+        .annotate(total=Sum('pay_amount'))
+        .order_by('bucket')
+    )
+    # TruncDay/TruncMonth with tzinfo return aware datetimes already
+    # converted to the clinic timezone, so .date() is the clinic-local day
+    # (and, for months, the first of that clinic-local month).
+    by_bucket = {
+        row['bucket'].date(): row['total'] or Decimal('0')
+        for row in rows
+    }
+
+    series = []
+    if monthly:
+        cursor = date(date_from.year, date_from.month, 1)
+        while cursor <= date_to:
+            series.append({
+                'date': cursor.strftime('%Y-%m'),
+                'amount': f"{by_bucket.get(cursor, Decimal('0')):.2f}",
+            })
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+    else:
+        cursor = date_from
+        while cursor <= date_to:
+            series.append({
+                'date': cursor.isoformat(),
+                'amount': f"{by_bucket.get(cursor, Decimal('0')):.2f}",
+            })
+            cursor += timedelta(days=1)
+    return series
 
 
 def _rate(numerator, denominator):
@@ -252,6 +305,26 @@ class ReportService:
             )
         }
 
+        # Same paid-date rule as the revenue KPI: PAID payments inside the
+        # clinic-local window, attributed through the payment's appointment's
+        # vet. Payments without an appointment have no vet to attribute and
+        # drop out; the appointment itself may fall outside the window (money
+        # counts when it changes hands, not when the visit was booked).
+        start, end_exclusive = day_bounds(clinic_id, date_from, date_to)
+        revenue_rows = Payment.objects.filter(
+            cln_id_id=clinic_id,
+            pay_status=PaymentStatus.PAID,
+            pay_paid_at__gte=start,
+            pay_paid_at__lt=end_exclusive,
+            apt_id__stf_id__in=[row['stf_id'] for row in rows],
+        ).values('apt_id__stf_id').annotate(
+            total=Sum('pay_amount'),
+        )
+        revenue_by_vet = {
+            row['apt_id__stf_id']: row['total'] or Decimal('0')
+            for row in revenue_rows
+        }
+
         results = [
             {
                 'vet_id': str(row['stf_id']),
@@ -259,6 +332,9 @@ class ReportService:
                 'total': row['total'],
                 'completed': row['completed'],
                 'no_shows': row['no_shows'],
+                'revenue': (
+                    f"{revenue_by_vet.get(row['stf_id'], Decimal('0')):.2f}"
+                ),
                 'avg_per_day': round(row['total'] / days, 1),
             }
             for row in rows
@@ -405,14 +481,18 @@ class ReportService:
         [start, end_exclusive) bounds as every other report, applied to
         PAY_PAID_AT - never a bare __date lookup. Amounts are returned as
         fixed two-decimal strings so no float ever touches them.
+
+        `series` buckets the same window with the same queryset, so its
+        total can never disagree with the `revenue` KPI above it.
         """
         start, end_exclusive = day_bounds(clinic_id, date_from, date_to)
+        tz = get_clinic_timezone(clinic_id)
         prev_from, prev_to = previous_window(date_from, date_to)
         prev_start, prev_end_exclusive = day_bounds(
             clinic_id, prev_from, prev_to,
         )
 
-        def _window_sum(win_start, win_end):
+        def _paid_in(win_start, win_end):
             payments = Payment.objects.filter(
                 cln_id_id=clinic_id,
                 pay_status=PaymentStatus.PAID,
@@ -421,13 +501,19 @@ class ReportService:
             )
             if vet_id:
                 payments = payments.filter(apt_id__stf_id_id=vet_id)
-            return payments.aggregate(
+            return payments
+
+        def _window_sum(win_start, win_end):
+            return _paid_in(win_start, win_end).aggregate(
                 total=Sum('pay_amount'),
                 count=Count('pay_id'),
             )
 
         current = _window_sum(start, end_exclusive)
         previous = _window_sum(prev_start, prev_end_exclusive)
+        series = _revenue_series(
+            _paid_in(start, end_exclusive), tz, date_from, date_to,
+        )
 
         return {
             'revenue': f"{current['total'] or Decimal('0'):.2f}",
@@ -436,6 +522,7 @@ class ReportService:
             'previous_revenue': f"{previous['total'] or Decimal('0'):.2f}",
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
+            'series': series,
         }
 
 
