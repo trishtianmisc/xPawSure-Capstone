@@ -483,3 +483,10 @@ class FreeFollowUpTests(FollowUpFlowBase):
                 ntf_reference_id=str(follow_up.apt_id),
             ).exists(),
         )
+        self.assertTrue(
+            Notification.objects.filter(
+                usr_id=self.vet_user,
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ntf_reference_id=str(follow_up.apt_id),
+            ).exists(),
+        )

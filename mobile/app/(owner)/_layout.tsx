@@ -14,6 +14,8 @@ import { font } from '../../src/theme/typography'
 const OWNER_REFRESH_QUERY_KEYS = [
   ['appointment'],
   ['consultations'],
+  ['consultation'],
+  ['screening'],
   ['prescriptions'],
   ['vaccinations'],
 ] as const

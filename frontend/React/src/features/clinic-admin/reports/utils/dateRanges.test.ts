@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  DEFAULT_WINDOW_DAYS,
   comparisonLabel,
+  defaultWindow,
   formatRange,
   formatShortDate,
   presetWindow,
@@ -14,6 +16,35 @@ describe('toISODate', () => {
   it('formats local dates as zero-padded YYYY-MM-DD', () => {
     expect(toISODate(new Date(2026, 0, 5))).toBe('2026-01-05')
     expect(toISODate(new Date(2026, 11, 31))).toBe('2026-12-31')
+  })
+})
+
+describe('defaultWindow', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('spans DEFAULT_WINDOW_DAYS ending today', () => {
+    const window = defaultWindow(new Date(2026, 9, 26))
+    expect(window.date_to).toBe('2026-10-26')
+    expect(window.date_from).toBe('2026-09-27')
+    expect(windowDays(window.date_from, window.date_to)).toBe(DEFAULT_WINDOW_DAYS)
+  })
+
+  it('is inclusive across a month boundary', () => {
+    const window = defaultWindow(new Date(2026, 2, 3))
+    expect(window.date_from).toBe('2026-02-02')
+    expect(window.date_to).toBe('2026-03-03')
+  })
+
+  it('defaults to the Manila calendar day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
+
+    expect(defaultWindow()).toEqual({
+      date_from: '2026-09-03',
+      date_to: '2026-10-02',
+    })
   })
 })
 

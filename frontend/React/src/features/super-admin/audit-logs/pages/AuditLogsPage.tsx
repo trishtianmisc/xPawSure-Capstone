@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
 import { useDebounce } from '../../../../hooks/useDebounce'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDateTime } from '../../../../utils/format'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../../clinics/services/clinic.service'
 import { useAuditLogs } from '../hooks/useAuditLogs'
@@ -193,7 +194,7 @@ export function AuditLogsPage() {
                   {data.results.map((entry: AuditLogEntry) => (
                     <tr key={entry.id} className="transition hover:bg-amber-50/50 dark:hover:bg-amber-900/10">
                       <td className="whitespace-nowrap px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(entry.timestamp).toLocaleString()}
+                        {formatDateTime(entry.timestamp)}
                       </td>
                       <td className="px-5 py-4">
                         <Badge variant={actionVariant(entry.action)}>{entry.action}</Badge>

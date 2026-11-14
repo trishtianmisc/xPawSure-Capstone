@@ -98,4 +98,45 @@ describe('ConsultationSummary', () => {
 
     expect(screen.getByText('Not matched')).toBeInTheDocument()
   })
+
+  it('wraps long values inside their detail cell', () => {
+    render(
+      <ConsultationSummary
+        consultation={makeConsultation({ notes: 'Start the prescribed medications.' })}
+      />,
+    )
+
+    expect(screen.getByText('Start the prescribed medications.')).toHaveClass('break-words')
+  })
+
+  it('shows the specific disease beneath the diagnosis', () => {
+    render(
+      <ConsultationSummary
+        consultation={makeConsultation({
+          diagnosis: 'Fungal',
+          specific_disease: 'Malassezia dermatitis',
+        })}
+      />,
+    )
+
+    expect(screen.getByText(/Specific disease: Malassezia dermatitis/)).toHaveClass(
+      'text-xs',
+      'font-normal',
+    )
+  })
+
+  it('shows the preferred follow-up date with the follow-up value', () => {
+    render(
+      <ConsultationSummary
+        consultation={makeConsultation({
+          follow_up_required: true,
+          follow_up_target_date: '2026-02-01',
+        })}
+      />,
+    )
+
+    expect(screen.getByText(/Needed/)).toHaveTextContent(
+      'Preferred follow-up: Feb 1, 2026',
+    )
+  })
 })

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Badge, Button } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDate } from '../../../../utils/format'
 import { CreateAdminModal } from '../../admins/components/CreateAdminModal'
 import { useAdminAction } from '../../admins/hooks/useAdmins'
 import { adminService } from '../../admins/services/admin.service'
@@ -107,7 +108,7 @@ export function ClinicAdminsTab({ clinicId, clinicName }: { clinicId: string; cl
                         <Badge variant={STATUS_VARIANTS[status] ?? 'default'}>{status}</Badge>
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {admin.last_login ? new Date(admin.last_login).toLocaleDateString() : 'Never'}
+                        {admin.last_login ? formatDate(admin.last_login) : 'Never'}
                       </td>
                       <td className="px-5 py-4 text-right">
                         <div className="flex items-center justify-end gap-1">

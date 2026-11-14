@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+import uuid
 from unittest.mock import patch
 
 from django.conf import settings
@@ -231,6 +232,34 @@ class PublicPetAPITest(TestCase):
         self.assertNotIn('Overdue shot', response.content.decode())
         self.assertNotIn('next_due', response.content.decode())
         self.assertNotIn('date_given', response.content.decode())
+
+    def test_public_status_uses_only_latest_dose_in_each_series(self):
+        today = date.today()
+        series_id = uuid.uuid4()
+        previous = VaccinationRecord.objects.create(
+            pet_id=self.pet,
+            vac_name='Rabies',
+            vac_dose='1 ml',
+            vac_route=VaccinationRoute.SUBCUTANEOUS,
+            vac_date_given=today - timedelta(days=400),
+            vac_next_due=today - timedelta(days=5),
+            vac_series_id=series_id,
+            vac_source='OWNER',
+        )
+        VaccinationRecord.objects.create(
+            pet_id=self.pet,
+            vac_name='Rabies',
+            vac_date_given=today,
+            vac_next_due=today + timedelta(days=365),
+            vac_series_id=previous.vac_series_id,
+            vac_source='OWNER',
+        )
+
+        response = self.client.get(self._url(self.pet.pet_qr_code))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['vaccination_statuses'], ['CURRENT'])
+        self.assertNotIn('Rabies', response.content.decode())
 
 
 class QRPublicUrlTest(TestCase):

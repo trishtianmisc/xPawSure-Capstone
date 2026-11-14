@@ -52,6 +52,7 @@ function makeAppointment(prescription: VetPrescriptionInfo | null): VetAppointme
     pet_birth_date: '2022-01-01',
     pet_weight: '12.50',
     pet_color: 'Black',
+    pet_profile_image: null,
     owner_name: 'John Doe',
     owner_phone: '09171234567',
     owner_address: '123 Bark Street, Quezon City',
@@ -67,9 +68,13 @@ function makeAppointment(prescription: VetPrescriptionInfo | null): VetAppointme
     apt_cancellation_reason: null,
     apt_reschedule_request_reason: null,
     apt_cancellation_request_reason: null,
+    apt_created_at: '2026-01-01T09:00:00Z',
+    apt_checked_in_at: null,
+    apt_completed_at: null,
     screening: null,
     consultation: null,
     prescription,
+    payment_provider_ref: null,
   }
 }
 
@@ -94,12 +99,14 @@ describe('PrescriptionPreviewPage', () => {
     expect(screen.getByText('Veterinary Medicine')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Dr. Smith, DVM' })).toBeInTheDocument()
     expect(
-      screen.getByText(/Happy Paws Clinic - 456 Paws Avenue, Quezon City/),
+      screen.getByText(/Happy Paws Clinic · 456 Paws Avenue, Quezon City/),
     ).toBeInTheDocument()
     expect(screen.getByText('VET-12345')).toBeInTheDocument()
     expect(screen.queryByText(/PTR #/)).not.toBeInTheDocument()
     expect(screen.queryByText(/S2 #/)).not.toBeInTheDocument()
-    expect(screen.getByText("Pet's Age:")).toBeInTheDocument()
+    expect(screen.getByText("Owner's Name")).toBeInTheDocument()
+    expect(screen.getByText("Pet's Age")).toBeInTheDocument()
+    expect(document.querySelector('#rx-watermark-pattern')).toBeNull()
     expect(screen.getByText('Male')).toBeInTheDocument()
     expect(screen.getByText('Labrador')).toBeInTheDocument()
     expect(screen.getByText('12.50 kg')).toBeInTheDocument()

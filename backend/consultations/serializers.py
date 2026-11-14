@@ -2,11 +2,13 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
 from consultations.models import Consultation
+from consultations.services import ConsultationService
 
 
 class ConsultationResponseSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(source='con_id', read_only=True)
     appointment_id = serializers.UUIDField(source='apt_id.apt_id', read_only=True)
+    screening_id = serializers.SerializerMethodField()
     pet_id = serializers.UUIDField(source='apt_id.pet_id.pet_id', read_only=True)
     pet_name = serializers.CharField(source='apt_id.pet_id.pet_name', read_only=True)
     veterinarian = serializers.SerializerMethodField()
@@ -29,7 +31,7 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Consultation
         fields = [
-            'id', 'appointment_id', 'pet_id', 'pet_name', 'veterinarian',
+            'id', 'appointment_id', 'screening_id', 'pet_id', 'pet_name', 'veterinarian',
             'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
             'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
             'follow_up_required', 'follow_up_target_date', 'created_at',
@@ -39,12 +41,32 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         user = obj.stf_id.usr_id
         return f'{user.usr_first_name} {user.usr_last_name}'.strip()
 
+    def get_screening_id(self, obj) -> str | None:
+        return ConsultationService.screening_id_for(obj)
+
     def get_prescription_id(self, obj) -> str | None:
         try:
             prescription = obj.prescription
         except ObjectDoesNotExist:
             return None
         return str(prescription.prs_id)
+
+
+class VetConsultationHistorySerializer(ConsultationResponseSerializer):
+    scheduled_at = serializers.DateTimeField(
+        source='apt_id.apt_scheduled_at', read_only=True,
+    )
+    checked_in_at = serializers.DateTimeField(
+        source='apt_id.apt_checked_in_at', read_only=True, allow_null=True,
+    )
+    completed_at = serializers.DateTimeField(
+        source='apt_id.apt_completed_at', read_only=True, allow_null=True,
+    )
+
+    class Meta(ConsultationResponseSerializer.Meta):
+        fields = ConsultationResponseSerializer.Meta.fields + [
+            'scheduled_at', 'checked_in_at', 'completed_at',
+        ]
 
 
 class ConsultationCreateSerializer(serializers.Serializer):

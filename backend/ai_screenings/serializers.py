@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from ai_screenings.comparison import default_cross_summary
 from ai_screenings.models import AiScreening, AiScreeningImage, Disease, ScreeningSource
+from ai_screenings.services import ScreeningService
 from appointments.models import AppointmentStatus
 
 
@@ -18,6 +19,24 @@ class DiseaseSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class LinkedConsultationSerializer(serializers.Serializer):
+    """One linked visit for a scan.
+
+    ``kind`` separates the original visit from a follow-up that reused the same
+    scan. Payloads are ``{'kind': ..., 'consultation': Consultation}`` dicts
+    built by ``ScreeningService.linked_consultations``.
+    """
+
+    kind = serializers.CharField(read_only=True)
+    id = serializers.UUIDField(source='consultation.con_id', read_only=True)
+    created_at = serializers.DateTimeField(source='consultation.con_created_at', read_only=True)
+    veterinarian = serializers.SerializerMethodField()
+
+    def get_veterinarian(self, obj) -> str:
+        user = obj['consultation'].stf_id.usr_id
+        return f'{user.usr_first_name} {user.usr_last_name}'.strip()
+
+
 class ScreeningSerializer(serializers.ModelSerializer):
     disease = serializers.CharField(source='dis_id.dis_name', read_only=True)
     disease_code = serializers.CharField(source='dis_id.dis_code', read_only=True)
@@ -26,6 +45,8 @@ class ScreeningSerializer(serializers.ModelSerializer):
     claude = serializers.SerializerMethodField()
     cross_analysis = serializers.SerializerMethodField()
     is_booked = serializers.SerializerMethodField()
+    is_consulted = serializers.SerializerMethodField()
+    linked_consultations = serializers.SerializerMethodField()
     # Supplementary display rows; null for screenings saved without answers.
     symptom_answers = serializers.JSONField(
         source='ais_symptom_answers', read_only=True, allow_null=True,
@@ -38,22 +59,46 @@ class ScreeningSerializer(serializers.ModelSerializer):
             'ais_confidence', 'ais_model_version', 'ais_inference_time_ms',
             'ais_device', 'ais_status', 'ais_source', 'ais_is_correct',
             'ais_created_at', 'image', 'claude', 'cross_analysis', 'is_booked',
-            'symptom_answers',
+            'is_consulted', 'symptom_answers', 'linked_consultations',
         ]
         read_only_fields = fields
 
+    def get_linked_consultations(self, obj):
+        return LinkedConsultationSerializer(
+            ScreeningService.linked_consultations(obj), many=True,
+        ).data
+
     def get_is_booked(self, obj):
-        """True while a non-cancelled appointment was booked from this scan.
+        """True while a live, non-cancelled appointment was booked from this scan.
 
         The owner list annotates this as a single EXISTS query; other callers
-        fall back to one existence check per record. A cancelled appointment
-        no longer counts as booked.
+        fall back to one existence check per record. Cancelling the appointment
+        or soft-deleting it returns the scan to unbooked, matching every other
+        owner-facing list where deleted appointments are hidden.
         """
         annotated = getattr(obj, 'is_booked', None)
         if annotated is not None:
             return bool(annotated)
-        return obj.appointments.exclude(
+        return obj.appointments.filter(
+            apt_deleted_at__isnull=True,
+        ).exclude(
             apt_status=AppointmentStatus.CANCELLED,
+        ).exists()
+
+    def get_is_consulted(self, obj):
+        """True once the scan's visit is completed with a recorded consultation.
+
+        The owner list annotates this as a single EXISTS query; other callers
+        fall back to one existence check per record. A consultation drafted while
+        the appointment is still in progress does not count.
+        """
+        annotated = getattr(obj, 'is_consulted', None)
+        if annotated is not None:
+            return bool(annotated)
+        return obj.appointments.filter(
+            apt_deleted_at__isnull=True,
+            apt_status=AppointmentStatus.COMPLETED,
+            consultation__isnull=False,
         ).exists()
 
     def get_image(self, obj):

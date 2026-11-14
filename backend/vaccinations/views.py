@@ -12,7 +12,12 @@ from vaccinations.serializers import (
     VaccinationResponseSerializer,
     VaccinationUpdateSerializer,
 )
-from vaccinations.services import VaccinationImmutableError, VaccinationService
+from vaccinations.services import (
+    InvalidVaccinationSeriesError,
+    VaccinationDateBeforePreviousDoseError,
+    VaccinationImmutableError,
+    VaccinationService,
+)
 
 
 class VaccinationListView(APIView):
@@ -61,12 +66,15 @@ class VaccinationListView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        vaccination = VaccinationService.create_for_owner(
-            pet=pet,
-            validated_data=serializer.validated_data,
-            user_id=str(request.user.usr_id),
-            ip_address=request.META.get('REMOTE_ADDR'),
-        )
+        try:
+            vaccination = VaccinationService.create_for_owner(
+                pet=pet,
+                validated_data=serializer.validated_data,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+        except (InvalidVaccinationSeriesError, VaccinationDateBeforePreviousDoseError) as e:
+            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         result = VaccinationResponseSerializer(vaccination).data
         return Response(result, status=status.HTTP_201_CREATED)
 

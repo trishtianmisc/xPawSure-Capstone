@@ -1,3 +1,4 @@
+import { clinicDateKey } from '../../../../utils/format'
 import type { ScheduleSlot } from '../types/veterinarian.types'
 
 const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
@@ -48,7 +49,7 @@ interface WeeklyCalendarProps {
 }
 
 export function WeeklyCalendar({ days, slots, onSlotClick }: WeeklyCalendarProps) {
-  const todayKey = toDateKey(new Date())
+  const todayKey = clinicDateKey()
   const gridStartMin = HOURS[0] * 60
   const gridEndMin = (HOURS[HOURS.length - 1] + 1) * 60
 

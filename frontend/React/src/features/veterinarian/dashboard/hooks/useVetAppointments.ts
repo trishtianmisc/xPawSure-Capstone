@@ -46,6 +46,15 @@ export function useAppointmentDetail(aptId: string) {
   })
 }
 
+export function usePetConsultationHistory(petId: string) {
+  return useQuery({
+    queryKey: ['veterinarian', 'pet-history', petId],
+    queryFn: () => dashboardService.getPetConsultationHistory(petId),
+    enabled: !!petId,
+    staleTime: 30_000,
+  })
+}
+
 export function useStartConsultation() {
   const refresh = useVetCacheRefresh()
   return useMutation({

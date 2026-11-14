@@ -15,6 +15,7 @@ const EMPTY_FORM = {
   route: '',
   frequency: '',
   duration: '',
+  quantity: '',
   notes: '',
 }
 
@@ -94,12 +95,18 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       setError('Please select a route of administration.')
       return
     }
+    const quantity = Number(form.quantity)
+    if (!form.quantity || !Number.isInteger(quantity) || quantity < 1) {
+      setError('Please enter a valid quantity (whole number greater than 0).')
+      return
+    }
     setError('')
     setPendingConfirm(true)
   }
 
   function confirmAdd() {
     const medicineName = form.medicine_name.trim()
+    const quantity = Number(form.quantity)
 
     if (editingId) {
       setRows((prev) =>
@@ -113,6 +120,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
                 route: form.route,
                 frequency: form.frequency,
                 duration: form.duration,
+                quantity,
                 notes: form.notes.trim() || null,
               }
             : row,
@@ -130,7 +138,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
           route: form.route,
           frequency: form.frequency,
           duration: form.duration,
-          quantity: null,
+          quantity,
           notes: form.notes.trim() || null,
         },
       ])
@@ -148,6 +156,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       route: row.route,
       frequency: row.frequency,
       duration: row.duration,
+      quantity: row.quantity != null ? String(row.quantity) : '',
       notes: row.notes ?? '',
     })
     setEditingId(row.id)
@@ -167,6 +176,10 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       setError('Add at least one medication before completing.')
       return
     }
+    if (rows.some((row) => row.quantity == null)) {
+      setError('Set a quantity for every medication before completing.')
+      return
+    }
     if (!appointment.consultation) {
       setError('Save the consultation first before adding a prescription.')
       return
@@ -184,6 +197,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
           frequency: row.frequency,
           duration: row.duration,
           route: row.route,
+          quantity: row.quantity as number,
           notes: row.notes ?? '',
         })),
       })
@@ -275,6 +289,17 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
               value={form.duration}
             />
           </div>
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-stone-700 dark:text-stone-300">Quantity</label>
+            <input
+              className={inputClass}
+              min="1"
+              onChange={(e) => handleChange('quantity', e.target.value)}
+              step="1"
+              type="number"
+              value={form.quantity}
+            />
+          </div>
         </div>
 
         <div>
@@ -307,6 +332,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
                 <th className="px-5 py-4 font-semibold">Dosage</th>
                 <th className="px-5 py-4 font-semibold">Frequency</th>
                 <th className="px-5 py-4 font-semibold">Duration</th>
+                <th className="px-5 py-4 font-semibold">Quantity</th>
                 <th className="px-5 py-4 font-semibold">Route of Administration</th>
                 <th className="px-5 py-4 text-right font-semibold">Actions</th>
               </tr>
@@ -319,6 +345,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
                   <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.dosage}</td>
                   <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.frequency}</td>
                   <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.duration}</td>
+                  <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{p.quantity ?? '—'}</td>
                   <td className="px-5 py-4 text-stone-600 dark:text-stone-400">{routeLabel(p.route)}</td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
@@ -351,15 +378,31 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
 
       {error && <p className="text-right text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      <div className="flex justify-end gap-3">
-        <button
-          className="rounded-md bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
-          disabled={savePrescription.isPending}
-          onClick={handleComplete}
-          type="button"
-        >
-          {savePrescription.isPending ? 'Saving…' : 'Complete Consultation'}
-        </button>
+      <div className="flex flex-col items-end gap-2">
+        {rows.length === 0 && (
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            No medication prescribed? Choose Next to continue without a prescription.
+          </p>
+        )}
+        <div className="flex justify-end gap-3">
+          {rows.length === 0 && (
+            <button
+              className="rounded-md border border-amber-700 px-5 py-2.5 text-sm font-semibold text-amber-800 transition hover:bg-amber-50 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+              onClick={() => navigate(`/veterinarian/appointments/${aptId}`)}
+              type="button"
+            >
+              Next
+            </button>
+          )}
+          <button
+            className="rounded-md bg-amber-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
+            disabled={rows.length === 0 || savePrescription.isPending}
+            onClick={handleComplete}
+            type="button"
+          >
+            {savePrescription.isPending ? 'Saving…' : 'Complete Consultation'}
+          </button>
+        </div>
       </div>
 
       {pendingConfirm && (
@@ -387,6 +430,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
                 ['Route', routeLabel(form.route)],
                 ['Frequency', form.frequency || '—'],
                 ['Duration', form.duration || '—'],
+                ['Quantity', form.quantity || '—'],
                 ['Instructions', form.notes.trim() || '—'],
               ].map(([label, value]) => (
                 <div className="flex justify-between gap-4" key={label}>

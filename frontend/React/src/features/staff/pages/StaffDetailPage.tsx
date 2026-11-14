@@ -7,6 +7,7 @@ import { useToast } from '../../../components/ui/ToastContext'
 import { Modal } from '../../../components/ui/Modal'
 import { PageHero } from '../../receptionist/components/PageHero'
 import { formatPhone } from '../../../utils/format'
+import { formatDate } from '../../../utils/format'
 import { useState } from 'react'
 import type { StaffMember } from '../types/staff.types'
 
@@ -314,14 +315,14 @@ export function StaffDetailPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Created</p>
               <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                {formatDate(staff.created_at)}
               </p>
             </div>
             {staff.updated_at && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Last Updated</p>
                 <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                  {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {formatDate(staff.updated_at)}
                 </p>
               </div>
             )}
@@ -349,7 +350,7 @@ export function StaffDetailPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">License Expiry</p>
                 <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
-                  {expiry ? expiry.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : '\u2014'}
+                  {expiry ? formatDate(expiry) : '\u2014'}
                 </p>
               </div>
               <div>
@@ -391,7 +392,7 @@ export function StaffDetailPage() {
             <div className="flex-1 min-w-0">
               <p className="text-sm text-stone-700 dark:text-stone-300">Account created</p>
               <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                {new Date(staff.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                {formatDate(staff.created_at)}
               </p>
             </div>
           </div>
@@ -405,7 +406,7 @@ export function StaffDetailPage() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-stone-700 dark:text-stone-300">Profile updated</p>
                 <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">
-                  {new Date(staff.updated_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  {formatDate(staff.updated_at)}
                 </p>
               </div>
             </div>

@@ -15,6 +15,11 @@ export async function getScreenings(petId?: string): Promise<ScreeningListRespon
   return data
 }
 
+export async function getScreening(id: string): Promise<Screening> {
+  const { data } = await http.get<Screening>(`/owner/screenings/${id}/`)
+  return data
+}
+
 /**
  * Request the independent Claude image review for the same JPEG that will be
  * used for on-device inference. Nothing is persisted by this endpoint; its

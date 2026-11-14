@@ -93,6 +93,17 @@ export interface CrossAnalysis {
   summary: string
 }
 
+export interface LinkedConsultation {
+  /**
+   * ORIGINAL = the visit this scan was first used for.
+   * FOLLOW_UP = a finished follow-up visit that reused the same scan.
+   */
+  kind: 'ORIGINAL' | 'FOLLOW_UP'
+  id: string
+  created_at: string
+  veterinarian: string
+}
+
 export interface Screening {
   ais_id: string
   pet_id: string
@@ -110,8 +121,14 @@ export interface Screening {
   image: ScreeningImage | null
   claude: ScreeningClaude
   cross_analysis: CrossAnalysis
-  /** True while a non-cancelled appointment was booked from this scan. */
+  /**
+   * True while a live, non-cancelled appointment was booked from this scan.
+   * Cancelling or soft-deleting that appointment returns it to false.
+   */
   is_booked: boolean
+  /** True once the scan's visit is completed with a recorded consultation. */
+  is_consulted: boolean
+  linked_consultations: LinkedConsultation[]
   /**
    * Supplementary questionnaire rows stored with this screening; null when
    * the screening was saved without answers or predates their storage.

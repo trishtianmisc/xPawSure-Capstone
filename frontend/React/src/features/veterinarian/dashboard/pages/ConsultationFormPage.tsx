@@ -7,11 +7,12 @@ import { DiseaseCombobox } from '../components/DiseaseCombobox'
 import { useAppointmentDetail, useSaveConsultation } from '../hooks/useVetAppointments'
 import type { VetAppointmentDetail } from '../types/dashboard.types'
 import { apiErrorMessage } from '../../../../utils/error'
+import { clinicDateKey, clinicToday } from '../../../../utils/format'
 
 function ageFromBirthDate(birthDate: string | null): string {
   if (!birthDate) return ''
   const birth = new Date(birthDate)
-  const now = new Date()
+  const now = clinicToday()
   let years = now.getFullYear() - birth.getFullYear()
   const monthDiff = now.getMonth() - birth.getMonth()
   if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) years -= 1
@@ -25,15 +26,19 @@ function toLocalDateInputValue(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+function clinicDay(value: string | Date): Date {
+  const [year, month, day] = clinicDateKey(value).split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 function minFollowUpDate(scheduledAt: string): string {
-  const scheduled = new Date(scheduledAt)
+  const scheduled = clinicDay(scheduledAt)
   const dayAfter = new Date(
     scheduled.getFullYear(),
     scheduled.getMonth(),
     scheduled.getDate() + 1,
   )
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = clinicToday()
   return toLocalDateInputValue(dayAfter > today ? dayAfter : today)
 }
 

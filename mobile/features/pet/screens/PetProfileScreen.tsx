@@ -204,21 +204,6 @@ export default function PetProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Identification</Text>
-          <View style={styles.identificationCard}>
-            <View style={styles.identificationRow}>
-              <Text style={styles.identificationLabel}>Microchip</Text>
-              <Text style={styles.identificationValue}>{pet.microchip_number || 'Not registered'}</Text>
-            </View>
-            <View style={styles.identificationDivider} />
-            <View style={styles.identificationRow}>
-              <Text style={styles.identificationLabel}>QR Code ID</Text>
-              <Text style={styles.identificationValue} numberOfLines={1}>{pet.qr_code || pet.id}</Text>
-            </View>
-          </View>
-        </View>
-
         <View
           onLayout={(event) => {
             qrSectionY.current = event.nativeEvent.layout.y
@@ -545,37 +530,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     ...font.bold,
     color: colors.text,
     fontSize: 16,
-  },
-
-  identificationCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  identificationRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 36,
-  },
-  identificationLabel: {
-    ...font.medium,
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  identificationValue: {
-    ...font.bold,
-    color: colors.text,
-    flex: 1,
-    fontSize: 13,
-    marginLeft: 16,
-    textAlign: 'right',
-  },
-  identificationDivider: {
-    backgroundColor: colors.border,
-    height: 1,
-    marginVertical: 4,
   },
 
   qrCard: {

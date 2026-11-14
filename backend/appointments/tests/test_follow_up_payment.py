@@ -177,6 +177,13 @@ class FollowUpPaymentTests(FollowUpFlowBase):
                 ntf_reference_id=follow_up.apt_id,
             ).exists(),
         )
+        self.assertTrue(
+            Notification.objects.filter(
+                usr_id=self.vet_user,
+                ntf_type=NotificationType.APPOINTMENT_CONFIRMED,
+                ntf_reference_id=follow_up.apt_id,
+            ).exists(),
+        )
 
     def test_expired_checkout_can_be_retried(self):
         follow_up, _ = self._scheduled_follow_up()

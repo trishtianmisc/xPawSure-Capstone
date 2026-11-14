@@ -1,4 +1,5 @@
 import type { ScreeningSummary } from '../../screening/types'
+import type { ConsultationRecord } from '../../../src/services/records'
 
 export type AppointmentStatus =
   | 'CONFIRMATION'
@@ -42,6 +43,8 @@ export interface AppointmentDetail extends AppointmentListItem {
   owner_phone: string | null
   apt_cancellation_reason: string | null
   apt_updated_at: string
+  /** The visit's consultation record; null until the veterinarian saves one. */
+  consultation: ConsultationRecord | null
 }
 
 export interface AppointmentListResponse {

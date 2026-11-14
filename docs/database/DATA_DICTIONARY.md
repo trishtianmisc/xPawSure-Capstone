@@ -109,6 +109,7 @@
 | STAFF_PROFILE | USR_ID | User ID (FK → USER) | UUID | NOT NULL |
 | STAFF_PROFILE | CLN_ID | Clinic ID (FK → CLINIC) | UUID | NOT NULL |
 | STAFF_PROFILE | STF_LICENSE_NUMBER | Professional license number (for vets) | VARCHAR | NULL |
+| STAFF_PROFILE | STF_PROFILE_IMAGE | Public URL of the staff profile photo | TEXT | NULL |
 | STAFF_PROFILE | STF_CREATED_AT | Record creation timestamp | TIMESTAMP | NULL |
 | STAFF_PROFILE | STF_UPDATED_AT | Last update timestamp | TIMESTAMP | NULL |
 
@@ -293,9 +294,11 @@
 | VACCINATION_RECORD | STF_ID | Veterinarian ID (FK → STAFF_PROFILE) | UUID | NULL |
 | VACCINATION_RECORD | VAC_NAME | Vaccine name | VARCHAR(255) | NOT NULL |
 | VACCINATION_RECORD | VAC_BRAND | Vaccine brand | VARCHAR(255) | NULL |
-| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine batch number | VARCHAR(100) | NULL |
-| VACCINATION_RECORD | VAC_DOSE | Dose info (e.g., 1st dose) | VARCHAR(100) | NOT NULL |
-| VACCINATION_RECORD | VAC_ROUTE | Administration route (VaccinationRoute enum) | ENUM | NOT NULL |
+| VACCINATION_RECORD | VAC_BATCH_NO | Vaccine lot number | VARCHAR(100) | NULL |
+| VACCINATION_RECORD | VAC_VETERINARIAN_NAME | Free-text veterinarian name for owner-reported records | VARCHAR(255) | NULL |
+| VACCINATION_RECORD | VAC_SERIES_ID | Dose-series grouping UUID (scoped by pet) | UUID | NOT NULL |
+| VACCINATION_RECORD | VAC_DOSE | Legacy dose information | VARCHAR(100) | NULL |
+| VACCINATION_RECORD | VAC_ROUTE | Legacy administration route | ENUM | NULL |
 | VACCINATION_RECORD | VAC_DATE_GIVEN | Date vaccine was given | DATE | NOT NULL |
 | VACCINATION_RECORD | VAC_NEXT_DUE | Next due date for booster | DATE | NULL |
 | VACCINATION_RECORD | VAC_NOTES | Notes | TEXT | NULL |

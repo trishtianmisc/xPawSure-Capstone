@@ -510,8 +510,16 @@ Every vaccination records
 - Vaccine name
 - Date administered
 - Source: veterinarian-issued or owner-reported
-- Batch number (optional)
+- Lot number (optional)
+- Veterinarian name (optional, owner-entered free text)
 - Next due date (optional)
+- Vaccine series (used to group doses of the same vaccine)
+
+Each administered dose remains a separate history record. Current due status is
+based only on the latest dose in a series; recording a later dose removes the
+prior dose's overdue status without deleting the prior history entry. The owner
+mobile app lets an owner record the next dose from the current series record.
+Dose, route, and notes are not collected by the current owner workflow.
 
 Sources
 

@@ -24,8 +24,8 @@ export function normalizePhoneInput(raw: string): string {
   return digits
 }
 
-// Clinic operations run in Philippine time; pass this to the formatters
-// below when a display must be pinned to the clinic calendar day.
+// Clinic operations run in Philippine time. This is the default for every
+// formatter below; callers may still pass a clinic-specific timezone override.
 export const CLINIC_TIME_ZONE = 'Asia/Manila'
 
 function toDate(value: string | Date | null | undefined): Date | null {
@@ -34,25 +34,54 @@ function toDate(value: string | Date | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-function isMidnight(date: Date, timeZone?: string): boolean {
-  if (timeZone) {
-    // hourCycle h23 (not hour12) so midnight formats as 00, never 24.
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      hour: 'numeric',
-      minute: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(date)
-    const hour = parts.find((p) => p.type === 'hour')?.value ?? ''
-    const minute = parts.find((p) => p.type === 'minute')?.value ?? ''
-    return Number(hour) === 0 && Number(minute) === 0
-  }
-  return date.getHours() === 0 && date.getMinutes() === 0
+interface ClinicDateParts {
+  year: number
+  month: number
+  day: number
+}
+
+export function clinicDateParts(value: Date = new Date()): ClinicDateParts {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: CLINIC_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value)
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((entry) => entry.type === type)?.value ?? 0)
+  return { year: part('year'), month: part('month'), day: part('day') }
+}
+
+export function clinicDateKey(value: Date | string = new Date()): string {
+  const date = toDate(value)
+  if (!date) return ''
+  const { year, month, day } = clinicDateParts(date)
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// A Date whose local Y/M/D components are today in Manila. Calendar helpers
+// (week starts, date inputs) can keep using local getters safely.
+export function clinicToday(): Date {
+  const { year, month, day } = clinicDateParts()
+  return new Date(year, month - 1, day)
+}
+
+function isMidnight(date: Date, timeZone: string): boolean {
+  // hourCycle h23 (not hour12) so midnight formats as 00, never 24.
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date)
+  const hour = parts.find((p) => p.type === 'hour')?.value ?? ''
+  const minute = parts.find((p) => p.type === 'minute')?.value ?? ''
+  return Number(hour) === 0 && Number(minute) === 0
 }
 
 export function formatDate(
   value: string | Date | null | undefined,
-  timeZone?: string,
+  timeZone: string = CLINIC_TIME_ZONE,
 ): string {
   const date = toDate(value)
   if (!date) return '—'
@@ -60,7 +89,7 @@ export function formatDate(
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    ...(timeZone ? { timeZone } : {}),
+    timeZone,
   })
 }
 
@@ -91,7 +120,7 @@ export function isFutureClinicDay(scheduledAt: string, atMs: number): boolean {
 
 export function formatDateLong(
   value: string | Date | null | undefined,
-  timeZone?: string,
+  timeZone: string = CLINIC_TIME_ZONE,
 ): string {
   const date = toDate(value)
   if (!date) return '—'
@@ -100,13 +129,13 @@ export function formatDateLong(
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    ...(timeZone ? { timeZone } : {}),
+    timeZone,
   })
 }
 
 export function formatTime(
   value: string | Date | null | undefined,
-  timeZone?: string,
+  timeZone: string = CLINIC_TIME_ZONE,
 ): string {
   const date = toDate(value)
   if (!date) return '—'
@@ -115,7 +144,7 @@ export function formatTime(
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-    ...(timeZone ? { timeZone } : {}),
+    timeZone,
   })
 }
 
@@ -132,7 +161,7 @@ export function formatClockTime(value: string): string {
 
 export function formatDateTime(
   value: string | Date | null | undefined,
-  timeZone?: string,
+  timeZone: string = CLINIC_TIME_ZONE,
 ): string {
   const date = toDate(value)
   if (!date) return '—'
@@ -156,9 +185,11 @@ export function formatRelativeTime(iso: string): string {
   if (absMs < dayMs) return rtf.format(Math.round(diffMs / hourMs), 'hour')
   if (absMs < dayMs * 7) return rtf.format(Math.round(diffMs / dayMs), 'day')
 
+  const sameYear = clinicDateParts(timestamp).year === clinicDateParts().year
   return timestamp.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
-    ...(timestamp.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}),
+    timeZone: CLINIC_TIME_ZONE,
+    ...(sameYear ? {} : { year: 'numeric' }),
   })
 }

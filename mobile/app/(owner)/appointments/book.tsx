@@ -32,6 +32,7 @@ import { useScreenings } from '../../../features/screening/hooks/useScreenings'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorCode, apiErrorMessage, apiErrorStatus } from '../../../src/utils/error'
+import { formatDateTime, manilaToday } from '../../../src/utils/datetime'
 
 /**
  * Owner booking wizard. Entry is scan-only: the fresh scan result screen is
@@ -68,7 +69,7 @@ interface DayChip {
 
 function buildDays(count: number): DayChip[] {
   const days: DayChip[] = []
-  const today = new Date()
+  const today = manilaToday()
   for (let i = 0; i < count; i += 1) {
     const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i)
     days.push({
@@ -219,7 +220,7 @@ export default function BookAppointmentScreen() {
       clinic.cln_id,
     )
     if (conflict) {
-      const when = new Date(conflict.apt_scheduled_at).toLocaleString(undefined, {
+      const when = formatDateTime(conflict.apt_scheduled_at, {
         day: 'numeric',
         month: 'short',
         hour: 'numeric',

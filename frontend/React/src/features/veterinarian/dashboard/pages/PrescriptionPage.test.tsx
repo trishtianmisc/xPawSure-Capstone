@@ -9,10 +9,12 @@ vi.mock('../hooks/useVetAppointments', () => ({
   useSavePrescription: vi.fn(),
 }))
 
+const navigateMock = vi.hoisted(() => vi.fn())
+
 vi.mock('react-router-dom', async (importOriginal) => ({
   ...(await importOriginal()),
   useParams: () => ({ id: 'apt-1' }),
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigateMock,
 }))
 
 function makeAppointment(): VetAppointmentDetail {
@@ -25,6 +27,7 @@ function makeAppointment(): VetAppointmentDetail {
     pet_birth_date: null,
     pet_weight: '12.50',
     pet_color: 'Black',
+    pet_profile_image: null,
     owner_name: 'John Doe',
     owner_phone: '09171234567',
     owner_address: '123 Bark Street, Quezon City',
@@ -40,9 +43,13 @@ function makeAppointment(): VetAppointmentDetail {
     apt_cancellation_reason: null,
     apt_reschedule_request_reason: null,
     apt_cancellation_request_reason: null,
+    apt_created_at: '2026-01-01T09:00:00Z',
+    apt_checked_in_at: null,
+    apt_completed_at: null,
     screening: null,
     consultation: null,
     prescription: null,
+    payment_provider_ref: null,
   }
 }
 
@@ -56,10 +63,12 @@ function fillForm() {
   fireEvent.change(field('Route of Administration'), { target: { value: 'ORAL' } })
   fireEvent.change(field('Frequency'), { target: { value: 'Twice daily' } })
   fireEvent.change(field('Duration'), { target: { value: '7 days' } })
+  fireEvent.change(field('Quantity'), { target: { value: '14' } })
 }
 
 describe('PrescriptionPage confirmation popup', () => {
   beforeEach(() => {
+    navigateMock.mockClear()
     vi.mocked(useAppointmentDetail).mockReturnValue({
       data: makeAppointment(),
       isLoading: false,
@@ -81,6 +90,7 @@ describe('PrescriptionPage confirmation popup', () => {
     const dialog = screen.getByRole('dialog')
     expect(within(dialog).getByText('Amoxicillin')).toBeInTheDocument()
     expect(within(dialog).getByText('250mg')).toBeInTheDocument()
+    expect(within(dialog).getByText('14')).toBeInTheDocument()
     expect(within(dialog).getByText('Oral')).toBeInTheDocument()
     // Not committed to the table yet
     expect(document.querySelector('tbody')).toBeNull()
@@ -120,5 +130,26 @@ describe('PrescriptionPage confirmation popup', () => {
 
     expect(screen.getByText('Medicine name is required.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Confirm medication' })).not.toBeInTheDocument()
+  })
+
+  it('shows a validation error and no popup when quantity is empty', () => {
+    render(<PrescriptionPage />)
+    fireEvent.change(field('Medicine Name'), { target: { value: 'Amoxicillin' } })
+    fireEvent.change(field('Route of Administration'), { target: { value: 'ORAL' } })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    expect(
+      screen.getByText('Please enter a valid quantity (whole number greater than 0).'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Confirm medication' })).not.toBeInTheDocument()
+  })
+
+  it('proceeds to the appointment without saving when Next is clicked', () => {
+    render(<PrescriptionPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(navigateMock).toHaveBeenCalledWith('/veterinarian/appointments/apt-1')
   })
 })

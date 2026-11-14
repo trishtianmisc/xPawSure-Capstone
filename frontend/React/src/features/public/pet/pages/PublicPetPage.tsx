@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 
 import { Alert, Badge, Button, Card } from '../../../../components/ui'
+import { formatDate } from '../../../../utils/format'
 import { usePublicPet } from '../hooks/usePublicPet'
 import type { VaccinationStatus } from '../types/pet.types'
 
@@ -11,15 +12,6 @@ const statusStyles: Record<VaccinationStatus, { label: string; variant: 'success
   DUE_SOON: { label: 'Due soon', variant: 'warning' },
   CURRENT: { label: 'Up to date', variant: 'success' },
   NO_DUE_DATE: { label: 'No due date', variant: 'default' },
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '—'
-  return new Date(value).toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
 }
 
 function formatSex(sex: string): string {

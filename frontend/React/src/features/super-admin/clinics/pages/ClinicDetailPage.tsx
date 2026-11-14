@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Badge, Button, Card, Input, Modal, Textarea } from '../../../../components/ui'
 import { useToast } from '../../../../components/ui/ToastContext'
 import { apiErrorMessage } from '../../../../utils/error'
+import { formatDateTime } from '../../../../utils/format'
 import { DashboardLayout } from '../../dashboard/components/DashboardLayout'
 import { clinicService } from '../services/clinic.service'
 import { ClinicAdminsTab } from '../tabs/ClinicAdminsTab'
@@ -237,13 +238,13 @@ export function ClinicDetailPage() {
                     <div className="py-4 sm:py-5">
                       <InfoRow
                         label="Created"
-                        value={new Date(clinic.created_at).toLocaleString()}
+                        value={formatDateTime(clinic.created_at)}
                       />
                     </div>
                     <div className="py-4 sm:py-5">
                       <InfoRow
                         label="Last updated"
-                        value={new Date(clinic.updated_at).toLocaleString()}
+                        value={formatDateTime(clinic.updated_at)}
                       />
                     </div>
                   </dl>
