@@ -1329,6 +1329,10 @@ class AppointmentService:
 
         old_scheduled_at = appointment.apt_scheduled_at
         appointment.apt_scheduled_at = slot_start
+        # Every move needs the owner's acknowledgement. A second reschedule
+        # clears any earlier approval so the owner is asked again.
+        appointment.apt_rescheduled_at = timezone.now()
+        appointment.apt_reschedule_acknowledged_at = None
 
         # Only a reschedule request is acted on by rescheduling; a cancel
         # request stays open until it is cancelled or declined.
@@ -1345,6 +1349,8 @@ class AppointmentService:
 
         new_values = {
             'apt_scheduled_at': str(slot_start),
+            'apt_rescheduled_at': str(appointment.apt_rescheduled_at),
+            'apt_reschedule_acknowledged_at': None,
             'old_slot': str(old_slot.vsl_id) if old_slot else None,
             'new_slot': str(slot.vsl_id),
         }
@@ -1383,8 +1389,77 @@ class AppointmentService:
             user_id=owner_user_id,
             title='Appointment Rescheduled',
             message=message,
-            ntf_type=NotificationType.SYSTEM,
+            ntf_type=NotificationType.APPOINTMENT_RESCHEDULED,
             ref_id=appointment.apt_id,
+        )
+
+        return appointment
+
+    @staticmethod
+    @transaction.atomic
+    def approve_reschedule(apt_id, owner_profile, user_id):
+        """Record the owner's acknowledgement of a rescheduled appointment.
+
+        Approval only acknowledges the new time; the appointment status is
+        left unchanged and the owner can still cancel it. The row is locked
+        so a concurrent second reschedule cannot be approved by mistake.
+        """
+        try:
+            appointment = (
+                Appointment.objects.select_for_update()
+                .select_related('pet_id__own_id')
+                .get(
+                    apt_id=apt_id,
+                    pet_id__own_id=owner_profile,
+                    apt_deleted_at__isnull=True,
+                )
+            )
+        except Appointment.DoesNotExist:
+            raise ValueError('Appointment not found.')
+
+        if appointment.apt_status not in (
+            AppointmentStatus.PENDING,
+            AppointmentStatus.CONFIRMED,
+        ):
+            raise InvalidRequestError(
+                'This appointment can no longer be approved.',
+            )
+
+        if appointment.apt_rescheduled_at is None:
+            raise InvalidRequestError(
+                'This appointment has not been rescheduled.',
+            )
+
+        if appointment.apt_reschedule_acknowledged_at is not None:
+            # Double taps and retries are harmless: return the same state.
+            return appointment
+
+        tz = get_clinic_timezone(appointment.cln_id_id)
+        if appointment.apt_scheduled_at <= datetime.now(tz):
+            raise InvalidRequestError(
+                'This appointment can no longer be approved.',
+            )
+
+        acknowledged_at = timezone.now()
+        appointment.apt_reschedule_acknowledged_at = acknowledged_at
+        appointment.save(
+            update_fields=[
+                'apt_reschedule_acknowledged_at',
+                'apt_updated_at',
+            ],
+        )
+
+        _audit(
+            user_id=str(user_id),
+            action=AuditAction.UPDATE,
+            module='appointments',
+            table_name='APPOINTMENT',
+            record_id=str(appointment.apt_id),
+            description='Owner approved rescheduled appointment',
+            old_values={'apt_reschedule_acknowledged_at': None},
+            new_values={
+                'apt_reschedule_acknowledged_at': str(acknowledged_at),
+            },
         )
 
         return appointment

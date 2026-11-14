@@ -1071,6 +1071,39 @@ The appointment and the target slot are locked together
 stale slot is reported as `400` (not `409`) so the receptionist can simply
 pick another slot. The move is audited with the old and new scheduled times.
 
+A successful move sets `apt_rescheduled_at` to the current time, clears
+`apt_reschedule_acknowledged_at`, and returns `reschedule_approval_pending:
+true`. The owner receives an `APPOINTMENT_RESCHEDULED` notification with
+Approve/Cancel actions; the appointment's status is unchanged. A second
+reschedule clears any earlier acknowledgement and asks the owner again.
+
+---
+
+## POST /api/owner/appointments/{id}/reschedule/approve/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets.
+
+Records the owner's acknowledgement of the latest reschedule set by the clinic.
+Approval is an acknowledgement only: it never changes `apt_status` and never
+moves the slot. The appointment remains `PENDING`/`CONFIRMED`, and the owner can
+still cancel it through `POST /api/owner/appointments/{id}/cancel/`.
+
+No request body is required.
+
+Responses:
+
+- 200: appointment detail with `apt_reschedule_acknowledged_at` set,
+  `reschedule_approval_pending: false`, and the unchanged `apt_status`.
+  Repeating the call is idempotent and returns the same state.
+- 400: the appointment has no reschedule, its status is not `PENDING` or
+  `CONFIRMED`, the scheduled time has passed, or no owner profile exists
+- 403: caller is not an owner
+- 404: unknown appointment, or it belongs to another owner
+
+If the owner ignores the notification, the appointment stays scheduled at the
+new time; there is no automatic cancellation or hold.
+
 ---
 
 ## GET /api/appointments/volume/
@@ -2731,8 +2764,14 @@ patient checks in. Both reference the appointment through
 `ntf_reference_table = "APPOINTMENT"` and `ntf_reference_id`.
 
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
-APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
-AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+APPOINTMENT_RESCHEDULED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE,
+PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED,
+AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+
+`APPOINTMENT_RESCHEDULED` notifications are sent to the owner when the clinic
+moves an appointment. Only the notification for the latest move carries
+`reschedule_approval_pending = true`; older notices become informational when a
+second reschedule occurs.
 
 Clinic admins receive `SYSTEM` notifications for: vet reschedule/cancel request
 submission (neutral body, reason text never included), veterinary license expiry
@@ -2772,16 +2811,21 @@ Response:
       "ntf_read_at": null,
       "pet_name": "Max | null",
       "pet_profile_image": "url | null",
-      "appointment_scheduled_at": "... | null"
+      "appointment_scheduled_at": "... | null",
+      "appointment_status": "CONFIRMED | null",
+      "reschedule_approval_pending": false
     }
   ]
 }
 
 For notifications whose `ntf_reference_table` is `APPOINTMENT` and whose
 reference resolves to an appointment, the response also includes the pet's
-name, the pet's profile image, and the appointment's scheduled time. These
-fields are `null` for every other notification type (or when the referenced
-appointment no longer exists).
+name, the pet's profile image, the appointment's scheduled time, the current
+appointment status, and whether the owner still needs to act on a reschedule.
+These fields are `null`/`false` for every other notification type (or when the
+referenced appointment no longer exists). `reschedule_approval_pending` is true
+only for a future `PENDING`/`CONFIRMED` appointment whose latest reschedule has
+not been acknowledged.
 
 ## DELETE /api/notifications/
 

@@ -28,6 +28,7 @@ from appointments.views_owner import (
     OwnerAppointmentCancelView,
     OwnerAppointmentDetailView,
     OwnerAppointmentListCreateView,
+    OwnerAppointmentRescheduleApproveView,
     OwnerAvailableSlotsView,
     OwnerClinicListView,
     OwnerFollowUpCheckoutView,
@@ -73,4 +74,5 @@ urlpatterns = [
     path('owner/appointments/<uuid:apt_id>/', OwnerAppointmentDetailView.as_view(), name='owner-appointment-detail'),
     path('owner/appointments/<uuid:apt_id>/checkout/', OwnerFollowUpCheckoutView.as_view(), name='owner-appointment-checkout'),
     path('owner/appointments/<uuid:apt_id>/cancel/', OwnerAppointmentCancelView.as_view(), name='owner-appointment-cancel'),
+    path('owner/appointments/<uuid:apt_id>/reschedule/approve/', OwnerAppointmentRescheduleApproveView.as_view(), name='owner-appointment-reschedule-approve'),
 ]

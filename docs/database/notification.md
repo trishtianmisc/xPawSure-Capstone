@@ -62,6 +62,8 @@ APPOINTMENT_CONFIRMED
 
 APPOINTMENT_CANCELLED
 
+APPOINTMENT_RESCHEDULED
+
 APPOINTMENT_REMINDER
 
 CONSULTATION_AVAILABLE
@@ -91,6 +93,11 @@ Users may only read their own notifications.
 Notifications cannot be modified.
 
 Notifications may be marked as read.
+
+APPOINTMENT_RESCHEDULED notifications tell the owner that the clinic moved an
+appointment. They include the referenced appointment's status and whether the
+owner still needs to approve the new time. Only the notification for the latest
+move is actionable; earlier reschedule notifications remain informational.
 
 Notifications should never be permanently deleted.
 

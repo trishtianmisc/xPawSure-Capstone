@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import {
   ActivityIndicator,
   Image,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,6 +13,7 @@ import {
 } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
 import { formatDateTime as formatManilaDateTime } from '../../../src/utils/datetime'
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
@@ -46,7 +48,9 @@ export default function ScreeningDetailsScreen() {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const { id, fromConsultation } = useLocalSearchParams<{ id?: string; fromConsultation?: string }>()
-  const { data: screening, isLoading, isError } = useScreening(id)
+  const { data: screening, isLoading, isError, refetch } = useScreening(id)
+  const refreshScreening = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshScreening)
   const handleBack = useScreeningDetailBack(fromConsultation)
   const { viewConsultation } = useMedicalRecordLinks()
 
@@ -76,7 +80,18 @@ export default function ScreeningDetailsScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         {isLoading ? (
           <View style={styles.statusState}>
             <ActivityIndicator color={colors.primary} />

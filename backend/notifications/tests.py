@@ -22,6 +22,7 @@ SERIALIZED_FIELDS = {
     'ntf_id', 'ntf_title', 'ntf_message', 'ntf_type', 'ntf_is_read',
     'ntf_reference_table', 'ntf_reference_id', 'ntf_created_at', 'ntf_read_at',
     'pet_name', 'pet_profile_image', 'appointment_scheduled_at',
+    'appointment_status', 'reschedule_approval_pending',
 }
 
 
@@ -140,6 +141,84 @@ class NotificationListTests(NotificationBase):
         self.assertIsNone(other['pet_name'])
         self.assertIsNone(other['pet_profile_image'])
         self.assertIsNone(other['appointment_scheduled_at'])
+
+    def test_reschedule_notification_exposes_owner_approval_state(self):
+        from django.utils import timezone
+
+        self.appointment.apt_rescheduled_at = timezone.now()
+        self.appointment.apt_reschedule_acknowledged_at = None
+        self.appointment.save(update_fields=[
+            'apt_rescheduled_at', 'apt_reschedule_acknowledged_at',
+        ])
+        NotificationService.create_notification(
+            self.owner_user.usr_id,
+            'Appointment Rescheduled',
+            'Your appointment has been rescheduled.',
+            NotificationType.APPOINTMENT_RESCHEDULED,
+            ref_table='APPOINTMENT',
+            ref_id=self.appointment.apt_id,
+        )
+
+        response = self.client.get('/api/notifications/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        item = next(
+            notification
+            for notification in response.data['results']
+            if notification['ntf_title'] == 'Appointment Rescheduled'
+        )
+        self.assertEqual(item['appointment_status'], AppointmentStatus.CONFIRMED)
+        self.assertTrue(item['reschedule_approval_pending'])
+
+        self.appointment.apt_reschedule_acknowledged_at = timezone.now()
+        self.appointment.save(update_fields=['apt_reschedule_acknowledged_at'])
+
+        response = self.client.get('/api/notifications/', **self._auth(OWNER_EMAIL))
+        item = next(
+            notification
+            for notification in response.data['results']
+            if notification['ntf_title'] == 'Appointment Rescheduled'
+        )
+        self.assertFalse(item['reschedule_approval_pending'])
+
+    def test_only_latest_reschedule_notification_is_actionable(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        now = timezone.now()
+        self.appointment.apt_rescheduled_at = now - timedelta(minutes=10)
+        self.appointment.apt_reschedule_acknowledged_at = None
+        self.appointment.save(update_fields=[
+            'apt_rescheduled_at', 'apt_reschedule_acknowledged_at',
+        ])
+        first = NotificationService.create_notification(
+            self.owner_user.usr_id,
+            'Appointment Rescheduled',
+            'Your appointment was moved to the first new time.',
+            NotificationType.APPOINTMENT_RESCHEDULED,
+            ref_table='APPOINTMENT',
+            ref_id=self.appointment.apt_id,
+        )
+
+        self.appointment.apt_rescheduled_at = timezone.now()
+        self.appointment.save(update_fields=['apt_rescheduled_at'])
+        second = NotificationService.create_notification(
+            self.owner_user.usr_id,
+            'Appointment Rescheduled',
+            'Your appointment was moved to the latest new time.',
+            NotificationType.APPOINTMENT_RESCHEDULED,
+            ref_table='APPOINTMENT',
+            ref_id=self.appointment.apt_id,
+        )
+
+        response = self.client.get('/api/notifications/', **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        items = {
+            notification['ntf_id']: notification
+            for notification in response.data['results']
+        }
+        self.assertFalse(items[str(first.ntf_id)]['reschedule_approval_pending'])
+        self.assertTrue(items[str(second.ntf_id)]['reschedule_approval_pending'])
 
     def test_list_unread_only_filter(self):
         response = self.client.get(

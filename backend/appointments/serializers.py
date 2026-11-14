@@ -1,4 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 from rest_framework import serializers
 
 from ai_screenings.serializers import (
@@ -9,6 +10,7 @@ from appointments.models import (
     Appointment,
     AppointmentRequestStatus,
     AppointmentRequestType,
+    AppointmentStatus,
     AppointmentType,
     VetSlot,
 )
@@ -56,6 +58,24 @@ def _vet_request_block(obj):
 
 def _has_open_request(obj):
     return obj.apt_request_status == AppointmentRequestStatus.OPEN
+
+
+def reschedule_approval_pending(obj):
+    """True while the owner still needs to acknowledge a reschedule.
+
+    Approval is only meaningful for a future PENDING/CONFIRMED appointment;
+    cancelled, completed, or already-approved rows never require action.
+    """
+    if obj.apt_rescheduled_at is None:
+        return False
+    if obj.apt_reschedule_acknowledged_at is not None:
+        return False
+    if obj.apt_status not in (
+        AppointmentStatus.PENDING,
+        AppointmentStatus.CONFIRMED,
+    ):
+        return False
+    return obj.apt_scheduled_at > timezone.now()
 
 
 class OwnerClinicSerializer(serializers.ModelSerializer):
@@ -200,6 +220,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     # which strips these fields together with the raw reason columns.
     vet_request = serializers.SerializerMethodField()
     has_open_request = serializers.SerializerMethodField()
+    reschedule_approval_pending = serializers.SerializerMethodField()
     payment_provider_ref = serializers.SerializerMethodField()
 
     class Meta:
@@ -216,6 +237,8 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
             'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
+            'apt_rescheduled_at', 'apt_reschedule_acknowledged_at',
+            'reschedule_approval_pending',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
             'vet_request', 'has_open_request', 'payment_provider_ref',
@@ -294,6 +317,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
 
     def get_has_open_request(self, obj):
         return _has_open_request(obj)
+
+    def get_reschedule_approval_pending(self, obj):
+        return reschedule_approval_pending(obj)
 
 
 class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):

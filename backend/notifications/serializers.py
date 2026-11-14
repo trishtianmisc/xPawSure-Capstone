@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from notifications.models import Notification
@@ -28,6 +29,8 @@ class NotificationSerializer(serializers.ModelSerializer):
     pet_name = serializers.SerializerMethodField()
     pet_profile_image = serializers.SerializerMethodField()
     appointment_scheduled_at = serializers.SerializerMethodField()
+    appointment_status = serializers.SerializerMethodField()
+    reschedule_approval_pending = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
@@ -36,6 +39,7 @@ class NotificationSerializer(serializers.ModelSerializer):
             'ntf_is_read', 'ntf_reference_table', 'ntf_reference_id',
             'ntf_created_at', 'ntf_read_at',
             'pet_name', 'pet_profile_image', 'appointment_scheduled_at',
+            'appointment_status', 'reschedule_approval_pending',
         ]
 
     def _get_appointment(self, obj):
@@ -70,6 +74,32 @@ class NotificationSerializer(serializers.ModelSerializer):
         if appointment is None:
             return None
         return appointment.apt_scheduled_at.isoformat()
+
+    def get_appointment_status(self, obj):
+        appointment = self._referenced_appointment(obj)
+        return appointment.apt_status if appointment else None
+
+    def get_reschedule_approval_pending(self, obj):
+        appointment = self._referenced_appointment(obj)
+        if appointment is None:
+            return False
+        if appointment.apt_rescheduled_at is None:
+            return False
+        if appointment.apt_reschedule_acknowledged_at is not None:
+            return False
+        if obj.ntf_created_at < appointment.apt_rescheduled_at:
+            # An older reschedule notification keeps pointing at the previous
+            # time; only the notice created for the latest move is actionable.
+            return False
+
+        from appointments.models import AppointmentStatus
+
+        if appointment.apt_status not in (
+            AppointmentStatus.PENDING,
+            AppointmentStatus.CONFIRMED,
+        ):
+            return False
+        return appointment.apt_scheduled_at > timezone.now()
 
 
 class NotificationListResponseSerializer(serializers.Serializer):
