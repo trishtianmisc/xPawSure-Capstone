@@ -85,6 +85,8 @@ function page(
     page: pageNumber,
     page_size: 100,
     total_pages: Math.max(Math.ceil(total / 100), 1),
+    paid_from: null,
+    paid_to: null,
     summary,
     results,
   }

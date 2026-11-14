@@ -1247,30 +1247,56 @@ Responses:
 Requires authentication. Receptionist or clinic admin. Scoped to the caller's
 clinic; owners get `403`.
 
+**Role split.** A receptionist request shows only the clinic's collection for
+the current clinic-local day: the server forces the paid window to today and
+IGNORES every client date parameter (`date_from`, `date_to`, `paid_from`,
+`paid_to`) outright — not even a malformed value returns `400`, because the
+parameter is not part of a receptionist request. Clinic admins keep the full
+history and the date filters below.
+
 Query params: `status`, `method`, `reference` (partial match on receipt
 number, owner first/last name, or pet name), `appointment` (uuid),
-`date_from`, `date_to` (creation date, UTC calendar days),
-`paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
-unpaid rows, so a range here reconciles with the revenue KPI for the same
-range), `page`, `page_size` (max 100).
+`date_from`, `date_to` (creation date, UTC calendar days — clinic admin
+only), `paid_from`, `paid_to` (payment date, clinic-local calendar days —
+clinic admin only; excludes unpaid rows, so a range here reconciles with the
+revenue KPI for the same range), `page`, `page_size` (max 100).
 
 `paid_from`/`paid_to` are inclusive clinic-local days (`[from 00:00, to+1
-00:00)` in the clinic's time zone). Validation: `400 VALIDATION_ERROR` when a
-date is malformed, `paid_from` is after `paid_to`, or the paid range exceeds
-366 days.
+00:00)` in the clinic's time zone). Validation (clinic admin only): `400
+VALIDATION_ERROR` when a date is malformed, `paid_from` is after `paid_to`,
+or the paid range exceeds 366 days.
 
 Response (200):
 
 { "total", "page", "page_size", "total_pages",
+  "paid_from", "paid_to",
   "summary": { "paid_total", "pending_total", "refunded_total", "payment_count" },
   "results": [payment] }
+
+`paid_from`/`paid_to` echo the paid window the server actually applied —
+`today`/`today` for a receptionist, the parsed parameters (or `null` when
+unbounded) for a clinic admin — so a UI can render its own date line without
+trusting the client clock.
 
 `summary` aggregates EVERY payment matching the filters (independent of
 `page`/`page_size`) with one conditional-sum query on the same queryset.
 Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
-(never netted against refunds) and honours the `paid_from`/`paid_to`
-payment-date window, so it equals the Reports revenue KPI for the same range.
-`payment_count` equals `total`.
+(never netted against refunds) and honours the paid window, so it equals the
+Reports revenue KPI for the same range — for a receptionist the strip IS the
+clinic admin's `paid_from=paid_to=today` figure. A receptionist's
+`pending_total` is always `0.00`: unpaid rows have no `PAY_PAID_AT`, so no
+paid window can hold them.
+
+**Exact-receipt exception (receptionist only).** With `reference`, the search
+narrows only the list — `summary` still describes the whole windowed day, so
+a lookup never moves a total. When `reference` is an exact `pay_reference`
+(unique), that one payment is pulled into the list from outside today's
+window (an owner asking about an older visit): scope, `status` and `method`
+still apply; only the paid window is lifted for that single row. Owner/pet
+name searches stay inside the window. `total` counts the list (including the
+escaped row), while `payment_count` stays with the summary (windowed).
+Without the escape — every clinic admin and owner request — `payment_count`
+equals `total`.
 
 ---
 

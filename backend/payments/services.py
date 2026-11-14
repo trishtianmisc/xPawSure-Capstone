@@ -96,6 +96,7 @@ class PaymentService:
         date_to=None,
         paid_from=None,
         paid_to=None,
+        exact_reference_escape=False,
         page=1,
         page_size=20,
     ) -> dict:
@@ -106,6 +107,12 @@ class PaymentService:
         days - the exact window the revenue report uses - so a list filtered
         to a range reconciles with the revenue KPI for that same range.
         ``date_from``/``date_to`` remain the original creation-date filter.
+
+        ``exact_reference_escape`` (receptionist requests only) lets an exact
+        receipt number pull its payment in from outside the forced window -
+        one row, for an owner asking about an older visit. The escape only
+        ever widens the LIST; the summary aggregates the windowed queryset,
+        so finding an older receipt never moves the totals.
         """
         qs = Payment.objects.all().select_related('own_id__usr_id', 'apt_id')
         if clinic_id:
@@ -117,15 +124,6 @@ class PaymentService:
             qs = qs.filter(pay_status=pay_status)
         if method:
             qs = qs.filter(pay_method=method)
-        if reference:
-            # Receipt number, owner name, or pet name - the three things a
-            # human has in hand when looking for a payment.
-            qs = qs.filter(
-                Q(pay_reference__icontains=reference)
-                | Q(own_id__usr_id__usr_first_name__icontains=reference)
-                | Q(own_id__usr_id__usr_last_name__icontains=reference)
-                | Q(pay_metadata__pet_name__icontains=reference)
-            )
         if appointment_id:
             # Follow-up checkouts are intentionally not linked to the
             # appointment until they are paid, so a failed or expired attempt
@@ -155,12 +153,55 @@ class PaymentService:
                 )
                 qs = qs.filter(pay_paid_at__lt=paid_end_exclusive)
 
-        total = qs.count()
-        # One conditional aggregate over the SAME filtered, unsliced queryset,
-        # so the totals cover every matching row (not just this page) and obey
-        # every filter - including the clinic-local PAY_PAID_AT window that
-        # Reports revenue uses, which is what makes the two figures reconcile.
-        summary = qs.aggregate(
+        # The summary always describes the fully windowed, status/method
+        # filtered queryset. The list narrows further (search, receipt
+        # escape) but never feeds the totals, so a lookup can never move
+        # them.
+        summary_qs = qs
+        rows_qs = qs
+        if reference:
+            # Receipt number, owner name, or pet name - the three things a
+            # human has in hand when looking for a payment.
+            text_q = (
+                Q(pay_reference__icontains=reference)
+                | Q(own_id__usr_id__usr_first_name__icontains=reference)
+                | Q(own_id__usr_id__usr_last_name__icontains=reference)
+                | Q(pay_metadata__pet_name__icontains=reference)
+            )
+            if exact_reference_escape:
+                # Receptionist receipt lookup: the search narrows only the
+                # list, and an exact receipt number may pull its payment in
+                # from outside the forced today window - an owner asking
+                # about an older visit. pay_reference is unique, so that
+                # branch adds at most one row; scope, status and method still
+                # apply, only the paid window is lifted for it. Owner/pet
+                # name searches stay inside the window.
+                escape = Payment.objects.all().select_related(
+                    'own_id__usr_id', 'apt_id',
+                )
+                if clinic_id:
+                    escape = escape.filter(cln_id_id=clinic_id)
+                if owner_id:
+                    escape = escape.filter(own_id_id=owner_id)
+                if pay_status:
+                    escape = escape.filter(pay_status=pay_status)
+                if method:
+                    escape = escape.filter(pay_method=method)
+                rows_qs = (
+                    qs.filter(text_q)
+                    | escape.filter(pay_reference__iexact=reference)
+                )
+            else:
+                qs = qs.filter(text_q)
+                summary_qs = rows_qs = qs
+
+        # One conditional aggregate over the summary queryset, so the totals
+        # cover every matching row (not just this page) and obey every filter
+        # - including the clinic-local PAY_PAID_AT window that Reports
+        # revenue uses, which is what makes the two figures reconcile.
+        summary_total = summary_qs.count()
+        total = summary_total if rows_qs is summary_qs else rows_qs.count()
+        summary = summary_qs.aggregate(
             paid_total=Coalesce(
                 Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PAID)),
                 Decimal('0'),
@@ -178,7 +219,7 @@ class PaymentService:
             ),
         )
         start = (page - 1) * page_size
-        results = list(qs[start:start + page_size])
+        results = list(rows_qs[start:start + page_size])
 
         return {
             'total': total,
@@ -187,12 +228,14 @@ class PaymentService:
             'total_pages': (total + page_size - 1) // page_size if page_size else 0,
             'results': results,
             # Fixed two-decimal strings: no float ever touches an amount,
-            # matching ReportService.get_revenue.
+            # matching ReportService.get_revenue. payment_count counts the
+            # windowed rows (summary_total), so the escaped receipt shows up
+            # in the list and its total, never in the summary figures.
             'summary': {
                 'paid_total': f"{summary['paid_total']:.2f}",
                 'pending_total': f"{summary['pending_total']:.2f}",
                 'refunded_total': f"{summary['refunded_total']:.2f}",
-                'payment_count': total,
+                'payment_count': summary_total,
             },
         }
 
