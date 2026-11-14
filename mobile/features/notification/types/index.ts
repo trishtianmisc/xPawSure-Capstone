@@ -2,6 +2,7 @@ export type NotificationTypeName =
   | 'APPOINTMENT_CREATED'
   | 'APPOINTMENT_CONFIRMED'
   | 'APPOINTMENT_CANCELLED'
+  | 'APPOINTMENT_RESCHEDULED'
   | 'APPOINTMENT_REMINDER'
   | 'CONSULTATION_AVAILABLE'
   | 'PRESCRIPTION_AVAILABLE'
@@ -25,6 +26,10 @@ export interface OwnerNotification {
   pet_name: string | null
   pet_profile_image: string | null
   appointment_scheduled_at: string | null
+  /** Appointment status for notifications that reference an appointment. */
+  appointment_status: string | null
+  /** True while this notification's reschedule still needs owner action. */
+  reschedule_approval_pending: boolean
 }
 
 export interface NotificationListResponse {

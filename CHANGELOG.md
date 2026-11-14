@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Owner reschedule acknowledgement: `APT_RESCHEDULED_AT` and `APT_RESCHEDULE_ACKNOWLEDGED_AT` on `APPOINTMENT` (migration `appointments/0009`), plus `APPOINTMENT_RESCHEDULED` notifications (migration `notifications/0003`)
+- `POST /api/owner/appointments/{id}/reschedule/approve/` — records the owner's acknowledgement of the clinic's new time without changing the appointment status; idempotent, owner-scoped, and audit-logged
+- `apt_rescheduled_at`, `apt_reschedule_acknowledged_at`, and `reschedule_approval_pending` on owner appointment detail responses; `appointment_status` and `reschedule_approval_pending` on notification responses
+- Mobile owner notifications screen now shows **Approve** and **Cancel appointment** actions for rescheduled appointments; the owner appointment detail screen shows a "New time proposed" approval card
+- `useApproveReschedule` hook and `appointmentService.approveReschedule()`; owner cancel and approve actions invalidate appointment and notification caches
+- 13 backend tests in `appointments/tests/test_owner_reschedule_approval.py` covering approval, idempotency, ownership, invalid states, re-approval after a second reschedule, and cancellation after a reschedule
+
+### Changed
+- Rescheduling an appointment now sets `APT_RESCHEDULED_AT`, clears the previous acknowledgement, and sends the owner an `APPOINTMENT_RESCHEDULED` notification instead of a generic `SYSTEM` notification
+- Cancelling from the owner notification list or appointment detail now refreshes notification caches as well as appointment caches
+
+### Documentation
+- Updated `docs/api/API_SPEC.md`, `docs/business/BUSINESS_RULES.md`, `docs/database/APPOINTMENT.md`, `docs/database/DATA_DICTIONARY.md`, and `docs/database/schema.dbml`
+
 ## [0.6.0] — 2026-11-02
 
 ### Added

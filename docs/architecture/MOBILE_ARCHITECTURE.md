@@ -343,6 +343,12 @@ The mobile application may receive push notifications for:
 - Screening results available
 - Vaccination reminders
 
+In-app notifications also surface clinic reschedules. An `APPOINTMENT_RESCHEDULED`
+notification shows **Approve** and **Cancel appointment** actions in the owner
+notifications list, and the owner appointment detail shows the same approval
+card. Approving acknowledges the new time without changing the appointment
+status; cancelling uses the normal owner cancellation flow and frees the slot.
+
 ---
 
 ## Veterinarian Features

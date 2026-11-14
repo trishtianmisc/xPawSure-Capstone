@@ -46,3 +46,8 @@ export async function cancelAppointment(aptId: string, reason?: string): Promise
   const { data } = await http.post(`/owner/appointments/${aptId}/cancel/`, { reason: reason ?? '' })
   return data
 }
+
+export async function approveReschedule(aptId: string): Promise<AppointmentDetail> {
+  const { data } = await http.post(`/owner/appointments/${aptId}/reschedule/approve/`)
+  return data
+}

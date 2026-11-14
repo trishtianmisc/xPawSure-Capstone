@@ -10,6 +10,8 @@ export function useCancelAppointment() {
     mutationFn: ({ aptId, reason }) => appointmentService.cancelAppointment(aptId, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointment'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['unreadNotificationCount'] })
     },
   })
 }

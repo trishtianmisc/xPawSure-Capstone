@@ -221,6 +221,7 @@ Owners may:
 - Register and manage their own pets
 - Perform AI-assisted screening (mobile only)
 - Book and cancel appointments
+- Approve or cancel a rescheduled appointment after the clinic moves it
 - View appointment history
 - View consultation history (read-only)
 - View prescription history (read-only)
@@ -314,6 +315,21 @@ No Show
 Appointments cannot overlap for the same veterinarian.
 
 Completed appointments cannot be edited except by a Super Admin.
+
+## Reschedule Acknowledgement
+
+When a receptionist moves an appointment to a new time, the appointment keeps
+its current `PENDING`/`CONFIRMED` status and the owner is notified with
+`APPOINTMENT_RESCHEDULED`. The owner may:
+
+- Approve the new time. This only records `APT_RESCHEDULE_ACKNOWLEDGED_AT`; the
+  appointment status and slot do not change.
+- Cancel the appointment through the normal owner cancellation flow. The
+  appointment becomes `CANCELLED` and the slot is freed.
+
+If the owner takes no action, the appointment stays scheduled at the new time.
+There is no automatic cancellation or slot hold. A second reschedule clears the
+acknowledgement and asks the owner again.
 
 ---
 
@@ -683,6 +699,7 @@ Notify veterinarians when:
 Notify owners when:
 
 - Appointment confirmed
+- Appointment rescheduled by the clinic (requires approve/cancel action)
 - Appointment reminder
 - Screening results reviewed by veterinarian
 - Vaccination due
