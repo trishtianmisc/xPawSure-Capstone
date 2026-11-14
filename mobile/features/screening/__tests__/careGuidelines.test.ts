@@ -150,6 +150,21 @@ describe('results UI no longer renders the Independent Image Review', () => {
     assert.match(resultSource, /gateFindings/)
   })
 
+  it('uses a simple Scan label instead of implementation details', () => {
+    assert.match(resultSource, /<Text style=\{styles\.timestamp\}>Scan<\/Text>/)
+    assert.doesNotMatch(resultSource, /image validation and on-device model/)
+  })
+
+  it('uses one analyzing message while image screening runs', () => {
+    const captureSource = readFileSync(
+      join(mobileRoot, 'app', '(owner)', 'pets', 'screening', 'index.tsx'),
+      'utf8',
+    )
+    assert.match(captureSource, /pickerLoading \? 'Preparing photo\.\.\.' : 'Analyzing photo'/)
+    assert.doesNotMatch(captureSource, /Checking photo\.\.\.|Running screening\.\.\./)
+    assert.doesNotMatch(captureSource, /Independent image review is checking/)
+  })
+
   it('AnalysisCards.tsx has been removed', () => {
     assert.equal(
       existsSync(join(mobileRoot, 'features', 'screening', 'components', 'AnalysisCards.tsx')),

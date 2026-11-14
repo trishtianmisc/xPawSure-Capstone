@@ -329,13 +329,7 @@ export default function ResultScreen() {
           )}
           <View style={styles.imageInfo}>
             <Text style={styles.petName}>{params.petName || 'Your pet'}</Text>
-            <Text style={styles.timestamp}>
-              {classifierSkipped
-                ? 'One photo · image validation only'
-                : deviceFailed
-                  ? 'One photo · image validation, classifier unavailable'
-                  : 'One photo · image validation and on-device model'}
-            </Text>
+            <Text style={styles.timestamp}>Scan</Text>
           </View>
         </View>
 
