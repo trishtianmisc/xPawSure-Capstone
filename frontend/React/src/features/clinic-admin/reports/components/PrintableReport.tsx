@@ -1,3 +1,4 @@
+import { formatPeso } from '../../../../utils/currency'
 import { formatDateTime, formatPhone } from '../../../../utils/format'
 import type { ClinicProfile } from '../../../clinic-profile/types/clinicProfile.types'
 import type {
@@ -10,11 +11,10 @@ import type {
 } from '../types/reports.types'
 import { aggregateSeries, type Granularity } from '../utils/granularity'
 import { AppointmentsOverTimeChart } from './AppointmentsOverTimeChart'
-import { PatientDemographicsCard } from './PatientDemographicsCard'
+import { PrintBreakdownTable } from './PrintBreakdownTable'
+import { PrintStatRow } from './PrintStatRow'
 import { ReportKPIRows } from './ReportKPIRows'
 import { RevenueOverTimeChart } from './RevenueOverTimeChart'
-import { ScreeningsAnalyticsCard } from './ScreeningsAnalyticsCard'
-import { StatusBreakdownChart } from './StatusBreakdownChart'
 import { VetWorkloadTable } from './VetWorkloadTable'
 
 interface PrintableReportProps {
@@ -39,12 +39,47 @@ interface PrintableReportProps {
   paymentsHref: string
 }
 
+// "NO_SHOW" -> "No show"
+function titleCase(value: string): string {
+  const spaced = value.replace(/_/g, ' ').toLowerCase()
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+}
+
+// Series keys are YYYY-MM-DD (daily) or YYYY-MM (monthly). Parse as a local
+// calendar date, never UTC.
+function formatBucket(key: string): string {
+  if (key.length === 7) {
+    return new Date(`${key}-01T00:00:00`).toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric',
+    })
+  }
+  return new Date(`${key}T00:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+// Highest point of a series. Ties resolve to the earliest date.
+function peakOf<T extends { date: string }>(
+  series: T[],
+  valueOf: (point: T) => number,
+): { point: T; value: number } | null {
+  let best: { point: T; value: number } | null = null
+  for (const point of [...series].sort((a, b) => a.date.localeCompare(b.date))) {
+    const value = valueOf(point)
+    if (!best || value > best.value) best = { point, value }
+  }
+  return best
+}
+
 // Paper-first document rendered off-screen (left: -9999px) instead of
-// display:none so recharts' ResponsiveContainer still measures it and charts
-// render. At print time the outer wrapper flips to static/visible while the
-// screen layout flips to print:hidden (see index.css @media print). Styles
-// are light-only on purpose: handlePrint drops the .dark class while the
-// dialog is open, so no dark: variants may appear here.
+// display:none so recharts' ResponsiveContainer still measures it and the two
+// remaining charts render. At print time the outer wrapper flips to
+// static/visible while the screen layout flips to print:hidden (see index.css
+// @media print). Styles are light-only on purpose: handlePrint drops the .dark
+// class while the dialog is open, so no dark: variants may appear here.
 export function PrintableReport({
   profile,
   summary,
@@ -65,6 +100,46 @@ export function PrintableReport({
   previousAgreementRate,
   paymentsHref,
 }: PrintableReportProps) {
+  // Stats use the raw (daily) series, not the chart's aggregated one, so
+  // "busiest day" stays a day even when the chart is weekly or monthly.
+  const apptTotal = appointments.series.reduce((sum, p) => sum + p.count, 0)
+  const apptPeak = peakOf(appointments.series, (p) => p.count)
+  const apptStats = [
+    { label: 'Total appointments', value: String(apptTotal) },
+    {
+      label: 'Busiest day',
+      value: apptPeak
+        ? `${formatBucket(apptPeak.point.date)} (${apptPeak.value})`
+        : '—',
+    },
+    {
+      label: 'Daily average',
+      value: days > 0 ? (apptTotal / days).toFixed(1) : '—',
+    },
+  ]
+
+  // Revenue buckets are daily up to 31 days and monthly beyond, so the "best"
+  // label follows the bucket size. The average is always per day of the range.
+  const revTotal = revenue ? Number(revenue.revenue) : 0
+  const revPeak = revenue
+    ? peakOf(revenue.series, (p) => Number(p.amount))
+    : null
+  const revMonthly = revenue?.series[0]?.date.length === 7
+  const revStats = [
+    { label: 'Total revenue', value: formatPeso(revTotal) },
+    {
+      label: revMonthly ? 'Best month' : 'Best day',
+      value:
+        revPeak && revPeak.value > 0
+          ? `${formatBucket(revPeak.point.date)} (${formatPeso(revPeak.value)})`
+          : '—',
+    },
+    {
+      label: 'Daily average',
+      value: days > 0 ? formatPeso(revTotal / days) : '—',
+    },
+  ]
+
   return (
     <div
       aria-hidden="true"
@@ -137,10 +212,18 @@ export function PrintableReport({
               onGranularityChange={() => undefined}
               hideControls
             />
+            <PrintStatRow stats={apptStats} />
           </section>
 
           <section className="print-section">
-            <StatusBreakdownChart data={appointments.by_status} />
+            <PrintBreakdownTable
+              title="Appointments by status"
+              labelHeading="Status"
+              rows={appointments.by_status.map((s) => ({
+                label: titleCase(s.status),
+                count: s.count,
+              }))}
+            />
           </section>
 
           {revenue && (
@@ -149,15 +232,72 @@ export function PrintableReport({
                 series={revenue.series}
                 paymentsHref={paymentsHref}
               />
+              <PrintStatRow stats={revStats} />
             </section>
           )}
 
-          <section className="print-section">
-            <PatientDemographicsCard report={patients} />
+          <section className="print-section space-y-4">
+            <h2 className="text-base font-bold text-stone-900">
+              Patient demographics
+              <span className="ml-2 text-xs font-normal text-stone-500">
+                {patients.total} patient{patients.total === 1 ? '' : 's'}
+              </span>
+            </h2>
+            <PrintBreakdownTable
+              title="By sex"
+              labelHeading="Sex"
+              rows={patients.by_sex.map((s) => ({
+                label: titleCase(s.sex),
+                count: s.count,
+              }))}
+            />
+            <PrintBreakdownTable
+              title="By age"
+              labelHeading="Age group"
+              rows={patients.age_buckets.map((b) => ({
+                label: b.bucket,
+                count: b.count,
+              }))}
+            />
+            <PrintBreakdownTable
+              title="By breed"
+              labelHeading="Breed"
+              maxRows={10}
+              rows={patients.by_breed.map((b) => ({
+                label: b.breed,
+                count: b.count,
+              }))}
+            />
           </section>
 
           <section className="print-section">
-            <ScreeningsAnalyticsCard report={screenings} />
+            <h2 className="text-base font-bold text-stone-900">
+              AI screenings
+            </h2>
+            <div className="mt-2">
+              <PrintBreakdownTable
+                title="By condition"
+                labelHeading="Condition"
+                rows={screenings.by_condition.map((c) => ({
+                  label: c.disease,
+                  count: c.count,
+                }))}
+              />
+            </div>
+            <PrintStatRow
+              stats={[
+                { label: 'Reviewed', value: String(screenings.reviewed) },
+                {
+                  label: 'Pending review',
+                  value: String(screenings.pending_review),
+                },
+                {
+                  label: 'Vet confirmed',
+                  value: String(screenings.vet_confirmed),
+                },
+                { label: 'Vet changed', value: String(screenings.vet_changed) },
+              ]}
+            />
           </section>
 
           <section className="print-section">
