@@ -32,6 +32,7 @@ export interface VetAppointment {
   pet_id: string
   pet_name: string
   pet_breed?: string | null
+  pet_profile_image?: string | null
   pet_species?: string | null
   pet_sex?: string | null
   pet_birth_date?: string | null
@@ -47,6 +48,10 @@ export interface VetAppointment {
   apt_type: string
   apt_status: AppointmentStatus
   apt_scheduled_at: string
+  apt_created_at?: string | null
+  apt_checked_in_at?: string | null
+  apt_completed_at?: string | null
+  payment_provider_ref?: string | null
   apt_reason: string | null
   apt_cancellation_reason?: string | null
   apt_reschedule_request_reason?: string | null
@@ -77,6 +82,7 @@ export interface VetPetConsultationHistory {
     pet_id: string
     pet_name: string
     pet_species: string | null
+    pet_profile_image: string | null
   }
   consultations: VetConsultationInfo[]
 }
@@ -110,10 +116,18 @@ export interface VetAppointmentDetail extends VetAppointment {
   prescription: VetPrescriptionInfo | null
 }
 
+export interface VetTodayStats {
+  total: number
+  confirmed: number
+  ongoing: number
+  completed: number
+}
+
 export interface VetDashboardStats {
   consultations_this_month: number
   pending: number
   completed: number
+  today_stats: VetTodayStats
 }
 
 export interface VetDashboardData {
@@ -124,10 +138,12 @@ export interface VetDashboardData {
 
 export interface ScheduleDayAppointment {
   id: string
+  date: string
   time: string
   pet_name: string
   breed: string
-  owner_name: string
+  pet_profile_image: string | null
+  status: AppointmentStatus
 }
 
 export interface ScheduleMonthAppointment extends ScheduleDayAppointment {

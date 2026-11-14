@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
 
@@ -6,9 +7,16 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from core.storage_service import SupabaseStorageService
 from users.models import RevokedToken, User, UserRole
 from users.services import AuthService
 from users.utils import extract_request_meta
+
+CONTENT_TYPE_EXTENSIONS = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+}
 
 
 class LoginSerializer(serializers.Serializer):
@@ -116,6 +124,11 @@ class ProfileSerializer(serializers.Serializer):
     first_name = serializers.CharField(max_length=100)
     last_name = serializers.CharField(max_length=100)
     phone = serializers.CharField(max_length=20, allow_blank=True, required=False)
+    profile_picture = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
     role = serializers.CharField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
 
@@ -128,14 +141,58 @@ class ProfileSerializer(serializers.Serializer):
         except ObjectDoesNotExist:
             return None
 
+    def validate_profile_picture(self, value):
+        if value is None:
+            return value
+
+        if getattr(value, 'content_type', None) not in CONTENT_TYPE_EXTENSIONS:
+            raise serializers.ValidationError(
+                'Profile picture must be a JPEG, PNG, or WebP image.',
+            )
+        if value.size > 2 * 1024 * 1024:
+            raise serializers.ValidationError(
+                'Profile picture must be 2 MB or less.',
+            )
+        return value
+
+    @staticmethod
+    def _update_profile_picture(user, image_file):
+        try:
+            staff = user.staffprofile
+        except ObjectDoesNotExist:
+            return
+
+        if image_file is None:
+            staff.stf_profile_image = None
+        else:
+            extension = CONTENT_TYPE_EXTENSIONS.get(image_file.content_type, 'jpg')
+            object_path = SupabaseStorageService.build_object_path(
+                f'staff/{staff.stf_id}', extension,
+            )
+            staff.stf_profile_image = SupabaseStorageService.upload(
+                bucket=settings.SUPABASE_STORAGE_BUCKET_STAFF_IMAGES,
+                file_bytes=image_file.read(),
+                content_type=image_file.content_type,
+                object_path=object_path,
+            )
+
+        staff.save(update_fields=['stf_profile_image', 'stf_updated_at'])
+
     @transaction.atomic
     def update(self, instance, validated_data):
+        has_profile_picture = 'profile_picture' in validated_data
+        profile_picture = validated_data.pop('profile_picture', None)
+
         instance.usr_first_name = validated_data.get('first_name', instance.usr_first_name)
         instance.usr_last_name = validated_data.get('last_name', instance.usr_last_name)
         new_phone = validated_data.get('phone', instance.usr_phone)
         phone_changed = new_phone != instance.usr_phone
         instance.usr_phone = new_phone
         instance.save(update_fields=['usr_first_name', 'usr_last_name', 'usr_phone', 'usr_updated_at'])
+
+        if has_profile_picture:
+            self._update_profile_picture(instance, profile_picture)
+
         if phone_changed and instance.usr_role == UserRole.OWNER:
             from owners.services import OwnerProfileService
 
@@ -171,4 +228,5 @@ class ProfileSerializer(serializers.Serializer):
                 if staff and staff.stf_license_expiration_date
                 else None
             ),
+            'profile_picture': (staff.stf_profile_image or '') if staff else '',
         }

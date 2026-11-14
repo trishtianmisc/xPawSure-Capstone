@@ -5,7 +5,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core.permissions import HasRole
-from notifications.serializers import NotificationSerializer
+from notifications.serializers import (
+    NotificationSerializer,
+    build_appointment_map,
+)
 from notifications.services import NotificationService
 from users.models import UserRole
 
@@ -62,7 +65,12 @@ class NotificationListView(APIView):
             page_size=page_size,
         )
 
-        serializer = NotificationSerializer(result['results'], many=True)
+        notifications = list(result['results'])
+        serializer = NotificationSerializer(
+            notifications,
+            many=True,
+            context={'appointment_map': build_appointment_map(notifications)},
+        )
         return Response({
             'total': result['total'],
             'page': result['page'],
@@ -70,6 +78,10 @@ class NotificationListView(APIView):
             'total_pages': result['total_pages'],
             'results': serializer.data,
         })
+
+    def delete(self, request):
+        NotificationService.clear_notifications(request.user.usr_id)
+        return Response({'detail': 'All notifications cleared.'})
 
 
 class NotificationUnreadCountView(APIView):
@@ -91,7 +103,10 @@ class NotificationMarkReadView(APIView):
                 {'detail': 'Notification not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = NotificationSerializer(ntf)
+        serializer = NotificationSerializer(
+            ntf,
+            context={'appointment_map': build_appointment_map([ntf])},
+        )
         return Response(serializer.data)
 
 

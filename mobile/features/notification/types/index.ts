@@ -8,6 +8,8 @@ export type NotificationTypeName =
   | 'VACCINATION_REMINDER'
   | 'AI_SCREENING_COMPLETED'
   | 'AI_SCREENING_REVIEWED'
+  | 'PAYMENT_COMPLETED'
+  | 'PAYMENT_EXPIRED'
   | 'SYSTEM'
 
 export interface OwnerNotification {
@@ -20,6 +22,9 @@ export interface OwnerNotification {
   ntf_reference_id: string | null
   ntf_created_at: string
   ntf_read_at: string | null
+  pet_name: string | null
+  pet_profile_image: string | null
+  appointment_scheduled_at: string | null
 }
 
 export interface NotificationListResponse {

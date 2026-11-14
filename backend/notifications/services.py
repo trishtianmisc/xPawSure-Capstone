@@ -179,3 +179,8 @@ class NotificationService:
         Notification.objects.filter(
             usr_id_id=user_id, ntf_is_read=False,
         ).update(ntf_is_read=True, ntf_read_at=now)
+
+    @staticmethod
+    def clear_notifications(user_id):
+        deleted, _ = Notification.objects.filter(usr_id_id=user_id).delete()
+        return deleted

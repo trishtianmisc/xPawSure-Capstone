@@ -47,7 +47,8 @@ Response (200):
     "email": "string",
     "full_name": "string",
     "role": "string",
-    "clinic_name": "string | null"
+    "clinic_name": "string | null",
+    "profile_picture": "string (public URL or empty string)"
   }
 }
 
@@ -151,7 +152,11 @@ Response (200):
   "phone": "string",
   "role": "string",
   "is_active": true,
-  "clinic_name": "string | null"
+  "clinic_name": "string | null",
+  "position": "string | null",
+  "license_number": "string | null",
+  "license_expiration_date": "YYYY-MM-DD | null",
+  "profile_picture": "string (public URL or empty string)"
 }
 
 ---
@@ -160,12 +165,15 @@ Response (200):
 
 Requires authentication.
 
+Accepts JSON or `multipart/form-data` when uploading a profile picture.
+
 Request:
 
 {
   "first_name": "string (optional)",
   "last_name": "string (optional)",
-  "phone": "string (optional)"
+  "phone": "string (optional)",
+  "profile_picture": "file (optional; JPEG, PNG, or WebP up to 2 MB; send null to remove)"
 }
 
 Response (200):
@@ -178,7 +186,11 @@ Response (200):
   "last_name": "string",
   "phone": "string",
   "role": "string",
-  "clinic_name": "string | null"
+  "clinic_name": "string | null",
+  "position": "string | null",
+  "license_number": "string | null",
+  "license_expiration_date": "YYYY-MM-DD | null",
+  "profile_picture": "string (public URL or empty string)"
 }
 
 Changing `phone` revokes any public pet QR phone-sharing consent. The owner
@@ -1139,7 +1151,7 @@ veterinarians; the pet must have at least one appointment at the caller's clinic
 
 Response (200):
 
-- pet: `{ pet_id, pet_name, pet_species }`
+- pet: `{ pet_id, pet_name, pet_species, pet_profile_image }`
 - consultations: array of consultation objects (same shape as
   `GET /api/appointments/{id}/` `consultation`, plus `scheduled_at` and the
   source appointment's `checked_in_at` and `completed_at`; either timestamp is
@@ -2698,6 +2710,7 @@ Mobile-accessible endpoints for owners:
 Notification endpoints (in-app notifications, see section 14):
 
 - GET /api/notifications/
+- DELETE /api/notifications/ (clear all of the caller's notifications)
 - GET /api/notifications/unread-count/
 - PATCH /api/notifications/{ntf_id}/read/
 - PATCH /api/notifications/read-all/
@@ -2756,10 +2769,28 @@ Response:
       "ntf_reference_table": "APPOINTMENT",
       "ntf_reference_id": "uuid or null",
       "ntf_created_at": "...",
-      "ntf_read_at": null
+      "ntf_read_at": null,
+      "pet_name": "Max | null",
+      "pet_profile_image": "url | null",
+      "appointment_scheduled_at": "... | null"
     }
   ]
 }
+
+For notifications whose `ntf_reference_table` is `APPOINTMENT` and whose
+reference resolves to an appointment, the response also includes the pet's
+name, the pet's profile image, and the appointment's scheduled time. These
+fields are `null` for every other notification type (or when the referenced
+appointment no longer exists).
+
+## DELETE /api/notifications/
+
+Deletes every notification owned by the caller. Notifications belonging to other
+users are never touched.
+
+Response:
+
+{ "detail": "All notifications cleared." }
 
 ## GET /api/notifications/unread-count/
 

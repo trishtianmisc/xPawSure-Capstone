@@ -4,24 +4,15 @@ import { useRouter } from 'expo-router'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { VetAppointmentCard } from '../../../features/vet/components/VetAppointmentCard'
 import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
-import { formatAppointmentStatus, formatShortDate, formatTime } from '../../../features/vet/lib/format'
+import { formatShortDate, formatTime } from '../../../features/vet/lib/format'
 import { manilaDateKey } from '../../../src/utils/datetime'
 import type { AppointmentStatus, ConsultationTab } from '../../../features/vet/types'
 
 const TABS: ConsultationTab[] = ['TODAY', 'UPCOMING', 'COMPLETED', 'CANCELLED']
-
-const STATUS_COLORS: Record<AppointmentStatus, { bg: string; text: string }> = {
-  PENDING: { bg: '#FDEBD0', text: '#E67E22' },
-  CONFIRMED: { bg: '#D5F5E3', text: '#27AE60' },
-  CHECKED_IN: { bg: '#FCF3CF', text: '#B7950B' },
-  IN_PROGRESS: { bg: '#E8DAEF', text: '#6C3483' },
-  COMPLETED: { bg: '#D6EAF8', text: '#2E86C1' },
-  CANCELLED: { bg: '#FADBD8', text: '#E74C3C' },
-  NO_SHOW: { bg: '#FADBD8', text: '#E74C3C' },
-}
 
 const INACTIVE: AppointmentStatus[] = ['CANCELLED', 'NO_SHOW']
 
@@ -105,38 +96,17 @@ export default function VetConsultationListScreen() {
             <Text style={styles.emptyText}>No consultations found.</Text>
           </View>
         ) : (
-          filtered.map((item) => {
-            const statusStyle = STATUS_COLORS[item.apt_status]
-            return (
-              <Pressable
-                key={item.apt_id}
-                onPress={() => router.push(`/(vet)/consultations/${item.apt_id}`)}
-                style={styles.card}
-              >
-                <View style={styles.cardTop}>
-                  <View style={styles.cardDateTime}>
-                    <Text style={styles.cardDate}>
-                      {formatShortDate(item.apt_scheduled_at)} | {formatTime(item.apt_scheduled_at)}
-                    </Text>
-                  </View>
-                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: statusStyle.text }]}>
-                      {formatAppointmentStatus(item.apt_status)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.petName}>
-                    {item.pet_name}
-                    {item.pet_breed || item.pet_species ? (
-                      <Text style={styles.petBreed}> | {item.pet_breed ?? item.pet_species}</Text>
-                    ) : null}
-                  </Text>
-                  <Text style={styles.ownerName}>Owner: {item.owner_name ?? '—'}</Text>
-                </View>
-              </Pressable>
-            )
-          })
+          filtered.map((item) => (
+            <VetAppointmentCard
+              breed={item.pet_breed ?? item.pet_species}
+              imageUrl={item.pet_profile_image}
+              key={item.apt_id}
+              meta={`${formatShortDate(item.apt_scheduled_at)} · ${formatTime(item.apt_scheduled_at)}`}
+              onPress={() => router.push(`/(vet)/consultations/${item.apt_id}`)}
+              petName={item.pet_name}
+              status={item.apt_status}
+            />
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
@@ -156,18 +126,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   tabTextActive: { color: colors.text },
 
   loading: { marginVertical: 40 },
-
-  card: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.borderLight },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  cardDateTime: {},
-  cardDate: { ...font.bold, color: colors.text, fontSize: 14 },
-  cardInfo: { marginTop: 10 },
-  petName: { ...font.bold, color: colors.text, fontSize: 16 },
-  petBreed: { ...font.medium, color: colors.textSecondary, fontSize: 14 },
-  ownerName: { ...font.regular, color: colors.textSecondary, fontSize: 13, marginTop: 4 },
-
-  statusBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  statusBadgeText: { ...font.bold, fontSize: 11 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...font.regular, color: colors.textSecondary, fontSize: 14 },

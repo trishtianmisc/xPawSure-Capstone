@@ -5,7 +5,7 @@ import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import type { VetScreeningAnswer } from '../types'
 
-const INITIAL_VISIBLE_ROWS = 5
+const INITIAL_VISIBLE_ROWS = 3
 
 export function SymptomAnswersCard({ rows }: { rows: VetScreeningAnswer[] }) {
   const { colors } = useTheme()

@@ -4,10 +4,11 @@ import { ActivityIndicator, Pressable, RefreshControl, SafeAreaView, ScrollView,
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { VetAppointmentCard } from '../../../features/vet/components/VetAppointmentCard'
 import { usePullToRefresh } from '../../../features/vet/hooks/usePullToRefresh'
 import { useRefreshVetOnFocus } from '../../../features/vet/hooks/useRefreshVetOnFocus'
 import { useVetAppointments } from '../../../features/vet/hooks/useVetAppointments'
-import { formatTime, localDateStr } from '../../../features/vet/lib/format'
+import { formatShortDate, formatTime, localDateStr } from '../../../features/vet/lib/format'
 import { manilaDateKey, manilaDateParts, manilaToday } from '../../../src/utils/datetime'
 import type { ScheduleDayAppointment, ScheduleMonthAppointment, ScheduleWeekDay, VetAppointment } from '../../../features/vet/types'
 
@@ -56,16 +57,28 @@ function getWeekKey(start: Date, end: Date): string {
   if (start.getMonth() === end.getMonth()) {
     return `${sMonth.slice(0, 3)} ${start.getDate()}-${end.getDate()}, ${start.getFullYear()}`
   }
-  return `${sMonth.slice(0, 3)} ${start.getDate()} – ${eMonth.slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`
+  return `${sMonth.slice(0, 3)} ${start.getDate()} - ${eMonth.slice(0, 3)} ${end.getDate()}, ${end.getFullYear()}`
 }
+
+function getWeekRangeLabel(start: Date, end: Date): string {
+  const sMonth = MONTHS[start.getMonth()]
+  const eMonth = MONTHS[end.getMonth()]
+  if (start.getMonth() === end.getMonth()) {
+    return `${sMonth} ${start.getDate()}-${end.getDate()}`
+  }
+  return `${sMonth} ${start.getDate()} - ${eMonth} ${end.getDate()}`
+}
+
 
 function toDayItem(apt: VetAppointment): ScheduleDayAppointment {
   return {
     id: apt.apt_id,
+    date: formatShortDate(apt.apt_scheduled_at),
     time: formatTime(apt.apt_scheduled_at),
     pet_name: apt.pet_name,
     breed: apt.pet_breed ?? apt.pet_species ?? '',
-    owner_name: apt.owner_name ?? '',
+    pet_profile_image: apt.pet_profile_image ?? null,
+    status: apt.apt_status,
   }
 }
 
@@ -80,7 +93,7 @@ interface AppointmentViewProps {
 export default function ScheduleScreen() {
   const router = useRouter()
   const { colors, isDark } = useTheme()
-  const styles = useMemo(() => createStyles(colors), [colors])
+  const styles = useMemo(() => createStyles(colors, isDark), [colors, isDark])
   const [activeTab, setActiveTab] = useState<typeof TABS[number]>('Day')
 
   const { data, isLoading, isError, refetch } = useVetAppointments({})
@@ -251,7 +264,10 @@ function DayView({ styles, appointments, onAppointmentPress }: AppointmentViewPr
       </View>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Appointments for {MONTHS_FULL[viewMonth]} {selectedDay}</Text>
+        <Text style={styles.sectionTitle}>{MONTHS_FULL[viewMonth]} {selectedDay}</Text>
+        <View style={styles.totalBadge}>
+          <Text style={styles.totalBadgeText}>{dayAppointments.length} total</Text>
+        </View>
       </View>
 
       <View style={styles.appointmentsSection}>
@@ -261,23 +277,15 @@ function DayView({ styles, appointments, onAppointmentPress }: AppointmentViewPr
           </View>
         ) : (
           dayAppointments.map((apt) => (
-            <Pressable
+            <VetAppointmentCard
+              breed={apt.breed}
+              imageUrl={apt.pet_profile_image}
               key={apt.id}
+              meta={`${apt.date} · ${apt.time}`}
               onPress={() => onAppointmentPress(apt.id)}
-              style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
-            >
-              <View style={styles.aptTimeCol}>
-                <Text style={styles.aptTime}>{apt.time}</Text>
-              </View>
-              <View style={styles.aptDivider} />
-              <View style={styles.aptInfoCol}>
-                <View style={styles.aptPetRow}>
-                  <Text style={styles.aptPetName} numberOfLines={1}>{apt.pet_name}</Text>
-                  <Text style={styles.aptBreed} numberOfLines={1}> | {apt.breed}</Text>
-                </View>
-                <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
-              </View>
-            </Pressable>
+              petName={apt.pet_name}
+              status={apt.status}
+            />
           ))
         )}
       </View>
@@ -299,6 +307,7 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
   }, [weekOffset])
 
   const weekKey = getWeekKey(start, end)
+  const weekRangeLabel = getWeekRangeLabel(start, end)
 
   const weekData: ScheduleWeekDay[] = useMemo(() => {
     const days: ScheduleWeekDay[] = []
@@ -319,6 +328,7 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
   }, [start, appointments])
 
   const hasAny = weekData.some((day) => day.appointments.length > 0)
+  const weekTotal = weekData.reduce((sum, day) => sum + day.appointments.length, 0)
 
   return (
     <>
@@ -330,6 +340,13 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
         <Pressable onPress={() => setWeekOffset(weekOffset + 1)} style={styles.navArrow}>
           <Text style={styles.navArrowText}>{'>'}</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{weekRangeLabel}</Text>
+        <View style={styles.totalBadge}>
+          <Text style={styles.totalBadgeText}>{weekTotal} total</Text>
+        </View>
       </View>
 
       <View style={styles.appointmentsSection}>
@@ -344,23 +361,15 @@ function WeekView({ styles, appointments, onAppointmentPress }: AppointmentViewP
                 <>
                   <Text style={styles.weekDayHeader}>{dayGroup.dayLabel}</Text>
                   {dayGroup.appointments.map((apt) => (
-                    <Pressable
+                    <VetAppointmentCard
+                      breed={apt.breed}
+                      imageUrl={apt.pet_profile_image}
                       key={apt.id}
+                      meta={`${apt.date} · ${apt.time}`}
                       onPress={() => onAppointmentPress(apt.id)}
-                      style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
-                    >
-                      <View style={styles.aptTimeCol}>
-                        <Text style={styles.aptTime}>{apt.time}</Text>
-                      </View>
-                      <View style={styles.aptDivider} />
-                      <View style={styles.aptInfoCol}>
-                        <View style={styles.aptPetRow}>
-                          <Text style={styles.aptPetName} numberOfLines={1}>{apt.pet_name}</Text>
-                          <Text style={styles.aptBreed} numberOfLines={1}> | {apt.breed}</Text>
-                        </View>
-                        <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
-                      </View>
-                    </Pressable>
+                      petName={apt.pet_name}
+                      status={apt.status}
+                    />
                   ))}
                 </>
               )}
@@ -434,10 +443,9 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>{MONTHS_FULL[selectedMonth]} {viewYear}</Text>
-      </View>
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{MONTHS_FULL[selectedMonth]} {CURRENT_YEAR}</Text>
+        <View style={styles.totalBadge}>
+          <Text style={styles.totalBadgeText}>{monthAppointments.length} total</Text>
+        </View>
       </View>
 
       <View style={styles.appointmentsSection}>
@@ -447,24 +455,15 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
           </View>
         ) : (
           monthAppointments.map((apt) => (
-            <Pressable
+            <VetAppointmentCard
+              breed={apt.breed}
+              imageUrl={apt.pet_profile_image}
               key={apt.id}
+              meta={`${apt.date} · ${apt.time}`}
               onPress={() => onAppointmentPress(apt.id)}
-              style={({ pressed }) => [styles.aptCard, pressed && styles.aptCardPressed]}
-            >
-              <View style={styles.aptTimeCol}>
-                <Text style={styles.aptDateLabel}>{apt.date}</Text>
-                <Text style={styles.aptTime}>{apt.time}</Text>
-              </View>
-              <View style={styles.aptDivider} />
-              <View style={styles.aptInfoCol}>
-                <View style={styles.aptPetRow}>
-                  <Text style={styles.aptPetName} numberOfLines={1}>{apt.pet_name}</Text>
-                  <Text style={styles.aptBreed} numberOfLines={1}> | {apt.breed}</Text>
-                </View>
-                <Text style={styles.aptOwner}>Owner: {apt.owner_name}</Text>
-              </View>
-            </Pressable>
+              petName={apt.pet_name}
+              status={apt.status}
+            />
           ))
         )}
       </View>
@@ -472,7 +471,7 @@ function MonthView({ styles, appointments, onAppointmentPress }: AppointmentView
   )
 }
 
-const createStyles = (colors: AppColors) => StyleSheet.create({
+const createStyles = (colors: AppColors, isDark: boolean) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.bg },
   content: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 40 },
 
@@ -514,21 +513,18 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   weekDayHeader: { ...font.bold, color: colors.text, fontSize: 14, marginTop: 12, marginBottom: 8 },
 
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
-  sectionTitle: { ...font.bold, color: colors.text, fontSize: 16 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, justifyContent: 'space-between', marginBottom: 14 },
+  sectionTitle: { ...font.bold, color: colors.text, flexShrink: 1, fontSize: 13 },
+  totalBadge: {
+    backgroundColor: isDark ? colors.primary : colors.primaryDark,
+    borderRadius: 999,
+    flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  totalBadgeText: { ...font.bold, color: '#FFFFFF', fontSize: 11 },
 
-  appointmentsSection: { gap: 10 },
-  aptCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.borderLight },
-  aptCardPressed: { opacity: 0.7 },
-  aptTimeCol: { width: 80 },
-  aptDateLabel: { ...font.semibold, color: colors.text, fontSize: 12, marginBottom: 2 },
-  aptTime: { ...font.bold, color: colors.text, fontSize: 13 },
-  aptDivider: { width: 3, height: 40, backgroundColor: colors.primary, borderRadius: 2, marginHorizontal: 12 },
-  aptInfoCol: { flex: 1 },
-  aptPetRow: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
-  aptPetName: { ...font.bold, color: colors.text, fontSize: 15 },
-  aptBreed: { ...font.regular, color: colors.textSecondary, fontSize: 13, flexShrink: 1 },
-  aptOwner: { ...font.regular, color: colors.textSecondary, fontSize: 12, marginTop: 2 },
+  appointmentsSection: { gap: 0 },
 
   emptyState: { alignItems: 'center', paddingVertical: 24 },
   emptyText: { ...font.regular, color: colors.textSecondary, fontSize: 14 },
