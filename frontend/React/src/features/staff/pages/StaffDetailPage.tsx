@@ -181,17 +181,17 @@ export function StaffDetailPage() {
               <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
                 {staff.position}
               </span>
-              {staff.must_change_password ? (
+              {!staff.is_active ? (
+                <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-200">
+                  Deactivated
+                </span>
+              ) : staff.must_change_password ? (
                 <span className="rounded-full bg-amber-400/20 px-2.5 py-0.5 text-xs font-medium text-amber-200">
                   Pending Setup
                 </span>
-              ) : staff.is_active ? (
+              ) : (
                 <span className="rounded-full bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-200">
                   Active
-                </span>
-              ) : (
-                <span className="rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-medium text-red-200">
-                  Inactive
                 </span>
               )}
             </>
@@ -207,7 +207,9 @@ export function StaffDetailPage() {
               </button>
               <button
                 onClick={() => openConfirm('reset-password')}
-                className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+                disabled={!staff.is_active}
+                title={!staff.is_active ? 'Reactivate this staff member first.' : undefined}
+                className="shrink-0 rounded-md border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/10"
                 type="button"
               >
                 Reset Password
@@ -232,6 +234,27 @@ export function StaffDetailPage() {
             </div>
           }
         />
+
+        {/* Deactivated Banner */}
+        {!staff.is_active && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-red-100 dark:bg-red-900/40">
+                <svg className="size-4 text-red-700 dark:text-red-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                  Account Deactivated
+                </p>
+                <p className="mt-0.5 text-xs text-red-700 dark:text-red-400">
+                  This staff member cannot log in. Reactivate this account to resend credentials or let them complete their setup.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Pending Setup Banner */}
         {isPendingSetup && (
@@ -355,17 +378,17 @@ export function StaffDetailPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Status</p>
                 <p className="mt-1">
-                  {staff.must_change_password ? (
+                  {!staff.is_active ? (
+                    <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                      Deactivated
+                    </span>
+                  ) : staff.must_change_password ? (
                     <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                       Pending Setup
                     </span>
-                  ) : staff.is_active ? (
+                  ) : (
                     <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                       Active
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      Inactive
                     </span>
                   )}
                 </p>
