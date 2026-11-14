@@ -764,12 +764,129 @@ class ClinicAdminPatientDetailTests(ClinicAdminPatientBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data['summary']['consultations'], 1)
         self.assertEqual(response.data['summary']['vaccinations'], 2)
-        self.assertEqual(response.data['summary']['ai_screenings'], 2)
+        # Only the screening tied to this clinic's appointment counts; the one
+        # linked to the other clinic's consultation does not.
+        self.assertEqual(response.data['summary']['ai_screenings'], 1)
         self.assertEqual(response.data['vaccination_status'], 'overdue')
         self.assertEqual(
             set(response.data['vaccinations'][0].keys()),
             {'name', 'date_given', 'next_due'},
         )
+
+    def test_ai_screening_count_only_counts_this_clinics_appointments(self):
+        disease = Disease.objects.create(
+            dis_code='DERM92',
+            dis_name='Clinic Scope Dermatitis',
+        )
+
+        def screening():
+            return AiScreening.objects.create(
+                pet_id=self.patient,
+                dis_id=disease,
+                usr_id=self.owner_user,
+                ais_confidence='80.00',
+                ais_model_version='v1.0',
+                ais_status=ScreeningStatus.PENDING_REVIEW,
+                ais_source=ScreeningSource.DEVICE,
+            )
+
+        # Two screenings linked to this clinic's appointments. The first is
+        # linked to two appointments here and must still count once.
+        first = screening()
+        second = screening()
+        second_appointment = self._appointment(
+            self.patient,
+            AppointmentStatus.COMPLETED,
+            timezone.now() - timedelta(days=3),
+            vet=self.vet,
+        )
+        self.valid_appointment.apt_screening = first
+        self.valid_appointment.save(update_fields=['apt_screening'])
+        second_appointment.apt_screening = first
+        second_appointment.save(update_fields=['apt_screening'])
+
+        third_appointment = self._appointment(
+            self.patient,
+            AppointmentStatus.COMPLETED,
+            timezone.now() - timedelta(days=7),
+            vet=self.vet,
+        )
+        third_appointment.apt_screening = second
+        third_appointment.save(update_fields=['apt_screening'])
+
+        # Three screenings linked to another clinic's appointments.
+        for days_ago in (4, 5, 6):
+            other_appointment = self._appointment(
+                self.patient,
+                AppointmentStatus.COMPLETED,
+                timezone.now() - timedelta(days=days_ago),
+                clinic=self.other_clinic,
+            )
+            other_appointment.apt_screening = screening()
+            other_appointment.save(update_fields=['apt_screening'])
+
+        response = self._detail()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['summary']['ai_screenings'], 2)
+
+    def test_unbooked_screening_is_not_counted(self):
+        disease = Disease.objects.create(
+            dis_code='DERM03',
+            dis_name='Unbooked Dermatitis',
+        )
+        AiScreening.objects.create(
+            pet_id=self.patient,
+            dis_id=disease,
+            usr_id=self.owner_user,
+            ais_confidence='70.00',
+            ais_model_version='v1.0',
+            ais_status=ScreeningStatus.PENDING_REVIEW,
+            ais_source=ScreeningSource.DEVICE,
+        )
+
+        response = self._detail()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['summary']['ai_screenings'], 0)
+
+    def test_ai_screening_count_scopes_consultation_links_to_this_clinic(self):
+        disease = Disease.objects.create(
+            dis_code='DERM93',
+            dis_name='Consult Link Dermatitis',
+        )
+        own_consultation = Consultation.objects.create(
+            apt_id=self.valid_appointment,
+            stf_id=self.vet,
+            con_diagnosis='Own clinic',
+        )
+        other_appointment = self._appointment(
+            self.patient,
+            AppointmentStatus.COMPLETED,
+            timezone.now() - timedelta(days=1),
+            clinic=self.other_clinic,
+        )
+        other_consultation = Consultation.objects.create(
+            apt_id=other_appointment,
+            stf_id=self.vet,
+            con_diagnosis='Other clinic',
+        )
+        for consultation in (own_consultation, other_consultation):
+            AiScreening.objects.create(
+                pet_id=self.patient,
+                dis_id=disease,
+                usr_id=self.owner_user,
+                con_id=consultation,
+                ais_confidence='80.00',
+                ais_model_version='v1.0',
+                ais_status=ScreeningStatus.PENDING_REVIEW,
+                ais_source=ScreeningSource.DEVICE,
+            )
+
+        response = self._detail()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['summary']['ai_screenings'], 1)
 
     def test_appointment_history_is_clinic_scoped_and_read_only(self):
         cancelled = self._appointment(

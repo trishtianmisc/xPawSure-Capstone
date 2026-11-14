@@ -314,9 +314,16 @@ class ClinicAdminPatientService:
             apt_id__apt_deleted_at__isnull=True,
         ).count()
 
+        clinic_appointments = Appointment.objects.filter(
+            cln_id_id=clinic_id,
+            apt_deleted_at__isnull=True,
+        )
         screening_count = AiScreening.objects.filter(
             pet_id=pet,
-        ).count()
+        ).filter(
+            Q(appointments__in=clinic_appointments)
+            | Q(con_id__apt_id__in=clinic_appointments)
+        ).distinct().count()
 
         return {
             'pet': pet,
