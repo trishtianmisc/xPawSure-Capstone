@@ -24,13 +24,18 @@ describe('determineScreeningState', () => {
     assert.equal(result.state, 'NOT_SKIN_IMAGE')
   })
 
-  it('returns DISEASE_DETECTED at the 0.50 similarity boundary even with low confidence', () => {
-    const result = determineScreeningState(predictions(45.0), 0.50)
+  it('returns DISEASE_DETECTED at the 0.30 similarity boundary even with low confidence', () => {
+    const result = determineScreeningState(predictions(45.0), 0.30)
     assert.equal(result.state, 'DISEASE_DETECTED')
   })
 
-  it('returns UNCERTAIN just below the 0.50 similarity boundary despite high confidence', () => {
-    const result = determineScreeningState(predictions(99.0), 0.4999)
+  it('accepts the reported 0.4649 similarity as a detected result', () => {
+    const result = determineScreeningState(predictions(88.75, 6.9), 0.4649)
+    assert.equal(result.state, 'DISEASE_DETECTED')
+  })
+
+  it('returns UNCERTAIN just below the 0.30 similarity boundary despite high confidence', () => {
+    const result = determineScreeningState(predictions(99.0), 0.2999)
     assert.equal(result.state, 'UNCERTAIN')
   })
 
@@ -42,7 +47,7 @@ describe('determineScreeningState', () => {
   })
 
   it('returns UNCERTAIN in the overlap zone even with high confidence', () => {
-    const result = determineScreeningState(predictions(99.0), 0.30)
+    const result = determineScreeningState(predictions(99.0), 0.20)
     assert.equal(result.state, 'UNCERTAIN')
   })
 

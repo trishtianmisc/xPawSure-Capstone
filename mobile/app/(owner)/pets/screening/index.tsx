@@ -462,11 +462,7 @@ export default function CaptureScreen() {
             <>
               <ActivityIndicator color="#FFF" size="small" />
               <Text style={styles.screenBtnText}>
-                {pickerLoading
-                  ? 'Preparing photo...'
-                  : analysisPhase === 'validating'
-                    ? 'Checking photo...'
-                    : 'Running screening...'}
+                {pickerLoading ? 'Preparing photo...' : 'Analyzing photo'}
               </Text>
             </>
           ) : (
@@ -485,19 +481,11 @@ export default function CaptureScreen() {
           <View style={styles.overlayCard}>
             <ActivityIndicator color={colors.primary} size="large" />
             <Text style={styles.overlayTitle}>
-              {pickerLoading
-                ? 'Preparing photo...'
-                : analysisPhase === 'validating'
-                  ? 'Checking photo...'
-                  : 'Running screening...'}
+              {pickerLoading ? 'Preparing photo...' : 'Analyzing photo'}
             </Text>
-            <Text style={styles.overlayHint}>
-              {pickerLoading
-                ? 'Converting the photo to a single analysis copy'
-                : analysisPhase === 'validating'
-                  ? 'Independent image review is checking whether this photo is suitable for screening'
-                  : 'Validation passed. The on-device model is analyzing the same photo'}
-            </Text>
+            {pickerLoading ? (
+              <Text style={styles.overlayHint}>Converting the photo to a single analysis copy</Text>
+            ) : null}
           </View>
         </View>
       </Modal>
