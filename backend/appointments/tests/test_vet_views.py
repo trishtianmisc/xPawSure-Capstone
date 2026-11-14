@@ -769,6 +769,8 @@ class VetPetConsultationHistoryTests(VetDashboardBase):
         return f'/api/veterinarian/pets/{(pet or self.pet).pet_id}/history/'
 
     def test_returns_clinic_consultations_for_pet(self):
+        self.pet.pet_profile_image = 'https://example.com/max.jpg'
+        self.pet.save(update_fields=['pet_profile_image'])
         own_appointment = self._make_appointment(
             self.vet, AppointmentStatus.COMPLETED, self.today_9am,
         )
@@ -791,6 +793,10 @@ class VetPetConsultationHistoryTests(VetDashboardBase):
         self.assertEqual(response.data['pet']['pet_id'], str(self.pet.pet_id))
         self.assertEqual(response.data['pet']['pet_name'], 'Max')
         self.assertEqual(response.data['pet']['pet_species'], 'Pug')
+        self.assertEqual(
+            response.data['pet']['pet_profile_image'],
+            'https://example.com/max.jpg',
+        )
         self.assertEqual(
             {row['id'] for row in response.data['consultations']},
             {str(own_consultation.con_id), str(other_consultation.con_id)},

@@ -1,6 +1,9 @@
+import base64
 from datetime import date
 from io import StringIO
+from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
@@ -10,6 +13,11 @@ from rest_framework.test import APIClient
 
 from clinics.models import Clinic
 from users.models import StaffPosition, StaffProfile, User, UserRole
+
+ONE_PIXEL_PNG = base64.b64decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
+    '+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+)
 
 
 class LoginAPITestCase(TestCase):
@@ -221,6 +229,74 @@ class ProfileStaffFieldsTestCase(TestCase):
         self.assertIsNone(response.data['position'])
         self.assertIsNone(response.data['license_number'])
         self.assertIsNone(response.data['license_expiration_date'])
+
+
+class ProfilePictureTestCase(TestCase):
+
+    def setUp(self):
+        self.clinic = Clinic.objects.create(cln_name='Cebu Paw Care')
+        self.vet = User.objects.create(
+            usr_email='vet-photo@cebu.com',
+            usr_first_name='Vic',
+            usr_last_name='Torian',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        self.vet.set_password('TestPass123!')
+        self.vet.save()
+        self.staff = StaffProfile.objects.create(
+            usr_id=self.vet,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.vet)
+
+    def test_profile_returns_empty_picture_by_default(self):
+        response = self.client.get(reverse('auth-profile'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['profile_picture'], '')
+
+    @patch('users.serializers.SupabaseStorageService.upload')
+    def test_vet_can_upload_profile_picture(self, upload):
+        upload.return_value = 'https://cdn.example.com/staff/avatar.png'
+        image = SimpleUploadedFile(
+            'avatar.png',
+            ONE_PIXEL_PNG,
+            content_type='image/png',
+        )
+
+        response = self.client.put(
+            reverse('auth-profile'),
+            {'profile_picture': image},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.staff.refresh_from_db()
+        self.assertEqual(
+            self.staff.stf_profile_image,
+            'https://cdn.example.com/staff/avatar.png',
+        )
+        self.assertEqual(
+            response.data['profile_picture'],
+            'https://cdn.example.com/staff/avatar.png',
+        )
+        upload.assert_called_once()
+
+    def test_vet_can_remove_profile_picture(self):
+        self.staff.stf_profile_image = 'https://cdn.example.com/staff/old.png'
+        self.staff.save(update_fields=['stf_profile_image'])
+
+        response = self.client.put(
+            reverse('auth-profile'),
+            {'profile_picture': None},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.staff.refresh_from_db()
+        self.assertIsNone(self.staff.stf_profile_image)
+        self.assertEqual(response.data['profile_picture'], '')
 
 
 class CreateSuperAdminCommandTests(TestCase):

@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useVetProfile } from '../../../features/vet/hooks/useVetProfile'
@@ -22,6 +22,7 @@ export default function VetProfileScreen() {
   const clinicName = profile?.clinic_name ?? user?.clinic_name ?? ''
   const licenseNumber = profile?.license_number ?? user?.license_number ?? ''
   const licenseExpiration = profile?.license_expiration_date ?? user?.license_expiration_date ?? ''
+  const profilePicture = profile?.profile_picture || user?.profile_picture || ''
 
   return (
     <SafeAreaView style={[styles.screen, { backgroundColor: colors.bg }]}>
@@ -29,9 +30,13 @@ export default function VetProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={[styles.card, { backgroundColor: colors.surface }]}>
-          <View style={styles.avatar}>
-            <MaterialCommunityIcons color={colors.primary} name="account-circle" size={56} />
-          </View>
+          {profilePicture ? (
+            <Image source={{ uri: profilePicture }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <MaterialCommunityIcons color={colors.primary} name="account-circle" size={56} />
+            </View>
+          )}
           <Text style={[styles.name, { color: colors.text }]}>{fullName || 'N/A'}</Text>
           <Text style={[styles.email, { color: colors.textSecondary }]}>{email || 'N/A'}</Text>
           {!!phone && (
@@ -98,6 +103,7 @@ const styles = StyleSheet.create({
   scroll: { paddingTop: 20, paddingBottom: 40 },
   card: { alignItems: 'center', marginHorizontal: 24, borderRadius: 16, padding: 24, marginBottom: 16 },
   avatar: { marginBottom: 12 },
+  avatarImage: { borderRadius: 42, height: 84, marginBottom: 12, width: 84 },
   name: { ...font.bold, fontSize: 18, marginBottom: 4, textAlign: 'center' },
   email: { ...font.regular, fontSize: 13, marginBottom: 4, textAlign: 'center' },
   infoRow: { alignItems: 'center', flexDirection: 'row', gap: 6, marginTop: 4 },

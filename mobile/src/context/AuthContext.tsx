@@ -17,6 +17,7 @@ interface User {
   position?: string | null
   license_number?: string | null
   license_expiration_date?: string | null
+  profile_picture?: string | null
 }
 
 interface AuthContextType {
@@ -115,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         position: profile.position ?? null,
         license_number: profile.license_number ?? null,
         license_expiration_date: profile.license_expiration_date ?? null,
+        profile_picture: profile.profile_picture ?? null,
       }
       await setItem(STORAGE_USER, JSON.stringify(next))
       setUser(next)

@@ -1,11 +1,16 @@
 import {
   formatDate as formatManilaDate,
+  formatDateTime as formatManilaDateTime,
   formatTime as formatManilaTime,
   manilaDateParts,
   manilaToday,
 } from '../../../src/utils/datetime'
 
-export { formatManilaDate as formatShortDate, formatManilaTime as formatTime }
+export {
+  formatManilaDate as formatShortDate,
+  formatManilaDateTime as formatDateTime,
+  formatManilaTime as formatTime,
+}
 
 export function localDateStr(date: Date = manilaToday()): string {
   const m = `${date.getMonth() + 1}`.padStart(2, '0')
@@ -15,6 +20,13 @@ export function localDateStr(date: Date = manilaToday()): string {
 
 export function formatAppointmentStatus(status: string): string {
   return status.replace(/_/g, ' ')
+}
+
+export function formatNumericDateTime(value: string | Date | null | undefined): string {
+  const date = formatManilaDate(value, { month: '2-digit', day: '2-digit', year: '2-digit' })
+  if (date === '—') return date
+  const time = formatManilaTime(value)
+  return time === '—' ? date : `${date} ${time}`
 }
 
 export function ageFromBirthDate(birthDate?: string | null): string {

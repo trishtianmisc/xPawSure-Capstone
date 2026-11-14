@@ -137,6 +137,7 @@ class VetPetConsultationHistoryView(APIView):
                 'pet_id': str(pet.pet_id),
                 'pet_name': pet.pet_name,
                 'pet_species': pet.brd_id.brd_name if pet.brd_id else None,
+                'pet_profile_image': pet.pet_profile_image,
             },
             'consultations': VetConsultationHistorySerializer(
                 history['consultations'], many=True,
