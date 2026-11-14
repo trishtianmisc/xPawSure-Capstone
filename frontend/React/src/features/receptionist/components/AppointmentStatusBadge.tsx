@@ -1,5 +1,8 @@
 import type { AppointmentStatus } from '../types/receptionist.types'
 
+export const UNIFORM_APPOINTMENT_BADGE_CLASS =
+  'inline-flex h-[1.625rem] w-[7.25rem] shrink-0 items-center justify-center whitespace-nowrap rounded-full px-1.5 font-bold uppercase leading-none tracking-wide'
+
 const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: string }> = {
   REVIEW: {
     label: 'Needs Review',
@@ -35,25 +38,28 @@ const STATUS_CONFIG: Record<AppointmentStatus, { label: string; className: strin
   },
   NO_SHOW: {
     label: 'No-Show',
-    className: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
+    className: 'bg-stone-300 text-stone-900 dark:bg-stone-700 dark:text-stone-100',
   },
 }
 
 export function AppointmentStatusBadge({
   status,
   compact = false,
+  uniform = false,
 }: {
   status: AppointmentStatus
   compact?: boolean
+  uniform?: boolean
 }) {
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.PENDING
-  return (
-    <span
-      className={`inline-flex shrink-0 items-center rounded-full font-bold uppercase tracking-wide ${
-        compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'
-      } ${config.className}`}
-    >
-      {config.label}
-    </span>
-  )
+  const hasLongLabel = config.label.length > 9
+
+  const sizeClass = compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-3 py-1 text-xs'
+  const badgeClass = uniform
+    ? `${UNIFORM_APPOINTMENT_BADGE_CLASS} ${
+        hasLongLabel ? 'text-[10px]' : 'text-xs'
+      } ${config.className}`
+    : `inline-flex shrink-0 items-center rounded-full font-bold uppercase tracking-wide ${sizeClass} ${config.className}`
+
+  return <span className={badgeClass}>{config.label}</span>
 }

@@ -38,8 +38,10 @@ function saveToStorage(key: string, value: string, persistent: boolean): void {
   try {
     if (persistent) {
       localStorage.setItem(key, value)
+      sessionStorage.removeItem(key)
     } else {
       sessionStorage.setItem(key, value)
+      localStorage.removeItem(key)
     }
   } catch {
     /* storage unavailable */
@@ -89,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     const refreshToken = loadFromStorage(STORAGE_KEY_REFRESH)
     if (refreshToken) {
-      await authService.logout(refreshToken)
+      await authService.logout(refreshToken).catch(() => undefined)
     }
     clearAuthStorage()
     setUser(null)

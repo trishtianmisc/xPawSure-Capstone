@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 
 import type { ScreeningSummary, VetConsultationInfo } from '../types/dashboard.types'
 import { formatDate } from '../../../../utils/format'
+import { formatDiseaseLabel } from '../constants/diseases'
 import { DetailCell, DetailRowGroup, DetailSection } from './DetailSection'
 
 function displayValue(value: string | null | undefined): string {
@@ -40,7 +41,9 @@ export function ConsultationSummary({
       label: 'Diagnosis',
       value: (
         <>
-          {displayValue(consultation.diagnosis)}
+          {consultation.diagnosis.trim()
+            ? formatDiseaseLabel(consultation.diagnosis)
+            : '—'}
           {consultation.specific_disease && (
             <span className="mt-1 block text-xs font-normal text-stone-500 dark:text-stone-400">
               Specific disease: {consultation.specific_disease}

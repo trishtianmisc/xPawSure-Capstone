@@ -426,7 +426,7 @@ function Sections({ history }: { history: PetHistory }) {
                     <td className={TD}>{labelize(apt.apt_type)}</td>
                     <td className={`${TD} hidden md:table-cell`}>{apt.vet_name ?? '—'}</td>
                     <td className={TD}>
-                      <AppointmentStatusBadge status={apt.apt_status} />
+                      <AppointmentStatusBadge status={apt.apt_status} uniform />
                     </td>
                   </tr>
                 ))}

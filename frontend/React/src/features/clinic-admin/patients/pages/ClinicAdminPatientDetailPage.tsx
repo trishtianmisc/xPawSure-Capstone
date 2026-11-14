@@ -347,7 +347,7 @@ export function ClinicAdminPatientDetailPage() {
                         {appointment.vet_name ?? 'Unassigned'}
                       </td>
                       <td className="px-3 py-3">
-                        <AppointmentStatusBadge status={appointment.apt_status} />
+                        <AppointmentStatusBadge status={appointment.apt_status} uniform />
                         {appointment.apt_status === 'CANCELLED' &&
                           appointment.apt_cancellation_reason && (
                             <p className="mt-1 max-w-xs text-xs text-stone-500 dark:text-stone-400">

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-import { DISEASE_OPTIONS, OTHER_DISEASE } from '../constants/diseases'
+import { DISEASE_OPTIONS, OTHER_DISEASE, formatDiseaseLabel } from '../constants/diseases'
 
 interface DiseaseComboboxProps {
   value: string
@@ -61,7 +61,7 @@ export function DiseaseCombobox({
           aria-haspopup="listbox"
           aria-controls={id ? `${id}-listbox` : undefined}
           aria-autocomplete="none"
-          value={isOther ? customValue : value}
+          value={isOther ? customValue : formatDiseaseLabel(value)}
           onChange={(event) => {
             if (isOther) onCustomChange(event.target.value)
           }}
@@ -100,7 +100,7 @@ export function DiseaseCombobox({
                 }`}
                 onClick={() => handleSelect(option)}
               >
-                {option}
+                {formatDiseaseLabel(option)}
               </button>
             </li>
           ))}

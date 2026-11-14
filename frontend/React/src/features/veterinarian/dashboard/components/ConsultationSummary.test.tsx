@@ -88,6 +88,20 @@ describe('ConsultationSummary', () => {
     expect(screen.queryByText('Not matched')).not.toBeInTheDocument()
   })
 
+  it('shows full names for bacterial and fungal diagnoses', () => {
+    const { rerender } = render(
+      <ConsultationSummary consultation={makeConsultation({ diagnosis: 'Fungal' })} />,
+    )
+
+    expect(screen.getByText('Fungal Infection')).toBeInTheDocument()
+
+    rerender(
+      <ConsultationSummary consultation={makeConsultation({ diagnosis: 'Bacterial' })} />,
+    )
+
+    expect(screen.getByText('Bacterial Infection')).toBeInTheDocument()
+  })
+
   it('shows Not matched when diagnosis is empty', () => {
     render(
       <ConsultationSummary

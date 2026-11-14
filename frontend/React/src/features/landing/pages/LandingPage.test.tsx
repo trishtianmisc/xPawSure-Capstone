@@ -34,6 +34,18 @@ describe('LandingPage', () => {
     expect(getStartedLinks.every((link) => link.getAttribute('href') === '/login')).toBe(true)
 
     expect(
+      screen.queryByText('Veterinary clinic management + AI-assisted screening'),
+    ).not.toBeInTheDocument()
+    expect(screen.getByAltText('XPawSure web appointments preview')).toBeInTheDocument()
+    expect(screen.getByText('Web app review')).toBeInTheDocument()
+    expect(screen.getByText('Mobile app review')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /get the android app/i })).toHaveAttribute(
+      'href',
+      'https://expo.dev/accounts/trishtianmisc/projects/xpawsure/builds/814a49d9-7c6a-4e0f-bf32-b7cbafbd84d6',
+    )
+    expect(screen.queryByText('Illustrative interface preview')).not.toBeInTheDocument()
+
+    expect(
       screen.getByRole('heading', {
         level: 2,
         name: /ai-assisted screening for better veterinary insights/i,
@@ -42,6 +54,7 @@ describe('LandingPage', () => {
     expect(
       screen.getByText(/does not replace professional veterinary examination/i),
     ).toBeInTheDocument()
+    expect(screen.getByText('Screening supports, never replaces, veterinary judgment')).toBeInTheDocument()
 
     expect(screen.getAllByRole('link', { name: /support@xpawsure\.com/i }).length).toBeGreaterThan(0)
   })

@@ -149,7 +149,7 @@ export function ClinicAdminAppointmentDetailPage() {
         }
         meta={
           <>
-            <AppointmentStatusBadge status={appointment.apt_status} />
+            <AppointmentStatusBadge status={appointment.apt_status} uniform />
             <span className="text-xs text-amber-100/70">{bookedBy(appointment)}</span>
           </>
         }
@@ -191,7 +191,7 @@ export function ClinicAdminAppointmentDetailPage() {
         <SectionHeader>Status</SectionHeader>
         <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <AppointmentStatusBadge status={appointment.apt_status} />
+            <AppointmentStatusBadge status={appointment.apt_status} uniform />
             <span className="text-sm font-semibold text-stone-900 dark:text-stone-100">
               {formatDateTime(appointment.apt_scheduled_at, displayTimeZone)}
             </span>

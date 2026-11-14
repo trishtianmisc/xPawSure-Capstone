@@ -16,7 +16,10 @@ describe('DiseaseCombobox', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Open disease list' }))
-    fireEvent.click(screen.getByRole('option', { name: 'Fungal' }))
+
+    expect(screen.getByRole('option', { name: 'Bacterial Infection' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('option', { name: 'Fungal Infection' }))
 
     expect(onSelect).toHaveBeenCalledWith('Fungal')
   })
@@ -69,6 +72,6 @@ describe('DiseaseCombobox', () => {
 
     const input = screen.getByRole('combobox')
     expect(input).toHaveProperty('readOnly', true)
-    expect(input).toHaveValue('Fungal')
+    expect(input).toHaveValue('Fungal Infection')
   })
 })

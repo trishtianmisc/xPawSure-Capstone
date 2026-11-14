@@ -5,9 +5,16 @@ interface ModalProps {
   onClose: () => void
   title: string
   children: ReactNode
+  widthClassName?: string
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  widthClassName = 'max-w-lg',
+}: ModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -32,7 +39,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       onClick={(e) => { if (e.target === overlayRef.current) onClose() }}
     >
       <div
-        className="w-full max-w-lg overflow-hidden rounded-md bg-white shadow-xl dark:bg-stone-800"
+        className={`w-full ${widthClassName} overflow-hidden rounded-md bg-white shadow-xl dark:bg-stone-800`}
         role="dialog"
         aria-modal="true"
         aria-label={title}

@@ -37,8 +37,8 @@ const ROLES: {
     description: 'Keeps the front desk and appointment flow running smoothly.',
     icon: 'calendar',
     responsibilities: [
-      'Schedules and manages appointments',
-      'Registers owners and pets',
+      'Manages appointments',
+      'Manages Vet Schedule',
       'Checks patients in',
     ],
   },

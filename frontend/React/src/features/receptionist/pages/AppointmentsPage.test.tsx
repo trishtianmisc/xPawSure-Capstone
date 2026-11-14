@@ -135,7 +135,11 @@ describe('AppointmentsPage vet requests', () => {
 
     renderPage()
 
-    expect(screen.getByText('Vet request')).toBeInTheDocument()
+    expect(screen.getByText('Vet request')).toHaveClass(
+      'h-[1.625rem]',
+      'w-[7.25rem]',
+      'whitespace-nowrap',
+    )
   })
 
   it('omits the badge when the row has no open request', () => {

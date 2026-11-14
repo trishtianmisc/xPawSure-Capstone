@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-import { Card } from '../../../../components/ui'
+import { Button, Card, Modal } from '../../../../components/ui'
+import { apiErrorMessage } from '../../../../utils/error'
+import { clinicDateKey, formatDateTime } from '../../../../utils/format'
 import { PageHero } from '../../../receptionist/components/PageHero'
-import { clinicDateKey } from '../../../../utils/format'
 import { ConsultationsTable } from '../components/ConsultationsTable'
 import { useStartConsultation, useVetAppointments } from '../hooks/useVetAppointments'
 import type { AppointmentStatus, VetAppointmentSummary } from '../types/dashboard.types'
@@ -56,6 +57,8 @@ export function ConsultationsPage() {
   const [monthFilter, setMonthFilter] = useState('')
   const [yearFilter, setYearFilter] = useState('')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
+  const [pendingStart, setPendingStart] = useState<VetAppointmentSummary | null>(null)
+  const [startError, setStartError] = useState('')
 
   const todayStr = clinicDateKey()
 
@@ -110,8 +113,30 @@ export function ConsultationsPage() {
   }
 
   function handleStart(aptId: string) {
+    const appointment = appointments.find((item) => item.apt_id === aptId)
+    if (!appointment) return
+
+    setStartError('')
+    setPendingStart(appointment)
+  }
+
+  function closeStartModal() {
+    if (startConsultation.isPending) return
+    setPendingStart(null)
+    setStartError('')
+  }
+
+  function confirmStart() {
+    if (!pendingStart) return
+    const aptId = pendingStart.apt_id
+
+    setStartError('')
     startConsultation.mutate(aptId, {
-      onSuccess: () => navigate(`/veterinarian/consultations/${aptId}`),
+      onSuccess: () => {
+        setPendingStart(null)
+        navigate(`/veterinarian/consultations/${aptId}`)
+      },
+      onError: (error) => setStartError(apiErrorMessage(error)),
     })
   }
 
@@ -211,6 +236,49 @@ export function ConsultationsPage() {
           />
         )}
       </div>
+
+      <Modal
+        open={pendingStart !== null}
+        onClose={closeStartModal}
+        title="Start consultation?"
+      >
+        {pendingStart && (
+          <>
+            <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+              Start the consultation for{' '}
+              <span className="font-semibold text-stone-900 dark:text-stone-100">
+                {pendingStart.pet_name}
+              </span>{' '}
+              scheduled on {formatDateTime(pendingStart.apt_scheduled_at)}?
+            </p>
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+              The appointment status will change to In Progress.
+            </p>
+            {startError && (
+              <p className="mt-3 text-sm font-medium text-red-700 dark:text-red-400">
+                {startError}
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-3">
+              <Button
+                disabled={startConsultation.isPending}
+                onClick={closeStartModal}
+                type="button"
+                variant="secondary"
+              >
+                Cancel
+              </Button>
+              <Button
+                loading={startConsultation.isPending}
+                onClick={confirmStart}
+                type="button"
+              >
+                Start Consultation
+              </Button>
+            </div>
+          </>
+        )}
+      </Modal>
     </div>
   )
 }

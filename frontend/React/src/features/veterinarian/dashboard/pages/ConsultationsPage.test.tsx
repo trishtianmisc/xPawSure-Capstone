@@ -2,6 +2,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { clinicDateKey } from '../../../../utils/format'
 import { useStartConsultation, useVetAppointments } from '../hooks/useVetAppointments'
 import type { VetAppointmentSummary } from '../types/dashboard.types'
 import { ConsultationsPage } from './ConsultationsPage'
@@ -74,15 +75,18 @@ function renderPage() {
   )
 }
 
+const startConsultationMutate = vi.fn()
+
 describe('ConsultationsPage filters', () => {
   beforeEach(() => {
+    startConsultationMutate.mockReset()
     vi.mocked(useVetAppointments).mockReturnValue({
       data: appointments,
       isLoading: false,
       error: null,
     } as unknown as ReturnType<typeof useVetAppointments>)
     vi.mocked(useStartConsultation).mockReturnValue({
-      mutate: vi.fn(),
+      mutate: startConsultationMutate,
       isPending: false,
     } as unknown as ReturnType<typeof useStartConsultation>)
   })
@@ -186,5 +190,58 @@ describe('ConsultationsPage filters', () => {
     expect(screen.getByLabelText('Filter by month')).toHaveValue('')
     expect(screen.getByLabelText('Filter by year')).toHaveValue('')
     expect(screen.getByText('Milo')).toBeInTheDocument()
+  })
+
+  it('asks for confirmation before starting a consultation', () => {
+    const today = clinicDateKey()
+    vi.mocked(useVetAppointments).mockReturnValue({
+      data: [
+        appointment({
+          apt_id: 'apt-luna',
+          pet_name: 'Luna',
+          apt_status: 'CHECKED_IN',
+          apt_scheduled_at: `${today}T09:00:00+08:00`,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVetAppointments>)
+
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Start consultation for Luna' }))
+
+    expect(screen.getByRole('dialog', { name: 'Start consultation?' })).toBeInTheDocument()
+    expect(
+      screen.getByText('The appointment status will change to In Progress.'),
+    ).toBeInTheDocument()
+    expect(startConsultationMutate).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(startConsultationMutate).not.toHaveBeenCalled()
+  })
+
+  it('starts the consultation only after confirmation', () => {
+    const today = clinicDateKey()
+    vi.mocked(useVetAppointments).mockReturnValue({
+      data: [
+        appointment({
+          apt_id: 'apt-luna',
+          pet_name: 'Luna',
+          apt_status: 'CHECKED_IN',
+          apt_scheduled_at: `${today}T09:00:00+08:00`,
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVetAppointments>)
+
+    renderPage()
+    fireEvent.click(screen.getByRole('button', { name: 'Start consultation for Luna' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start Consultation' }))
+
+    expect(startConsultationMutate).toHaveBeenCalledTimes(1)
+    expect(startConsultationMutate.mock.calls[0][0]).toBe('apt-luna')
   })
 })

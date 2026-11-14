@@ -80,7 +80,7 @@ export default function HomeScreen() {
     : null
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <StatusBar
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={styles.safeArea.backgroundColor}
@@ -310,7 +310,7 @@ export default function HomeScreen() {
 const createStyles = (colors: AppColors) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: colors.bg },
-    content: { paddingHorizontal: 24, paddingTop: 15, paddingBottom: 40 },
+    content: { paddingHorizontal: 24, paddingTop: 15, paddingBottom: 24 },
 
     header: { marginBottom: 20 },
     greeting: { ...font.extrabold, color: colors.text, fontSize: 22, lineHeight: 28 },

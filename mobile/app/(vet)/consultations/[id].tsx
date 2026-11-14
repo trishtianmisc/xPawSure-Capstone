@@ -14,6 +14,7 @@ import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment
 import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
 import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
 import { VetPetHero } from '../../../features/vet/components/VetPetHero'
+import { formatDiseaseName } from '../../../features/vet/lib/diseaseNames'
 import { formatAppointmentStatus, formatNumericDateTime, formatShortDate, formatTime } from '../../../features/vet/lib/format'
 import { getDiagnosisAgreement } from '../../../features/vet/lib/screeningMatch'
 import { APPOINTMENT_STATUS_COLORS } from '../../../features/vet/lib/statusColors'
@@ -263,7 +264,9 @@ export default function VetConsultationDetailScreen() {
                   <View style={styles.screeningAssessmentRow}>
                     <View style={styles.screeningAssessmentCopy}>
                       <Text style={styles.screeningLabel}>Final Assessment</Text>
-                      <Text style={styles.screeningPrediction}>{detail.screening.disease}</Text>
+                      <Text style={styles.screeningPrediction}>
+                        {formatDiseaseName(detail.screening.disease)}
+                      </Text>
                       <Text style={styles.screeningDesc}>
                         {Math.round(Number(detail.screening.ais_confidence))}% confidence
                       </Text>
