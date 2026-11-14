@@ -25,12 +25,7 @@ export function HeroSection() {
     >
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:px-8">
         <Reveal>
-          <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300">
-            <LandingIcon className="size-3.5" name="sparkles" />
-            Veterinary clinic management + AI-assisted screening
-          </span>
-
-          <h1 className="mt-6 text-4xl font-extrabold leading-[1.1] tracking-tight text-stone-950 dark:text-white sm:text-5xl">
+          <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-stone-950 dark:text-white sm:text-5xl">
             Smarter Veterinary Care,{' '}
             <span className="text-amber-900 dark:text-amber-300">Better Pet Health.</span>
           </h1>

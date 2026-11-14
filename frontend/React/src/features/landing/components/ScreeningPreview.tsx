@@ -61,8 +61,19 @@ export function ScreeningPreview() {
         </div>
       </div>
       <p className="mt-3 text-center text-xs font-medium text-amber-200/70">
-        Illustrative interface preview
+        Mobile app review
       </p>
+      <div className="mt-2 flex justify-center">
+        <a
+          className="inline-flex items-center gap-1.5 rounded text-xs font-semibold text-amber-200 transition hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-200"
+          href="https://expo.dev/accounts/trishtianmisc/projects/xpawsure/builds/814a49d9-7c6a-4e0f-bf32-b7cbafbd84d6"
+          rel="noreferrer"
+          target="_blank"
+        >
+          Get the Android app
+          <LandingIcon className="size-3.5" name="arrow-right" />
+        </a>
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { Button, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
 import { formatDate, formatTime } from '../../../../utils/format'
 import { PageHero } from '../../../receptionist/components/PageHero'
+import { formatDiseaseLabel } from '../constants/diseases'
 import { usePetConsultationHistory } from '../hooks/useVetAppointments'
 import type { VetConsultationHistoryItem } from '../types/dashboard.types'
 
@@ -26,13 +27,14 @@ function ConsultationHistoryCard({ consultation }: { consultation: VetConsultati
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
   const detailsId = `consultation-details-${consultation.id}`
+  const diagnosisLabel = formatDiseaseLabel(consultation.diagnosis)
 
   return (
     <Card padding="sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-lg font-semibold text-stone-900 dark:text-stone-100">
-            {consultation.diagnosis}
+            {diagnosisLabel}
           </h2>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-500 dark:text-stone-400">
             <span className="font-semibold text-stone-900 dark:text-stone-100">
@@ -61,8 +63,8 @@ function ConsultationHistoryCard({ consultation }: { consultation: VetConsultati
             aria-expanded={expanded}
             aria-label={
               expanded
-                ? `Hide details for ${consultation.diagnosis}`
-                : `View details for ${consultation.diagnosis}`
+                ? `Hide details for ${diagnosisLabel}`
+                : `View details for ${diagnosisLabel}`
             }
             className="grid size-9 shrink-0 place-items-center rounded-full border border-stone-200 text-stone-500 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-900 dark:border-stone-600 dark:text-stone-400 dark:hover:border-amber-700 dark:hover:bg-amber-900/20 dark:hover:text-amber-200"
             onClick={() => setExpanded((current) => !current)}

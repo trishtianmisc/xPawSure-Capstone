@@ -8,6 +8,7 @@ import { ConsultationSummary } from '../components/ConsultationSummary'
 import { DetailCell, DetailRowGroup, DetailSection } from '../components/DetailSection'
 import { PrescriptionSummary } from '../components/PrescriptionSummary'
 import { SymptomAnswersCard } from '../components/SymptomAnswersCard'
+import { formatDiseaseLabel } from '../constants/diseases'
 import {
   useAppointmentDetail,
   useRequestCancellation,
@@ -298,36 +299,36 @@ export function AppointmentDetailPage() {
               value={formatDateTime(appointment.apt_scheduled_at)}
             />
           </DetailRowGroup>
-          {(appointment.apt_checked_in_at || appointment.apt_completed_at) && (
+          {appointment.apt_checked_in_at ? (
             <DetailRowGroup>
-              {appointment.apt_checked_in_at && appointment.apt_completed_at ? (
-                <>
-                  <DetailCell
-                    divider
-                    label="Checked in"
-                    value={formatDateTime(appointment.apt_checked_in_at)}
-                  />
-                  <DetailCell
-                    label="Completed"
-                    value={formatDateTime(appointment.apt_completed_at)}
-                  />
-                </>
-              ) : (
-                <DetailCell
-                  className="sm:col-span-2"
-                  label={appointment.apt_checked_in_at ? 'Checked in' : 'Completed'}
-                  value={formatDateTime(
-                    appointment.apt_checked_in_at ?? appointment.apt_completed_at,
-                  )}
-                />
-              )}
+              <DetailCell
+                divider
+                label="Checked in"
+                value={formatDateTime(appointment.apt_checked_in_at)}
+              />
+              <DetailCell
+                label="Completed"
+                value={
+                  appointment.apt_completed_at
+                    ? formatDateTime(appointment.apt_completed_at)
+                    : 'Not yet done'
+                }
+              />
             </DetailRowGroup>
-          )}
+          ) : appointment.apt_completed_at ? (
+            <DetailRowGroup>
+              <DetailCell
+                className="sm:col-span-2"
+                label="Completed"
+                value={formatDateTime(appointment.apt_completed_at)}
+              />
+            </DetailRowGroup>
+          ) : null}
           <DetailRowGroup>
             <DetailCell
               divider
               label="Status"
-              value={<AppointmentStatusBadge status={appointment.apt_status} />}
+              value={<AppointmentStatusBadge status={appointment.apt_status} uniform />}
             />
             <DetailCell
               label="Ref. No"
@@ -361,7 +362,7 @@ export function AppointmentDetailPage() {
         <DetailSection title="AI Screening">
           <div className="flex items-start gap-4 p-4">
             <ScreeningImage
-              alt={appointment.screening.disease}
+              alt={formatDiseaseLabel(appointment.screening.disease)}
               src={appointment.screening.image_url ?? null}
             />
             <div className="min-w-0 flex-1 rounded-md border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900">
@@ -369,7 +370,7 @@ export function AppointmentDetailPage() {
                 Final Assessment
               </p>
               <p className="mt-1 text-sm font-bold text-amber-800 dark:text-amber-500">
-                {appointment.screening.disease}
+                {formatDiseaseLabel(appointment.screening.disease)}
               </p>
               <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
                 AI screening result ·{' '}

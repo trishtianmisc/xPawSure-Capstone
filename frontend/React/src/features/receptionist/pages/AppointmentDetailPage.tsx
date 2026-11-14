@@ -177,7 +177,7 @@ export function AppointmentDetailPage() {
               {petSubtitle}
             </p>
           </div>
-          <AppointmentStatusBadge status={appointment.apt_status} />
+          <AppointmentStatusBadge status={appointment.apt_status} uniform />
         </div>
       </div>
 

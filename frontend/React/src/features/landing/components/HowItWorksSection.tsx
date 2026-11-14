@@ -18,7 +18,7 @@ const STEPS: { title: string; description: string; icon: LandingIconName }[] = [
   {
     title: 'Capture a screening photo',
     description:
-      'Pet owners submit a single skin photo through the XPawSure mobile app for preliminary screening.',
+      'Pet owners submit a single skin photo through the XPawSure mobile app for preliminary screening books for a consultation',
     icon: 'camera',
   },
   {

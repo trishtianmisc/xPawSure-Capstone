@@ -154,10 +154,44 @@ describe('AppointmentDetailPage pet avatar', () => {
     expect(screen.getByText('Completed')).toBeInTheDocument()
   })
 
+  it('shows completion as not yet done when checked in but not completed', () => {
+    const appointment = makeAppointment(null)
+    appointment.apt_status = 'CHECKED_IN'
+    appointment.apt_checked_in_at = '2026-01-05T08:55:00+08:00'
+
+    renderPage(appointment)
+
+    expect(screen.getByText('Checked in')).toBeInTheDocument()
+    expect(screen.getByText('Completed')).toBeInTheDocument()
+    expect(screen.getByText('Not yet done')).toBeInTheDocument()
+  })
+
   it('shows the payment provider reference', () => {
     renderPage(makeAppointment(null))
 
     expect(screen.getByText('PROV-REF-123')).toBeInTheDocument()
+  })
+
+  it('shows full names for bacterial and fungal screening results', () => {
+    const appointment = makeAppointment(null)
+    appointment.screening = {
+      ais_id: 'ais-1',
+      disease: 'Fungal',
+      ais_confidence: 91,
+      ais_model_version: 'v1',
+      ais_status: 'COMPLETED',
+      ais_source: 'OWNER',
+      ais_created_at: '2026-01-05T08:30:00+08:00',
+      symptom_answers: [],
+      image_url: 'https://example.com/fungal.jpg',
+    }
+
+    renderPage(appointment)
+
+    expect(screen.getByText('Fungal Infection')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Zoom Fungal Infection screening image' }),
+    ).toBeInTheDocument()
   })
 
   it('opens and closes the screening image preview', () => {

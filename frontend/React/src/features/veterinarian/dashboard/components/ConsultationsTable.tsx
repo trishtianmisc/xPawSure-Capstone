@@ -132,12 +132,13 @@ export function ConsultationsTable({
                     {labelize(c.apt_type)}
                   </td>
                   <td className="px-5 py-4">
-                    <AppointmentStatusBadge status={c.apt_status} />
+                    <AppointmentStatusBadge status={c.apt_status} uniform />
                   </td>
                   <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-2">
                       {canStart && (
                         <button
+                          aria-label={`Start consultation for ${c.pet_name}`}
                           className="rounded-md bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-800"
                           onClick={() => onStart(c.apt_id)}
                           type="button"

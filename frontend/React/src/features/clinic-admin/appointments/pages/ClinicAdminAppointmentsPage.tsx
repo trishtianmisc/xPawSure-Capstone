@@ -336,7 +336,7 @@ export function ClinicAdminAppointmentsPage() {
                         {labelize(apt.apt_type)}
                       </td>
                       <td className="px-5 py-4">
-                        <AppointmentStatusBadge status={apt.apt_status} />
+                        <AppointmentStatusBadge status={apt.apt_status} uniform />
                       </td>
                       <td
                         className="px-5 py-4 text-right"

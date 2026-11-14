@@ -5,7 +5,10 @@ import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { useAppointments } from '../hooks/useAppointments'
 import { useVetScheduleList } from '../hooks/useAvailableSlots'
-import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
+import {
+  AppointmentStatusBadge,
+  UNIFORM_APPOINTMENT_BADGE_CLASS,
+} from '../components/AppointmentStatusBadge'
 import { PageHero } from '../components/PageHero'
 import { QuickStatusAction } from '../components/QuickStatusAction'
 import { formatDateTime } from '../../../utils/format'
@@ -306,9 +309,11 @@ export function AppointmentsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex flex-col items-start gap-1.5">
-                          <AppointmentStatusBadge status={apt.apt_status} />
+                          <AppointmentStatusBadge status={apt.apt_status} uniform />
                           {apt.has_open_request && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+                            <span
+                              className={`${UNIFORM_APPOINTMENT_BADGE_CLASS} bg-amber-100 text-[10px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-300`}
+                            >
                               Vet request
                             </span>
                           )}

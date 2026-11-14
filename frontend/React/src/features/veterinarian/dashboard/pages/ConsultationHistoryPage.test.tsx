@@ -93,6 +93,25 @@ describe('ConsultationHistoryPage', () => {
     expect(screen.queryByText('Red patches on the belly')).not.toBeInTheDocument()
   })
 
+  it('shows full names for bacterial and fungal diagnoses', () => {
+    mockHistory([
+      makeConsultation('con-1', 'apt-previous', 'Fungal'),
+      makeConsultation('con-2', 'apt-current', 'Bacterial'),
+    ])
+
+    renderPage('/veterinarian/pets/pet-1/history?apt=apt-current')
+
+    expect(
+      screen.getByRole('heading', { name: 'Fungal Infection' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Bacterial Infection' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'View details for Fungal Infection' }),
+    ).toBeInTheDocument()
+  })
+
   it('expands and collapses the consultation details from the dropdown button', () => {
     mockHistory([makeConsultation('con-1', 'apt-previous', 'Dermatitis')])
 

@@ -32,7 +32,7 @@ export function TodayConsultations({ consultations, onView }: TodayConsultations
                 </p>
               </div>
               <div className="flex items-center gap-3">
-                <AppointmentStatusBadge status={c.apt_status} />
+                <AppointmentStatusBadge status={c.apt_status} uniform />
                 <span className="text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
                   View
                 </span>

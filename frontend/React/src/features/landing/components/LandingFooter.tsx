@@ -29,8 +29,7 @@ export function LandingFooter() {
               Veterinary clinic management with AI-assisted preliminary screening for canine skin
               conditions.
             </p>
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:bg-amber-900/30 dark:text-amber-300">
-              <LandingIcon className="size-3.5" name="shield" />
+            <p className="mt-3 max-w-xs text-sm leading-6 text-stone-600 dark:text-stone-400">
               Screening supports, never replaces, veterinary judgment
             </p>
           </div>

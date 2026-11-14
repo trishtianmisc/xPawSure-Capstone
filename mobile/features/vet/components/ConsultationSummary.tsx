@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { formatDiseaseName } from '../lib/diseaseNames'
 import { formatShortDate } from '../lib/format'
 import type { VetConsultationInfo } from '../types'
 
@@ -31,7 +32,7 @@ export function ConsultationSummary({
     .join(' · ')
 
   const fields = [
-    { label: 'Diagnosis', value: consultation.diagnosis, bold: true },
+    { label: 'Diagnosis', value: formatDiseaseName(consultation.diagnosis), bold: true },
     { label: 'Treatment', value: consultation.treatment, bold: false },
     { label: 'Chief complaint', value: consultation.chief_complaint, bold: false },
     { label: 'Subjective', value: consultation.subjective, bold: false },

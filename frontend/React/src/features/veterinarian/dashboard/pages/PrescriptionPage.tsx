@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { Modal } from '../../../../components/ui'
 import { PageHero } from '../../../receptionist/components/PageHero'
+import { PrescriptionItemsTable } from '../components/PrescriptionSummary'
 import { ROUTE_OPTIONS } from '../constants/prescription'
 import { useAppointmentDetail, useSavePrescription } from '../hooks/useVetAppointments'
 import type { VetAppointmentDetail } from '../types/dashboard.types'
@@ -21,6 +23,29 @@ const EMPTY_FORM = {
 
 function routeLabel(value: string): string {
   return ROUTE_OPTIONS.find((option) => option.value === value)?.label ?? value
+}
+
+function ReviewCell({
+  children,
+  className = '',
+  colSpan,
+  label,
+}: {
+  children: ReactNode
+  className?: string
+  colSpan: number
+  label: string
+}) {
+  return (
+    <td className={`px-4 py-3 align-top ${className}`} colSpan={colSpan}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+        {label}
+      </p>
+      <div className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800 dark:text-stone-200">
+        {children}
+      </div>
+    </td>
+  )
 }
 
 export function PrescriptionPage() {
@@ -71,15 +96,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [pendingConfirm, setPendingConfirm] = useState(false)
-
-  useEffect(() => {
-    if (!pendingConfirm) return
-    function onKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') setPendingConfirm(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [pendingConfirm])
+  const [pendingComplete, setPendingComplete] = useState(false)
 
   function handleChange(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -171,7 +188,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
     }
   }
 
-  async function handleComplete() {
+  function handleComplete() {
     if (rows.length === 0) {
       setError('Add at least one medication before completing.')
       return
@@ -185,10 +202,20 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       return
     }
     setError('')
+    setPendingComplete(true)
+  }
+
+  async function confirmComplete() {
+    const consultation = appointment.consultation
+    if (!consultation) {
+      setPendingComplete(false)
+      setError('Save the consultation first before adding a prescription.')
+      return
+    }
 
     try {
       await savePrescription.mutateAsync({
-        consultation_id: appointment.consultation.id,
+        consultation_id: consultation.id,
         instructions: '',
         items: rows.map((row) => ({
           medicine_name: row.medicine_name,
@@ -203,6 +230,7 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
       })
       navigate(`/veterinarian/appointments/${aptId}`)
     } catch (err) {
+      setPendingComplete(false)
       setError(apiErrorMessage(err))
     }
   }
@@ -405,63 +433,130 @@ function PrescriptionForm({ appointment }: { appointment: VetAppointmentDetail }
         </div>
       </div>
 
-      {pendingConfirm && (
-        <div
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setPendingConfirm(false)}
-          role="dialog"
-        >
-          <div
-            className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl dark:bg-stone-900"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h3 className="mb-1 text-lg font-semibold text-stone-900 dark:text-stone-100">
-              {editingId ? 'Confirm update' : 'Confirm medication'}
-            </h3>
-            <p className="mb-4 text-sm text-stone-600 dark:text-stone-300">
-              Check the details below for spelling and accuracy before it is added.
-            </p>
-            <dl className="mb-5 space-y-2 rounded-lg border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800">
-              {[
-                ['Medicine', form.medicine_name.trim()],
-                ['Generic name', form.generic_name.trim() || '—'],
-                ['Dosage', form.dosage || '—'],
-                ['Route', routeLabel(form.route)],
-                ['Frequency', form.frequency || '—'],
-                ['Duration', form.duration || '—'],
-                ['Quantity', form.quantity || '—'],
-                ['Instructions', form.notes.trim() || '—'],
-              ].map(([label, value]) => (
-                <div className="flex justify-between gap-4" key={label}>
-                  <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                    {label}
-                  </dt>
-                  <dd className="break-words text-right text-sm text-stone-800 dark:text-stone-200">
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-            <div className="flex justify-end gap-3">
-              <button
-                className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
-                onClick={() => setPendingConfirm(false)}
-                type="button"
-              >
-                Go back
-              </button>
-              <button
-                className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
-                onClick={confirmAdd}
-                type="button"
-              >
-                {editingId ? 'Confirm update' : 'Confirm'}
-              </button>
-            </div>
-          </div>
+      <Modal
+        onClose={() => setPendingConfirm(false)}
+        open={pendingConfirm}
+        title={editingId ? 'Confirm update' : 'Confirm medication'}
+        widthClassName="max-w-2xl"
+      >
+        <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+          Check the details below for spelling and accuracy before it is added.
+        </p>
+        <div className="mt-4 max-h-[60vh] overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-700">
+          <table className="w-full table-fixed border-collapse text-left">
+            <colgroup>
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+              <col className="w-1/6" />
+            </colgroup>
+            <tbody className="divide-y divide-stone-200 dark:divide-stone-700">
+              <tr>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  colSpan={3}
+                  label="Medicine name"
+                >
+                  {form.medicine_name.trim() || '—'}
+                </ReviewCell>
+                <ReviewCell colSpan={3} label="Generic name">
+                  {form.generic_name.trim() || '—'}
+                </ReviewCell>
+              </tr>
+              <tr>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  colSpan={2}
+                  label="Dosage"
+                >
+                  {form.dosage || '—'}
+                </ReviewCell>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  colSpan={2}
+                  label="Frequency"
+                >
+                  {form.frequency || '—'}
+                </ReviewCell>
+                <ReviewCell colSpan={2} label="Quantity">
+                  {form.quantity || '—'}
+                </ReviewCell>
+              </tr>
+              <tr>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  colSpan={3}
+                  label="Duration"
+                >
+                  {form.duration || '—'}
+                </ReviewCell>
+                <ReviewCell colSpan={3} label="Route">
+                  {routeLabel(form.route)}
+                </ReviewCell>
+              </tr>
+              <tr>
+                <ReviewCell colSpan={6} label="Instructions">
+                  {form.notes.trim() || '—'}
+                </ReviewCell>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      )}
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+            onClick={() => setPendingConfirm(false)}
+            type="button"
+          >
+            Go back
+          </button>
+          <button
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
+            onClick={confirmAdd}
+            type="button"
+          >
+            {editingId ? 'Confirm update' : 'Confirm'}
+          </button>
+        </div>
+      </Modal>
+
+      <Modal
+        onClose={() => setPendingComplete(false)}
+        open={pendingComplete}
+        title="Complete consultation"
+        widthClassName="max-w-4xl"
+      >
+        <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+          Review the prescription before completing consultation.
+        </p>
+        <div className="mt-4 rounded-lg border border-stone-200 p-4 dark:border-stone-700">
+          <PrescriptionItemsTable items={rows} />
+        </div>
+        <p className="mt-3 text-xs text-stone-500 dark:text-stone-400">
+          The consultation and prescription remain editable until the receptionist completes the
+          appointment.
+        </p>
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-700 transition hover:bg-stone-50 disabled:opacity-50 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-800"
+            disabled={savePrescription.isPending}
+            onClick={() => setPendingComplete(false)}
+            type="button"
+          >
+            Go back
+          </button>
+          <button
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800 disabled:opacity-50"
+            disabled={savePrescription.isPending}
+            onClick={confirmComplete}
+            type="button"
+          >
+            {savePrescription.isPending ? 'Saving…' : 'Confirm and complete'}
+          </button>
+        </div>
+      </Modal>
       </div>
     </div>
   )
