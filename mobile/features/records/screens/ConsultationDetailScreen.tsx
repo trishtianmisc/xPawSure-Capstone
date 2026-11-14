@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, type ComponentProps } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, type ComponentProps } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
 import { formatDate } from '../../../src/utils/datetime'
 import { useConsultation } from '../hooks/useConsultation'
@@ -82,7 +83,9 @@ export default function ConsultationDetailScreen() {
   const { id, fromScreening } = useLocalSearchParams<{ id: string; fromScreening?: string }>()
   const router = useRouter()
   const { colors } = useTheme()
-  const { data: consultation, isLoading, isError, error } = useConsultation(id)
+  const { data: consultation, isLoading, isError, error, refetch } = useConsultation(id)
+  const refreshConsultation = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshConsultation)
   const styles = useMemo(() => createStyles(colors), [colors])
   const { viewScreening } = useMedicalRecordLinks()
   const handleBack = useRecordDetailBack(
@@ -142,7 +145,18 @@ export default function ConsultationDetailScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader()}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heroCard}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>

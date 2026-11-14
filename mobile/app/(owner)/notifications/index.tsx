@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { useMemo, useState, type ComponentProps } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState, type ComponentProps } from 'react'
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useApproveReschedule } from '../../../features/appointment/hooks/useApproveReschedule'
 import { useCancelAppointment } from '../../../features/appointment/hooks/useCancelAppointment'
@@ -13,6 +13,7 @@ import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { formatDateTime } from '../../../src/utils/datetime'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -129,12 +130,14 @@ export default function NotificationsScreen() {
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const router = useRouter()
-  const { data, isError, isLoading } = useNotifications()
+  const { data, isError, isLoading, refetch } = useNotifications()
   const markRead = useMarkReadNotification()
   const markAllRead = useMarkAllReadNotifications()
   const approveReschedule = useApproveReschedule()
   const cancelAppointment = useCancelAppointment()
   const [actionAptId, setActionAptId] = useState<string | null>(null)
+  const refreshNotifications = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshNotifications)
 
   const notifications = data?.results ?? []
   const unreadCount = notifications.filter((item) => !item.ntf_is_read).length
@@ -225,7 +228,18 @@ export default function NotificationsScreen() {
           )}
         </View>
 
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => void onRefresh()}
+              refreshing={refreshing}
+              tintColor={colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
           {isLoading ? (
             <View style={styles.statusState}>
               <ActivityIndicator color={colors.primary} />

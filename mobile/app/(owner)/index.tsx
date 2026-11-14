@@ -1,11 +1,12 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { useMemo } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo } from 'react'
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 
 import { useAuth } from '../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../src/hooks/usePullToRefresh'
 import { font } from '../../src/theme/typography'
 import { formatDate, formatTime, manilaDateParts, manilaHour } from '../../src/utils/datetime'
 import { StatusPill } from '../../features/appointment/components/StatusPill'
@@ -24,13 +25,19 @@ export default function HomeScreen() {
   const { colors, isDark } = useTheme()
   const firstName = user?.first_name?.trim() || 'Pet Parent'
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: pets, isLoading: petsLoading } = usePets(user?.id)
-  const { data: appointments } = useMyAppointments()
+  const { data: pets, isLoading: petsLoading, refetch: refetchPets } = usePets(user?.id)
+  const { data: appointments, refetch: refetchAppointments } = useMyAppointments()
   const {
     data: screeningsData,
     isLoading: screeningsLoading,
     isError: screeningsError,
+    refetch: refetchScreenings,
   } = useAllScreenings()
+  const refreshHome = useCallback(
+    () => Promise.all([refetchPets(), refetchAppointments(), refetchScreenings()]),
+    [refetchAppointments, refetchPets, refetchScreenings],
+  )
+  const { refreshing, onRefresh } = usePullToRefresh(refreshHome)
 
   const hour = manilaHour()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
@@ -78,7 +85,18 @@ export default function HomeScreen() {
         barStyle={isDark ? 'light-content' : 'dark-content'}
         backgroundColor={styles.safeArea.backgroundColor}
       />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.greeting}>

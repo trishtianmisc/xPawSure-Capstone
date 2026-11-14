@@ -329,7 +329,12 @@ Prescription details include a **Save / Share PDF** action. The PDF is generated
 
 Prescription details also include a **View as Image** action. It renders the prescription document on-device, captures it as a PNG with `react-native-view-shot`, and opens a full-screen preview. The preview offers **Download Image**, which requests photo-library access and saves the PNG with `expo-media-library`. The image is generated and stored only on the device; no prescription image is uploaded to the server.
 
-Owner records and appointments refresh when the screen gains focus, when the app returns to the foreground from the background, and when the owner pulls to refresh. These refreshes invalidate the owner consultation, prescription, vaccination, screening, and appointment queries so newly created records appear without signing out or clearing the app cache.
+Owner data screens support pull-to-refresh, including Home, Pets and pet details,
+Appointments and appointment details, Notifications, Records and record details,
+Screening history/details, Payments, and Profile. Appointments and Records also
+refresh when their screen gains focus; owner appointment/record queries refresh
+when the app returns to the foreground. These refreshes fetch current server
+data without signing out or clearing the app cache.
 
 Owners may add, edit, and delete their own reported vaccination records (veterinarian-issued records are read-only).
 

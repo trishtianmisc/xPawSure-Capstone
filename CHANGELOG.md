@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Pull-to-refresh on owner server-backed screens, including Home, Pets, appointment and record details, Notifications, Screening history/details, Payments, and Profile; Appointments and Records retain their existing refresh controls
 - Owner reschedule acknowledgement: `APT_RESCHEDULED_AT` and `APT_RESCHEDULE_ACKNOWLEDGED_AT` on `APPOINTMENT` (migration `appointments/0009`), plus `APPOINTMENT_RESCHEDULED` notifications (migration `notifications/0003`)
 - `POST /api/owner/appointments/{id}/reschedule/approve/` — records the owner's acknowledgement of the clinic's new time without changing the appointment status; idempotent, owner-scoped, and audit-logged
 - `apt_rescheduled_at`, `apt_reschedule_acknowledged_at`, and `reschedule_approval_pending` on owner appointment detail responses; `appointment_status` and `reschedule_approval_pending` on notification responses

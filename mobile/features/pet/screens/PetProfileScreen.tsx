@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
@@ -10,6 +10,7 @@ import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { font } from '../../../src/theme/typography'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { useConsultations } from '../../records/hooks/useConsultations'
 import { useVaccinations } from '../../records/hooks/useVaccinations'
 import { useScreenings } from '../../screening/hooks/useScreenings'
@@ -49,11 +50,21 @@ export default function PetProfileScreen() {
   const { colors } = useTheme()
   const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { data: pet, isLoading, isError, error } = usePet(id)
+  const { data: pet, isLoading, isError, error, refetch: refetchPet } = usePet(id)
   const deletePet = useDeletePet(user?.id ?? '')
   const vaccinations = useVaccinations(pet?.id, !!pet)
   const consultations = useConsultations(pet?.id, !!pet)
   const screenings = useScreenings(pet?.id, !!pet)
+  const refreshPetProfile = useCallback(
+    () => Promise.all([
+      refetchPet(),
+      vaccinations.refetch(),
+      consultations.refetch(),
+      screenings.refetch(),
+    ]),
+    [consultations.refetch, refetchPet, screenings.refetch, vaccinations.refetch],
+  )
+  const { refreshing, onRefresh } = usePullToRefresh(refreshPetProfile)
   const styles = useMemo(() => createStyles(colors), [colors])
   const insets = useSafeAreaInsets()
   const scrollViewRef = useRef<ScrollView>(null)
@@ -130,7 +141,19 @@ export default function PetProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.coverSection, { height: 160 + insets.top }]}>
           <View style={styles.coverGradient}>
             <Pressable

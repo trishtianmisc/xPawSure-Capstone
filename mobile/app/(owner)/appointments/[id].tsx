@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState, type ComponentProps } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState, type ComponentProps } from 'react'
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useAppointment } from '../../../features/appointment/hooks/useAppointment'
 import { useApproveReschedule } from '../../../features/appointment/hooks/useApproveReschedule'
@@ -17,6 +17,7 @@ import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { formatDate, formatDateTime, formatTime, manilaDateParts } from '../../../src/utils/datetime'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
@@ -51,12 +52,17 @@ export default function AppointmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: appointment, isError, isLoading } = useAppointment(id)
-  const { data: paymentsData } = useAppointmentPayment(appointment?.apt_id)
+  const { data: appointment, isError, isLoading, refetch: refetchAppointment } = useAppointment(id)
+  const { data: paymentsData, refetch: refetchPayments } = useAppointmentPayment(appointment?.apt_id)
   const approveReschedule = useApproveReschedule()
   const cancelAppointment = useCancelAppointment()
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const refreshAppointment = useCallback(
+    () => Promise.all([refetchAppointment(), refetchPayments()]),
+    [refetchAppointment, refetchPayments],
+  )
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAppointment)
 
   function handleBack() {
     if (router.canGoBack()) {
@@ -180,7 +186,18 @@ export default function AppointmentDetailScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader()}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => void onRefresh()}
+              refreshing={refreshing}
+              tintColor={colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
         {/* Status banner */}
         <View style={[styles.banner, { backgroundColor: presentation.bg }]}>
           <View style={[styles.bannerIcon, { borderColor: presentation.text }]}>

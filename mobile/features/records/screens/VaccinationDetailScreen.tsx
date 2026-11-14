@@ -1,10 +1,11 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { formatDate } from '../../../src/utils/datetime'
@@ -35,7 +36,9 @@ export default function VaccinationDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
-  const { data: vaccination, isLoading, isError, error } = useVaccination(id)
+  const { data: vaccination, isLoading, isError, error, refetch } = useVaccination(id)
+  const refreshVaccination = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshVaccination)
   const deleteVaccination = useDeleteVaccination()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [confirmVisible, setConfirmVisible] = useState(false)
@@ -108,6 +111,14 @@ export default function VaccinationDetailScreen() {
       {renderHeader()}
       <ScrollView
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerCard}>
