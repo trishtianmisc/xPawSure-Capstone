@@ -1,10 +1,11 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 
 import { SessionWatcher } from './components/SessionWatcher'
 import { NotFoundPage } from './components/NotFoundPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
+const LandingPage = lazy(() => import('./features/landing/pages/LandingPage').then(m => ({ default: m.LandingPage })))
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPage').then(m => ({ default: m.PublicPetPage })))
 const MockCheckoutPage = lazy(() => import('./features/payments/pages/MockCheckoutPage').then(m => ({ default: m.MockCheckoutPage })))
@@ -73,7 +74,7 @@ function App() {
       <SessionWatcher />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route element={<Navigate replace to="/login" />} path="/" />
+          <Route element={<LandingPage />} path="/" />
           <Route element={<LoginPage />} path="/login" />
           <Route element={<PublicPetPage />} path="/pets/:qrCode/public" />
           <Route element={<MockCheckoutPage />} path="/payments/mock/:reference" />
