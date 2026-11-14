@@ -116,12 +116,20 @@ export function reportCsvRows(
     rows.push(
       [],
       ['Veterinarian workload'],
-      ['Veterinarian', 'Appointments', 'Completed', 'No-shows', 'Avg per open day'],
+      [
+        'Veterinarian',
+        'Appointments',
+        'Completed',
+        'No-shows',
+        'Revenue',
+        'Avg per open day',
+      ],
       ...input.workload.results.map((row) => [
         row.vet_name,
         row.total,
         row.completed,
         row.no_shows,
+        formatPeso(row.revenue),
         row.avg_per_day,
       ]),
       ['Open days in range', input.workload.days],

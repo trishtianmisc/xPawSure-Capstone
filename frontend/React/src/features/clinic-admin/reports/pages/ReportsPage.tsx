@@ -14,6 +14,7 @@ import { PatientDemographicsCard } from '../components/PatientDemographicsCard'
 import { PrintableReport } from '../components/PrintableReport'
 import { ReportFilters } from '../components/ReportFilters'
 import { ReportKPIRows } from '../components/ReportKPIRows'
+import { RevenueOverTimeChart } from '../components/RevenueOverTimeChart'
 import { ScreeningsAnalyticsCard } from '../components/ScreeningsAnalyticsCard'
 import { StatusBreakdownChart } from '../components/StatusBreakdownChart'
 import { VetWorkloadTable } from '../components/VetWorkloadTable'
@@ -28,11 +29,13 @@ import {
 import type { ReportQuery } from '../types/reports.types'
 import { agreementRate } from '../utils/agreementRate'
 import {
-  defaultWindow,
+  comparisonLabel as describeComparison,
   formatRange,
+  presetWindow,
   previousWindow,
   windowDays,
   type DateWindow,
+  type RangePreset,
 } from '../utils/dateRanges'
 import { downloadCsv, reportCsvRows, reportFilename, toCsv } from '../utils/exportCsv'
 import { aggregateSeries, type Granularity } from '../utils/granularity'
@@ -107,11 +110,25 @@ const PANEL_SKELETON = (
 )
 
 export function ClinicAdminReportsPage() {
-  const [defaultRange] = useState<DateWindow>(() => defaultWindow())
-  const [window, setWindow] = useState<DateWindow>(defaultRange)
+  const [preset, setPreset] = useState<RangePreset>('this-month')
+  // Only the Custom preset reads this; it starts as the default month and
+  // is re-seeded from the visible window the first time Custom is picked.
+  const [customWindow, setCustomWindow] = useState<DateWindow>(() =>
+    presetWindow('this-month', CLINIC_TIME_ZONE),
+  )
   const [vetId, setVetId] = useState('')
   const [granularity, setGranularity] = useState<Granularity>('day')
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null)
+
+  const settings = useClinicSettings()
+  // Presets resolve in the clinic's timezone so "Today"/"This month" match
+  // the backend's clinic-local day bounds even before settings load.
+  const clinicTz = settings.data?.timezone ?? CLINIC_TIME_ZONE
+  const window = useMemo<DateWindow>(
+    () =>
+      preset === 'custom' ? customWindow : presetWindow(preset, clinicTz),
+    [preset, customWindow, clinicTz],
+  )
 
   const params = useMemo<ReportQuery>(
     () => ({
@@ -130,7 +147,6 @@ export function ClinicAdminReportsPage() {
   const revenue = useReportRevenue(params)
   const vets = useVeterinarians()
   const profile = useClinicProfile()
-  const settings = useClinicSettings()
 
   // The printable report is styled light-only, and the screen layout is
   // hidden at print time, so flip to light right before the browser takes
@@ -178,15 +194,13 @@ export function ClinicAdminReportsPage() {
 
   const days = windowDays(window.date_from, window.date_to)
   const rangeLabel = formatRange(window.date_from, window.date_to)
+  const comparison = describeComparison(preset, days)
   const vetSelected = Boolean(vetId)
   const vetName = vets.data?.find((vet) => vet.id === vetId)
   const vetLabel = vetName
     ? `${vetName.first_name} ${vetName.last_name}`
     : 'All veterinarians'
-  const hasActiveFilters =
-    vetId !== '' ||
-    window.date_from !== defaultRange.date_from ||
-    window.date_to !== defaultRange.date_to
+  const hasActiveFilters = vetId !== '' || preset !== 'this-month'
 
   // The printable document needs every section loaded; printing mid-load
   // would silently drop charts or the workload table from the report.
@@ -226,7 +240,28 @@ export function ClinicAdminReportsPage() {
 
   function clearFilters() {
     setVetId('')
-    setWindow(defaultRange)
+    setPreset('this-month')
+  }
+
+  // Choosing a fixed preset re-resolves the window in the clinic timezone;
+  // picking Custom carries the currently visible range into the inputs.
+  function handlePresetChange(next: RangePreset) {
+    if (next === 'custom') {
+      setCustomWindow((current) =>
+        preset === 'custom' ? current : window,
+      )
+    }
+    setPreset(next)
+  }
+
+  // Manual date edits always switch to Custom, seeded from whatever range
+  // is on screen so only the edited end changes.
+  function handleDateChange(key: 'date_from' | 'date_to', value: string) {
+    setCustomWindow((current) => {
+      const base = preset === 'custom' ? current : window
+      return { ...base, [key]: value }
+    })
+    setPreset('custom')
   }
 
   // Deep link into the appointments page with the current range applied, so
@@ -239,6 +274,16 @@ export function ClinicAdminReportsPage() {
     query.set('date_to', window.date_to)
     return `/clinic/appointments?${query.toString()}`
   }
+
+  // The payments page reads paid_from/paid_to/status from its URL, so this
+  // link lands on the exact PAID rows behind the chart's total.
+  const paymentsHref = (() => {
+    const query = new URLSearchParams()
+    query.set('paid_from', window.date_from)
+    query.set('paid_to', window.date_to)
+    query.set('status', 'PAID')
+    return `/clinic/payments?${query.toString()}`
+  })()
 
   return (
     <>
@@ -278,14 +323,12 @@ export function ClinicAdminReportsPage() {
           vetsLoading={vets.isLoading}
           vetId={vetId}
           onVetIdChange={setVetId}
+          preset={preset}
+          onPresetChange={handlePresetChange}
           dateFrom={window.date_from}
-          onDateFromChange={(value) =>
-            setWindow((current) => ({ ...current, date_from: value }))
-          }
+          onDateFromChange={(value) => handleDateChange('date_from', value)}
           dateTo={window.date_to}
-          onDateToChange={(value) =>
-            setWindow((current) => ({ ...current, date_to: value }))
-          }
+          onDateToChange={(value) => handleDateChange('date_to', value)}
           onClear={clearFilters}
           hasActiveFilters={hasActiveFilters}
         />
@@ -311,7 +354,7 @@ export function ClinicAdminReportsPage() {
             previous={data.previous}
             agreementRate={agreementCurrent}
             previousAgreementRate={agreementPrevious}
-            days={days}
+            comparisonLabel={comparison}
             vetSelected={vetSelected}
             revenue={revenue.data}
             revenueLoading={revenue.isLoading}
@@ -349,6 +392,18 @@ export function ClinicAdminReportsPage() {
           )}
         />
       </div>
+
+      <AsyncSection
+        state={revenue}
+        label="revenue over time"
+        skeleton={PANEL_SKELETON}
+        render={(data) => (
+          <RevenueOverTimeChart
+            series={data.series}
+            paymentsHref={paymentsHref}
+          />
+        )}
+      />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <AsyncSection
@@ -400,6 +455,7 @@ export function ClinicAdminReportsPage() {
           revenue={revenue.data}
           rangeLabel={rangeLabel}
           days={days}
+          comparisonLabel={comparison}
           vetLabel={vetLabel}
           vetSelected={vetSelected}
           generatedAt={generatedAt}
@@ -407,6 +463,7 @@ export function ClinicAdminReportsPage() {
           granularity={granularity}
           agreementRate={agreementCurrent}
           previousAgreementRate={agreementPrevious}
+          paymentsHref={paymentsHref}
         />
       )}
     </>

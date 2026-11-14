@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 
 import { formatDateTime, formatPhone } from '../../../../utils/format'
 import type { ClinicProfile } from '../../../clinic-profile/types/clinicProfile.types'
@@ -64,6 +65,7 @@ const workload: VetWorkloadReport = {
       total: 5,
       completed: 4,
       no_shows: 1,
+      revenue: '4200.00',
       avg_per_day: 2.5,
     },
   ],
@@ -98,11 +100,22 @@ const revenue: ReportRevenue = {
   previous_revenue: '7000.00',
   date_from: '2026-10-01',
   date_to: '2026-10-07',
+  series: [
+    { date: '2026-10-01', amount: '5000.00' },
+    { date: '2026-10-02', amount: '0.00' },
+    { date: '2026-10-07', amount: '3500.00' },
+  ],
 }
+
+const PAYMENTS_HREF =
+  '/clinic/payments?paid_from=2026-10-01&paid_to=2026-10-07&status=PAID'
 
 function renderReport(overrides: { vetSelected?: boolean } = {}) {
   return render(
-    <PrintableReport
+    // Router context: the report embeds the revenue chart, whose View
+    // payments link needs react-router.
+    <MemoryRouter>
+      <PrintableReport
       profile={profile}
       summary={summary}
       appointments={appointments}
@@ -112,6 +125,7 @@ function renderReport(overrides: { vetSelected?: boolean } = {}) {
       revenue={revenue}
       rangeLabel="Oct 1 – Oct 7, 2026"
       days={7}
+      comparisonLabel="vs previous 7 days"
       vetLabel={overrides.vetSelected ? 'Dr. Reyes' : 'All veterinarians'}
       vetSelected={overrides.vetSelected ?? false}
       generatedAt={stamp}
@@ -119,7 +133,9 @@ function renderReport(overrides: { vetSelected?: boolean } = {}) {
       granularity="day"
       agreementRate={100}
       previousAgreementRate={null}
-    />,
+      paymentsHref={PAYMENTS_HREF}
+      />
+    </MemoryRouter>,
   )
 }
 
@@ -141,13 +157,19 @@ describe('PrintableReport', () => {
     expect(screen.getByText(/All figures below reflect only the filters/)).toBeInTheDocument()
 
     expect(screen.getByText('Key Metrics')).toBeInTheDocument()
-    expect(screen.getByText('Revenue')).toBeInTheDocument()
+    // KPI label and the workload table's Revenue column both read "Revenue".
+    expect(screen.getAllByText('Revenue').length).toBeGreaterThan(0)
     expect(screen.getByText('₱8,500.00')).toBeInTheDocument()
     expect(screen.getByText('9 payments')).toBeInTheDocument()
     expect(screen.getByText('Appointments Over Time')).toBeInTheDocument()
     expect(screen.getByText('Status Breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Revenue Over Time')).toBeInTheDocument()
+    expect(screen.getByText('Daily paid revenue')).toBeInTheDocument()
     expect(screen.getByText('Veterinarian Workload')).toBeInTheDocument()
+    expect(screen.getByText('₱4,200.00')).toBeInTheDocument()
     expect(screen.getByText('AI Screenings')).toBeInTheDocument()
+    // Preset-aware baseline wording reaches the printable copy too.
+    expect(screen.getAllByText('vs previous 7 days').length).toBeGreaterThan(0)
 
     const generated = screen.getByText(/Report generated/)
     expect(generated.textContent).toContain(
@@ -169,5 +191,12 @@ describe('PrintableReport', () => {
     expect(
       screen.queryByText(/always cover the whole clinic/),
     ).not.toBeInTheDocument()
+  })
+
+  it('links the revenue chart to the exact PAID payments window', () => {
+    renderReport()
+
+    const link = screen.getByRole('link', { name: 'View payments', hidden: true })
+    expect(link).toHaveAttribute('href', PAYMENTS_HREF)
   })
 })

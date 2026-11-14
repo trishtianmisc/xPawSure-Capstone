@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 
+import { formatPeso } from '../../../../utils/currency'
 import type { VetWorkloadReport } from '../types/reports.types'
 
 interface VetWorkloadTableProps {
@@ -41,6 +42,9 @@ export function VetWorkloadTable({ report, vetHref }: VetWorkloadTableProps) {
                 <th className="pb-3 pr-4 text-right font-semibold">
                   No-shows
                 </th>
+                <th className="pb-3 pr-4 text-right font-semibold">
+                  Revenue
+                </th>
                 <th className="pb-3 text-right font-semibold">
                   Avg / open day
                 </th>
@@ -72,6 +76,9 @@ export function VetWorkloadTable({ report, vetHref }: VetWorkloadTableProps) {
                     </td>
                     <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
                       {row.no_shows}
+                    </td>
+                    <td className="py-3 pr-4 text-right text-stone-600 dark:text-stone-300">
+                      {formatPeso(row.revenue)}
                     </td>
                     <td className="py-3 text-right font-semibold text-stone-900 dark:text-stone-100">
                       {row.avg_per_day}

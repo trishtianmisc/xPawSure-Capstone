@@ -2841,7 +2841,12 @@ Validation errors (all `400` with `{"detail": "..."}`):
 
 Comparison period (`previous` in responses) is the equal-length window
 immediately before the requested one: Oct 1-8 compares against Sep 23-30,
-never against "last month".
+never against "last month". The Reports UI labels that baseline from the
+active range preset, always in day counts because the baseline is
+equal-length rather than a calendar period: "vs yesterday" for Today, and
+"vs previous N days" for This month / This year / Last 30 days / Custom
+(N = the selected window's day count, e.g. "vs previous 13 days" on the
+13th of the month) — never "vs previous month/year".
 
 Rate denominators: `completion_rate` and `no_show_rate` use elapsed,
 non-cancelled appointments in the window (scheduled time already passed) as
@@ -2920,6 +2925,7 @@ Response 200:
       "total": 10,
       "completed": 2,
       "no_shows": 3,
+      "revenue": "4500.00",
       "avg_per_day": 1.7
     }
   ],
@@ -2931,6 +2937,14 @@ Response 200:
 **open days** (`ClinicOperatingHours`, `is_closed = false`) inside the window,
 falling back to the calendar-day count when the clinic has no open hours
 configured. With `vet_id` supplied the list contains at most that vet.
+
+`revenue` attributes the revenue KPI to the vet through the payment's
+appointment: `PAID` payments inside the window grouped by
+`PAYMENT.APT_ID → APPOINTMENT.STF_ID`, on `PAY_PAID_AT` (the appointment's
+own date is irrelevant). Fixed two-decimal string, `"0.00"` when none.
+Payments with no appointment link never appear under any vet — they count
+only in the unfiltered revenue KPI — so the rows sum to at most the
+clinic-wide `revenue` of `/api/reports/revenue/` for the same window.
 
 ## GET /api/reports/screenings/
 
@@ -3016,9 +3030,9 @@ Scoping notes:
 
 Frontend: `frontend/React/src/features/clinic-admin/reports/` (page route
 `/clinic/reports`). Exports are client-side: one multi-section CSV covering
-every loaded panel (KPIs, revenue, status breakdown, daily series, workload,
-screenings, demographics) named `xpawsure-report_{date_from}_{date_to}.csv`,
-plus a
+every loaded panel (KPIs, revenue, status breakdown, daily series, workload
+with a per-vet Revenue column, screenings, demographics) named
+`xpawsure-report_{date_from}_{date_to}.csv`, plus a
 print action (`window.print()`). The "Vet Agreement Rate" KPI is derived in
 the UI as `vet_confirmed / (vet_confirmed + vet_changed)` (null when nothing
 is judged → shown as "—"); its previous-period baseline is fetched with a
@@ -3029,6 +3043,22 @@ status legend / workload rows deep-link to
 `/clinic/appointments?status&vet_id&date_from&date_to` — the appointments page
 initializes its filters from those URL params (changes written with
 `replace`).
+
+The page offers range presets — Today, This month (default), This year,
+Last 30 days, Custom — resolved in the clinic timezone, so Today/This
+month/This year end on the clinic's current calendar day and never include
+future days (This month/This year are month-to-date / year-to-date). Every
+query, the comparison label, and the deep links re-resolve from the active
+preset; editing a date input switches to Custom seeded from the visible
+range. The revenue panel renders `series` as an "Revenue Over Time" area
+chart (daily or monthly buckets exactly as returned, light fill, dots
+always visible) whose "View payments" link deep-links to
+`/clinic/payments?paid_from&paid_to&status=PAID`; the payments page
+initializes those three filters from its URL — dates must be real
+`YYYY-MM-DD` values and `status` is whitelisted, anything invalid falls
+back to the unfiltered default — with changes written using `replace`. The
+workload table shows a Revenue column formatted with the same `formatPeso`
+as the revenue KPI card.
 
 ## GET /api/reports/revenue/
 
@@ -3043,7 +3073,11 @@ Response 200:
   "payment_count": 42,
   "previous_revenue": "11000.00",
   "date_from": "2026-10-01",
-  "date_to": "2026-10-30"
+  "date_to": "2026-10-30",
+  "series": [
+    { "date": "2026-10-01", "amount": "1200.00" },
+    { "date": "2026-10-02", "amount": "0.00" }
+  ]
 }
 ```
 
@@ -3066,5 +3100,12 @@ Scoping notes:
   every other report. An empty window returns `"0.00"`, never `null`.
   `currency` is the recorded payment currency (`PHP`). `payment_count` counts
   the `PAID` payments summed — one payment per consultation-fee collection.
+- `series` breaks that same sum down across the window: one bucket per
+  clinic-local calendar day when the range spans at most 31 days (keys
+  `YYYY-MM-DD`), otherwise one per clinic-local month (keys `YYYY-MM`),
+  zero-filled (`"0.00"`) and ordered oldest to newest. Each `amount` is a
+  fixed two-decimal string and the buckets always sum exactly to `revenue`
+  (same queryset as the KPI; +1 constant query). The UI derives its axis
+  labels and daily/monthly subtitle from the key shape.
 - This endpoint is read-only and never triggers payment expiry or
   reconciliation side effects.

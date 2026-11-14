@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 import uuid
 
@@ -574,6 +575,26 @@ class ReportVetWorkloadTests(ReportsBase):
         self.assertEqual(response.data['results'], [])
         self.assertGreater(response.data['days'], 0)
 
+    def test_workload_includes_revenue_per_vet(self):
+        paid_at = datetime(2026, 10, 2, 12, 0, tzinfo=MNL)
+        # Vera's appointment (in window) collected 300; the paid-date rule
+        # attributes it to the vet on the payment's appointment.
+        self._payment('300.00', paid_at, appointment=self.apt_completed)
+        # Collected but never booked: no vet to attribute, so it never
+        # appears in the column.
+        self._payment('700.00', paid_at)
+        # Pending: excluded by the same PAID rule as the revenue KPI.
+        self._payment('999.00', paid_at, status=PaymentStatus.PENDING)
+
+        response = self._get('/api/reports/vet-workload/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        by_vet = {row['vet_name']: row for row in response.data['results']}
+        self.assertEqual(by_vet['Vera Vet']['revenue'], '300.00')
+        self.assertEqual(by_vet['Bo Vet']['revenue'], '0.00')
+        self.assertTrue(
+            all('revenue' in row for row in response.data['results']),
+        )
+
 
 class ReportScreeningsTests(ReportsBase):
 
@@ -975,6 +996,127 @@ class ReportRevenueTests(ReportsBase):
         self.assertEqual(empty['previous_revenue'], '0.00')
         self.assertEqual(empty['payment_count'], 0)
 
+    def test_series_total_equals_revenue_kpi(self):
+        self._payment('100.00', datetime(2026, 10, 1, 9, 0, tzinfo=MNL))
+        self._payment('250.50', datetime(2026, 10, 4, 13, 0, tzinfo=MNL))
+        self._payment('0.40', datetime(2026, 10, 8, 23, 59, tzinfo=MNL))
+        # Noise the KPI excludes: the series must agree with it exactly.
+        self._payment(
+            '999.00', datetime(2026, 10, 2, 9, 0, tzinfo=MNL),
+            status=PaymentStatus.PENDING,
+        )
+
+        data = self._get('/api/reports/revenue/', **WINDOW).data
+        series_total = sum(Decimal(row['amount']) for row in data['series'])
+        self.assertEqual(series_total, Decimal(data['revenue']))
+        self.assertEqual(data['revenue'], '350.90')
+        self.assertEqual(len(data['series']), 8)
+
+    def test_series_total_equals_revenue_kpi_under_vet_filter(self):
+        paid_at = datetime(2026, 10, 3, 12, 0, tzinfo=MNL)
+        self._payment(
+            '300.00', paid_at,
+            appointment=self._apt(paid_at, vet=self.vet_a),
+        )
+        # Unlinked: counted unfiltered, dropped under vet_id - the series
+        # must follow the same rule as the KPI it is checked against.
+        self._payment('700.00', paid_at)
+
+        data = self._get(
+            '/api/reports/revenue/',
+            vet_id=str(self.vet_a.stf_id), **WINDOW,
+        ).data
+        series_total = sum(Decimal(row['amount']) for row in data['series'])
+        self.assertEqual(series_total, Decimal(data['revenue']))
+        self.assertEqual(data['revenue'], '300.00')
+
+    def test_series_zero_fills_every_day_in_range(self):
+        empty = self._get(
+            '/api/reports/revenue/',
+            date_from='2026-06-01', date_to='2026-06-08',
+        ).data
+        self.assertEqual(
+            [row['date'] for row in empty['series']],
+            [f'2026-06-{day:02d}' for day in range(1, 9)],
+        )
+        self.assertTrue(
+            all(row['amount'] == '0.00' for row in empty['series']),
+        )
+
+        # A payment on one day must not remove its empty neighbours: a
+        # skipped day would let the chart's line draw straight across the
+        # dip and hide it.
+        self._payment('500.00', datetime(2026, 10, 3, 12, 0, tzinfo=MNL))
+        gapped = self._get('/api/reports/revenue/', **WINDOW).data
+        amounts = {row['date']: row['amount'] for row in gapped['series']}
+        self.assertEqual(len(amounts), 8)
+        self.assertEqual(amounts['2026-10-03'], '500.00')
+        self.assertEqual(amounts['2026-10-02'], '0.00')
+        self.assertEqual(amounts['2026-10-08'], '0.00')
+
+    def test_series_buckets_respect_clinic_midnight(self):
+        # 23:30 PHT Sep 30 belongs to the previous window only.
+        self._payment('60.00', datetime(2026, 9, 30, 23, 30, tzinfo=MNL))
+        # 00:30 PHT Oct 1 (= 16:30 UTC Sep 30) must land in the Oct 1
+        # bucket; a naive UTC __date lookup would file it under Sep 30.
+        self._payment('100.00', datetime(2026, 10, 1, 0, 30, tzinfo=MNL))
+        # 23:30 PHT Oct 8 stays in the Oct 8 bucket.
+        self._payment('40.00', datetime(2026, 10, 8, 23, 30, tzinfo=MNL))
+
+        data = self._get('/api/reports/revenue/', **WINDOW).data
+        amounts = {row['date']: row['amount'] for row in data['series']}
+        self.assertEqual(amounts['2026-10-01'], '100.00')
+        self.assertEqual(amounts['2026-10-08'], '40.00')
+        self.assertNotIn('2026-09-30', amounts)
+        self.assertEqual(data['revenue'], '140.00')
+        self.assertEqual(data['previous_revenue'], '60.00')
+
+    def test_series_monthly_when_range_exceeds_31_days(self):
+        self._payment('100.00', datetime(2026, 9, 6, 9, 0, tzinfo=MNL))
+        self._payment('200.00', datetime(2026, 10, 2, 9, 0, tzinfo=MNL))
+
+        # 40-day window: buckets become calendar months, zero-filled.
+        monthly = self._get(
+            '/api/reports/revenue/',
+            date_from='2026-09-05', date_to='2026-10-14',
+        ).data
+        self.assertEqual(
+            [row['date'] for row in monthly['series']],
+            ['2026-09', '2026-10'],
+        )
+        self.assertEqual(monthly['series'][0]['amount'], '100.00')
+        self.assertEqual(monthly['series'][1]['amount'], '200.00')
+        monthly_total = sum(
+            Decimal(row['amount']) for row in monthly['series']
+        )
+        self.assertEqual(monthly_total, Decimal(monthly['revenue']))
+
+        # Exactly 31 days still buckets daily.
+        daily = self._get(
+            '/api/reports/revenue/',
+            date_from='2026-10-01', date_to='2026-10-31',
+        ).data
+        self.assertEqual(len(daily['series']), 31)
+        self.assertEqual(daily['series'][0]['date'], '2026-10-01')
+        self.assertEqual(daily['series'][-1]['date'], '2026-10-31')
+
+    def test_series_month_buckets_respect_clinic_midnight(self):
+        # 23:30 PHT Aug 31 stays in August.
+        self._payment('150.00', datetime(2026, 8, 31, 23, 30, tzinfo=MNL))
+        # 00:30 PHT Sep 1 (= 16:30 UTC Aug 31): a UTC month truncation
+        # would wrongly file it under August.
+        self._payment('250.00', datetime(2026, 9, 1, 0, 30, tzinfo=MNL))
+
+        data = self._get(
+            '/api/reports/revenue/',
+            date_from='2026-08-15', date_to='2026-10-15',
+        ).data
+        amounts = {row['date']: row['amount'] for row in data['series']}
+        self.assertEqual(list(amounts), ['2026-08', '2026-09', '2026-10'])
+        self.assertEqual(amounts['2026-08'], '150.00')
+        self.assertEqual(amounts['2026-09'], '250.00')
+        self.assertEqual(amounts['2026-10'], '0.00')
+
 
 class ReportQueryCountTests(ReportsBase):
 
@@ -1020,5 +1162,40 @@ class ReportQueryCountTests(ReportsBase):
 
         with CaptureQueriesContext(connection) as large:
             response = self._get('/api/reports/revenue/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(large.captured_queries), small_count)
+
+    def test_vet_workload_query_count_is_constant_as_rows_grow(self):
+        # The workload's revenue column adds one payment aggregate; it must
+        # stay a single GROUP BY, never one query per vet or per payment.
+        self._payment(
+            '10.00', datetime(2026, 10, 2, 9, 0, tzinfo=MNL),
+            appointment=self.apt_completed,
+        )
+
+        with CaptureQueriesContext(connection) as small:
+            response = self._get('/api/reports/vet-workload/', **WINDOW)
+        self.assertEqual(response.status_code, 200, response.data)
+        small_count = len(small.captured_queries)
+
+        new_apts = []
+        for index in range(30):
+            new_apts.append(self._apt(
+                datetime(2026, 10, 7, 8, 0, tzinfo=MNL)
+                + timedelta(minutes=index),
+                vet=self.vet_a,
+                status=AppointmentStatus.COMPLETED,
+            ))
+        # apt_id is a OneToOneField, so each payment needs its own booking.
+        for index in range(10):
+            self._payment(
+                f'{index + 1}.00',
+                datetime(2026, 10, 6, 9, 0, tzinfo=MNL)
+                + timedelta(minutes=index),
+                appointment=new_apts[index],
+            )
+
+        with CaptureQueriesContext(connection) as large:
+            response = self._get('/api/reports/vet-workload/', **WINDOW)
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(len(large.captured_queries), small_count)

@@ -48,6 +48,7 @@ const WORKLOAD: VetWorkloadReport = {
       total: 10,
       completed: 3,
       no_shows: 1,
+      revenue: '300.00',
       avg_per_day: 1.2,
     },
   ],
@@ -88,6 +89,10 @@ const REVENUE: ReportRevenue = {
   previous_revenue: '1200.00',
   date_from: '2026-10-19',
   date_to: '2026-10-26',
+  series: [
+    { date: '2026-10-19', amount: '1000.50' },
+    { date: '2026-10-20', amount: '500.00' },
+  ],
 }
 
 describe('toCsv', () => {
@@ -180,12 +185,21 @@ describe('reportCsvRows', () => {
     expect(rows).toContainEqual(['2026-10-19', 2])
   })
 
-  it('includes workload rows with the open-day denominator', () => {
+  it('includes workload rows with revenue and the open-day denominator', () => {
+    expect(rows).toContainEqual([
+      'Veterinarian',
+      'Appointments',
+      'Completed',
+      'No-shows',
+      'Revenue',
+      'Avg per open day',
+    ])
     expect(rows).toContainEqual([
       'Vera Vet',
       10,
       3,
       1,
+      '₱300.00',
       1.2,
     ])
     expect(rows).toContainEqual(['Open days in range', 8])
@@ -224,6 +238,7 @@ describe('reportCsvRows', () => {
       'Appointments',
       'Completed',
       'No-shows',
+      'Revenue',
       'Avg per open day',
     ])
     expect(summaryOnly).not.toContainEqual(['Disease', 'Count'])
