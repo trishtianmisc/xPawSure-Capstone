@@ -188,7 +188,7 @@ export default function AdjustScreen() {
 
   if (!hasResult) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
         {header}
         <View style={styles.emptyCard}>
@@ -202,7 +202,7 @@ export default function AdjustScreen() {
 
   if (!question) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
         {header}
         <View style={styles.emptyCard}>
@@ -217,7 +217,7 @@ export default function AdjustScreen() {
   const progressPct = Math.round(((cursor + 1) / total) * 100)
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
       {header}
 

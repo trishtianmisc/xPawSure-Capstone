@@ -24,7 +24,7 @@ export default function ProfileScreen() {
   const address = profile?.address ?? ''
 
   return (
-    <SafeAreaView style={[styles.screen, { backgroundColor: colors.bg }]}>
+    <SafeAreaView edges={['left', 'right']} style={[styles.screen, { backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <ScrollView
         contentContainerStyle={styles.content}

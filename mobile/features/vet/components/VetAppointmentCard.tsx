@@ -17,29 +17,6 @@ interface VetAppointmentCardProps {
   onPress: () => void
 }
 
-interface PawPrint {
-  left: `${number}%`
-  top: number
-  size: number
-  rotate: `${number}deg`
-}
-
-const PAW_PRINTS: PawPrint[] = [
-  { left: '1%', top: -16, size: 32, rotate: '-18deg' },
-  { left: '20%', top: -24, size: 20, rotate: '15deg' },
-  { left: '42%', top: -20, size: 26, rotate: '-30deg' },
-  { left: '69%', top: -18, size: 34, rotate: '12deg' },
-  { left: '90%', top: -14, size: 18, rotate: '24deg' },
-  { left: '3%', top: 26, size: 16, rotate: '8deg' },
-  { left: '21%', top: 34, size: 22, rotate: '-12deg' },
-  { left: '55%', top: 30, size: 16, rotate: '30deg' },
-  { left: '76%', top: 26, size: 24, rotate: '-22deg' },
-  { left: '4%', top: 54, size: 28, rotate: '18deg' },
-  { left: '40%', top: 48, size: 18, rotate: '-16deg' },
-  { left: '63%', top: 56, size: 20, rotate: '10deg' },
-  { left: '90%', top: 50, size: 30, rotate: '-8deg' },
-]
-
 export function VetAppointmentCard({
   petName,
   breed,
@@ -61,21 +38,6 @@ export function VetAppointmentCard({
       onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
-      <View pointerEvents="none" style={styles.pattern}>
-        {PAW_PRINTS.map((paw) => (
-          <MaterialCommunityIcons
-            color={colors.iconBg}
-            key={`${paw.left}-${paw.top}`}
-            name="paw"
-            size={paw.size}
-            style={[
-              styles.paw,
-              { left: paw.left, top: paw.top, transform: [{ rotate: paw.rotate }] },
-            ]}
-          />
-        ))}
-      </View>
-
       <View style={styles.topRow}>
         <Text numberOfLines={1} style={styles.meta}>{meta}</Text>
         {statusStyle ? (
@@ -122,8 +84,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     position: 'relative',
   },
   cardPressed: { opacity: 0.7 },
-  pattern: { ...StyleSheet.absoluteFillObject },
-  paw: { position: 'absolute' },
   topRow: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'space-between', marginBottom: 3 },
   meta: { ...font.bold, color: colors.text, flexShrink: 1, fontSize: 12, lineHeight: 16 },
   statusBadge: { borderRadius: 8, flexShrink: 0, paddingHorizontal: 8, paddingVertical: 3 },

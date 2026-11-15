@@ -195,6 +195,7 @@ export default function BookAppointmentScreen() {
   function handleGoScan() {
     router.replace(
       petId ? `/(owner)/pets/screening?petId=${petId}` : '/(owner)/pets/screening',
+      { withAnchor: true },
     )
   }
 

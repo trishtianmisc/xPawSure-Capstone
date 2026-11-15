@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
-import { ActivityIndicator, Alert, BackHandler, Image, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActivityIndicator, BackHandler, Image, Modal, Pressable, RefreshControl, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
@@ -39,6 +39,7 @@ export default function VetConsultationDetailScreen() {
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [rescheduleReason, setRescheduleReason] = useState('')
   const [cancelReason, setCancelReason] = useState('')
+  const [notice, setNotice] = useState<{ title: string; message: string } | null>(null)
   const [screeningImageFailed, setScreeningImageFailed] = useState(false)
 
   const diagnosisAgreement = getDiagnosisAgreement(
@@ -89,9 +90,17 @@ export default function VetConsultationDetailScreen() {
     ]),
   )
 
+  const closeRescheduleForm = () => {
+    setShowRescheduleForm(false)
+    setRescheduleReason('')
+  }
+
   const handleRescheduleContinue = () => {
     if (!rescheduleReason.trim()) {
-      Alert.alert('Required', 'Please enter a reason for rescheduling.')
+      setNotice({
+        title: 'Reason Required',
+        message: 'Please enter a reason for rescheduling.',
+      })
       return
     }
     setShowRescheduleForm(false)
@@ -108,14 +117,20 @@ export default function VetConsultationDetailScreen() {
           setRescheduleReason('')
           setShowSuccessModal(true)
         },
-        onError: (error) => Alert.alert('Request failed', apiErrorMessage(error)),
+        onError: (error) => setNotice({
+          title: 'Request Failed',
+          message: apiErrorMessage(error),
+        }),
       },
     )
   }
 
   const handleCancelContinue = () => {
     if (!cancelReason.trim()) {
-      Alert.alert('Required', 'Please enter a reason for cancellation.')
+      setNotice({
+        title: 'Reason Required',
+        message: 'Please enter a reason for cancellation.',
+      })
       return
     }
     setShowCancelForm(false)
@@ -132,7 +147,10 @@ export default function VetConsultationDetailScreen() {
           setCancelReason('')
           setShowSuccessModal(true)
         },
-        onError: (error) => Alert.alert('Request failed', apiErrorMessage(error)),
+        onError: (error) => setNotice({
+          title: 'Request Failed',
+          message: apiErrorMessage(error),
+        }),
       },
     )
   }
@@ -344,15 +362,29 @@ export default function VetConsultationDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Submit reschedule request?</Text>
-            <Text style={styles.modalMessage}>
-              You&apos;re requesting to reschedule {detail?.pet_name} on{' '}
-              {detail ? formatShortDate(detail.apt_scheduled_at) : ''} at{' '}
-              {detail ? formatTime(detail.apt_scheduled_at) : ''}. The appointment stays Confirmed
-              until clinic staff reviews this request.
-            </Text>
+            <View style={styles.reviewSummary}>
+              <View>
+                <Text style={styles.reviewSummaryLabel}>Pet</Text>
+                <Text style={styles.reviewSummaryValue}>{detail?.pet_name || '—'}</Text>
+              </View>
+              <View>
+                <Text style={styles.reviewSummaryLabel}>Current schedule</Text>
+                <Text style={styles.reviewSummaryValue}>
+                  {detail
+                    ? `${formatShortDate(detail.apt_scheduled_at)} at ${formatTime(detail.apt_scheduled_at)}`
+                    : '—'}
+                </Text>
+              </View>
+            </View>
             <View style={styles.reasonEcho}>
               <Text style={styles.reasonEchoLabel}>Reason</Text>
               <Text style={styles.reasonEchoText}>{rescheduleReason.trim()}</Text>
+            </View>
+            <View style={styles.reviewNote}>
+              <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
+              <Text style={styles.reviewNoteText}>
+                The appointment stays Confirmed until clinic staff reviews this request.
+              </Text>
             </View>
             <View style={styles.modalActions}>
               <Pressable
@@ -378,15 +410,29 @@ export default function VetConsultationDetailScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Submit cancellation request?</Text>
-            <Text style={styles.modalMessage}>
-              You&apos;re requesting to cancel {detail?.pet_name} on{' '}
-              {detail ? formatShortDate(detail.apt_scheduled_at) : ''} at{' '}
-              {detail ? formatTime(detail.apt_scheduled_at) : ''}. The appointment stays Confirmed
-              until clinic staff reviews this request.
-            </Text>
+            <View style={styles.reviewSummary}>
+              <View>
+                <Text style={styles.reviewSummaryLabel}>Pet</Text>
+                <Text style={styles.reviewSummaryValue}>{detail?.pet_name || '—'}</Text>
+              </View>
+              <View>
+                <Text style={styles.reviewSummaryLabel}>Current schedule</Text>
+                <Text style={styles.reviewSummaryValue}>
+                  {detail
+                    ? `${formatShortDate(detail.apt_scheduled_at)} at ${formatTime(detail.apt_scheduled_at)}`
+                    : '—'}
+                </Text>
+              </View>
+            </View>
             <View style={styles.reasonEcho}>
               <Text style={styles.reasonEchoLabel}>Reason</Text>
               <Text style={styles.reasonEchoText}>{cancelReason.trim()}</Text>
+            </View>
+            <View style={styles.reviewNote}>
+              <MaterialCommunityIcons color={colors.textMuted} name="information-outline" size={16} />
+              <Text style={styles.reviewNoteText}>
+                The appointment stays Confirmed until clinic staff reviews this request.
+              </Text>
             </View>
             <View style={styles.modalActions}>
               <Pressable
@@ -401,7 +447,7 @@ export default function VetConsultationDetailScreen() {
               </Pressable>
               <Pressable style={styles.modalYesRedBtn} onPress={confirmCancel} disabled={requesting}>
                 <Text style={styles.modalYesRedText}>
-                  {requesting ? 'Submitting...' : 'Submit Cancellation Request'}
+                  {requesting ? 'Submitting...' : 'Submit Request'}
                 </Text>
               </Pressable>
             </View>
@@ -415,7 +461,7 @@ export default function VetConsultationDetailScreen() {
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Reschedule Appointment</Text>
-              <Pressable onPress={() => { setShowRescheduleForm(false); setRescheduleReason('') }}>
+              <Pressable onPress={closeRescheduleForm}>
                 <MaterialCommunityIcons color={colors.textSecondary} name="close" size={22} />
               </Pressable>
             </View>
@@ -433,7 +479,7 @@ export default function VetConsultationDetailScreen() {
             />
 
             <View style={styles.formActions}>
-              <Pressable style={styles.formCancelBtn} onPress={() => { setShowRescheduleForm(false); setRescheduleReason('') }}>
+              <Pressable style={styles.formCancelBtn} onPress={closeRescheduleForm}>
                 <Text style={styles.formCancelText}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.formSubmitGreenBtn} onPress={handleRescheduleContinue} disabled={requesting}>
@@ -475,6 +521,27 @@ export default function VetConsultationDetailScreen() {
                 <Text style={styles.formSubmitRedText}>Continue</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Notice Modal */}
+      <Modal
+        visible={!!notice}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNotice(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.noticeIconContainer}>
+              <MaterialCommunityIcons color="#FFFFFF" name="paw" size={26} />
+            </View>
+            <Text style={styles.modalTitle}>{notice?.title}</Text>
+            <Text style={styles.modalMessage}>{notice?.message}</Text>
+            <Pressable style={styles.noticeBtn} onPress={() => setNotice(null)}>
+              <Text style={styles.noticeBtnText}>Got it</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -541,8 +608,8 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: 12, marginTop: 10, marginBottom: 10 },
   rescheduleBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
   rescheduleText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
-  cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
-  cancelText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
+  cancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#E74C3C' },
+  cancelText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   screeningCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.borderLight },
   screeningImage: { width: '100%', height: 160, borderRadius: 12, backgroundColor: colors.surfaceAlt, marginBottom: 14 },
@@ -563,11 +630,16 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 24 },
   modalCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, width: '100%', alignItems: 'center' },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 16, textAlign: 'center' },
   modalMessage: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', marginBottom: 16, lineHeight: 20 },
-  reasonEcho: { width: '100%', backgroundColor: colors.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: colors.borderLight, padding: 12, marginBottom: 20 },
+  reviewSummary: { width: '100%', backgroundColor: colors.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: colors.borderLight, padding: 14, gap: 10, marginBottom: 12 },
+  reviewSummaryLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 },
+  reviewSummaryValue: { color: colors.text, fontSize: 14, fontWeight: '600', lineHeight: 19 },
+  reasonEcho: { width: '100%', backgroundColor: colors.surfaceAlt, borderRadius: 10, borderWidth: 1, borderColor: colors.borderLight, padding: 12, marginBottom: 12 },
   reasonEchoLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   reasonEchoText: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  reviewNote: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 20 },
+  reviewNoteText: { flex: 1, color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   modalActions: { flexDirection: 'row', gap: 12, width: '100%' },
   modalNoBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderLight },
   modalNoText: { ...font.bold, color: colors.textSecondary, fontSize: 14 },
@@ -590,6 +662,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   formSubmitGreenText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
   formSubmitRedBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#E74C3C' },
   formSubmitRedText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
+
+  noticeIconContainer: { alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: colors.primary, marginBottom: 16 },
+  noticeBtn: { width: '100%', alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: colors.primary },
+  noticeBtnText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 
   successIconContainer: { alignItems: 'center', justifyContent: 'center', width: 56, height: 56, borderRadius: 28, backgroundColor: '#27AE60', marginBottom: 16 },
   successBtn: { width: '100%', alignItems: 'center', paddingVertical: 12, borderRadius: 10, backgroundColor: '#27AE60' },
