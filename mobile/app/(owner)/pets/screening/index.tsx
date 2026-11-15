@@ -27,6 +27,7 @@ import type { ClaudeAnalysisResponse } from '../../../../features/screening/type
 import { useAIScreening } from '../../../../ai/hooks/useAIScreening'
 import { prepareImageForInference } from '../../../../ai/services/imagePreprocess'
 import { isReady, loadModel } from '../../../../ai/services/tensorflow.service'
+import { CropImageModal } from '../../../../features/screening/components/CropImageModal'
 
 type AnalysisPhase = 'idle' | 'validating' | 'classifying'
 
@@ -56,6 +57,8 @@ export default function CaptureScreen() {
 
   const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
   const [imageUri, setImageUri] = useState<string | null>(null)
+  // Photo awaiting the user's crop decision; the crop step is optional.
+  const [pendingCropUri, setPendingCropUri] = useState<string | null>(null)
   const [pickerLoading, setPickerLoading] = useState(false)
   const [analysisPhase, setAnalysisPhase] = useState<AnalysisPhase>('idle')
   const screeningRunRef = useRef(false)
@@ -110,6 +113,35 @@ export default function CaptureScreen() {
     }
   }
 
+  /** Apply the chosen crop, then run the single existing preparation step. */
+  const handleCropConfirm = async (croppedUri: string) => {
+    setPendingCropUri(null)
+    setPickerLoading(true)
+    try {
+      await prepareSelectedImage(croppedUri)
+    } finally {
+      setPickerLoading(false)
+    }
+  }
+
+  /** Keep the photo as-is and run the same preparation step. */
+  const handleCropSkip = async () => {
+    const source = pendingCropUri
+    setPendingCropUri(null)
+    if (!source) return
+    setPickerLoading(true)
+    try {
+      await prepareSelectedImage(source)
+    } finally {
+      setPickerLoading(false)
+    }
+  }
+
+  /** Close the crop tool and discard the photo. */
+  const handleCropCancel = () => {
+    setPendingCropUri(null)
+  }
+
   const handlePickGallery = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!perm.granted) return
@@ -124,7 +156,7 @@ export default function CaptureScreen() {
         exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        await prepareSelectedImage(result.assets[0].uri)
+        setPendingCropUri(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -143,7 +175,7 @@ export default function CaptureScreen() {
         exif: false,
       })
       if (!result.canceled && result.assets[0]) {
-        await prepareSelectedImage(result.assets[0].uri)
+        setPendingCropUri(result.assets[0].uri)
       }
     } finally {
       setPickerLoading(false)
@@ -489,6 +521,14 @@ export default function CaptureScreen() {
           </View>
         </View>
       </Modal>
+
+      <CropImageModal
+        visible={pendingCropUri !== null}
+        uri={pendingCropUri}
+        onCrop={handleCropConfirm}
+        onSkip={handleCropSkip}
+        onCancel={handleCropCancel}
+      />
     </SafeAreaView>
   )
 }

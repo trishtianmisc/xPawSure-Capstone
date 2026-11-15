@@ -1,29 +1,29 @@
 import type { DiseaseType } from '../../../ai/types/ai.types'
 
 /**
- * VETERINARIAN-APPROVED CARE GUIDELINES.
+ * VETERINARIAN-APPROVED CARE GUIDELINES (universal).
  *
- * The care steps below come from the veterinarian-approved care guidelines
- * reference for the five supported screening classes. They are general
- * guidance only and must never be presented as a prescription.
+ * One set of care steps applies to all five supported screening classes.
+ * Content is derived from the original care-guidelines reference PDF and
+ * rewritten as general owner guidance. It is never a prescription.
  *
  * Content rules (keep when replacing content):
  *   - No medication dosages, units, or treatment schedules.
  *   - Treatment steps describe what a veterinarian prescribes and supervises;
  *     they are never an instruction for the owner to self-treat.
  *   - Never presented as a confirmed diagnosis or a treatment plan.
- *   - Selection depends ONLY on the primary raw AI predicted class; the
- *     questionnaire and any other input must never influence it.
+ *   - Selection depends ONLY on whether a valid primary prediction exists;
+ *     the questionnaire and any other input must never influence it.
  *   - This module is display-only: it cannot modify AI prediction, AI
  *     confidence, the saved screening result, questionnaire answers, or
  *     booking logic.
  *
- * To update the content, edit CARE_GUIDELINES in this file only — no
- * component or AI-logic changes are needed.
+ * To update the content, edit UNIVERSAL_CARE_STEPS only — no component or
+ * AI-logic changes are needed.
  */
 
 export interface CareGuideline {
-  /** Display title shown on the card. */
+  /** Display title shown on the card (universal for every condition). */
   title: string
   /** Veterinarian-approved general care steps. */
   careSteps: string[]
@@ -33,70 +33,56 @@ export interface CareGuideline {
 export const CARE_GUIDELINE_DISCLAIMER =
   'General care information approved by a veterinarian. This is not a diagnosis and not a prescription; treatment must be prescribed and supervised by a veterinarian.'
 
-/** General fallback shown when the predicted class is missing or unsupported. */
+/** Fallback when no valid primary prediction is available. */
 export const GENERAL_CONSULT_MESSAGE =
   'No condition-specific guidance is available for this result. Please consult a veterinarian for advice about your pet\u2019s skin health.'
 
-export const CARE_GUIDELINES: Record<DiseaseType, CareGuideline> = {
-  ALLERGIC_DERMATITIS: {
-    title: 'Allergic Dermatitis',
-    careSteps: [
-      'Identify underlying triggers',
-      'Clean the affected area',
-      'Keep the area clean and dry',
-      'Rule out ectoparasites',
-      'Administer antipruritic or antihistamine medication',
-    ],
-  },
-  BACTERIAL: {
-    title: 'Bacterial Infection',
-    careSteps: [
-      'Identify the cause of infection',
-      'Perform lab tests such as CBC, sensitivity cultures, and cytology',
-      'Administer antibiotics prescribed by the veterinarian',
-      'Provide supportive care',
-      'Sanitize the environment. Quarantine and isolate the infected animal.',
-      'Monitor the animal and follow up if there is no improvement',
-    ],
-  },
-  FUNGAL: {
-    title: 'Fungal Infection',
-    careSteps: [
-      'Topical or oral antifungal drug administration',
-      'Whole-body rinse with antifungal shampoo twice a week',
-      'Disinfection and cleaning of the environment',
-    ],
-  },
-  HOTSPOT: {
-    title: 'Hotspot',
-    careSteps: [
-      'Avoid self-trauma, such as licking and scratching',
-      'Clean the affected area gently',
-      'Trim the hair around the affected area',
-      'Bathe twice a week using antibacterial and antifungal shampoo',
-      'Keep the coat dry at all times',
-      'Seek professional help',
-    ],
-  },
-  MANGE: {
-    title: 'Mange',
-    careSteps: [
-      'Identify the type of mange (through skin scraping)',
-      'Take a hair sample from your pet',
-      'Administer medication such as topical medications, shampoo, and antiparasitic medications',
-      'Administer antibiotics to treat secondary bacterial infection',
-      'Disinfect the environment and quarantine the infected animal',
-    ],
-  },
+/** Six universal recommendations — identical for all five conditions. */
+export const UNIVERSAL_CARE_STEPS: readonly string[] = [
+  'Seek Veterinary Assessment: Have your dog examined by a licensed veterinarian to identify the possible cause and severity of the skin condition.',
+  'Maintain Proper Hygiene: Keep your dog\u2019s affected skin area, resting place, and surroundings clean. Maintain proper hygiene to help prevent further skin problems.',
+  'Prevent Further Irritation: Discourage excessive licking, scratching, and biting of affected areas to avoid additional irritation or injury.',
+  'Follow Veterinary Recommendations: Follow the veterinarian\u2019s instructions regarding appropriate care and management of your dog\u2019s skin condition.',
+  'Monitor Skin Condition and Recovery: Observe changes in redness, irritation, affected areas, hair loss, and overall skin condition. Seek veterinary advice if symptoms worsen or do not improve.',
+  'Practice Proper Environmental Hygiene: Keep your dog\u2019s surroundings clean and follow veterinary advice on preventing possible transmission when the condition may be contagious.',
+] as const
+
+const UNIVERSAL_GUIDELINE: CareGuideline = {
+  title: 'Care Guidelines',
+  careSteps: [...UNIVERSAL_CARE_STEPS],
 }
 
 /**
- * Returns the care guideline for the primary raw AI predicted class.
+ * Same universal guideline under every supported disease key so existing
+ * Top-1 lookups keep working while content stays condition-agnostic.
+ */
+export const CARE_GUIDELINES: Record<DiseaseType, CareGuideline> = {
+  ALLERGIC_DERMATITIS: UNIVERSAL_GUIDELINE,
+  BACTERIAL: UNIVERSAL_GUIDELINE,
+  FUNGAL: UNIVERSAL_GUIDELINE,
+  HOTSPOT: UNIVERSAL_GUIDELINE,
+  MANGE: UNIVERSAL_GUIDELINE,
+}
+
+/** Supported disease codes (keys of CARE_GUIDELINES). */
+export const SUPPORTED_DISEASE_CODES: readonly string[] = Object.keys(
+  CARE_GUIDELINES,
+) as DiseaseType[]
+
+export function isSupportedDiseaseCode(
+  code?: string | null,
+): code is DiseaseType {
+  if (!code) return false
+  return Object.prototype.hasOwnProperty.call(CARE_GUIDELINES, code)
+}
+
+/**
+ * Returns the universal care guideline for a primary prediction code.
  * Pure lookup: the questionnaire and any other input cannot reach this
  * function. Returns null when the prediction is missing or unsupported so
  * the caller can show the general consultation message instead.
  */
 export function getCareGuideline(prediction?: string | null): CareGuideline | null {
-  if (!prediction) return null
-  return CARE_GUIDELINES[prediction as DiseaseType] ?? null
+  if (!isSupportedDiseaseCode(prediction)) return null
+  return CARE_GUIDELINES[prediction]
 }

@@ -9,8 +9,14 @@ import {
   CARE_GUIDELINES,
   CARE_GUIDELINE_DISCLAIMER,
   GENERAL_CONSULT_MESSAGE,
+  UNIVERSAL_CARE_STEPS,
   getCareGuideline,
+  isSupportedDiseaseCode,
 } from '../data/careGuidelines.ts'
+import {
+  shouldShowCareGuidelines,
+  shouldShowSavedCareGuidelines,
+} from '../careGuidelineVisibility.ts'
 
 const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
@@ -22,30 +28,51 @@ const ALL_KEYS: DiseaseType[] = [
   'MANGE',
 ]
 
-const EXPECTED_TITLES: Record<DiseaseType, string> = {
-  ALLERGIC_DERMATITIS: 'Allergic Dermatitis',
-  BACTERIAL: 'Bacterial Infection',
-  FUNGAL: 'Fungal Infection',
-  HOTSPOT: 'Hotspot',
-  MANGE: 'Mange',
-}
+/** The six approved universal recommendations (headings must appear). */
+const EXPECTED_HEADINGS = [
+  'Seek Veterinary Assessment',
+  'Maintain Proper Hygiene',
+  'Prevent Further Irritation',
+  'Follow Veterinary Recommendations',
+  'Monitor Skin Condition and Recovery',
+  'Practice Proper Environmental Hygiene',
+]
 
 describe('CARE_GUIDELINES data', () => {
   it('covers all five supported predicted classes', () => {
     assert.deepEqual(Object.keys(CARE_GUIDELINES).sort(), [...ALL_KEYS].sort())
   })
 
-  it('has the expected display title for every condition', () => {
+  it('uses the universal title for every condition', () => {
     for (const key of ALL_KEYS) {
-      assert.equal(CARE_GUIDELINES[key].title, EXPECTED_TITLES[key])
+      assert.equal(CARE_GUIDELINES[key].title, 'Care Guidelines')
     }
   })
 
-  it('every entry has a non-empty care-steps list with non-empty items', () => {
+  it('every entry has exactly the six universal care steps', () => {
+    assert.equal(UNIVERSAL_CARE_STEPS.length, 6)
     for (const key of ALL_KEYS) {
       const g = CARE_GUIDELINES[key]
-      assert.ok(g.careSteps.length > 0, `${key}: careSteps empty`)
+      assert.equal(g.careSteps.length, 6, `${key}: expected 6 steps`)
+      assert.deepEqual(g.careSteps, [...UNIVERSAL_CARE_STEPS], `${key}: steps differ`)
       for (const item of g.careSteps) assert.ok(item.trim().length > 0, `${key}: empty item`)
+    }
+  })
+
+  it('shares one identical guideline object across all five conditions', () => {
+    for (let i = 1; i < ALL_KEYS.length; i++) {
+      assert.equal(
+        CARE_GUIDELINES[ALL_KEYS[i]],
+        CARE_GUIDELINES[ALL_KEYS[0]],
+        'all conditions must reference the same universal guideline',
+      )
+    }
+  })
+
+  it('includes every approved recommendation heading', () => {
+    const serialized = JSON.stringify(CARE_GUIDELINES)
+    for (const heading of EXPECTED_HEADINGS) {
+      assert.ok(serialized.includes(heading), `missing heading: ${heading}`)
     }
   })
 
@@ -64,11 +91,15 @@ describe('CARE_GUIDELINES data', () => {
 })
 
 describe('getCareGuideline selection', () => {
-  it('returns the matching guideline for all five classes', () => {
+  it('returns the same universal guideline for all five classes', () => {
+    const first = getCareGuideline(ALL_KEYS[0])
+    assert.ok(first, 'expected a guideline for the first class')
     for (const key of ALL_KEYS) {
       const g = getCareGuideline(key)
       assert.ok(g, `${key}: expected a guideline`)
-      assert.equal(g.title, EXPECTED_TITLES[key])
+      assert.equal(g.title, 'Care Guidelines')
+      assert.deepEqual(g.careSteps, [...UNIVERSAL_CARE_STEPS])
+      assert.equal(g, first, `${key}: must be the same universal object`)
     }
   })
 
@@ -94,6 +125,14 @@ describe('getCareGuideline selection', () => {
 
   it('provides a general consultation message for missing/unsupported classes', () => {
     assert.match(GENERAL_CONSULT_MESSAGE, /consult a veterinarian/i)
+  })
+
+  it('isSupportedDiseaseCode accepts only the five supported codes', () => {
+    for (const key of ALL_KEYS) assert.equal(isSupportedDiseaseCode(key), true)
+    assert.equal(isSupportedDiseaseCode(null), false)
+    assert.equal(isSupportedDiseaseCode(''), false)
+    assert.equal(isSupportedDiseaseCode('Mange'), false)
+    assert.equal(isSupportedDiseaseCode('OTHER'), false)
   })
 })
 
@@ -135,13 +174,6 @@ describe('results UI no longer renders the Independent Image Review', () => {
     assert.ok(careIndex > 0, 'CareGuidelinesCard missing')
     assert.ok(symptomIndex > 0, 'SymptomSummaryCard missing')
     assert.ok(careIndex < symptomIndex, 'care guidelines must render before symptom summary')
-  })
-
-  it('only shows disease-specific care guidelines for a detected result', () => {
-    assert.match(
-      resultSource,
-      /screeningState === 'DISEASE_DETECTED' && top && \(\s*<CareGuidelinesCard prediction=\{top\.disease\} \/>/,
-    )
   })
 
   it('result.tsx keeps the claude gate and save payload wiring intact', () => {
@@ -198,7 +230,11 @@ describe('details UI no longer renders Cross-analysis or Independent Image Revie
     assert.doesNotMatch(detailsSource, /independent image review/)
   })
 
-  it('ScreeningDetailsScreen.tsx renders care guidelines from the saved primary prediction', () => {
+  it('ScreeningDetailsScreen.tsx gates care guidelines on a saved disease code', () => {
+    assert.match(
+      detailsSource,
+      /shouldShowSavedCareGuidelines\(screening\.disease_code\) &&/,
+    )
     assert.match(
       detailsSource,
       /<CareGuidelinesCard prediction=\{screening\.disease_code\} \/>/,
@@ -221,5 +257,109 @@ describe('details UI no longer renders Cross-analysis or Independent Image Revie
     )
     assert.match(typesSource, /cross_analysis: CrossAnalysis/)
     assert.match(typesSource, /cross_analysis_status\?: CrossAnalysisStatus/)
+  })
+})
+
+describe('result visibility: Claude acceptance, Top-1, state, configured review', () => {
+  const base = {
+    state: 'DISEASE_DETECTED' as const,
+    reviewNotConfigured: false,
+    hasValidTop1: true,
+    claudeAccepted: true,
+  }
+
+  it('shows guidelines when all four approved conditions hold', () => {
+    assert.equal(shouldShowCareGuidelines(base), true)
+  })
+
+  it('hides guidelines when the review is not configured (unsaved preview)', () => {
+    assert.equal(shouldShowCareGuidelines({ ...base, reviewNotConfigured: true }), false)
+  })
+
+  it('hides guidelines when Claude Vision has not accepted the image', () => {
+    assert.equal(shouldShowCareGuidelines({ ...base, claudeAccepted: false }), false)
+  })
+
+  it('hides guidelines when there is no valid Top-1 prediction', () => {
+    assert.equal(shouldShowCareGuidelines({ ...base, hasValidTop1: false }), false)
+  })
+
+  it('hides guidelines for non-disease final states', () => {
+    assert.equal(shouldShowCareGuidelines({ ...base, state: 'UNCERTAIN' }), false)
+    assert.equal(shouldShowCareGuidelines({ ...base, state: 'NOT_SKIN_IMAGE' }), false)
+    assert.equal(shouldShowCareGuidelines({ ...base, state: 'INVALID_IMAGE' }), false)
+    assert.equal(shouldShowCareGuidelines({ ...base, state: null }), false)
+  })
+
+  it('accepts only the four visibility inputs (no confidence or similarity params)', () => {
+    assert.equal(shouldShowCareGuidelines.length, 1)
+    const a = shouldShowCareGuidelines(base)
+    const b = shouldShowCareGuidelines({ ...base })
+    assert.equal(a, b)
+  })
+
+  it('never reads a confidence percentage or feature-similarity threshold', () => {
+    const visibilitySource = readFileSync(
+      join(mobileRoot, 'features', 'screening', 'careGuidelineVisibility.ts'),
+      'utf8',
+    )
+    assert.doesNotMatch(visibilitySource, /SCREENING_THRESHOLDS/)
+    assert.doesNotMatch(visibilitySource, /FEATURE_SIMILARITY/)
+    assert.doesNotMatch(visibilitySource, /featureSimilarity/)
+    assert.doesNotMatch(visibilitySource, /\bconfidence\s*[:=]/)
+    assert.doesNotMatch(visibilitySource, /\bsimilarity\s*[:=]/)
+    assert.doesNotMatch(visibilitySource, /\b70\b/)
+    assert.doesNotMatch(visibilitySource, /0\.30/)
+  })
+})
+
+describe('details visibility: saved disease code only', () => {
+  it('shows guidelines for each supported saved disease code', () => {
+    for (const key of ALL_KEYS) {
+      assert.equal(shouldShowSavedCareGuidelines(key), true, key)
+    }
+  })
+
+  it('hides guidelines for missing or unsupported codes (UNCERTAIN and others)', () => {
+    assert.equal(shouldShowSavedCareGuidelines(null), false)
+    assert.equal(shouldShowSavedCareGuidelines(undefined), false)
+    assert.equal(shouldShowSavedCareGuidelines(''), false)
+    assert.equal(shouldShowSavedCareGuidelines('UNCERTAIN'), false)
+    assert.equal(shouldShowSavedCareGuidelines('NOT_SKIN_IMAGE'), false)
+    assert.equal(shouldShowSavedCareGuidelines('INVALID_IMAGE'), false)
+    assert.equal(shouldShowSavedCareGuidelines('UNKNOWN'), false)
+  })
+})
+
+describe('result screen gates CareGuidelinesCard on the approved visibility rule', () => {
+  const resultSource = readFileSync(
+    join(mobileRoot, 'app', '(owner)', 'pets', 'screening', 'result.tsx'),
+    'utf8',
+  )
+
+  it('renders care guidelines through shouldShowCareGuidelines with all four inputs', () => {
+    assert.match(resultSource, /shouldShowCareGuidelines\(\{/)
+    assert.match(resultSource, /state:\s*screeningState/)
+    assert.match(resultSource, /reviewNotConfigured,/)
+    assert.match(resultSource, /hasValidTop1:/)
+    assert.match(resultSource, /claudeAccepted:\s*isClaudeValidationApproved\(claudeResponse\)/)
+  })
+
+  it('does not gate care guidelines on confidence or feature-similarity thresholds', () => {
+    assert.doesNotMatch(resultSource, /shouldShowCareGuidelines\([^)]*confidence/)
+    assert.doesNotMatch(resultSource, /featureSimilarity/)
+    assert.doesNotMatch(resultSource, /FEATURE_SIMILARITY/)
+  })
+
+  it('no longer gates care guidelines on the bare deviceFailed check', () => {
+    assert.doesNotMatch(resultSource, /!deviceFailed && \(\s*<CareGuidelinesCard/)
+    assert.doesNotMatch(
+      resultSource,
+      /\{\s*!deviceFailed && \(\s*<CareGuidelinesCard/,
+    )
+  })
+
+  it('keeps passing the raw primary prediction as display-only content', () => {
+    assert.match(resultSource, /<CareGuidelinesCard prediction=\{top\?\.disease \?\? null\} \/>/)
   })
 })

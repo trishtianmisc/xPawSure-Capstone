@@ -19,11 +19,12 @@ interface CareGuidelinesCardProps {
 }
 
 /**
- * Display-only, veterinarian-approved care steps selected from static data by
- * the primary raw AI predicted class. The questionnaire never selects or
- * alters the content, and this card can never modify the AI prediction,
- * confidence, saved result, or booking. Renders the general consultation
- * message when the predicted class is missing or unsupported.
+ * Display-only card with the universal veterinarian-approved care steps.
+ * The predicted condition name is shown elsewhere as the AI screening
+ * result — this card always uses the universal title. The questionnaire
+ * never selects or alters the content, and this card can never modify the
+ * AI prediction, confidence, saved result, or booking. Renders the general
+ * consultation message when the predicted class is missing or unsupported.
  */
 export function CareGuidelinesCard({ prediction, title, note }: CareGuidelinesCardProps) {
   const { colors } = useTheme()
@@ -35,14 +36,14 @@ export function CareGuidelinesCard({ prediction, title, note }: CareGuidelinesCa
       <Text style={styles.sectionLabel}>{title ?? 'Care Guidelines'}</Text>
       <View style={styles.card}>
         <Text style={styles.disclaimerBadge}>Veterinarian-Approved Guidance</Text>
-        <Text style={styles.title}>{guideline ? guideline.title : 'Consult a Veterinarian'}</Text>
+        <Text style={styles.title}>{guideline ? guideline.title : 'Care Guidelines'}</Text>
 
         {guideline ? (
           <View style={styles.block}>
             <Text style={styles.blockLabel}>Care Steps</Text>
             {guideline.careSteps.map((item) => (
               <View key={item} style={styles.bulletRow}>
-                <Text style={styles.bulletMark}>{'\u2022'}</Text>
+                <Text style={styles.bulletMark}>{'•'}</Text>
                 <Text style={styles.bulletText}>{item}</Text>
               </View>
             ))}

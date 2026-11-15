@@ -22,6 +22,9 @@ import { KNOWLEDGE } from '../../../../ai/decisionTree/knowledge'
 import { CareGuidelinesCard } from '../../../../features/screening/components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../../../../features/screening/components/SymptomSummaryCard'
 import { useCreateScreening } from '../../../../features/screening/hooks/useCreateScreening'
+import { isClaudeValidationApproved } from '../../../../features/screening/comparison'
+import { shouldShowCareGuidelines } from '../../../../features/screening/careGuidelineVisibility'
+import { isSupportedDiseaseCode } from '../../../../features/screening/data/careGuidelines'
 import { buildScreeningSavePayload } from '../../../../features/screening/savePayload'
 import type {
   ClaudeAnalysisResponse,
@@ -434,9 +437,12 @@ export default function ResultScreen() {
           </>
         )}
 
-        {!deviceFailed && screeningState === 'DISEASE_DETECTED' && top && (
-          <CareGuidelinesCard prediction={top.disease} />
-        )}
+        {shouldShowCareGuidelines({
+          state: screeningState,
+          reviewNotConfigured,
+          hasValidTop1: !!top && isSupportedDiseaseCode(top.disease),
+          claudeAccepted: isClaudeValidationApproved(claudeResponse),
+        }) && <CareGuidelinesCard prediction={top?.disease ?? null} />}
 
         {!deviceFailed && screeningState === 'DISEASE_DETECTED' && symptomRows.length > 0 && (
           <SymptomSummaryCard

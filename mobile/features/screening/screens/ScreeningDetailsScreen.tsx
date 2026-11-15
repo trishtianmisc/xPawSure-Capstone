@@ -17,6 +17,7 @@ import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
 import { formatDateTime as formatManilaDateTime } from '../../../src/utils/datetime'
 import { KNOWLEDGE } from '../../../ai/decisionTree/knowledge'
+import { shouldShowSavedCareGuidelines } from '../careGuidelineVisibility'
 import { CareGuidelinesCard } from '../components/CareGuidelinesCard'
 import { SymptomSummaryCard } from '../components/SymptomSummaryCard'
 import { DISEASE_META, screeningStatusPill } from '../constants'
@@ -27,9 +28,10 @@ import { consultationLinkLabel } from '../../records/lib/medicalRecordLinks'
 
 /**
  * Read-only view of one stored screening log: what the on-device model
- * recorded, plus sample care guidelines keyed to the saved prediction.
- * The image-validation gate, stored review, and cross-analysis data are
- * kept on the backend for audit but are not rendered here.
+ * recorded, plus universal care guidelines when the saved result carries a
+ * supported disease code (DISEASE_DETECTED only). The image-validation gate,
+ * stored review, and cross-analysis data are kept on the backend for audit
+ * but are not rendered here.
  * Booking never starts here — the Book Appointment action lives only on
  * the fresh scan result screen.
  */
@@ -164,7 +166,9 @@ export default function ScreeningDetailsScreen() {
               </Pressable>
             ))}
 
-            <CareGuidelinesCard prediction={screening.disease_code} />
+            {shouldShowSavedCareGuidelines(screening.disease_code) && (
+              <CareGuidelinesCard prediction={screening.disease_code} />
+            )}
 
             <SymptomSummaryCard
               rows={symptomRows}
