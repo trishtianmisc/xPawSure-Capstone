@@ -3,12 +3,9 @@ from datetime import datetime, timedelta
 
 from django.db.models import (
     Count,
-    DateTimeField,
     Exists,
     F,
     IntegerField,
-    Max,
-    Min,
     OuterRef,
     Prefetch,
     Q,
@@ -21,20 +18,16 @@ from django.utils import timezone
 from ai_screenings.models import AiScreening
 from appointments.models import Appointment, AppointmentStatus
 from appointments.services import (
-    NON_PATIENT_APPOINTMENT_STATUSES,
     filter_clinic_patients,
     get_clinic_timezone,
+    last_visit_annotation,
+    upcoming_appointment_annotation,
 )
 from consultations.models import Consultation
 from pets.models import Pet
 from pets.services.public_pet_service import DUE_SOON_DAYS
 from vaccinations.models import VaccinationRecord
 from vaccinations.services import VaccinationService
-
-UPCOMING_APPOINTMENT_STATUSES = (
-    AppointmentStatus.PENDING,
-    AppointmentStatus.CONFIRMED,
-)
 
 VACCINATION_STATUS_VALUES = {
     'up_to_date',
@@ -69,35 +62,6 @@ class ClinicAdminPatientService:
             Subquery(count_subquery, output_field=IntegerField()),
             Value(0),
         )
-
-    @staticmethod
-    def _last_visit_annotation(clinic_id, now):
-        latest = Appointment.objects.filter(
-            pet_id=OuterRef('pk'),
-            cln_id_id=clinic_id,
-            apt_deleted_at__isnull=True,
-            apt_scheduled_at__lt=now,
-        ).exclude(
-            apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES,
-        ).values('pet_id').annotate(
-            value=Max('apt_scheduled_at'),
-        ).values('value')[:1]
-
-        return Subquery(latest, output_field=DateTimeField())
-
-    @staticmethod
-    def _next_appointment_annotation(clinic_id, now):
-        upcoming = Appointment.objects.filter(
-            pet_id=OuterRef('pk'),
-            cln_id_id=clinic_id,
-            apt_deleted_at__isnull=True,
-            apt_status__in=UPCOMING_APPOINTMENT_STATUSES,
-            apt_scheduled_at__gte=now,
-        ).values('pet_id').annotate(
-            value=Min('apt_scheduled_at'),
-        ).values('value')[:1]
-
-        return Subquery(upcoming, output_field=DateTimeField())
 
     @staticmethod
     def _base_queryset(clinic_id):
@@ -180,12 +144,8 @@ class ClinicAdminPatientService:
                 clinic_id,
                 (AppointmentStatus.CANCELLED,),
             ),
-            last_visit_at=ClinicAdminPatientService._last_visit_annotation(
-                clinic_id, now,
-            ),
-            next_appointment_at=ClinicAdminPatientService._next_appointment_annotation(
-                clinic_id, now,
-            ),
+            last_visit_at=last_visit_annotation(clinic_id, now),
+            next_appointment_at=upcoming_appointment_annotation(clinic_id, now),
             has_any_vaccination=has_any_vaccination,
             has_overdue_vaccination=has_overdue,
             has_due_soon_vaccination=has_due_soon,
