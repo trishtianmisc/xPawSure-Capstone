@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Mobile forgot-password flow with a generic email response, one-hour single-use deep link, session revocation, and password-reset email through the configured mail service
 - Mobile screening now uses a 0.30 feature-similarity cutoff for `DISEASE_DETECTED`; condition-specific care guidance is shown only for a detected result, not for uncertain/rejected scans
 - Pull-to-refresh on owner server-backed screens, including Home, Pets, appointment and record details, Notifications, Screening history/details, Payments, and Profile; Appointments and Records retain their existing refresh controls
 - Owner reschedule acknowledgement: `APT_RESCHEDULED_AT` and `APT_RESCHEDULE_ACKNOWLEDGED_AT` on `APPOINTMENT` (migration `appointments/0009`), plus `APPOINTMENT_RESCHEDULED` notifications (migration `notifications/0003`)

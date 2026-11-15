@@ -137,6 +137,50 @@ Response (200):
 
 ---
 
+## POST /api/auth/password-reset/
+
+Public. Requests a password reset email for eligible mobile accounts (`OWNER`
+or `VETERINARIAN`). The response is the same whether or not the email belongs
+to an eligible account, to avoid exposing account existence. The endpoint is
+rate limited.
+
+Request:
+
+{
+  "email": "string"
+}
+
+Response (200):
+
+{
+  "detail": "If an account with that email exists, we sent a password reset link."
+}
+
+The email link expires after one hour and can be used once. Email delivery
+failure does not reveal whether the account exists.
+
+---
+
+## POST /api/auth/password-reset/confirm/
+
+Public. Exchanges a valid email reset token for a new password and invalidates
+all existing sessions for that user.
+
+Request:
+
+{
+  "token": "string",
+  "new_password": "string (at least 8 characters; password validators apply)"
+}
+
+Responses:
+
+- 200: password reset successfully
+- 400: invalid, expired, or already-used link; or invalid password
+- 429: request rate limit exceeded
+
+---
+
 ## GET /api/auth/profile/
 
 Requires authentication.

@@ -43,6 +43,22 @@ export async function login(email: string, password: string) {
   return data.user
 }
 
+export async function requestPasswordReset(email: string): Promise<{ detail: string }> {
+  const { data } = await http.post<{ detail: string }>('/auth/password-reset/', { email })
+  return data
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<{ detail: string }> {
+  const { data } = await http.post<{ detail: string }>('/auth/password-reset/confirm/', {
+    token,
+    new_password: newPassword,
+  })
+  return data
+}
+
 export async function register(payload: RegisterPayload) {
   const { data } = await http.post<RegisterResponse>('/auth/register/', payload)
   return data

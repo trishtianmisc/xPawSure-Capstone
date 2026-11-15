@@ -185,6 +185,7 @@ done by first selecting an owner, then one of that owner's pets.
 
 Veterinarians can
 
+- Reset their own password through the registered email address in the mobile app
 - Manage consultations
 - Review AI screening results
 - Create prescriptions
@@ -218,6 +219,7 @@ Duplicate owner records are prohibited.
 Owners may:
 
 - Register and manage their profile
+- Request a password reset through their registered email
 - Register and manage their own pets
 - Perform AI-assisted screening (mobile only)
 - Book and cancel appointments

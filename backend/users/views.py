@@ -2,7 +2,7 @@ from audit_log.models import AuditAction
 from audit_log.services import AuditService
 
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -13,13 +13,20 @@ from users.models import RevokedToken, User
 
 from users.serializers import (
     ChangePasswordSerializer,
+    ConfirmPasswordResetSerializer,
     LoginSerializer,
     LogoutSerializer,
     ProfileSerializer,
     RegisterSerializer,
+    RequestPasswordResetSerializer,
 )
+from users.password_reset import InvalidPasswordResetToken, PasswordResetService
 from users.services import AuthService
-from users.throttles import LoginRateThrottle
+from users.throttles import (
+    LoginRateThrottle,
+    PasswordResetConfirmThrottle,
+    PasswordResetRequestThrottle,
+)
 from users.utils import extract_request_meta
 
 
@@ -50,6 +57,47 @@ class LoginView(APIView):
             )
             raise
         return Response(serializer.validated_data, status=status.HTTP_200_OK)
+
+
+class PasswordResetRequestView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetRequestThrottle]
+
+    def post(self, request):
+        serializer = RequestPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        PasswordResetService.request_reset(serializer.validated_data['email'])
+        return Response(
+            {'detail': PasswordResetService.GENERIC_REQUEST_MESSAGE},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PasswordResetConfirmView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = [PasswordResetConfirmThrottle]
+
+    def post(self, request):
+        serializer = ConfirmPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            PasswordResetService.reset_password(
+                token=serializer.validated_data['token'],
+                new_password=serializer.validated_data['new_password'],
+                ip_address=request.META.get('REMOTE_ADDR'),
+                device=request.META.get('HTTP_USER_AGENT'),
+            )
+        except InvalidPasswordResetToken:
+            return Response(
+                {'detail': 'This password reset link is invalid or expired. Request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {'detail': 'Password reset successfully. You can now sign in.'},
+            status=status.HTTP_200_OK,
+        )
 
 
 class RegisterView(APIView):

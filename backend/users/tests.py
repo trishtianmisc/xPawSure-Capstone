@@ -1,8 +1,10 @@
 import base64
 from datetime import date
 from io import StringIO
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -135,6 +137,173 @@ class LoginAPITestCase(TestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data['user']['clinic_name'])
+
+
+class PasswordResetAPITestCase(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.email = 'reset-owner@example.com'
+        self.password = 'OldPass!2381'
+        self.user = User.objects.create(
+            usr_email=self.email,
+            usr_first_name='Reset',
+            usr_last_name='Owner',
+            usr_role=UserRole.OWNER,
+            usr_must_change_password=True,
+        )
+        self.user.set_password(self.password)
+        self.user.save()
+        self.request_url = reverse('auth-password-reset')
+        self.confirm_url = reverse('auth-password-reset-confirm')
+
+    @patch('users.password_reset.send_templated_email')
+    def _request_reset(self, mock_send):
+        response = self.client.post(
+            self.request_url,
+            {'email': self.email},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(
+            response.data['detail'],
+            'If an account with that email exists, we sent a password reset link.',
+        )
+        mock_send.assert_called_once()
+        reset_url = mock_send.call_args.kwargs['context']['reset_url']
+        token = parse_qs(urlsplit(reset_url).query)['token'][0]
+        return token
+
+    def test_request_response_does_not_reveal_unknown_emails(self):
+        with patch('users.password_reset.send_templated_email') as mock_send:
+            known = self.client.post(
+                self.request_url, {'email': self.email}, format='json',
+            )
+            unknown = self.client.post(
+                self.request_url, {'email': 'nobody@example.com'}, format='json',
+            )
+
+        self.assertEqual(known.status_code, status.HTTP_200_OK)
+        self.assertEqual(unknown.status_code, status.HTTP_200_OK)
+        self.assertEqual(known.data, unknown.data)
+        self.assertEqual(mock_send.call_count, 1)
+
+    def test_only_owner_and_veterinarian_accounts_receive_mobile_reset_email(self):
+        from users.password_reset import PasswordResetService
+
+        staff = User.objects.create(
+            usr_email='desk-reset@example.com',
+            usr_first_name='Desk',
+            usr_last_name='User',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        vet = User.objects.create(
+            usr_email='vet-reset@example.com',
+            usr_first_name='Vet',
+            usr_last_name='User',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        with patch('users.password_reset.send_templated_email') as mock_send:
+            response = self.client.post(
+                self.request_url,
+                {'email': staff.usr_email},
+                format='json',
+            )
+            vet_response = self.client.post(
+                self.request_url,
+                {'email': vet.usr_email},
+                format='json',
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['detail'], PasswordResetService.GENERIC_REQUEST_MESSAGE)
+        self.assertEqual(vet_response.status_code, status.HTTP_200_OK)
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs['to_email'], vet.usr_email)
+
+    def test_reset_updates_password_and_revokes_existing_sessions(self):
+        from audit_log.models import AuditAction, AuditLog
+
+        login = self.client.post(
+            reverse('auth-login'),
+            {'email': self.email, 'password': self.password},
+            format='json',
+        )
+        self.assertEqual(login.status_code, status.HTTP_200_OK)
+        old_refresh = login.data['refresh']
+        old_version = self.user.usr_token_version
+        token = self._request_reset()
+
+        response = self.client.post(
+            self.confirm_url,
+            {'token': token, 'new_password': 'NewPass!4832'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('NewPass!4832'))
+        self.assertFalse(self.user.check_password(self.password))
+        self.assertFalse(self.user.usr_must_change_password)
+        self.assertEqual(self.user.usr_token_version, old_version + 1)
+        self.assertTrue(AuditLog.objects.filter(
+            adl_action=AuditAction.PASSWORD_RESET,
+            adl_record_id=self.user.usr_id,
+        ).exists())
+
+        refresh_response = self.client.post(
+            reverse('auth-refresh'), {'refresh': old_refresh}, format='json',
+        )
+        self.assertEqual(refresh_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_reset_link_can_only_be_used_once(self):
+        token = self._request_reset()
+        payload = {'token': token, 'new_password': 'NewPass!4832'}
+        first = self.client.post(self.confirm_url, payload, format='json')
+        second = self.client.post(self.confirm_url, payload, format='json')
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK, first.data)
+        self.assertEqual(second.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            second.data['detail'],
+            'This password reset link is invalid or expired. Request a new one.',
+        )
+
+    def test_changing_password_invalidates_an_outstanding_reset_link(self):
+        token = self._request_reset()
+        self.user.set_password('ChangedElsewhere!4832')
+        self.user.save(update_fields=['usr_password_hash', 'usr_updated_at'])
+
+        response = self.client.post(
+            self.confirm_url,
+            {'token': token, 'new_password': 'NewPass!4832'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(self.user.check_password('ChangedElsewhere!4832'))
+
+    def test_expired_and_invalid_tokens_are_rejected(self):
+        token = self._request_reset()
+
+        with patch(
+            'users.password_reset.PASSWORD_RESET_TOKEN_MAX_AGE_SECONDS',
+            -1,
+        ):
+            expired = self.client.post(
+                self.confirm_url,
+                {'token': token, 'new_password': 'NewPass!4832'},
+                format='json',
+            )
+        invalid = self.client.post(
+            self.confirm_url,
+            {'token': 'invalid-token', 'new_password': 'NewPass!4832'},
+            format='json',
+        )
+
+        self.assertEqual(expired.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(invalid.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(expired.data['detail'], invalid.data['detail'])
 
 
 class ClinicNamePayloadTestCase(TestCase):
