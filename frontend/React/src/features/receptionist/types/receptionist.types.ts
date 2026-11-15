@@ -107,15 +107,6 @@ export interface AppointmentListResponse {
   results: Appointment[]
 }
 
-export interface CreateAppointmentPayload {
-  pet_id: string
-  slot_id: string
-  apt_type: AppointmentType
-  reason?: string
-  /** Set once the clinic's consultation fee has been paid. */
-  pay_id?: string
-}
-
 export interface Owner {
   own_id: string
   full_name: string
@@ -231,17 +222,6 @@ export interface PetHistory {
   vaccinations: VaccinationRecord[]
   screenings: ScreeningSummary[]
   appointments: Appointment[]
-}
-
-export interface CreatePetPayload {
-  owner_id: string
-  pet_name: string
-  pet_sex: string
-  brd_id?: string | null
-  pet_birth_date?: string | null
-  pet_weight?: number | null
-  pet_color?: string | null
-  pet_microchip_no?: string | null
 }
 
 export interface UpdatePetPayload {

@@ -5,7 +5,6 @@ import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { usePets } from '../hooks/usePets'
 import { PageHero } from '../components/PageHero'
-import { PetRegisterModal } from '../components/PetRegisterModal'
 import { apiErrorMessage } from '../../../utils/error'
 import { formatDate } from '../../../utils/format'
 
@@ -36,7 +35,6 @@ export function PetsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [registerOpen, setRegisterOpen] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -62,18 +60,9 @@ export function PetsPage() {
             meta={
               data && (
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-amber-100">
-                  {search ? `${data.total} matching` : `${data.total} ${data.total === 1 ? 'patient' : 'patients'}`}
-                </span>
-              )
-            }
-            actions={
-              <button
-                type="button"
-                onClick={() => setRegisterOpen(true)}
-                className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
-              >
-                + Register patient
-              </button>
+              {search ? `${data.total} matching` : `${data.total} ${data.total === 1 ? 'patient' : 'patients'}`}
+            </span>
+            )
             }
           />
         </div>
@@ -241,13 +230,9 @@ export function PetsPage() {
                   ? 'Try a different name or breed, or clear the search.'
                   : 'Patients appear here after their first appointment at your clinic.'}
               </p>
-              {search ? (
+              {search && (
                 <Button type="button" size="sm" variant="secondary" className="mt-4" onClick={clearSearch}>
                   Clear search
-                </Button>
-              ) : (
-                <Button type="button" size="sm" className="mt-4" onClick={() => setRegisterOpen(true)}>
-                  + Register patient
                 </Button>
               )}
             </div>
@@ -283,8 +268,6 @@ export function PetsPage() {
           )}
         </div>
       </div>
-
-      <PetRegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
     </div>
   )
 }

@@ -519,15 +519,6 @@ export function PetDetailPage() {
               )}
             </>
           }
-          actions={
-            <button
-              onClick={() => navigate('/receptionist/appointments/new')}
-              className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
-              type="button"
-            >
-              + Book Appointment
-            </button>
-          }
         />
 
         <div className="grid gap-6 lg:grid-cols-3">

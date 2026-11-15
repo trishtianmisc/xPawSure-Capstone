@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listPets, getPetDetail, getPetHistory, createPet, updatePet } from '../services/pet.service'
+import { listPets, getPetDetail, getPetHistory, updatePet } from '../services/pet.service'
 
 export function usePets(
   params: {
@@ -33,17 +33,6 @@ export function usePetHistory(petId: string) {
     queryFn: () => getPetHistory(petId),
     enabled: !!petId,
     staleTime: 30_000,
-  })
-}
-
-export function useCreatePet() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: createPet,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['receptionist', 'pets'] })
-      queryClient.invalidateQueries({ queryKey: ['receptionist', 'owners'] })
-    },
   })
 }
 

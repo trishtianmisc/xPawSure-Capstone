@@ -152,9 +152,7 @@ Until the password is changed, the Clinic Admin must not access protected applic
 
 Receptionists can
 
-- Register owners
-- Register pets
-- Schedule appointments
+- Reschedule appointments and confirm follow-up requests
 - Check patients in
 - Collect the consultation fee (GCash, card) and record cash payments
 
@@ -162,6 +160,8 @@ Receptionists may perform these actions only for their own clinic.
 
 Receptionists cannot
 
+- Book new appointments (owners book through the mobile app)
+- Register owners or register pets
 - Create diagnoses
 - Create prescriptions
 - Modify consultations
@@ -341,7 +341,7 @@ Payment comes before the appointment when the clinic charges a consultation fee.
   (`CLINIC_SETTINGS.CLS_CONSULTATION_FEE`).
 - A fee of `0` means no payment is required and booking works unchanged.
 - When the fee is greater than `0`, an appointment cannot exist without a `PAID`
-  payment attached to it. This applies to receptionist bookings and owner bookings.
+  payment attached to it. This applies to owner bookings.
 - A payment covers exactly one appointment and belongs to exactly one clinic and
   one owner.
 - Amount, currency, and method are fixed when the checkout is created; clients
@@ -480,8 +480,8 @@ display context: they are embedded as `symptom_answers` on the appointment
 payloads veterinarians and receptionists already use and rendered next to the
 AI screening result. Visibility follows existing appointment scoping —
 veterinarians only see their own appointments, receptionists only their
-clinic's — and receptionists may see the answers for booking/front-desk
-context. The answers remain display-only in those workflows too.
+clinic's — and receptionists may see the answers for front-desk context.
+The answers remain display-only in those workflows too.
 
 Owner bookings from the mobile app require a screening for the booked pet.
 Bookings without a valid screening are rejected.
@@ -681,7 +681,6 @@ Vaccination (Optional)
 Consultation Completed
 
 Owner bookings are created PENDING and await clinic confirmation.
-Receptionist desk bookings are created CONFIRMED.
 
 Follow-up recommendations create a REVIEW appointment when the source
 appointment is completed. Scheduling its slot moves it to CONFIRMATION

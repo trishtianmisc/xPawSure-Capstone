@@ -15,10 +15,10 @@
 
 The Payment module collects the clinic's consultation fee.
 
-For a new booking, a Receptionist (web) or an Owner (mobile) creates a *checkout*
-for a chosen slot. When the payment reaches `PAID` it is attached to exactly one
-appointment; the booking endpoints refuse to create an appointment without it
-whenever the clinic's fee is greater than zero.
+For a new booking, an Owner (mobile) creates a *checkout* for a chosen slot.
+When the payment reaches `PAID` it is attached to exactly one appointment;
+the booking endpoints refuse to create an appointment without it whenever the
+clinic's fee is greater than zero.
 
 A follow-up works in the opposite order: the receptionist books the slot first,
 and the owner pays from the appointment detail screen while the appointment is

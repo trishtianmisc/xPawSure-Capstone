@@ -37,7 +37,6 @@ const ReceptionistLayout = lazy(() => import('./features/receptionist/components
 const ReceptionistDashboardPage = lazy(() => import('./features/receptionist/pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReceptionistAppointmentsPage = lazy(() => import('./features/receptionist/pages/AppointmentsPage').then(m => ({ default: m.AppointmentsPage })))
 const ReceptionistAppointmentDetailPage = lazy(() => import('./features/receptionist/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
-const ReceptionistCreateAppointmentPage = lazy(() => import('./features/receptionist/pages/CreateAppointmentPage').then(m => ({ default: m.CreateAppointmentPage })))
 const ReceptionistPaymentsPage = lazy(() => import('./features/receptionist/pages/PaymentsPage').then(m => ({ default: m.PaymentsPage })))
 const ReceptionistOwnersPage = lazy(() => import('./features/receptionist/pages/OwnersPage').then(m => ({ default: m.OwnersPage })))
 const ReceptionistOwnerDetailPage = lazy(() => import('./features/receptionist/pages/OwnerDetailPage').then(m => ({ default: m.OwnerDetailPage })))
@@ -214,7 +213,6 @@ function App() {
             <Route index element={<ReceptionistDashboardPage />} />
             <Route element={<ReceptionistDashboardPage />} path="dashboard" />
             <Route element={<ReceptionistAppointmentsPage />} path="appointments" />
-            <Route element={<ReceptionistCreateAppointmentPage />} path="appointments/new" />
             <Route element={<ReceptionistAppointmentDetailPage />} path="appointments/:id" />
             <Route element={<ReceptionistPaymentsPage />} path="payments" />
             <Route element={<ReceptionistOwnersPage />} path="owners" />

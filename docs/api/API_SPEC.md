@@ -417,9 +417,8 @@ Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
   receptionist's own clinic whose status is not `CANCELLED` or `NO_SHOW`. A pet
   becomes a clinic patient once it has a non-cancelled, non-no-show appointment
   there; a pet whose only appointments were cancelled or no-show is not listed.
-- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
-  Used by the booking form so walk-in owners can be booked; after a non-cancelled
-  booking the pet appears in the clinic's Patients tab.
+- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic,
+  regardless of appointment history at the caller's clinic.
 - Detail and history endpoints still require only a non-deleted appointment at
   the clinic, so a pet removed from the directory by the rule above remains
   reachable by direct link (read-only access is unchanged).
@@ -498,8 +497,7 @@ Query parameters: `search`, `scope`, `page`, `page_size`
 
 - `scope=clinic`: only owners whose pets are clinic patients (same rule as
   `GET /api/receptionist/pets/`). Used by the receptionist Owners tab, so it
-  never lists owners with no record at that clinic. The booking and patient
-  registration pickers omit it to search every owner.
+  never lists owners with no record at that clinic.
 - A receptionist without a staff profile gets `400` when `scope=clinic`.
 
 ## GET /api/owners/{id}/
@@ -787,7 +785,9 @@ counts are taken — `needs_attention` therefore surfaces late-but-actionable
 Requires authentication. Owner or receptionist.
 
 Owner: Books appointment for own pet (`POST /api/owner/appointments/`).
-Receptionist: Books appointment for any pet at clinic (`POST /api/appointments/`).
+The receptionist web app no longer offers booking — owners book through the
+mobile app. The endpoint still accepts a receptionist token for API clients
+and books any pet at that clinic.
 
 Owner booking rule: the owner must attach a skin screening result for the booked pet.
 If `screening_id` is missing, does not belong to the pet, or the pet has no screening,

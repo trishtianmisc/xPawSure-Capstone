@@ -222,15 +222,12 @@ Cannot manage other clinics or grant Super Admin privileges.
 
 Can manage:
 
-- Register owners
-
-- Register pets
-
-- Schedule appointments
+- Reschedule appointments and confirm follow-up requests
 
 - Check patients in
 
-Cannot edit medical diagnosis.
+Cannot book or create appointments (owners book through the mobile app),
+register owners or register pets, or edit medical diagnosis.
 
 Can access only records within their own clinic.
 
