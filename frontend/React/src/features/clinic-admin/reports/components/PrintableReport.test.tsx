@@ -159,15 +159,16 @@ describe('PrintableReport', () => {
     expect(screen.getByText('Key Metrics')).toBeInTheDocument()
     // KPI label and the workload table's Revenue column both read "Revenue".
     expect(screen.getAllByText('Revenue').length).toBeGreaterThan(0)
-    expect(screen.getByText('₱8,500.00')).toBeInTheDocument()
+    // Total revenue appears in the KPI card and the Revenue Over Time stats.
+    expect(screen.getAllByText('₱8,500.00').length).toBeGreaterThan(0)
     expect(screen.getByText('9 payments')).toBeInTheDocument()
     expect(screen.getByText('Appointments Over Time')).toBeInTheDocument()
-    expect(screen.getByText('Status Breakdown')).toBeInTheDocument()
+    expect(screen.getByText('Appointments by status')).toBeInTheDocument()
     expect(screen.getByText('Revenue Over Time')).toBeInTheDocument()
     expect(screen.getByText('Daily paid revenue')).toBeInTheDocument()
     expect(screen.getByText('Veterinarian Workload')).toBeInTheDocument()
     expect(screen.getByText('₱4,200.00')).toBeInTheDocument()
-    expect(screen.getByText('AI Screenings')).toBeInTheDocument()
+    expect(screen.getByText('AI screenings')).toBeInTheDocument()
     // Preset-aware baseline wording reaches the printable copy too.
     expect(screen.getAllByText('vs previous 7 days').length).toBeGreaterThan(0)
 

@@ -153,8 +153,10 @@ def _assert_no_open_request(appointment):
 
 
 def _notify_request_submitted(appointment, verb):
-    """Neutral notice to every receptionist and clinic admin of the
-    appointment's clinic.
+    """Neutral notice to every receptionist of the appointment's clinic.
+
+    Only receptionists handle vet requests (reschedule/decline are
+    receptionist-only endpoints), so clinic admins are not addressed.
 
     The message never contains the vet's reason text; it only says which
     action was requested and when the appointment is scheduled.
@@ -162,7 +164,7 @@ def _notify_request_submitted(appointment, verb):
     from notifications.models import NotificationType
 
     staff_ids = User.objects.filter(
-        usr_role__in=[UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN],
+        usr_role=UserRole.RECEPTIONIST,
         staffprofile__cln_id=appointment.cln_id_id,
     ).values_list('usr_id', flat=True)
     for uid in staff_ids:

@@ -67,6 +67,13 @@ export interface PaymentListResponse {
   page: number
   page_size: number
   total_pages: number
+  /**
+   * Echo of the paid window the server actually applied (clinic-local days),
+   * so a page can render its own date line without trusting the client clock.
+   * Receptionist requests are always today; `null` means an unbounded list.
+   */
+  paid_from: string | null
+  paid_to: string | null
   summary: PaymentListSummary
   results: Payment[]
 }

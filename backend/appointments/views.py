@@ -18,6 +18,7 @@ from appointments.serializers import (
     ConfirmFollowUpSerializer,
     CreateAppointmentSerializer,
     GenerateSlotsSerializer,
+    ReceptionistAppointmentDetailSerializer,
     ReceptionistAppointmentListSerializer,
     VetSlotSerializer,
 )
@@ -279,7 +280,7 @@ class AppointmentListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = AppointmentDetailSerializer(appointment)
+        result = ReceptionistAppointmentDetailSerializer(appointment)
         return Response(result.data, status=status.HTTP_201_CREATED)
 
 
@@ -343,9 +344,12 @@ class AppointmentDetailView(APIView):
         return [permission() for permission in self.permission_classes]
 
     def get_serializer_class(self, request):
-        if getattr(request.user, 'usr_role', None) == UserRole.CLINIC_ADMIN:
+        role = getattr(request.user, 'usr_role', None)
+        if role == UserRole.CLINIC_ADMIN:
             return ClinicAdminAppointmentDetailSerializer
-        return AppointmentDetailSerializer
+        if role == UserRole.VETERINARIAN:
+            return AppointmentDetailSerializer
+        return ReceptionistAppointmentDetailSerializer
 
     @staticmethod
     def _vet_guard(request, appointment):
@@ -469,7 +473,7 @@ class AppointmentDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = ReceptionistAppointmentDetailSerializer(appointment)
         return Response(serializer.data)
 
 
@@ -500,7 +504,7 @@ class AppointmentRequestDeclineView(APIView):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = ReceptionistAppointmentDetailSerializer(appointment)
         return Response(serializer.data)
 
 
@@ -544,7 +548,7 @@ class AppointmentRescheduleView(APIView):
         except ValueError as e:
             return Response({'detail': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = AppointmentDetailSerializer(appointment)
+        serializer = ReceptionistAppointmentDetailSerializer(appointment)
         return Response(serializer.data)
 
 
@@ -593,7 +597,7 @@ class ConfirmFollowUpView(APIView):
                 status=status.HTTP_409_CONFLICT,
             )
 
-        return Response(AppointmentDetailSerializer(appointment).data)
+        return Response(ReceptionistAppointmentDetailSerializer(appointment).data)
 
 
 class ScheduleView(APIView):

@@ -414,6 +414,41 @@ class StaffListTests(StaffAPITestCase):
         emails = [r['email'] for r in response.data['results']]
         self.assertNotIn('other@test.com', emails)
 
+    def test_pending_status_filter_excludes_deactivated_accounts(self):
+        user = User.objects.create(
+            usr_email='pending_deact@test.com',
+            usr_first_name='Pending',
+            usr_last_name='Deactivated',
+            usr_role=UserRole.RECEPTIONIST,
+            usr_is_active=False,
+            usr_must_change_password=True,
+        )
+        StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        pending = self.client.get(
+            self.list_url, {'status': 'PENDING'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(pending.status_code, status.HTTP_200_OK)
+        self.assertNotIn(
+            'pending_deact@test.com',
+            [r['email'] for r in pending.data['results']],
+        )
+
+        deactivated = self.client.get(
+            self.list_url, {'status': 'DEACTIVATED'}, format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(deactivated.status_code, status.HTTP_200_OK)
+        self.assertIn(
+            'pending_deact@test.com',
+            [r['email'] for r in deactivated.data['results']],
+        )
+
     def test_list_pagination(self):
         for i in range(5):
             user = User.objects.create(
@@ -959,6 +994,48 @@ class StaffActionTests(StaffAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.active_user.refresh_from_db()
         self.assertTrue(self.active_user.usr_must_change_password)
+
+    def test_reset_password_rejects_deactivated_staff(self):
+        old_hash = self.deactivated_user.usr_password_hash
+        response = self.client.post(
+            self._action_url(str(self.deactivated_user.usr_id), 'reset-password'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Reactivate', response.data['detail'])
+        self.deactivated_user.refresh_from_db()
+        self.assertEqual(self.deactivated_user.usr_password_hash, old_hash)
+
+    def test_resend_welcome_rejects_deactivated_staff(self):
+        response = self.client.post(
+            self._action_url(str(self.deactivated_user.usr_id), 'resend-welcome'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('Reactivate', response.data['detail'])
+        self.assertFalse(
+            Notification.objects.filter(ntf_title='Credentials Email Failed').exists()
+        )
+
+    def test_activate_preserves_pending_state_without_credentials_notice(self):
+        self.deactivated_user.usr_must_change_password = True
+        self.deactivated_user.save(update_fields=['usr_must_change_password'])
+
+        response = self.client.post(
+            self._action_url(str(self.deactivated_user.usr_id), 'activate'),
+            format='json',
+            **self._auth_header(self.clinic_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.deactivated_user.refresh_from_db()
+        self.assertTrue(self.deactivated_user.usr_is_active)
+        self.assertTrue(self.deactivated_user.usr_must_change_password)
+        self.assertFalse(
+            Notification.objects.filter(ntf_title='Credentials Email Failed').exists()
+        )
 
     def test_unknown_action_returns_400(self):
         response = self.client.post(

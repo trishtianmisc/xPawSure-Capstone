@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import resolve
 from django.utils import timezone
 
-from ai_screenings.models import AiScreening, Disease
+from ai_screenings.models import AiScreening, Disease, ScreeningStatus
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from appointments.services import AppointmentService
 from clinics.models import Clinic, ClinicSettings
@@ -439,12 +439,6 @@ class VeterinariansEndpointTests(OversightBase):
 class AppointmentDetailTests(OversightBase):
     """Clinic Admin read-only access to GET /api/appointments/{id}/."""
 
-    ADMIN_SCREENING_KEYS = {
-        'ais_id', 'disease', 'ais_confidence', 'ais_model_version',
-        'ais_status', 'ais_source', 'ais_is_correct', 'ais_created_at',
-        'vet_diagnosis', 'reviewed_at',
-    }
-
     def _detail(self, apt, user):
         return self.client.get(
             f'/api/appointments/{apt.apt_id}/', **self._auth(user),
@@ -456,16 +450,19 @@ class AppointmentDetailTests(OversightBase):
         self.assertEqual(response.data['apt_id'], str(self.apt_oct3.apt_id))
         self.assertIn('created_by_role', response.data)
         self.assertIn('status_change', response.data)
-        self.assertIn('screening', response.data)
+        self.assertNotIn('screening', response.data)
 
-    def test_admin_detail_excludes_clinical_and_contact_fields(self):
+    def test_admin_detail_excludes_clinical_fields(self):
         response = self._detail(self.apt_oct3, self.admin)
         self.assertEqual(response.status_code, 200, response.data)
-        for field in (
-            'consultation', 'prescription', 'owner_phone', 'owner_email',
-            'apt_updated_at',
-        ):
+        for field in ('consultation', 'prescription', 'apt_updated_at'):
             self.assertNotIn(field, response.data)
+
+    def test_admin_detail_includes_owner_contact(self):
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn('owner_phone', response.data)
+        self.assertIn('owner_email', response.data)
 
     def test_receptionist_detail_contract_unchanged(self):
         response = self._detail(self.apt_oct3, self.receptionist)
@@ -573,34 +570,37 @@ class AppointmentDetailTests(OversightBase):
         self.assertIsNone(change['changed_by_role'])
         self.assertIsNone(change['source'])
 
-    def test_screening_none_returns_null(self):
+    def test_detail_omits_screening_block(self):
         response = self._detail(self.apt_oct3, self.admin)
-        self.assertIsNone(response.data['screening'])
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('screening', response.data)
+        self.assertIsNone(response.data['screening_status'])
 
-    def test_screening_summary_exposes_review_outcome_only(self):
+    def test_screening_status_reports_review_state_only(self):
         disease = Disease.objects.create(dis_code='GING', dis_name='Gingivitis')
         screening = AiScreening.objects.create(
             pet_id=self.pet,
             dis_id=disease,
             ais_confidence=87.50,
             ais_model_version='v1.0',
-            ais_is_correct=True,
-            ais_compared_diagnosis='Gingivitis',
-            ais_compared_at=timezone.now(),
         )
         self.apt_oct3.apt_screening = screening
         self.apt_oct3.save()
 
         response = self._detail(self.apt_oct3, self.admin)
         self.assertEqual(response.status_code, 200, response.data)
-        payload = response.data['screening']
-        self.assertEqual(set(payload.keys()), self.ADMIN_SCREENING_KEYS)
-        self.assertEqual(payload['disease'], 'Gingivitis')
-        self.assertEqual(payload['vet_diagnosis'], 'Gingivitis')
-        self.assertTrue(payload['ais_is_correct'])
-        self.assertIsNotNone(payload['reviewed_at'])
-        self.assertNotIn('con_id', payload)
-        self.assertNotIn('ais_device', payload)
+        self.assertEqual(
+            response.data['screening_status'], {'review_status': 'PENDING_REVIEW'},
+        )
+        self.assertNotIn('screening', response.data)
+
+        screening.ais_status = ScreeningStatus.REVIEWED
+        screening.save(update_fields=['ais_status'])
+
+        response = self._detail(self.apt_oct3, self.admin)
+        self.assertEqual(
+            response.data['screening_status'], {'review_status': 'REVIEWED'},
+        )
 
 
 class DashboardStatsTests(OversightBase):

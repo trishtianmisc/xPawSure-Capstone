@@ -119,6 +119,22 @@ class PaymentTestBase(OwnerBookingBase):
             pay_metadata={'pet_name': pet_name},
         )
 
+    def _clinic_admin_auth(self):
+        """A clinic-admin identity for this clinic. Date-driven list tests
+        are admin territory now: a receptionist request never sees a date
+        parameter, so anything exercising paid_from/paid_to must log in here."""
+        if not hasattr(self, '_clinic_admin_created'):
+            user = self._create_user(
+                'admin@example.com', UserRole.CLINIC_ADMIN, 'Ada', 'Admin',
+            )
+            StaffProfile.objects.create(
+                usr_id=user,
+                cln_id=self.clinic,
+                stf_position=StaffPosition.CLINIC_ADMIN,
+            )
+            self._clinic_admin_created = True
+        return self._auth('admin@example.com')
+
     def _book(self, pay_id=None, slot_id=None, email=RECEPTIONIST_EMAIL):
         payload = {
             'pet_id': str(self.pet.pet_id),
@@ -661,11 +677,11 @@ class PaymentReadTests(PaymentTestBase):
 
         in_nov = self.client.get(
             '/api/payments/?paid_from=2026-11-01&paid_to=2026-11-01',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
         in_oct = self.client.get(
             '/api/payments/?paid_from=2026-10-31&paid_to=2026-10-31',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
 
         self.assertEqual(in_nov.status_code, status.HTTP_200_OK, in_nov.data)
@@ -681,10 +697,10 @@ class PaymentReadTests(PaymentTestBase):
         wide = self.client.get(
             f'/api/payments/?paid_from={today - timedelta(days=30)}'
             f'&paid_to={today + timedelta(days=30)}',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
         unfiltered = self.client.get(
-            '/api/payments/', **self._auth(RECEPTIONIST_EMAIL),
+            '/api/payments/', **self._clinic_admin_auth(),
         )
 
         # The pending row has no PAY_PAID_AT, so no paid window can hold it.
@@ -695,16 +711,16 @@ class PaymentReadTests(PaymentTestBase):
     def test_paid_date_range_rejects_reversed_and_overlong(self):
         reversed_range = self.client.get(
             '/api/payments/?paid_from=2026-11-02&paid_to=2026-11-01',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
         # 2026-01-01 .. 2027-01-02 is 367 inclusive days.
         overlong = self.client.get(
             '/api/payments/?paid_from=2026-01-01&paid_to=2027-01-02',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
         max_span = self.client.get(
             '/api/payments/?paid_from=2026-01-01&paid_to=2027-01-01',
-            **self._auth(RECEPTIONIST_EMAIL),
+            **self._clinic_admin_auth(),
         )
 
         self.assertEqual(reversed_range.status_code, status.HTTP_400_BAD_REQUEST)
@@ -807,11 +823,15 @@ class PaymentClinicAdminWriteTests(PaymentTestBase):
 
 class PaymentListSummaryTests(PaymentTestBase):
     """The strip totals cover every matching row, not just the visible page,
-    and follow the same PAID + PAY_PAID_AT rules as Reports revenue."""
+    and follow the same PAID + PAY_PAID_AT rules as Reports revenue.
+
+    These probe the full-history shape, so they log in as the clinic admin:
+    a receptionist request is always pinned to today's clinic-local window
+    (see ReceptionistTodayOnlyTests for that shape)."""
 
     def _get(self, query=''):
         response = self.client.get(
-            f'/api/payments/?{query}', **self._auth(RECEPTIONIST_EMAIL),
+            f'/api/payments/?{query}', **self._clinic_admin_auth(),
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
         return response.data
@@ -942,6 +962,179 @@ class PaymentListSummaryTests(PaymentTestBase):
 
         self.assertEqual(data['summary']['paid_total'], '1250.00')
         self.assertEqual(data['summary']['paid_total'], revenue['revenue'])
+
+
+class ReceptionistTodayOnlyTests(PaymentTestBase):
+    """The counter page shows only the clinic's collection for the current
+    clinic-local day: client date parameters are ignored outright, the strip
+    equals the clinic admin's Today figure, and an exact receipt number may
+    surface one older payment in the list without ever moving a total."""
+
+    def _get(self, query=''):
+        response = self.client.get(
+            f'/api/payments/?{query}', **self._auth(RECEPTIONIST_EMAIL),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        return response.data
+
+    def test_client_date_parameters_are_ignored(self):
+        now = timezone.now()
+        today_paid = self._make_payment(paid_at=now, amount=Decimal('500.00'))
+        old_paid = self._make_payment(
+            paid_at=now - timedelta(days=120), amount=Decimal('999.00'),
+        )
+        self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+        )
+        today = now.astimezone(MNL).date()
+
+        # Malformed values that would 400 for an admin, plus a range far
+        # wider than the 366-day cap: none of it is a receptionist parameter,
+        # so none of it may fail - or widen - the request.
+        data = self._get(
+            'paid_from=banana&paid_to=2030-12-31'
+            '&date_from=not-a-date&date_to=2030-12-31',
+        )
+
+        self.assertEqual(data['paid_from'], today.isoformat())
+        self.assertEqual(data['paid_to'], today.isoformat())
+        self.assertEqual(data['total'], 1, data)
+        self.assertEqual(data['results'][0]['pay_id'], str(today_paid.pay_id))
+        self.assertNotIn(
+            str(old_paid.pay_id), [row['pay_id'] for row in data['results']],
+        )
+        self.assertEqual(data['summary']['paid_total'], '500.00')
+        self.assertEqual(data['summary']['pending_total'], '0.00')
+        self.assertEqual(data['summary']['payment_count'], 1)
+
+    def test_collected_today_matches_clinic_admin_today_and_reports_revenue(self):
+        now = timezone.now()
+        mnl_day = now.astimezone(MNL).date()
+        self._make_payment(paid_at=now, amount=Decimal('1250.00'))  # today, PAID
+        self._make_payment(  # today, refunded: in both windows, not revenue
+            paid_at=now, pay_status=PaymentStatus.REFUNDED,
+            amount=Decimal('500.00'),
+        )
+        self._make_payment(  # PAID but three days back: outside both
+            paid_at=now - timedelta(days=3), amount=Decimal('777.00'),
+        )
+        self._make_payment(  # never paid
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+        )
+
+        receptionist = self._get()
+        admin = self.client.get(
+            f'/api/payments/?paid_from={mnl_day}&paid_to={mnl_day}',
+            **self._clinic_admin_auth(),
+        )
+        self.assertEqual(admin.status_code, status.HTTP_200_OK, admin.data)
+        revenue = ReportService.get_revenue(self.clinic.pk, mnl_day, mnl_day)
+
+        r_summary = receptionist['summary']
+        a_summary = admin.data['summary']
+        self.assertEqual(admin.data['paid_from'], mnl_day.isoformat())
+        # Same clinic-local day, same window, same rules: the three figures
+        # agree - the receptionist strip IS the admin's Today column.
+        self.assertEqual(r_summary['paid_total'], a_summary['paid_total'])
+        self.assertEqual(r_summary['paid_total'], revenue['revenue'])
+        self.assertEqual(r_summary['paid_total'], '1250.00')
+        self.assertEqual(r_summary['payment_count'], a_summary['payment_count'])
+        self.assertEqual(r_summary['payment_count'], 2)
+        self.assertEqual(r_summary['refunded_total'], a_summary['refunded_total'])
+        self.assertEqual(r_summary['refunded_total'], '500.00')
+
+    def test_forced_window_uses_clinic_local_midnights(self):
+        tz = MNL
+        midnight = datetime.combine(datetime.now(tz).date(), datetime.min.time())
+        # 00:30 PHT today sits inside; 23:59:30 PHT yesterday sits outside.
+        # A UTC-day window would push 00:30 PHT into yesterday and disagree
+        # with the revenue KPI, exactly like the admin date-filter test.
+        just_in = self._make_payment(
+            paid_at=timezone.make_aware(midnight + timedelta(minutes=30), tz),
+            amount=Decimal('100.00'),
+        )
+        self._make_payment(
+            paid_at=timezone.make_aware(midnight - timedelta(seconds=30), tz),
+            amount=Decimal('999.00'),
+        )
+
+        data = self._get()
+
+        self.assertEqual(data['total'], 1, data)
+        self.assertEqual(data['results'][0]['pay_id'], str(just_in.pay_id))
+        self.assertEqual(data['summary']['paid_total'], '100.00')
+        self.assertEqual(data['summary']['payment_count'], 1)
+
+    def test_exact_receipt_finds_older_payment_without_moving_totals(self):
+        now = timezone.now()
+        today_payment = self._make_payment(paid_at=now, amount=Decimal('500.00'))
+        older = self._make_payment(
+            paid_at=now - timedelta(days=90), amount=Decimal('999.00'),
+        )
+
+        baseline = self._get()
+        found = self._get(f'reference={older.pay_reference}')
+
+        self.assertEqual(baseline['total'], 1)
+        self.assertEqual(
+            baseline['results'][0]['pay_id'], str(today_payment.pay_id),
+        )
+        # Exactly one row - the escaped older receipt - not today's row.
+        self.assertEqual(found['total'], 1, found)
+        self.assertEqual(found['results'][0]['pay_id'], str(older.pay_id))
+        # ...and every total still describes today alone: the older 999.00
+        # never joins the strip, search or no search.
+        self.assertEqual(found['summary'], baseline['summary'])
+        self.assertEqual(found['summary']['paid_total'], '500.00')
+        self.assertEqual(found['summary']['payment_count'], 1)
+
+    def test_owner_name_search_does_not_escape_the_window(self):
+        self._make_payment(
+            paid_at=timezone.now() - timedelta(days=90),
+            amount=Decimal('999.00'),
+        )
+
+        # "Owner" matches this payment's owner surname (icontains), but a
+        # name is never a receipt number, so the window still holds it out.
+        data = self._get('reference=Owner')
+
+        self.assertEqual(data['total'], 0, data)
+        self.assertEqual(data['summary']['paid_total'], '0.00')
+        self.assertEqual(data['summary']['payment_count'], 0)
+
+    def test_status_and_method_filters_still_apply(self):
+        now = timezone.now()
+        self._make_payment(
+            paid_at=now, amount=Decimal('500.00'), method=PaymentMethod.CASH,
+        )
+        self._make_payment(
+            paid_at=now, amount=Decimal('300.00'), method=PaymentMethod.GCASH,
+        )
+        self._make_payment(
+            paid_at=now, pay_status=PaymentStatus.REFUNDED,
+            amount=Decimal('200.00'), method=PaymentMethod.GCASH,
+        )
+        self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+        )
+
+        cash = self._get('method=CASH')
+        refunded = self._get('status=REFUNDED')
+        pending = self._get('status=PENDING')
+
+        self.assertEqual(cash['total'], 1)
+        self.assertEqual(cash['summary']['paid_total'], '500.00')
+        self.assertEqual(cash['summary']['payment_count'], 1)
+        self.assertEqual(refunded['total'], 1)
+        self.assertEqual(refunded['summary']['refunded_total'], '200.00')
+        self.assertEqual(refunded['summary']['paid_total'], '0.00')
+        # No unpaid row ever has a PAY_PAID_AT, so "awaiting payment" can
+        # never appear in a paid-date list - the documented caveat.
+        self.assertEqual(pending['total'], 0)
+        self.assertEqual(pending['summary']['payment_count'], 0)
 
 
 class PaymentNotificationTests(PaymentTestBase):

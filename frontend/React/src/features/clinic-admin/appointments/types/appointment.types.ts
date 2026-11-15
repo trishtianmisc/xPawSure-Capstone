@@ -1,12 +1,4 @@
-import type {
-  AppointmentDetail,
-  ScreeningSummary,
-} from '../../../receptionist/types/receptionist.types'
-
-export interface ClinicAdminScreeningSummary extends ScreeningSummary {
-  vet_diagnosis: string | null
-  reviewed_at: string | null
-}
+import type { AppointmentDetail, VetRequest } from '../../../receptionist/types/receptionist.types'
 
 export interface AppointmentStatusChange {
   changed_at: string | null
@@ -17,9 +9,17 @@ export interface AppointmentStatusChange {
 
 export type CreatedByRole = 'RECEPTIONIST' | 'OWNER' | null
 
+/**
+ * Oversight view of the vet's request: who asked, when, and how the clinic
+ * answered. The vet's message and the decline note stay receptionist/vet-only,
+ * so they are absent from this payload.
+ */
+export type ClinicAdminVetRequest = Omit<VetRequest, 'reason' | 'decline_note'>
+
+/** Clinic Admin oversight view: no clinical records, so no AI screening. */
 export interface ClinicAdminAppointmentDetail
-  extends Omit<AppointmentDetail, 'screening'> {
+  extends Omit<AppointmentDetail, 'vet_request'> {
   created_by_role: CreatedByRole
   status_change: AppointmentStatusChange | null
-  screening: ClinicAdminScreeningSummary | null
+  vet_request: ClinicAdminVetRequest | null
 }
