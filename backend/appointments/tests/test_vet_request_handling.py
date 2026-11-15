@@ -192,35 +192,30 @@ class VetRequestSubmitTests(VetRequestHandlingBase):
             ).exists(),
         )
 
-    def test_submit_notifies_clinic_admins_neutrally(self):
+    def test_submit_does_not_notify_clinic_admins(self):
+        """Requests are receptionist work; admins cannot act on them."""
         apt_id, _ = self._confirmed_appointment()
 
         self._vet_request('request-reschedule', apt_id, 'Surgery conflict')
 
-        notifs = Notification.objects.filter(
-            usr_id_id=self.admin_user.usr_id,
-            ntf_type=NotificationType.SYSTEM,
-            ntf_reference_id=apt_id,
+        self.assertFalse(
+            Notification.objects.filter(
+                usr_id_id=self.admin_user.usr_id,
+                ntf_reference_id=apt_id,
+            ).exists(),
         )
-        self.assertTrue(notifs.exists())
-        body = notifs.first().ntf_message
-        self.assertIn('Reschedule requested for', body)
-        self.assertNotIn('Surgery conflict', body)
 
-    def test_submit_cancel_notifies_clinic_admins_neutrally(self):
+    def test_submit_cancel_does_not_notify_clinic_admins(self):
         apt_id, _ = self._confirmed_appointment()
 
         self._vet_request('request-cancel', apt_id, 'Vet is unavailable')
 
-        notifs = Notification.objects.filter(
-            usr_id_id=self.admin_user.usr_id,
-            ntf_type=NotificationType.SYSTEM,
-            ntf_reference_id=apt_id,
+        self.assertFalse(
+            Notification.objects.filter(
+                usr_id_id=self.admin_user.usr_id,
+                ntf_reference_id=apt_id,
+            ).exists(),
         )
-        self.assertTrue(notifs.exists())
-        body = notifs.first().ntf_message
-        self.assertIn('Cancellation requested for', body)
-        self.assertNotIn('Vet is unavailable', body)
 
     def test_legacy_reason_without_lifecycle_can_be_requested_again(self):
         apt_id, _ = self._confirmed_appointment()
@@ -348,7 +343,7 @@ class VetRequestLeakTests(VetRequestHandlingBase):
         self.assertNotIn('apt_cancellation_request_reason', row)
         self.assertNotIn(self.REASON, self._dump(response.data))
 
-    def test_admin_detail_excludes_request_data(self):
+    def test_admin_detail_shows_request_timeline_without_reason(self):
         apt_id = self._open_request_appointment()
 
         response = self.client.get(
@@ -356,7 +351,13 @@ class VetRequestLeakTests(VetRequestHandlingBase):
         )
 
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertNotIn('vet_request', response.data)
+        request = response.data['vet_request']
+        self.assertIsNotNone(request)
+        self.assertEqual(request['type'], 'RESCHEDULE')
+        self.assertEqual(request['status'], 'OPEN')
+        self.assertEqual(request['requested_by'], 'Vera Vet')
+        self.assertNotIn('reason', request)
+        self.assertNotIn('decline_note', request)
         self.assertNotIn('apt_reschedule_request_reason', response.data)
         self.assertNotIn('apt_cancellation_request_reason', response.data)
         self.assertNotIn(self.REASON, self._dump(response.data))

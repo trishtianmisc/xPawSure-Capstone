@@ -1,10 +1,7 @@
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
-from ai_screenings.serializers import (
-    ClinicAdminScreeningSummarySerializer,
-    ScreeningSummarySerializer,
-)
+from ai_screenings.serializers import ScreeningSummarySerializer
 from appointments.models import (
     Appointment,
     AppointmentRequestStatus,
@@ -15,6 +12,22 @@ from appointments.models import (
 from clinics.models import Clinic
 from consultations.serializers import ConsultationResponseSerializer
 from prescriptions.serializers import PrescriptionResponseSerializer
+
+
+def _screening_status(obj):
+    """Presence plus review state of the attached screening, nothing clinical.
+
+    Receptionists and clinic admins get only enough to say whether the owner
+    attached an AI screening and whether a vet has looked at it yet.
+    """
+    screening = getattr(obj, 'apt_screening', None)
+    if screening is None:
+        return None
+    reviewed = (
+        screening.ais_compared_at is not None
+        or screening.ais_status != 'PENDING_REVIEW'
+    )
+    return {'review_status': 'REVIEWED' if reviewed else 'PENDING_REVIEW'}
 
 
 def _vet_request_block(obj):
@@ -56,6 +69,26 @@ def _vet_request_block(obj):
 
 def _has_open_request(obj):
     return obj.apt_request_status == AppointmentRequestStatus.OPEN
+
+
+# Clinic Admin oversight sees that a vet raised a request and how the clinic
+# handled it, but the message body stays receptionist/vet-only.
+_CLINIC_ADMIN_VET_REQUEST_FIELDS = (
+    'type',
+    'status',
+    'requested_by',
+    'requested_at',
+    'resolved_by',
+    'resolved_at',
+)
+
+
+def _clinic_admin_vet_request_block(obj):
+    """Timeline-only view of the vet's request: no reason, no decline note."""
+    block = _vet_request_block(obj)
+    if block is None:
+        return None
+    return {field: block[field] for field in _CLINIC_ADMIN_VET_REQUEST_FIELDS}
 
 
 class OwnerClinicSerializer(serializers.ModelSerializer):
@@ -283,6 +316,28 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         return _has_open_request(obj)
 
 
+class ReceptionistAppointmentDetailSerializer(AppointmentDetailSerializer):
+    """Receptionist-facing detail: never carries the AI screening payload.
+
+    The screening result and the owner's questionnaire answers are clinical
+    context that belongs to the veterinarian reviewing them, so the reception
+    desk only receives the booking and payment-facing fields plus
+    screening_status (attached or not, and whether a vet reviewed it). Vets
+    keep AppointmentDetailSerializer, which still includes the screening block.
+    """
+
+    screening_status = serializers.SerializerMethodField()
+
+    class Meta(AppointmentDetailSerializer.Meta):
+        fields = ['screening_status'] + [
+            f for f in AppointmentDetailSerializer.Meta.fields
+            if f != 'screening'
+        ]
+
+    def get_screening_status(self, obj):
+        return _screening_status(obj)
+
+
 class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):
     """Owner-facing detail: never carries the vet's request data.
 
@@ -303,29 +358,30 @@ class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):
         ]
 
 
-class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
+class ClinicAdminAppointmentDetailSerializer(ReceptionistAppointmentDetailSerializer):
     """Read-only appointment summary for Clinic Admin oversight.
 
     Narrower than the receptionist detail: no consultation, prescription, or
-    other clinical records, and no owner contact details. Adds who booked the
-    appointment (by role) and who/when the current status was set. The vet's
-    request reason is receptionist/vet-only and is never included here.
+    other clinical records. Carries the owner's contact details and an
+    oversight view of the vet's request (type, status, who asked and how it
+    ended), but never the request message or the decline note, which stay
+    receptionist/vet-only, and never the AI screening result or the owner's
+    questionnaire answers. Adds who booked the appointment (by role) and
+    who/when the current status was set.
     """
 
     created_by_role = serializers.SerializerMethodField()
     status_change = serializers.SerializerMethodField()
-    screening = ClinicAdminScreeningSummarySerializer(
-        source='apt_screening', read_only=True,
-    )
+    vet_request = serializers.SerializerMethodField()
 
     class Meta(AppointmentDetailSerializer.Meta):
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
-            'owner_name', 'screening',
+            'owner_name', 'owner_phone', 'owner_email',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name', 'created_by_role',
-            'status_change',
+            'status_change', 'screening_status', 'vet_request',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
             'apt_created_at',
@@ -340,6 +396,9 @@ class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
         from appointments.services import AppointmentService
 
         return AppointmentService.get_status_change(obj)
+
+    def get_vet_request(self, obj):
+        return _clinic_admin_vet_request_block(obj)
 
 
 class CreateAppointmentSerializer(serializers.Serializer):

@@ -1,5 +1,31 @@
 import type { ReactNode } from 'react'
 
+export type StatCardTone = 'sky' | 'rose' | 'violet' | 'emerald' | 'amber'
+
+// Full class strings so Tailwind can see them.
+const TONES: Record<StatCardTone, { container: string; icon: string }> = {
+  sky: {
+    container: 'bg-sky-100/80 dark:bg-sky-900/25',
+    icon: 'bg-white/70 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
+  },
+  rose: {
+    container: 'bg-rose-100/80 dark:bg-rose-900/25',
+    icon: 'bg-white/70 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+  },
+  violet: {
+    container: 'bg-violet-100/80 dark:bg-violet-900/25',
+    icon: 'bg-white/70 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
+  },
+  emerald: {
+    container: 'bg-emerald-100/80 dark:bg-emerald-900/25',
+    icon: 'bg-white/70 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  amber: {
+    container: 'bg-amber-100/80 dark:bg-amber-900/25',
+    icon: 'bg-white/70 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  },
+}
+
 interface StatCardProps {
   icon: ReactNode
   label: string
@@ -8,14 +34,38 @@ interface StatCardProps {
   hint?: string
   className?: string
   valueClassName?: string
-};
+  // Optional tint. Omit it to keep the original white card.
+  tone?: StatCardTone
+}
 
+export function StatCard({
+  icon,
+  label,
+  value,
+  trend,
+  hint,
+  className = '',
+  valueClassName = 'text-4xl',
+  tone,
+}: StatCardProps) {
+  const styles = tone ? TONES[tone] : null
 
-export function StatCard({ icon, label, value, trend, hint, className = '', valueClassName = 'text-4xl' }: StatCardProps) {
   return (
-    <div className={`rounded-xl border border-stone-200 bg-white p-6 shadow-sm transition hover:shadow-md dark:border-stone-700 dark:bg-stone-800 ${className}`}>
+    <div
+      className={`p-6 transition hover:shadow-md ${
+        styles
+          ? `rounded-3xl ${styles.container}`
+          : 'rounded-xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800'
+      } ${className}`}
+    >
       <div className="flex items-start justify-between">
-        <div className="rounded-xl bg-amber-50 p-3 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+        <div
+          className={`rounded-xl p-3 ${
+            styles
+              ? styles.icon
+              : 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+          }`}
+        >
           {icon}
         </div>
         {trend && (
@@ -30,22 +80,43 @@ export function StatCard({ icon, label, value, trend, hint, className = '', valu
       <p className={`mt-4 font-extrabold tracking-tight text-stone-950 dark:text-stone-100 ${valueClassName}`}>
         {value}
       </p>
-      <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+      <p
+        className={`mt-1 text-sm ${
+          styles
+            ? 'font-medium text-stone-600 dark:text-stone-300'
+            : 'text-stone-500 dark:text-stone-400'
+        }`}
+      >
         {label}
       </p>
       {hint && (
-        <p className="mt-0.5 text-xs text-stone-400 dark:text-stone-500">{hint}</p>
+        <p
+          className={`mt-0.5 text-xs ${
+            styles
+              ? 'text-stone-500 dark:text-stone-400'
+              : 'text-stone-400 dark:text-stone-500'
+          }`}
+        >
+          {hint}
+        </p>
       )}
     </div>
   )
 }
 
-export function StatCardSkeleton() {
+export function StatCardSkeleton({ tone }: { tone?: StatCardTone }) {
+  const styles = tone ? TONES[tone] : null
   return (
-    <div className="animate-pulse rounded-xl border border-stone-200 bg-white p-6 dark:border-stone-700 dark:bg-stone-800">
-      <div className="h-12 w-12 rounded-xl bg-stone-200 dark:bg-stone-700" />
-      <div className="mt-4 h-8 w-20 rounded bg-stone-200 dark:bg-stone-700" />
-      <div className="mt-2 h-4 w-32 rounded bg-stone-200 dark:bg-stone-700" />
+    <div
+      className={`animate-pulse p-6 ${
+        styles
+          ? `rounded-3xl ${styles.container}`
+          : 'rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800'
+      }`}
+    >
+      <div className={`h-12 w-12 rounded-xl ${styles ? 'bg-white/60 dark:bg-stone-700/60' : 'bg-stone-200 dark:bg-stone-700'}`} />
+      <div className={`mt-4 h-8 w-20 rounded ${styles ? 'bg-white/60 dark:bg-stone-700/60' : 'bg-stone-200 dark:bg-stone-700'}`} />
+      <div className={`mt-2 h-4 w-32 rounded ${styles ? 'bg-white/60 dark:bg-stone-700/60' : 'bg-stone-200 dark:bg-stone-700'}`} />
     </div>
   )
 }

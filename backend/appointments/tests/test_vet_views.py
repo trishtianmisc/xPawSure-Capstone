@@ -477,8 +477,9 @@ class VetAppointmentDetailTests(VetDashboardBase):
 
 
 class VetSymptomAnswersVisibilityTests(VetDashboardBase):
-    """Owner questionnaire answers reach vet/receptionist surfaces as
-    display-only context (symptom_answers) without changing AI fields."""
+    """Owner questionnaire answers reach vet surfaces as display-only
+    context (symptom_answers) without changing AI fields; receptionists only
+    get the administrative detail, without the screening block."""
 
     ROWS = [
         {'question': 'Where is the affected area?', 'answer': 'Back, Ears'},
@@ -546,7 +547,7 @@ class VetSymptomAnswersVisibilityTests(VetDashboardBase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_receptionist_detail_includes_symptom_answers(self):
+    def test_receptionist_detail_omits_screening(self):
         appointment, _ = self._appointment_with_screening(answers=self.ROWS)
 
         response = self.client.get(
@@ -554,7 +555,11 @@ class VetSymptomAnswersVisibilityTests(VetDashboardBase):
             **self._auth(RECEPTIONIST_EMAIL),
         )
         self.assertEqual(response.status_code, 200, response.data)
-        self.assertEqual(response.data['screening']['symptom_answers'], self.ROWS)
+        self.assertNotIn('screening', response.data)
+        self.assertEqual(
+            response.data['screening_status'],
+            {'review_status': 'PENDING_REVIEW'},
+        )
 
 
 class VetCancellationTests(VetDashboardBase):
