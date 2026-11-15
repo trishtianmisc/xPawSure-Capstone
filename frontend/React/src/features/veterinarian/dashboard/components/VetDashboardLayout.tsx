@@ -17,6 +17,22 @@ interface NavSection {
   items: NavItem[]
 }
 
+function ProfileAvatar({
+  picture,
+  initials,
+  className,
+}: {
+  picture?: string | null
+  initials: string
+  className: string
+}) {
+  if (picture) {
+    return <img src={picture} alt="" className={`${className} object-cover`} />
+  }
+
+  return <div className={className}>{initials}</div>
+}
+
 const NAV_SECTIONS: NavSection[] = [
   {
     label: 'Main',
@@ -29,6 +45,7 @@ const NAV_SECTIONS: NavSection[] = [
     label: 'Management',
     items: [
       { label: 'Schedule', path: '/veterinarian/schedule', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+      { label: 'Analytics', path: '/veterinarian/analytics', icon: 'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z' },
     ],
   },
 ]
@@ -152,9 +169,11 @@ export function VetDashboardLayout() {
             to="/veterinarian/profile"
             onClick={() => setIsMobileNavOpen(false)}
           >
-            <div className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-sm font-bold text-white shadow-sm">
-              {user?.first_name?.[0]}{user?.last_name?.[0]}
-            </div>
+            <ProfileAvatar
+              picture={user?.profile_picture}
+              initials={`${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`}
+              className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-sm font-bold text-white shadow-sm"
+            />
             {!isCollapsed && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">
@@ -220,9 +239,14 @@ export function VetDashboardLayout() {
             <div className="hidden items-center gap-3 sm:flex">
               <Link
                 to="/veterinarian/profile"
-                className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-amber-400/50"
+                aria-label="Open profile"
+                className="shrink-0 rounded-full transition hover:ring-2 hover:ring-amber-400/50"
               >
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
+                <ProfileAvatar
+                  picture={user?.profile_picture}
+                  initials={`${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`}
+                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm"
+                />
               </Link>
               <button
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"

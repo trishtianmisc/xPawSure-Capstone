@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { authService } from '../login/services/auth.service'
-import type { AuthUser, LoginCredentials } from '../login/types/auth.types'
+import type { AuthUser, LoginCredentials, UpdateProfilePayload } from '../login/types/auth.types'
 import { AuthContext, type AuthContextValue } from './AuthContext'
 
 const STORAGE_KEY_USER = 'xpawsure_user'
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data
   }, [user])
 
-  const updateProfile = useCallback(async (data: { first_name?: string; last_name?: string; phone?: string }) => {
+  const updateProfile = useCallback(async (data: UpdateProfilePayload) => {
     const result = await authService.updateProfile(data)
     const merged = { ...user, ...result } as AuthUser
     setUser(merged)
