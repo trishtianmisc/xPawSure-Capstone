@@ -2,17 +2,16 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ai_screenings.serializers import ScreeningSummarySerializer
-from appointments.serializers import AppointmentListSerializer
-from appointments.services import ReceptionistPetService
-from consultations.serializers import ConsultationResponseSerializer
+from appointments.serializers import AppointmentHistorySerializer
+from appointments.services import ReceptionistPetService, get_clinic_timezone
 from core.permissions import IsReceptionist
 from pets.serializers import PetResponseSerializer
 from pets.serializers_receptionist import (
     ReceptionistPetCreateSerializer,
+    ReceptionistPetDetailSerializer,
+    ReceptionistPetListSerializer,
     ReceptionistPetUpdateSerializer,
 )
-from prescriptions.serializers import PrescriptionResponseSerializer
 from vaccinations.serializers import VaccinationResponseSerializer
 from vaccinations.services import VaccinationService
 
@@ -54,7 +53,11 @@ class ReceptionistPetListCreateView(APIView):
             scope=request.query_params.get('scope'),
         )
 
-        serializer = PetResponseSerializer(result['results'], many=True)
+        serializer = ReceptionistPetListSerializer(
+            result['results'],
+            many=True,
+            context={'timezone': get_clinic_timezone(clinic_id)},
+        )
 
         return Response({
             'total': result['total'],
@@ -108,7 +111,7 @@ class ReceptionistPetDetailView(APIView):
                 {'detail': 'Pet not found.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        serializer = PetResponseSerializer(pet)
+        serializer = ReceptionistPetDetailSerializer(pet)
         return Response(serializer.data)
 
     def patch(self, request, pet_id):
@@ -161,19 +164,10 @@ class ReceptionistPetHistoryView(APIView):
         VaccinationService.latest_by_series(vaccinations)
 
         return Response({
-            'consultations': ConsultationResponseSerializer(
-                list(history['consultations']), many=True,
-            ).data,
-            'prescriptions': PrescriptionResponseSerializer(
-                list(history['prescriptions']), many=True,
-            ).data,
             'vaccinations': VaccinationResponseSerializer(
                 vaccinations, many=True,
             ).data,
-            'screenings': ScreeningSummarySerializer(
-                list(history['screenings']), many=True,
-            ).data,
-            'appointments': AppointmentListSerializer(
+            'appointments': AppointmentHistorySerializer(
                 list(history['appointments']), many=True,
             ).data,
         })

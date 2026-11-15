@@ -1,6 +1,7 @@
 import http from '../../../services/http'
 import type {
   Pet,
+  PetDetail,
   PetHistory,
   PetListResponse,
   UpdatePetPayload,
@@ -17,7 +18,7 @@ export async function listPets(params: {
   return data
 }
 
-export async function getPetDetail(petId: string): Promise<Pet> {
+export async function getPetDetail(petId: string): Promise<PetDetail> {
   const { data } = await http.get(`/receptionist/pets/${petId}/`)
   return data
 }

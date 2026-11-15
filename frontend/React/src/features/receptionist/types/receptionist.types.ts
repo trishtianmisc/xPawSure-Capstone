@@ -145,6 +145,9 @@ export interface Pet {
   qr_code: string | null
   qr_code_url: string | null
   created_at: string
+  owner_name: string | null
+  last_visit_date: string | null
+  next_appointment_date: string | null
 }
 
 export interface PetListResponse {
@@ -155,45 +158,13 @@ export interface PetListResponse {
   results: Pet[]
 }
 
-export interface ConsultationRecord {
-  id: string
-  appointment_id: string
-  /** The visit's scan, resolved through its appointment; null when unlinked. */
-  screening_id: string | null
-  pet_id: string
-  pet_name: string
-  veterinarian: string
-  chief_complaint: string | null
-  subjective: string | null
-  objective: string | null
-  assessment: string | null
-  plan: string | null
-  diagnosis: string
-  treatment: string | null
-  notes: string | null
-  created_at: string
-}
-
-export interface PrescriptionItemRecord {
-  id: string
-  medicine_name: string
-  dosage: string
-  frequency: string
-  duration: string
-  route: string
-  quantity: number | null
-  notes: string | null
-}
-
-export interface PrescriptionRecord {
-  id: string
-  consultation_id: string
-  pet_id: string
-  pet_name: string
-  veterinarian: string
-  instructions: string | null
-  items: PrescriptionItemRecord[]
-  created_at: string
+/** Single-pet payload: the owner block is detail-only, never on list rows. */
+export interface PetDetail extends Pet {
+  owner: {
+    name: string
+    phone: string | null
+    email: string
+  } | null
 }
 
 export interface VaccinationRecord {
@@ -216,12 +187,22 @@ export interface VaccinationRecord {
   created_at: string
 }
 
+/** Appointment row in a pet's history; deliberately free of clinical data. */
+export interface AppointmentHistoryItem {
+  apt_id: string
+  apt_scheduled_at: string
+  apt_type: AppointmentType
+  apt_status: AppointmentStatus
+  vet_name: string | null
+}
+
+/**
+ * Reception desk history: who treated the pet and when, plus its vaccines.
+ * Consultations, prescriptions, and screenings are vet/clinic-admin only.
+ */
 export interface PetHistory {
-  consultations: ConsultationRecord[]
-  prescriptions: PrescriptionRecord[]
   vaccinations: VaccinationRecord[]
-  screenings: ScreeningSummary[]
-  appointments: Appointment[]
+  appointments: AppointmentHistoryItem[]
 }
 
 export interface UpdatePetPayload {

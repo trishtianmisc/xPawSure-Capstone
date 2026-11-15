@@ -154,6 +154,12 @@ class VetSlotSerializer(serializers.ModelSerializer):
         return None
 
 
+def _staff_full_name(stf):
+    if stf and stf.usr_id:
+        return f'{stf.usr_id.usr_first_name} {stf.usr_id.usr_last_name}'
+    return None
+
+
 class AppointmentListSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_species = serializers.SerializerMethodField()
@@ -182,9 +188,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         return None
 
     def get_vet_name(self, obj):
-        if obj.stf_id and obj.stf_id.usr_id:
-            return f'{obj.stf_id.usr_id.usr_first_name} {obj.stf_id.usr_id.usr_last_name}'
-        return None
+        return _staff_full_name(obj.stf_id)
 
     def get_owner_name(self, obj):
         if obj.pet_id and obj.pet_id.own_id and obj.pet_id.own_id.usr_id:
@@ -197,6 +201,19 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             u = obj.apt_created_by
             return f'{u.usr_first_name} {u.usr_last_name}'
         return None
+
+
+class AppointmentHistorySerializer(serializers.ModelSerializer):
+    vet_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = [
+            'apt_id', 'apt_scheduled_at', 'apt_type', 'apt_status', 'vet_name',
+        ]
+
+    def get_vet_name(self, obj):
+        return _staff_full_name(obj.stf_id)
 
 
 class ReceptionistAppointmentListSerializer(AppointmentListSerializer):

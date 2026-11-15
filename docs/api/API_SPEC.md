@@ -423,6 +423,13 @@ Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
   the clinic, so a pet removed from the directory by the rule above remains
   reachable by direct link (read-only access is unchanged).
 - Invalid `page` / `page_size` values fall back to defaults (never a 500).
+- Each `results[]` item carries the base pet fields plus `owner_name`
+  (`"First Last"`, `null` if missing), `last_visit_date`, and
+  `next_appointment_date`. Both dates are clinic-local `YYYY-MM-DD` strings in
+  the receptionist's clinic timezone and are `null` when no such appointment
+  exists: `last_visit_date` is the latest past appointment that is neither
+  `CANCELLED` nor `NO_SHOW`; `next_appointment_date` is the next
+  `PENDING`/`CONFIRMED` appointment from now onward.
 
 ## POST /api/receptionist/pets/
 
@@ -439,6 +446,11 @@ Requires authentication. Receptionist.
 Returns the pet only if it has an appointment at the receptionist's clinic,
 otherwise `404`.
 
+Payload: the base pet fields plus an `owner` block
+(`{ "name": "First Last", "phone": "+63..." | null, "email": "..." }`) so the
+detail page can show who to call. The owner block is detail-only — list rows
+carry `owner_name` instead.
+
 ## PATCH /api/receptionist/pets/{id}/
 
 Requires authentication. Receptionist.
@@ -449,37 +461,36 @@ Same clinic rule as GET — otherwise `404`.
 
 Requires authentication. Receptionist.
 
-Full read-only medical record for the Patient record page. The pet must have an
-appointment at the receptionist's clinic (`404` otherwise); a receptionist without
-a staff profile gets `400`.
+Visit history for the Patient record page: who saw the pet, when, and its
+vaccines. The pet must have an appointment at the receptionist's clinic (`404`
+otherwise); a receptionist without a staff profile gets `400`.
 
 Response:
 
 ```json
 {
-  "consultations": [],
-  "prescriptions": [],
   "vaccinations": [],
-  "screenings": [],
   "appointments": []
 }
 ```
 
+Each `appointments[]` item carries exactly `apt_id`, `apt_scheduled_at`,
+`apt_type`, `apt_status`, and `vet_name` (`null` when unassigned).
+
 Scoping (shared patients — a pet treated at multiple clinics):
 
-- `consultations`, `prescriptions`, `appointments`: only records from the
-  receptionist's own clinic (per `BUSINESS_RULES.md` — no records outside their
-  own clinic).
-- `vaccinations`, `screenings`: **pet-level** — returned in full, including
-  owner-reported vaccinations and phone AI screenings that belong to the pet
-  rather than any clinic.
+- `appointments`: only records from the receptionist's own clinic (per
+  `BUSINESS_RULES.md` — no records outside their own clinic).
+- `vaccinations`: **pet-level** — returned in full, including owner-reported
+  vaccinations that belong to the pet rather than any clinic.
+
+Privacy: this is deliberately not the medical record. Consultations (SOAP notes,
+diagnosis, treatment), prescriptions (items, instructions), and AI screenings are
+vet- and clinic-admin-only, so they are never serialised here — no consultations,
+prescriptions, or screenings keys, and no clinical values inside the appointment
+rows. Any client needing those fields must use the vet or clinic-admin endpoints.
 
 Read-only: the endpoint never mutates records (medical history is immutable).
-
-Web UI presentation: prescriptions are rendered inside their (one-to-one)
-consultation, and a consultation's AI screening is resolved through
-`appointments[].screening` — only screenings tied to a consultation are shown.
-Response shape is unchanged.
 
 ---
 
