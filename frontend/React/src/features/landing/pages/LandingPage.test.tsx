@@ -37,7 +37,8 @@ describe('LandingPage', () => {
       screen.queryByText('Veterinary clinic management + AI-assisted screening'),
     ).not.toBeInTheDocument()
     expect(screen.getByAltText('XPawSure web appointments preview')).toBeInTheDocument()
-    expect(screen.getByText('Web app review')).toBeInTheDocument()
+    expect(screen.getByText('Appointments · click to see the next screen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /show next preview/i })).toBeInTheDocument()
     expect(screen.getByText('Mobile app review')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /get the android app/i })).toHaveAttribute(
       'href',

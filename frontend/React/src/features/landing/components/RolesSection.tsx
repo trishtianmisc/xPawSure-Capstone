@@ -57,7 +57,7 @@ const ROLES: {
 
 export function RolesSection() {
   return (
-    <section className="border-y border-stone-200 bg-stone-50 py-20 dark:border-stone-800 dark:bg-stone-900/40 sm:py-24">
+    <section className="border-y border-stone-200 py-20 dark:border-stone-800 dark:bg-stone-900/40 sm:py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           <SectionHeading

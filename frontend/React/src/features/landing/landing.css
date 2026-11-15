@@ -11,11 +11,31 @@
     transform 600ms ease-out;
 }
 
+.landing-preview-screen {
+  animation: landing-preview-enter 260ms ease-out;
+}
+
+@keyframes landing-preview-enter {
+  from {
+    opacity: 0.4;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-reveal,
   .landing-reveal[data-visible='true'] {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+
+  .landing-preview-screen {
+    animation: none;
   }
 }

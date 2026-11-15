@@ -1,7 +1,6 @@
 import type { MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
-
-import { DashboardPreview } from './DashboardPreview'
+import { HeroPreviewDeck } from './HeroPreviewDeck'
 import { LandingIcon } from './LandingIcon'
 import { Reveal } from './Reveal'
 import { scrollToSection } from '../landing.utils'
@@ -20,7 +19,7 @@ export function HeroSection() {
 
   return (
     <section
-      className="scroll-mt-20 border-b border-stone-200 bg-white py-16 dark:border-stone-800 dark:bg-stone-950 sm:py-20 lg:py-24"
+      className="scroll-mt-20 border-b border-stone-200 py-16 dark:border-stone-800 sm:py-20 lg:py-24"
       id="home"
     >
       <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:gap-16 lg:px-8">
@@ -66,8 +65,7 @@ export function HeroSection() {
           </ul>
         </Reveal>
 
-        <Reveal delay={120}>
-          <DashboardPreview />
+        <Reveal delay={120}>          <HeroPreviewDeck />
         </Reveal>
       </div>
     </section>

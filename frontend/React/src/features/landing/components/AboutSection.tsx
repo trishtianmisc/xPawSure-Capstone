@@ -40,7 +40,7 @@ export function AboutSection() {
 
   return (
     <section
-      className="scroll-mt-20 border-b border-stone-200 bg-stone-50 py-20 dark:border-stone-800 dark:bg-stone-900/40 sm:py-24"
+      className="scroll-mt-20 border-b border-stone-200 py-20 dark:border-stone-800 dark:bg-stone-900/40 sm:py-24"
       id="about"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">

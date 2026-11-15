@@ -6,7 +6,7 @@ import { Reveal } from './Reveal'
 export function CallToActionSection() {
   return (
     <section
-      className="scroll-mt-20 bg-stone-50 py-20 dark:bg-stone-950 sm:py-24"
+      className="scroll-mt-20 py-20 sm:py-24"
       id="contact"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">

@@ -13,7 +13,7 @@ export function LandingFooter() {
   }
 
   return (
-    <footer className="border-t border-stone-200 bg-white print:hidden dark:border-stone-800 dark:bg-stone-950">
+    <footer className="border-t border-stone-200 bg-white/70 print:hidden dark:border-stone-800 dark:bg-stone-950/85">
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.6fr_1fr_1fr_1.4fr]">
           <div>

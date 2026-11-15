@@ -56,7 +56,7 @@ const FEATURES: { title: string; description: string; icon: LandingIconName }[] 
 export function FeaturesSection() {
   return (
     <section
-      className="scroll-mt-20 bg-white py-20 dark:bg-stone-950 sm:py-24"
+      className="scroll-mt-20 py-20 sm:py-24"
       id="features"
     >
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
