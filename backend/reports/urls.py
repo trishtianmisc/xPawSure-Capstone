@@ -7,6 +7,8 @@ from reports.views import (
     ReportScreeningsView,
     ReportSummaryView,
     ReportVetWorkloadView,
+    VetReportAppointmentsView,
+    VetReportSummaryView,
 )
 
 urlpatterns = [
@@ -35,5 +37,15 @@ urlpatterns = [
         'reports/revenue/',
         ReportRevenueView.as_view(),
         name='report-revenue',
+    ),
+    path(
+        'veterinarian/reports/summary/',
+        VetReportSummaryView.as_view(),
+        name='veterinarian-report-summary',
+    ),
+    path(
+        'veterinarian/reports/appointments/',
+        VetReportAppointmentsView.as_view(),
+        name='veterinarian-report-appointments',
     ),
 ]

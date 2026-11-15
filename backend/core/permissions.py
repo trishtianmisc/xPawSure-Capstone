@@ -26,6 +26,14 @@ class IsVeterinarian(BasePermission):
         return getattr(request.user, 'usr_role', None) == UserRole.VETERINARIAN
 
 
+class IsVeterinarianReadOnly(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            getattr(request.user, 'usr_role', None) == UserRole.VETERINARIAN
+            and request.method in SAFE_METHODS
+        )
+
+
 class IsReceptionist(BasePermission):
     def has_permission(self, request, view):
         return getattr(request.user, 'usr_role', None) == UserRole.RECEPTIONIST

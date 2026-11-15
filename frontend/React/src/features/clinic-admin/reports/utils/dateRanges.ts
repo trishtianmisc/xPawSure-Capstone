@@ -8,6 +8,7 @@ export interface DateWindow {
 export type RangePreset =
   | 'today'
   | 'this-month'
+  | 'this-month-full'
   | 'this-year'
   | 'last-30'
   | 'custom'
@@ -76,6 +77,13 @@ export function presetWindow(
         date_from: `${to.getFullYear()}-${String(to.getMonth() + 1).padStart(2, '0')}-01`,
         date_to: toISODate(to),
       }
+    case 'this-month-full': {
+      // Vet Analytics aligns with the Consultations month filter: the whole
+      // calendar month, including appointments scheduled after today.
+      const from = new Date(to.getFullYear(), to.getMonth(), 1)
+      const lastDay = new Date(to.getFullYear(), to.getMonth() + 1, 0)
+      return { date_from: toISODate(from), date_to: toISODate(lastDay) }
+    }
   }
 }
 

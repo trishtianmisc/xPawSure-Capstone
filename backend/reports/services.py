@@ -248,6 +248,36 @@ class ReportService:
         }
 
     @staticmethod
+    def get_vet_summary(clinic_id, date_from, date_to, vet_id):
+        now = timezone.localtime()
+        current = _counts(
+            _appointments_in_window(
+                clinic_id, date_from, date_to, vet_id=vet_id,
+            ),
+            now,
+        )
+        prev_from, prev_to = previous_window(date_from, date_to)
+        previous = _counts(
+            _appointments_in_window(
+                clinic_id, prev_from, prev_to, vet_id=vet_id,
+            ),
+            now,
+        )
+
+        return {
+            'total_appointments': current['total_appointments'],
+            'completion_rate': current['completion_rate'],
+            'no_show_rate': current['no_show_rate'],
+            'cancellation_rate': current['cancellation_rate'],
+            'previous': {
+                'total_appointments': previous['total_appointments'],
+                'completion_rate': previous['completion_rate'],
+                'no_show_rate': previous['no_show_rate'],
+                'cancellation_rate': previous['cancellation_rate'],
+            },
+        }
+
+    @staticmethod
     def get_appointments_report(clinic_id, date_from, date_to, vet_id=None):
         series = AppointmentService.get_volume(
             clinic_id=clinic_id,
