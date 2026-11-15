@@ -4,6 +4,7 @@ import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { useVeterinarians } from '../hooks/useVeterinarians'
 import { AddVeterinarianModal } from '../components/AddVeterinarianModal'
+import { formatDate } from '../../../utils/format'
 import type { Veterinarian } from '../types/veterinarian.types'
 
 const PAGE_SIZE = 10
@@ -148,7 +149,7 @@ export function VeterinarianListPage() {
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
                         {vet.license_expiration_date
-                          ? new Date(vet.license_expiration_date).toLocaleDateString()
+                          ? formatDate(vet.license_expiration_date)
                           : '—'}
                       </td>
                       <td className="px-5 py-4">
@@ -163,7 +164,7 @@ export function VeterinarianListPage() {
                         </span>
                       </td>
                       <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {new Date(vet.created_at).toLocaleDateString()}
+                        {formatDate(vet.created_at)}
                       </td>
                     </tr>
                   ))}

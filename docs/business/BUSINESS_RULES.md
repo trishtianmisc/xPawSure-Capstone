@@ -221,6 +221,7 @@ Owners may:
 - Register and manage their own pets
 - Perform AI-assisted screening (mobile only)
 - Book and cancel appointments
+- Approve or cancel a rescheduled appointment after the clinic moves it
 - View appointment history
 - View consultation history (read-only)
 - View prescription history (read-only)
@@ -314,6 +315,21 @@ No Show
 Appointments cannot overlap for the same veterinarian.
 
 Completed appointments cannot be edited except by a Super Admin.
+
+## Reschedule Acknowledgement
+
+When a receptionist moves an appointment to a new time, the appointment keeps
+its current `PENDING`/`CONFIRMED` status and the owner is notified with
+`APPOINTMENT_RESCHEDULED`. The owner may:
+
+- Approve the new time. This only records `APT_RESCHEDULE_ACKNOWLEDGED_AT`; the
+  appointment status and slot do not change.
+- Cancel the appointment through the normal owner cancellation flow. The
+  appointment becomes `CANCELLED` and the slot is freed.
+
+If the owner takes no action, the appointment stays scheduled at the new time.
+There is no automatic cancellation or slot hold. A second reschedule clears the
+acknowledgement and asks the owner again.
 
 ---
 
@@ -510,8 +526,16 @@ Every vaccination records
 - Vaccine name
 - Date administered
 - Source: veterinarian-issued or owner-reported
-- Batch number (optional)
+- Lot number (optional)
+- Veterinarian name (optional, owner-entered free text)
 - Next due date (optional)
+- Vaccine series (used to group doses of the same vaccine)
+
+Each administered dose remains a separate history record. Current due status is
+based only on the latest dose in a series; recording a later dose removes the
+prior dose's overdue status without deleting the prior history entry. The owner
+mobile app lets an owner record the next dose from the current series record.
+Dose, route, and notes are not collected by the current owner workflow.
 
 Sources
 
@@ -606,10 +630,13 @@ independently — "Display Both Results Separately" holds at the data level. On
 the mobile owner app neither the review-findings card nor the cross-analysis
 card is rendered on the result or screening-details screens; those slots show
 the veterinarian-approved Care Guidelines card (static, display-only
-content), selected only by the primary raw AI predicted class and never able to
-modify prediction, confidence, saved result, questionnaire answers, or
-booking. Stored screenings still carry both outputs independently in the
-database and API for audit; the veterinarian consult surfaces are unaffected.
+content). On the fresh screening result screen it is shown only when the
+screening state is `DISEASE_DETECTED` and a primary prediction exists; uncertain
+and rejected results do not show disease-specific guidance. The content is
+selected by the primary raw AI prediction and never modifies prediction,
+confidence, saved result, questionnaire answers, or booking. Stored screenings
+still carry both outputs independently in the database and API for audit; the
+veterinarian consult surfaces are unaffected.
 
 ---
 
@@ -675,6 +702,7 @@ Notify veterinarians when:
 Notify owners when:
 
 - Appointment confirmed
+- Appointment rescheduled by the clinic (requires approve/cancel action)
 - Appointment reminder
 - Screening results reviewed by veterinarian
 - Vaccination due

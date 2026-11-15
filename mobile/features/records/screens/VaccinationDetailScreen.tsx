@@ -1,23 +1,21 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { formatDate } from '../../../src/utils/datetime'
 import { VaccinationStatusPill } from '../components/VaccinationStatusPill'
 import { useDeleteVaccination } from '../hooks/useDeleteVaccination'
 import { useVaccination } from '../hooks/useVaccination'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function DetailRow({ label, value }: { label: string; value: string | null }) {
@@ -38,7 +36,9 @@ export default function VaccinationDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
-  const { data: vaccination, isLoading, isError, error } = useVaccination(id)
+  const { data: vaccination, isLoading, isError, error, refetch } = useVaccination(id)
+  const refreshVaccination = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshVaccination)
   const deleteVaccination = useDeleteVaccination()
   const styles = useMemo(() => createStyles(colors), [colors])
   const [confirmVisible, setConfirmVisible] = useState(false)
@@ -46,9 +46,8 @@ export default function VaccinationDetailScreen() {
   const isOwnerRecord = vaccination?.source === 'OWNER'
   const vetLabel = !vaccination
     ? null
-    : vaccination.source === 'OWNER'
-      ? 'Reported by you'
-      : (vaccination.veterinarian ?? 'Clinic record')
+    : vaccination.veterinarian
+      ?? (vaccination.source === 'OWNER' ? 'Reported by you' : 'Clinic record')
 
   const confirmDelete = () => {
     if (!vaccination) return
@@ -112,35 +111,56 @@ export default function VaccinationDetailScreen() {
       {renderHeader()}
       <ScrollView
         contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerCard}>
           <View style={styles.headerTop}>
             <Text style={styles.vaccineName}>{vaccination.name}</Text>
-            <VaccinationStatusPill nextDue={vaccination.next_due} />
+            <VaccinationStatusPill
+              isLatest={vaccination.is_latest_in_series}
+              nextDue={vaccination.next_due}
+            />
           </View>
           <Text style={styles.petName}>{vaccination.pet_name}</Text>
           <Text style={styles.meta}>
-            Given {formatDate(vaccination.date_given)}{vetLabel ? ` · ${vetLabel}` : ''}
+            Given {formatLongDate(vaccination.date_given)}{vetLabel ? ` · ${vetLabel}` : ''}
           </Text>
         </View>
 
         <View style={styles.detailsCard}>
           <DetailRow label="Brand" value={vaccination.brand} />
-          <DetailRow label="Batch No." value={vaccination.batch_no} />
-          <DetailRow label="Dose" value={vaccination.dose} />
-          <DetailRow label="Route" value={vaccination.route} />
+          <DetailRow label="Lot No." value={vaccination.batch_no} />
           <DetailRow
             label="Next Due"
-            value={vaccination.next_due ? formatDate(vaccination.next_due) : null}
+            value={vaccination.next_due ? formatLongDate(vaccination.next_due) : null}
           />
         </View>
 
-        {vaccination.notes ? (
-          <View style={styles.detailsCard}>
-            <Text style={styles.notesLabel}>Notes</Text>
-            <Text style={styles.notesText}>{vaccination.notes}</Text>
-          </View>
+        {vaccination.is_latest_in_series ? (
+          <Pressable
+            accessibilityLabel="Record next dose"
+            accessibilityRole="button"
+            onPress={() => router.push({
+              pathname: '/(owner)/records/vaccinations/new',
+              params: {
+                petId: vaccination.pet_id,
+                seriesId: vaccination.series_id,
+                name: vaccination.name,
+              },
+            })}
+            style={styles.nextDoseButton}
+          >
+            <MaterialCommunityIcons color={colors.inverse} name="needle" size={18} />
+            <Text style={styles.nextDoseButtonText}>Record next dose</Text>
+          </Pressable>
         ) : null}
 
         {isOwnerRecord ? (
@@ -235,15 +255,17 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   },
   detailLabel: { ...font.medium, color: colors.textSecondary, fontSize: 13 },
   detailValue: { ...font.bold, color: colors.text, flex: 1, fontSize: 14, textAlign: 'right' },
-  notesLabel: {
-    ...font.bold,
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginBottom: 6,
-    marginTop: 10,
-    textTransform: 'uppercase',
+  nextDoseButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 16,
   },
-  notesText: { ...font.regular, color: colors.text, fontSize: 14, lineHeight: 21, paddingBottom: 10 },
+  nextDoseButtonText: { ...font.bold, color: colors.inverse, fontSize: 14 },
   actionsRow: {
     flexDirection: 'row',
     gap: 12,

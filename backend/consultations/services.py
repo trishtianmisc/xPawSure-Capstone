@@ -28,6 +28,16 @@ def _iso_date(value):
 class ConsultationService:
 
     @staticmethod
+    def screening_id_for(consultation: Consultation) -> str | None:
+        """Resolve the visit's scan, never a different pet's screening."""
+        appointment = consultation.apt_id
+        if appointment.apt_screening_id is None:
+            return None
+        if appointment.apt_screening.pet_id_id != appointment.pet_id_id:
+            return None
+        return str(appointment.apt_screening_id)
+
+    @staticmethod
     def _resolve_follow_up(appointment, required: bool, target_date):
         if not required:
             return False, None
@@ -218,7 +228,7 @@ class ConsultationService:
 
         queryset = Consultation.objects.filter(
             apt_id__pet_id__own_id=owner_profile,
-        ).select_related('apt_id__pet_id', 'stf_id__usr_id', 'prescription')
+        ).select_related('apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id', 'prescription')
 
         if pet_id is not None:
             queryset = queryset.filter(apt_id__pet_id=pet_id)
@@ -230,7 +240,7 @@ class ConsultationService:
         return Consultation.objects.filter(
             con_id=con_id,
             apt_id__pet_id__own_id=owner_profile,
-        ).select_related('apt_id__pet_id', 'stf_id__usr_id', 'prescription').first()
+        ).select_related('apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id', 'prescription').first()
 
     @staticmethod
     @transaction.atomic

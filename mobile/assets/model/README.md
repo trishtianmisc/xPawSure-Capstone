@@ -41,7 +41,7 @@ npm run compute:reference -- "<Train dir>" "assets/model/training_reference.json
 This shards the work across worker threads (defaults to 8). JPEG and PNG
 training images are both included. After regenerating, re-check similarity
 thresholds (`FEATURE_SIMILARITY_MIN` / `FEATURE_SIMILARITY_HIGH` in
-`ai/constants/diseases.ts`) against real device logs.
+`ai/constants/screening.ts`) against real device logs.
 
 ## Converting a model
 

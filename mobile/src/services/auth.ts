@@ -12,6 +12,7 @@ interface User {
   position?: string | null
   license_number?: string | null
   license_expiration_date?: string | null
+  profile_picture?: string | null
 }
 
 interface LoginResponse {
@@ -63,8 +64,38 @@ export async function getProfile() {
   return data
 }
 
-export async function updateProfile(payload: Partial<Pick<User, 'first_name' | 'last_name'>> & { phone?: string }) {
-  const { data } = await http.put<User>('/auth/profile/', payload)
+export interface UpdateProfilePayload {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  profile_picture?: string | null
+}
+
+export async function updateProfile(payload: UpdateProfilePayload) {
+  if (typeof payload.profile_picture === 'string') {
+    const form = new FormData()
+    if (payload.first_name !== undefined) form.append('first_name', payload.first_name)
+    if (payload.last_name !== undefined) form.append('last_name', payload.last_name)
+    if (payload.phone !== undefined) form.append('phone', payload.phone)
+    form.append('profile_picture', {
+      uri: payload.profile_picture,
+      name: 'profile.jpg',
+      type: 'image/jpeg',
+    } as unknown as Blob)
+
+    const { data } = await http.put<User>('/auth/profile/', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+
+  const body: UpdateProfilePayload = {}
+  if (payload.first_name !== undefined) body.first_name = payload.first_name
+  if (payload.last_name !== undefined) body.last_name = payload.last_name
+  if (payload.phone !== undefined) body.phone = payload.phone
+  if (payload.profile_picture === null) body.profile_picture = null
+
+  const { data } = await http.put<User>('/auth/profile/', body)
   return data
 }
 

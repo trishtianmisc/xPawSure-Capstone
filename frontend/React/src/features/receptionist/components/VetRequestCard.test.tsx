@@ -94,15 +94,15 @@ describe('VetRequestCard', () => {
     } as unknown as ReturnType<typeof useAvailableSlots>)
   })
 
-  it('renders the open request with reason, requester, and owner phone', () => {
+  it('renders the open request with reason and requester', () => {
     renderCard(appointment())
 
     expect(screen.getByText('Veterinarian request')).toBeInTheDocument()
     expect(screen.getByText('Open')).toBeInTheDocument()
     expect(screen.getByText('Reschedule request')).toBeInTheDocument()
     expect(screen.getByText('Surgery conflict')).toBeInTheDocument()
-    expect(screen.getByText(/Requested by Vera Vet/)).toBeInTheDocument()
-    expect(screen.getByText(/Owner phone · 0917 123 4567/)).toBeInTheDocument()
+    expect(screen.getByText('Vera Vet')).toBeInTheDocument()
+    expect(screen.getByText('Requested')).toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Decline' }),
     ).toBeInTheDocument()
@@ -153,7 +153,8 @@ describe('VetRequestCard', () => {
 
     expect(screen.getByText('Declined')).toBeInTheDocument()
     expect(screen.getByText(/Note: Slot already committed/)).toBeInTheDocument()
-    expect(screen.getByText(/Declined by Rita Desk/)).toBeInTheDocument()
+    expect(screen.getByText('Rita Desk')).toBeInTheDocument()
+    expect(screen.getByText(/Declined ·/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Reschedule' })).toBeNull()
   })
@@ -172,7 +173,8 @@ describe('VetRequestCard', () => {
     )
 
     expect(screen.getByText('Resolved')).toBeInTheDocument()
-    expect(screen.getByText(/Resolved by Rita Desk/)).toBeInTheDocument()
+    expect(screen.getByText('Rita Desk')).toBeInTheDocument()
+    expect(screen.getByText(/Resolved ·/)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Decline' })).toBeNull()
   })
 

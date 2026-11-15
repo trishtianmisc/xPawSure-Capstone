@@ -342,11 +342,11 @@ export function PaymentsPage() {
             </div> */}
           </div>
 
-          {/* <p className="mt-5 text-xs text-stone-400 dark:text-stone-300">
+          <p className="mt-5 text-xs text-stone-400 dark:text-stone-300">
             Showing payments paid today. Print includes every matching payment
             for today, up to 100. Payment history and revenue reports are in
             the clinic admin&apos;s account.
-          </p> */}
+          </p>
 
           {printError && (
             <p

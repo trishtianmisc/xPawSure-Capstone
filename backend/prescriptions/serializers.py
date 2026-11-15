@@ -89,7 +89,7 @@ class PrescriptionItemCreateSerializer(serializers.Serializer):
     frequency = serializers.CharField(max_length=100)
     duration = serializers.CharField(max_length=100)
     route = serializers.ChoiceField(choices=PrescriptionRoute.choices)
-    quantity = serializers.IntegerField(required=False, allow_null=True, default=None)
+    quantity = serializers.IntegerField(min_value=1)
     notes = serializers.CharField(required=False, allow_blank=True, default='')
 
     def validate_medicine_name(self, value):

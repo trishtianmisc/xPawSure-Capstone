@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useBlockRemainingSlots, useGenerateSlots, useSchedule, useUpdateSlotStatus } from '../hooks/useAvailableSlots'
 import { apiErrorMessage } from '../../../utils/error'
-import { formatClockTime, isoDate } from '../../../utils/format'
+import { clinicToday, formatClockTime, isoDate } from '../../../utils/format'
 import { Modal } from '../../../components/ui/Modal'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import type { AppointmentStatus, GenerateSlotsResponse, SlotStatus } from '../types/receptionist.types'
@@ -251,7 +251,7 @@ const LEGEND_ITEMS = [
 export function SchedulePage() {
   const navigate = useNavigate()
   const { vetId } = useParams<{ vetId: string }>()
-  const today = useMemo(() => new Date(), [])
+  const today = useMemo(() => clinicToday(), [])
   const [rangeStart, setRangeStart] = useState(() => today)
   const [view, setView] = useState<ViewMode>('3')
   const [showGenerateModal, setShowGenerateModal] = useState(false)

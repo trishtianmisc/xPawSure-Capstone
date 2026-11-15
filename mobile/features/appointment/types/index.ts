@@ -1,4 +1,5 @@
 import type { ScreeningSummary } from '../../screening/types'
+import type { ConsultationRecord } from '../../../src/services/records'
 
 export type AppointmentStatus =
   | 'CONFIRMATION'
@@ -41,7 +42,15 @@ export interface AppointmentDetail extends AppointmentListItem {
   consultation_fee: number
   owner_phone: string | null
   apt_cancellation_reason: string | null
+  /** When the clinic last moved this appointment to a new time. */
+  apt_rescheduled_at: string | null
+  /** When the owner acknowledged the latest move; null while still pending. */
+  apt_reschedule_acknowledged_at: string | null
+  /** True when the owner still needs to approve or cancel the new time. */
+  reschedule_approval_pending: boolean
   apt_updated_at: string
+  /** The visit's consultation record; null until the veterinarian saves one. */
+  consultation: ConsultationRecord | null
 }
 
 export interface AppointmentListResponse {

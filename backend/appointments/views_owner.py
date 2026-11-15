@@ -18,6 +18,7 @@ from appointments.serializers import (
 )
 from appointments.services import (
     AppointmentService,
+    InvalidRequestError,
     InvalidTransitionError,
     SlotUnavailableError,
     VetSlotService,
@@ -449,6 +450,40 @@ class OwnerAppointmentCancelView(APIView):
                 cancellation_reason=reason,
             )
         except InvalidTransitionError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except ValueError as e:
+            return Response(
+                {'detail': str(e)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = OwnerAppointmentDetailSerializer(appointment)
+        return Response(serializer.data)
+
+
+class OwnerAppointmentRescheduleApproveView(APIView):
+    """Owner acknowledges the appointment time set by the clinic."""
+
+    permission_classes = [IsOwner]
+
+    def post(self, request, apt_id):
+        owner_profile = _get_owner_profile(request.user)
+        if not owner_profile:
+            return Response(
+                {'detail': 'Owner profile not found.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            appointment = AppointmentService.approve_reschedule(
+                apt_id=apt_id,
+                owner_profile=owner_profile,
+                user_id=request.user.usr_id,
+            )
+        except InvalidRequestError as e:
             return Response(
                 {'detail': str(e)},
                 status=status.HTTP_400_BAD_REQUEST,

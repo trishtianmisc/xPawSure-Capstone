@@ -182,7 +182,7 @@ export function ClinicAdminAppointmentDetailPage() {
         }
         meta={
           <>
-            <AppointmentStatusBadge status={appointment.apt_status} />
+            <AppointmentStatusBadge status={appointment.apt_status} uniform />
             <span className="text-xs text-amber-100/70">{bookedBy(appointment)}</span>
           </>
         }

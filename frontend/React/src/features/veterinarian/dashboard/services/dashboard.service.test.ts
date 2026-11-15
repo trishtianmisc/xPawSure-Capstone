@@ -24,6 +24,7 @@ const prescriptionPayload = {
       frequency: 'Twice daily',
       duration: '14 days',
       route: 'TOPICAL',
+      quantity: 1,
       notes: 'Apply to affected area',
     },
   ],
@@ -90,6 +91,21 @@ describe('dashboardService consultation and prescription saves', () => {
       '/veterinarian/appointments/apt-1/request-cancel/',
       { reason: 'Sick' },
     )
+    expect(result).toEqual(mockResponse.data)
+  })
+
+  it('getPetConsultationHistory fetches the clinic scoped history', async () => {
+    const mockResponse = {
+      data: {
+        pet: { pet_id: 'pet-1', pet_name: 'Max', pet_species: 'Pug' },
+        consultations: [],
+      },
+    }
+    vi.mocked(http.get).mockResolvedValue(mockResponse)
+
+    const result = await dashboardService.getPetConsultationHistory('pet-1')
+
+    expect(http.get).toHaveBeenCalledWith('/veterinarian/pets/pet-1/history/')
     expect(result).toEqual(mockResponse.data)
   })
 })

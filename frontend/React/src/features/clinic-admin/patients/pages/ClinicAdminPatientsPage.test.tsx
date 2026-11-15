@@ -85,21 +85,25 @@ describe('ClinicAdminPatientsPage', () => {
     } as unknown as ReturnType<typeof useClinicPatients>)
   })
 
-  it('renders the unfiltered total, rows, vaccination statuses, and links', () => {
+  it('renders rows, appointment totals, and detail links', () => {
     renderPage()
 
-    expect(screen.getByText('Total patients: 7')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Bella' })).toHaveAttribute(
       'href',
       '/clinic/patients/pet-1',
     )
-    expect(screen.getAllByText('Overdue').length).toBeGreaterThan(1)
-    expect(screen.getAllByText('Up to date').length).toBeGreaterThan(1)
-    expect(screen.getByText('Showing 1-2 of 2 patients')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Rocky' })).toHaveAttribute(
+      'href',
+      '/clinic/patients/pet-2',
+    )
+    expect(
+      screen.getByText('Showing 1-2 of 2 patients'),
+    ).toBeInTheDocument()
     expect(screen.getByText('1 no-shows | 2 cancelled')).toBeInTheDocument()
+    expect(screen.getByText('4')).toBeInTheDocument()
   })
 
-  it('resets to page 1 and sends filter, no-show, and search parameters', async () => {
+  it('resets to page 1 and sends search parameters', async () => {
     renderPage()
 
     fireEvent.click(screen.getByRole('button', { name: 'Next' }))
@@ -107,35 +111,15 @@ describe('ClinicAdminPatientsPage', () => {
       expect(vi.mocked(useClinicPatients).mock.lastCall?.[0].page).toBe(2)
     })
 
-    fireEvent.change(screen.getByLabelText('Filter by vaccination status'), {
-      target: { value: 'overdue' },
-    })
-    await waitFor(() => {
-      expect(vi.mocked(useClinicPatients).mock.lastCall?.[0]).toMatchObject({
-        vaccination_status: 'overdue',
-        page: 1,
-      })
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: 'With no-shows' }))
-    expect(screen.getByRole('button', { name: 'With no-shows' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    await waitFor(() => {
-      expect(
-        vi.mocked(useClinicPatients).mock.lastCall?.[0].has_no_shows,
-      ).toBe(true)
-    })
-
     fireEvent.change(screen.getByLabelText('Search patients'), {
       target: { value: 'bella' },
     })
     await waitFor(
       () => {
-        expect(vi.mocked(useClinicPatients).mock.lastCall?.[0].search).toBe(
-          'bella',
-        )
+        expect(vi.mocked(useClinicPatients).mock.lastCall?.[0]).toMatchObject({
+          search: 'bella',
+          page: 1,
+        })
       },
       { timeout: 1000 },
     )

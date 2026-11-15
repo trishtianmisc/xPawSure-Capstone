@@ -34,23 +34,6 @@ function SectionHeader({ children }: { children: ReactNode }) {
   )
 }
 
-interface DetailCellProps {
-  label: string
-  value: ReactNode
-  className?: string
-}
-
-function DetailCell({ label, value, className = '' }: DetailCellProps) {
-  return (
-    <div className={`px-4 py-3 ${className}`}>
-      <dt className="text-xs text-stone-500 dark:text-stone-400">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold text-stone-900 dark:text-stone-100">{value}</dd>
-    </div>
-  )
-}
-
-const ROW_CLASS = 'grid grid-cols-1 border-b border-stone-200 last:border-b-0 dark:border-stone-700'
-const FIRST_CELL_CLASS = 'sm:border-r sm:border-stone-200 dark:sm:border-stone-700'
 const PAYMENT_PANEL_TONE: Record<string, string> = {
   PAID: 'bg-emerald-300/30 dark:bg-emerald-900/25',
   PENDING: 'bg-amber-100/80 dark:bg-amber-900/25',
@@ -225,7 +208,7 @@ export function AppointmentDetailPage() {
               {petSubtitle}
             </p>
           </div>
-          <AppointmentStatusBadge status={appointment.apt_status} />
+          <AppointmentStatusBadge status={appointment.apt_status} uniform />
         </div>
       </div>
 

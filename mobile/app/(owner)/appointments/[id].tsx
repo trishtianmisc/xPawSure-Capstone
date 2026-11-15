@@ -1,9 +1,10 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useState, type ComponentProps } from 'react'
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState, type ComponentProps } from 'react'
+import { ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useAppointment } from '../../../features/appointment/hooks/useAppointment'
+import { useApproveReschedule } from '../../../features/appointment/hooks/useApproveReschedule'
 import { useCancelAppointment } from '../../../features/appointment/hooks/useCancelAppointment'
 import { STATUS_PRESENTATION } from '../../../features/appointment/lib/statusPresentation'
 import type { AppointmentStatus } from '../../../features/appointment/types'
@@ -16,6 +17,8 @@ import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorMessage } from '../../../src/utils/error'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
+import { formatDate, formatDateTime, formatTime, manilaDateParts } from '../../../src/utils/datetime'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
@@ -49,11 +52,17 @@ export default function AppointmentDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data: appointment, isError, isLoading } = useAppointment(id)
-  const { data: paymentsData } = useAppointmentPayment(appointment?.apt_id)
+  const { data: appointment, isError, isLoading, refetch: refetchAppointment } = useAppointment(id)
+  const { data: paymentsData, refetch: refetchPayments } = useAppointmentPayment(appointment?.apt_id)
+  const approveReschedule = useApproveReschedule()
   const cancelAppointment = useCancelAppointment()
   const [confirmVisible, setConfirmVisible] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const refreshAppointment = useCallback(
+    () => Promise.all([refetchAppointment(), refetchPayments()]),
+    [refetchAppointment, refetchPayments],
+  )
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAppointment)
 
   function handleBack() {
     if (router.canGoBack()) {
@@ -82,6 +91,18 @@ export default function AppointmentDetailScreen() {
         },
       },
     )
+  }
+
+  function handleApproveReschedule() {
+    if (!id) return
+    approveReschedule.mutate(id, {
+      onSuccess: () => {
+        Alert.alert('Schedule approved', 'Your appointment stays booked at the new time.')
+      },
+      onError: (error) => {
+        Alert.alert("Couldn't approve schedule", apiErrorMessage(error))
+      },
+    })
   }
 
   const renderHeader = () => (
@@ -124,6 +145,9 @@ export default function AppointmentDetailScreen() {
 
   const presentation = STATUS_PRESENTATION[appointment.apt_status]
   const canCancel = CANCELLABLE_STATUSES.includes(appointment.apt_status)
+  // The veterinarian's record is only surfaced once the visit is completed.
+  const consultation =
+    appointment.apt_status === 'COMPLETED' ? appointment.consultation : null
   const payment = paymentsData ? pickAppointmentPayment(paymentsData.results) : null
   const paymentPresentation = payment ? PAYMENT_PRESENTATION[payment.status] : null
   // A paid follow-up becomes CONFIRMED, so this card is only for the window
@@ -132,24 +156,25 @@ export default function AppointmentDetailScreen() {
     appointment.apt_type === 'FOLLOW_UP' &&
     appointment.apt_status === 'CONFIRMATION'
 
-  const scheduledDate = new Date(appointment.apt_scheduled_at)
-  const weekday = scheduledDate.toLocaleDateString(undefined, { weekday: 'short' })
-  const dayNumber = scheduledDate.getDate()
-  const monthYear = scheduledDate.toLocaleDateString(undefined, {
+  const weekday = formatDate(appointment.apt_scheduled_at, { weekday: 'short' })
+  const dayNumber = manilaDateParts(new Date(appointment.apt_scheduled_at)).day
+  const monthYear = formatDate(appointment.apt_scheduled_at, {
     month: 'long',
     year: 'numeric',
   })
-  const timeText = scheduledDate.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
+  const timeText = formatTime(appointment.apt_scheduled_at)
+  const rescheduledDateText = formatDate(appointment.apt_scheduled_at, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
   })
-  const bookedOn = new Date(appointment.apt_created_at).toLocaleDateString(undefined, {
+  const bookedOn = formatDate(appointment.apt_created_at, {
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   })
   const paidOn = payment?.paid_at
-    ? new Date(payment.paid_at).toLocaleString(undefined, {
+    ? formatDateTime(payment.paid_at, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -161,7 +186,18 @@ export default function AppointmentDetailScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader()}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={
+            <RefreshControl
+              colors={[colors.primary]}
+              onRefresh={() => void onRefresh()}
+              refreshing={refreshing}
+              tintColor={colors.primary}
+            />
+          }
+          showsVerticalScrollIndicator={false}
+        >
         {/* Status banner */}
         <View style={[styles.banner, { backgroundColor: presentation.bg }]}>
           <View style={[styles.bannerIcon, { borderColor: presentation.text }]}>
@@ -183,6 +219,67 @@ export default function AppointmentDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        {appointment.reschedule_approval_pending ? (
+          <View style={styles.approvalCard}>
+            <View style={styles.approvalHeader}>
+              <View style={styles.approvalIcon}>
+                <MaterialCommunityIcons
+                  color={colors.primary}
+                  name="calendar-clock-outline"
+                  size={20}
+                />
+              </View>
+              <View style={styles.approvalBody}>
+                <Text style={styles.approvalTitle}>New time proposed</Text>
+                <Text style={styles.approvalText}>
+                  The clinic moved your appointment to {rescheduledDateText} at {timeText}.
+                  Please approve the new time or cancel.
+                </Text>
+              </View>
+            </View>
+            <View style={styles.approvalActions}>
+              <Pressable
+                accessibilityHint="Keeps this appointment at the new time"
+                accessibilityLabel="Approve new appointment time"
+                accessibilityRole="button"
+                disabled={approveReschedule.isPending || cancelAppointment.isPending}
+                onPress={handleApproveReschedule}
+                style={[
+                  styles.approvalButton,
+                  (approveReschedule.isPending || cancelAppointment.isPending) &&
+                    styles.actionDisabled,
+                ]}
+              >
+                {approveReschedule.isPending ? (
+                  <ActivityIndicator color={colors.inverse} size="small" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons color={colors.inverse} name="check" size={16} />
+                    <Text style={styles.approvalButtonText}>Approve new time</Text>
+                  </>
+                )}
+              </Pressable>
+              <Pressable
+                accessibilityHint="Cancels this appointment and releases the slot"
+                accessibilityLabel="Cancel this appointment"
+                accessibilityRole="button"
+                disabled={approveReschedule.isPending || cancelAppointment.isPending}
+                onPress={handleCancel}
+                style={[
+                  styles.approvalCancel,
+                  (approveReschedule.isPending || cancelAppointment.isPending) &&
+                    styles.actionDisabled,
+                ]}
+              >
+                <Text style={styles.approvalCancelText}>Cancel appointment</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.approvalHint}>
+              If you do nothing, your appointment stays booked at this time.
+            </Text>
+          </View>
+        ) : null}
 
         {awaitingFollowUpPayment ? (
           <FollowUpPaymentCard
@@ -257,6 +354,37 @@ export default function AppointmentDetailScreen() {
           <View style={styles.card}>
             <Text style={styles.sectionLabel}>REASON FOR VISIT</Text>
             <Text style={styles.reasonText}>{appointment.apt_reason}</Text>
+          </View>
+        ) : null}
+
+        {/* Consultation record */}
+        {consultation ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionLabel}>CONSULTATION</Text>
+            <InfoRow icon="stethoscope" label="Diagnosis" value={consultation.diagnosis} />
+            {consultation.specific_disease ? (
+              <InfoRow
+                icon="tag-outline"
+                label="Specific"
+                value={consultation.specific_disease}
+              />
+            ) : null}
+            <InfoRow
+              icon="account-check-outline"
+              label="Veterinarian"
+              value={consultation.veterinarian}
+            />
+            <Pressable
+              accessibilityHint="Opens the consultation record"
+              accessibilityLabel="View consultation record"
+              accessibilityRole="button"
+              hitSlop={6}
+              onPress={() => router.navigate(`/(owner)/records/consultations/${consultation.id}`)}
+              style={styles.linkRow}
+            >
+              <Text style={styles.linkText}>View consultation record</Text>
+              <MaterialCommunityIcons color={colors.primary} name="chevron-right" size={16} />
+            </Pressable>
           </View>
         ) : null}
 
@@ -434,4 +562,18 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
   cancelButton: { alignItems: 'center', borderColor: colors.error, borderRadius: 12, borderWidth: 1.5, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 48 },
   cancelButtonDisabled: { opacity: 0.6 },
   cancelButtonText: { ...font.bold, color: colors.error, fontSize: 15 },
+
+  approvalCard: { backgroundColor: colors.primaryLight, borderColor: colors.borderLight, borderRadius: 14, borderWidth: 1, gap: 12, padding: 16 },
+  approvalHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: 12 },
+  approvalIcon: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
+  approvalBody: { flex: 1, gap: 4 },
+  approvalTitle: { ...font.extrabold, color: colors.primaryDark, fontSize: 15 },
+  approvalText: { ...font.regular, color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  approvalActions: { flexDirection: 'row', gap: 8 },
+  approvalButton: { alignItems: 'center', backgroundColor: colors.primary, borderRadius: 10, flex: 1, flexDirection: 'row', gap: 6, justifyContent: 'center', minHeight: 44, paddingHorizontal: 12 },
+  approvalButtonText: { ...font.bold, color: colors.inverse, fontSize: 13 },
+  approvalCancel: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.border, borderRadius: 10, borderWidth: 1, flex: 1, justifyContent: 'center', minHeight: 44, paddingHorizontal: 12 },
+  approvalCancelText: { ...font.bold, color: colors.error, fontSize: 13 },
+  approvalHint: { ...font.regular, color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  actionDisabled: { opacity: 0.6 },
 })

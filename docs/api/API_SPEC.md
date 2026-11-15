@@ -18,6 +18,10 @@ All endpoints require role-based authorization.
 
 The API returns JSON responses.
 
+All timestamps are stored in UTC and serialized as ISO 8601 in `Asia/Manila`
+time (`+08:00`). Date-only fields represent calendar dates in `Asia/Manila`
+unless an endpoint documents a clinic-specific timezone override.
+
 ---
 
 # 2. Authentication
@@ -43,7 +47,8 @@ Response (200):
     "email": "string",
     "full_name": "string",
     "role": "string",
-    "clinic_name": "string | null"
+    "clinic_name": "string | null",
+    "profile_picture": "string (public URL or empty string)"
   }
 }
 
@@ -147,7 +152,11 @@ Response (200):
   "phone": "string",
   "role": "string",
   "is_active": true,
-  "clinic_name": "string | null"
+  "clinic_name": "string | null",
+  "position": "string | null",
+  "license_number": "string | null",
+  "license_expiration_date": "YYYY-MM-DD | null",
+  "profile_picture": "string (public URL or empty string)"
 }
 
 ---
@@ -156,12 +165,15 @@ Response (200):
 
 Requires authentication.
 
+Accepts JSON or `multipart/form-data` when uploading a profile picture.
+
 Request:
 
 {
   "first_name": "string (optional)",
   "last_name": "string (optional)",
-  "phone": "string (optional)"
+  "phone": "string (optional)",
+  "profile_picture": "file (optional; JPEG, PNG, or WebP up to 2 MB; send null to remove)"
 }
 
 Response (200):
@@ -174,7 +186,11 @@ Response (200):
   "last_name": "string",
   "phone": "string",
   "role": "string",
-  "clinic_name": "string | null"
+  "clinic_name": "string | null",
+  "position": "string | null",
+  "license_number": "string | null",
+  "license_expiration_date": "YYYY-MM-DD | null",
+  "profile_picture": "string (public URL or empty string)"
 }
 
 Changing `phone` revokes any public pet QR phone-sharing consent. The owner
@@ -385,6 +401,9 @@ The public QR profile exposes status values only; it never exposes vaccination
 names, administration dates, or due dates. Statuses are sorted by urgency:
 `OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
 Each array item is one of `OVERDUE`, `DUE_SOON`, `CURRENT`, or `NO_DUE_DATE`.
+Statuses are computed from only the latest dose in each vaccine series, so a
+newly recorded dose clears the prior dose's overdue status while preserving the
+old dose in vaccination history.
 
 ---
 
@@ -833,6 +852,19 @@ so the mobile follow-up pay card can show the amount before it creates a
 checkout. The value does not change an existing payment; the backend owns the
 amount charged.
 
+The shared `screening` summary includes the stored `symptom_answers`
+questionnaire rows (display-only `{question, answer}` objects) alongside the
+final condition, confidence, image URL, and review statuses. `symptom_answers`
+is `null` when the screening was saved without a questionnaire.
+
+The `consultation` object includes the consultation's own `created_at`
+timestamp. The vet history endpoint also adds the source appointment's
+`scheduled_at`, `checked_in_at`, and `completed_at` timestamps.
+
+The detail response also includes `payment_provider_ref`, the linked payment's
+provider reference (`null` when no payment is linked or the provider did not
+return one).
+
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
 details. Beyond the shared appointment fields it adds:
@@ -1039,6 +1071,39 @@ The appointment and the target slot are locked together
 stale slot is reported as `400` (not `409`) so the receptionist can simply
 pick another slot. The move is audited with the old and new scheduled times.
 
+A successful move sets `apt_rescheduled_at` to the current time, clears
+`apt_reschedule_acknowledged_at`, and returns `reschedule_approval_pending:
+true`. The owner receives an `APPOINTMENT_RESCHEDULED` notification with
+Approve/Cancel actions; the appointment's status is unchanged. A second
+reschedule clears any earlier acknowledgement and asks the owner again.
+
+---
+
+## POST /api/owner/appointments/{id}/reschedule/approve/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets.
+
+Records the owner's acknowledgement of the latest reschedule set by the clinic.
+Approval is an acknowledgement only: it never changes `apt_status` and never
+moves the slot. The appointment remains `PENDING`/`CONFIRMED`, and the owner can
+still cancel it through `POST /api/owner/appointments/{id}/cancel/`.
+
+No request body is required.
+
+Responses:
+
+- 200: appointment detail with `apt_reschedule_acknowledged_at` set,
+  `reschedule_approval_pending: false`, and the unchanged `apt_status`.
+  Repeating the call is idempotent and returns the same state.
+- 400: the appointment has no reschedule, its status is not `PENDING` or
+  `CONFIRMED`, the scheduled time has passed, or no owner profile exists
+- 403: caller is not an owner
+- 404: unknown appointment, or it belongs to another owner
+
+If the owner ignores the notification, the appointment stays scheduled at the
+new time; there is no automatic cancellation or hold.
+
 ---
 
 ## GET /api/appointments/volume/
@@ -1076,15 +1141,26 @@ Query parameters:
 - date (optional, `YYYY-MM-DD`, defaults to the clinic-local today). `400` for an
   invalid date.
 
-Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed },
-today_consultations: [ ...appointment summaries ] }`. All three stats are scoped to the
-calendar month of the `date` query parameter (they reset on the 1st of each month):
-`consultations_this_month` is the monthly total (confirmed, checked-in, in-progress, and
-completed appointments scheduled within that month, so
+Response (200): `{ clinic_name, stats: { consultations_this_month, pending, completed,
+today_stats: { total, confirmed, ongoing, completed } }, today_consultations: [
+...appointment summaries ], upcoming_consultations: [ ...appointment summaries ] }`.
+`today_consultations` lists the vet's appointments scheduled on `date` (confirmed,
+checked-in, in-progress, and completed). `upcoming_consultations` lists the vet's confirmed,
+checked-in, and in-progress appointments scheduled on or after `date`, ordered by schedule
+time, capped at 10.
+
+The monthly stats remain for mobile clients and are scoped to the calendar month of the
+`date` query parameter: `consultations_this_month` is the monthly total (confirmed,
+checked-in, in-progress, and completed appointments scheduled within that month, so
 `consultations_this_month == pending + completed`), `pending` counts the not-completed
-portion (confirmed, checked-in, in-progress; labeled "Upcoming" in the UI), and
-`completed` counts completed appointments. Unconfirmed (PENDING), cancelled, and no-show
-appointments are excluded from all three.
+portion (confirmed, checked-in, in-progress), and `completed` counts completed appointments.
+Unconfirmed (PENDING), cancelled, and no-show appointments are excluded from all three.
+
+`today_stats` is scoped to `date` and powers the four web dashboard cards:
+`total` is the sum of confirmed, ongoing, and completed appointments that day,
+`confirmed` counts confirmed appointments (Upcoming), `ongoing` counts checked-in plus
+in-progress appointments, and `completed` counts completed appointments. PENDING,
+cancelled, and no-show appointments are excluded.
 
 ---
 
@@ -1096,6 +1172,29 @@ appointment summaries (each includes `apt_reschedule_request_reason` and
 `apt_cancellation_request_reason`). Each summary embeds the same `screening`
 object as `GET /api/appointments/{id}/`, including the display-only
 `symptom_answers` rows.
+
+---
+
+## GET /api/veterinarian/pets/{pet_id}/history/
+
+Returns the pet's completed consultation history at the veterinarian's clinic,
+newest first. Only consultations tied to `COMPLETED` appointments are included.
+Only consultations from the caller's clinic are included. Accessible to
+veterinarians; the pet must have at least one appointment at the caller's clinic.
+
+Response (200):
+
+- pet: `{ pet_id, pet_name, pet_species, pet_profile_image }`
+- consultations: array of consultation objects (same shape as
+  `GET /api/appointments/{id}/` `consultation`, plus `scheduled_at` and the
+  source appointment's `checked_in_at` and `completed_at`; either timestamp is
+  `null` when it was never recorded).
+
+Responses:
+
+- 400: the caller has no staff profile or is not assigned to a clinic
+- 403: the caller is not a veterinarian
+- 404: unknown pet, or the pet has no appointments at the caller's clinic
 
 ---
 
@@ -1256,8 +1355,8 @@ history and the date filters below.
 
 Query params: `status`, `method`, `reference` (partial match on receipt
 number, owner first/last name, or pet name), `appointment` (uuid),
-`date_from`, `date_to` (creation date, UTC calendar days — clinic admin
-only), `paid_from`, `paid_to` (payment date, clinic-local calendar days —
+`date_from`, `date_to` (creation date, `Asia/Manila` calendar days — clinic
+admin only), `paid_from`, `paid_to` (payment date, clinic-local calendar days —
 clinic admin only; excludes unpaid rows, so a range here reconciles with the
 revenue KPI for the same range), `page`, `page_size` (max 100).
 
@@ -1623,7 +1722,7 @@ Query params:
 - pet_id (optional): filter by pet. Foreign or unknown pet returns an empty
   list; invalid UUID returns 400.
 
-Response (200): Array of { id, appointment_id, pet_id, pet_name, veterinarian,
+Response (200): Array of { id, appointment_id, screening_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
 specific_disease, prescription_id, treatment, notes, follow_up_required,
 follow_up_target_date, created_at }
@@ -1631,6 +1730,10 @@ follow_up_target_date, created_at }
 `specific_disease` is `null` when no specific disease/subtype is recorded.
 `prescription_id` is the linked prescription UUID when one exists, otherwise
 `null`. A consultation has at most one prescription.
+`screening_id` is the visit's screening UUID, resolved through its appointment,
+or `null` if none is linked. A different pet's screening is never returned.
+The owner app uses it for **View Screening**. This is a read-only link and does
+not depend on prediction/diagnosis agreement or screening comparison metadata.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
 when no follow-up is requested.
 
@@ -1781,8 +1884,7 @@ Request body:
   - frequency (required)
   - duration (required)
   - route (required): ORAL | TOPICAL | INJECTION | EAR | EYE | OTHER
-  - quantity (optional): integer; stays null when the veterinarian UI does
-    not capture it
+  - quantity (required): positive integer
   - notes (optional): string
 
 Responses:
@@ -1816,11 +1918,17 @@ Query params:
   list; invalid UUID returns 400.
 
 Response (200): Array of { id, consultation_id, pet_id, pet_name, veterinarian,
-name, brand, batch_no, dose, route, date_given, next_due, notes, source,
-created_at }, ordered by date_given descending.
+name, brand, batch_no, series_id, dose, route, date_given, next_due, notes,
+source, created_at, is_latest_in_series }, ordered by date_given descending.
 
 - source is "VET" (veterinarian-issued) or "OWNER" (owner-reported).
-- veterinarian and consultation_id are null for owner-reported records.
+- veterinarian is the linked staff veterinarian on clinic records, or the
+  optional owner-entered free-text name on owner-reported records. Consultation
+  ID is null for owner-reported records.
+- `series_id` groups doses for one pet. `is_latest_in_series` identifies the
+  newest dose; due status is based only on that dose. Older doses remain in
+  history but no longer contribute an overdue status after a newer dose is
+  recorded.
 
 ---
 
@@ -1846,16 +1954,22 @@ Request:
   "pet_id": "uuid",
   "name": "Rabies",
   "brand": "Nobivac (optional)",
-  "batch_no": "B-123 (optional)",
-  "dose": "1 ml",
-  "route": "SUBCUTANEOUS",
+  "batch_no": "LOT-123 (optional)",
+  "veterinarian": "Dr. Example (optional)",
+  "series_id": "uuid (optional; use to record another dose in an existing series)",
   "date_given": "2026-09-30",
-  "next_due": "2027-09-30 (optional)",
-  "notes": "optional"
+  "next_due": "2027-09-30 (optional)"
 }
 
-Validation errors (400): missing required fields, unknown route, date_given in
-the future, next_due before date_given. Unknown or foreign pet returns 404.
+Dose, route, and notes are accepted as optional legacy fields but are not
+collected by the current owner app. If `series_id` is omitted, a normalized
+same-pet vaccine-name match reuses the existing series; otherwise a new series
+is created. A supplied series must already belong to the selected pet.
+
+Validation errors (400): missing required fields, date_given in the future,
+next_due before date_given, or a series that does not belong to the selected pet.
+The new dose date cannot precede the latest recorded dose in the selected series.
+Unknown or foreign pet returns 404.
 
 Response (201): Vaccination object as above.
 
@@ -1946,6 +2060,10 @@ Response:
       "ais_is_correct": null,
       "ais_created_at": "...",
       "is_booked": false,
+      "is_consulted": false,
+      "linked_consultations": [
+        { "kind": "ORIGINAL", "id": "...", "created_at": "...", "veterinarian": "..." }
+      ],
       "symptom_answers": [
         { "question": "Where is the affected area?", "answer": "Back, Ears" }
       ],
@@ -1989,8 +2107,28 @@ Response:
 the linked appointment; it then becomes `true`/`false` (see verdict rules
 below).
 
-`is_booked` is `true` while a non-cancelled appointment was booked from the
-screening; cancelling that appointment returns it to `false`.
+`is_booked` is `true` while a live, non-cancelled appointment was booked from the
+screening; cancelling or soft-deleting that appointment returns it to `false`.
+A deleted appointment is hidden everywhere else in the app, so a scan it used no
+longer reads as booked and can be booked again.
+
+`is_consulted` is `true` once the visit booked from the screening is completed
+and has a recorded consultation. A consultation drafted while the appointment is
+still in progress, a cancelled appointment, and a deleted appointment all keep it
+`false`. The owner app shows a **Consulted** pill when it is `true`, otherwise
+**Booked** while `is_booked`.
+
+`linked_consultations` contains at most two `{ kind, id, created_at, veterinarian }`
+summaries of the visits linked to this screening for the same pet, on non-deleted
+appointments. `kind` is `ORIGINAL` for the earliest visit — the one the scan was
+first used for — and `FOLLOW_UP` for a follow-up visit that reused the same scan.
+A follow-up is only linked once its appointment is `COMPLETED`, so an unfinished
+follow-up is never exposed. Entries are ordered original first, then follow-up.
+The list is empty when no consultation exists (booking alone does not count). The
+owner app labels the links **View Consultation** and **View Follow-up
+Consultation**. No medical record or AI output is modified when following a link.
+The scan's `con_id` is comparison metadata and is not used as the full visit
+history because later follow-up comparisons may replace it.
 
 `symptom_answers` is the stored questionnaire summary, returned as display
 context only. It is `null` when the screening was saved without answers or
@@ -2004,6 +2142,21 @@ never treated as confirmation.
 
 Historical image-less screenings return `image: null`, `claude.status:
 "NOT_REQUESTED"`, and `cross_analysis.status: "INSUFFICIENT_EVIDENCE"`.
+
+---
+
+## GET /api/owner/screenings/{id}/
+
+Requires authentication (Owner role). Returns the same screening object as a
+list item, including `linked_consultations`, looked up directly by screening ID.
+This supports older scans that are not in the first page of history.
+
+- 200: the owner's screening.
+- 404: unknown screening or screening belonging to a different owner.
+- 401/403: unauthenticated or not an owner.
+- 400: the authenticated owner has no owner profile.
+
+Read-only: update and delete methods are not supported.
 
 ---
 
@@ -2540,7 +2693,7 @@ Response 200:
     "title": "Staff member deactivated: maria@test.com",
     "subtitle": "by Ada Admin",
     "category": "staff",
-    "timestamp": "2026-09-30T16:35:35Z"
+    "timestamp": "2026-10-01T00:35:35+08:00"
   }
 ]
 
@@ -2616,6 +2769,7 @@ Mobile-accessible endpoints for owners:
 Notification endpoints (in-app notifications, see section 14):
 
 - GET /api/notifications/
+- DELETE /api/notifications/ (clear all of the caller's notifications)
 - GET /api/notifications/unread-count/
 - PATCH /api/notifications/{ntf_id}/read/
 - PATCH /api/notifications/read-all/
@@ -2630,9 +2784,20 @@ Requires authentication. Allowed roles: Owner, Receptionist, Veterinarian,
 Clinic Admin. Users can only read or modify their own notifications
 (foreign ids return 404).
 
+Assigned veterinarians receive `APPOINTMENT_CONFIRMED` notifications when an
+appointment is confirmed and `CONSULTATION_AVAILABLE` notifications when a
+patient checks in. Both reference the appointment through
+`ntf_reference_table = "APPOINTMENT"` and `ntf_reference_id`.
+
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
-APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE, PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER,
-AI_SCREENING_COMPLETED, AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+APPOINTMENT_RESCHEDULED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE,
+PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED,
+AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+
+`APPOINTMENT_RESCHEDULED` notifications are sent to the owner when the clinic
+moves an appointment. Only the notification for the latest move carries
+`reschedule_approval_pending = true`; older notices become informational when a
+second reschedule occurs.
 
 Clinic admins receive `SYSTEM` notifications for: vet reschedule/cancel request
 submission (neutral body, reason text never included), veterinary license expiry
@@ -2669,10 +2834,33 @@ Response:
       "ntf_reference_table": "APPOINTMENT",
       "ntf_reference_id": "uuid or null",
       "ntf_created_at": "...",
-      "ntf_read_at": null
+      "ntf_read_at": null,
+      "pet_name": "Max | null",
+      "pet_profile_image": "url | null",
+      "appointment_scheduled_at": "... | null",
+      "appointment_status": "CONFIRMED | null",
+      "reschedule_approval_pending": false
     }
   ]
 }
+
+For notifications whose `ntf_reference_table` is `APPOINTMENT` and whose
+reference resolves to an appointment, the response also includes the pet's
+name, the pet's profile image, the appointment's scheduled time, the current
+appointment status, and whether the owner still needs to act on a reschedule.
+These fields are `null`/`false` for every other notification type (or when the
+referenced appointment no longer exists). `reschedule_approval_pending` is true
+only for a future `PENDING`/`CONFIRMED` appointment whose latest reschedule has
+not been acknowledged.
+
+## DELETE /api/notifications/
+
+Deletes every notification owned by the caller. Notifications belonging to other
+users are never touched.
+
+Response:
+
+{ "detail": "All notifications cleared." }
 
 ## GET /api/notifications/unread-count/
 

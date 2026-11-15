@@ -21,8 +21,8 @@ VET_EMAIL = 'vacvet@example.com'
 
 LIST_FIELDS = {
     'id', 'consultation_id', 'pet_id', 'pet_name', 'veterinarian',
-    'name', 'brand', 'batch_no', 'dose', 'route',
-    'date_given', 'next_due', 'notes', 'source', 'created_at',
+    'name', 'brand', 'batch_no', 'series_id', 'dose', 'route',
+    'date_given', 'next_due', 'notes', 'source', 'created_at', 'is_latest_in_series',
 }
 
 
@@ -144,6 +144,8 @@ class VaccinationListTests(VaccinationBase):
         self.assertEqual(record['brand'], 'Nobivac')
         self.assertEqual(record['route'], 'SUBCUTANEOUS')
         self.assertIsNotNone(record['next_due'])
+        self.assertTrue(record['is_latest_in_series'])
+        self.assertEqual(record['series_id'], str(self.vaccination.vac_series_id))
 
     def test_list_excludes_other_owners_vaccinations(self):
         response = self.client.get('/api/vaccinations/', **self._auth(OWNER_EMAIL))
@@ -260,6 +262,64 @@ class VaccinationWriteTestMixin:
 
 class VaccinationCreateTests(VaccinationWriteTestMixin, VaccinationBase):
 
+    def test_create_without_dose_route_or_notes_and_with_free_text_veterinarian(self):
+        payload = self._create_payload()
+        payload.pop('dose')
+        payload.pop('route')
+        payload.pop('notes')
+        payload['veterinarian'] = 'Dr. Free Text'
+
+        response = self.client.post('/api/vaccinations/', payload, **self._auth(OWNER_EMAIL))
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data['veterinarian'], 'Dr. Free Text')
+        self.assertIsNone(response.data['dose'])
+        self.assertIsNone(response.data['route'])
+        self.assertIsNone(response.data['notes'])
+        self.assertTrue(response.data['is_latest_in_series'])
+
+        record = VaccinationRecord.objects.get(vac_id=response.data['id'])
+        self.assertEqual(record.vac_veterinarian_name, 'Dr. Free Text')
+        self.assertIsNone(record.vac_dose)
+        self.assertIsNone(record.vac_route)
+
+    def test_create_same_normalized_name_uses_existing_series(self):
+        first = self._create_owner_vaccination(name='Rabies')
+        second = self._create_owner_vaccination(name='  RABIES  ')
+
+        self.assertEqual(first.data['series_id'], second.data['series_id'])
+        first_detail = self.client.get(
+            f"/api/vaccinations/{first.data['id']}/",
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertFalse(first_detail.data['is_latest_in_series'])
+        self.assertTrue(second.data['is_latest_in_series'])
+
+    def test_create_rejects_series_from_another_pet(self):
+        response = self.client.post(
+            '/api/vaccinations/',
+            self._create_payload(series_id=str(self.foreign_vaccination.vac_series_id)),
+            **self._auth(OWNER_EMAIL),
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(
+            VaccinationRecord.objects.filter(pet_id=self.pet, vac_name='Leptospirosis').exists()
+        )
+
+    def test_create_rejects_date_before_latest_dose_in_series(self):
+        first = self._create_owner_vaccination(date_given=(timezone.localdate() - timedelta(days=30)).isoformat())
+        response = self.client.post(
+            '/api/vaccinations/',
+            self._create_payload(
+                series_id=first.data['series_id'],
+                date_given=(timezone.localdate() - timedelta(days=31)).isoformat(),
+            ),
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('latest dose', response.data['detail'])
+
     def test_create_returns_201_with_owner_source(self):
         response = self.client.post(
             '/api/vaccinations/',
@@ -282,8 +342,9 @@ class VaccinationCreateTests(VaccinationWriteTestMixin, VaccinationBase):
         self.assertEqual(
             set(audit.adl_new_values),
             {
-                'pet_id', 'vac_name', 'vac_brand', 'vac_batch_no', 'vac_dose',
-                'vac_route', 'vac_date_given', 'vac_next_due', 'vac_notes', 'vac_source',
+                'pet_id', 'vac_name', 'vac_brand', 'vac_batch_no', 'vac_veterinarian_name',
+                'vac_series_id', 'vac_dose', 'vac_route', 'vac_date_given',
+                'vac_next_due', 'vac_notes', 'vac_source',
             },
         )
         self.assertEqual(audit.adl_new_values['vac_brand'], 'Zoetis')

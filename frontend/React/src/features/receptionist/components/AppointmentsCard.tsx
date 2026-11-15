@@ -185,7 +185,7 @@ export function AppointmentsCard() {
                             {apt.apt_status === 'IN_PROGRESS' ? 'NOW' : 'NEXT'}
                           </span>
                         )}
-                        <AppointmentStatusBadge status={apt.apt_status} />
+                        <AppointmentStatusBadge status={apt.apt_status} uniform />
                         <QuickStatusAction
                           aptId={apt.apt_id}
                           status={apt.apt_status}
@@ -246,7 +246,7 @@ export function AppointmentsCard() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <AppointmentStatusBadge status={apt.apt_status} />
+                  <AppointmentStatusBadge status={apt.apt_status} uniform />
                   <span className="inline-flex items-center gap-1 rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-900 dark:bg-amber-900/30 dark:text-amber-300 dark:hover:bg-amber-900/50">
                     View
                   </span>

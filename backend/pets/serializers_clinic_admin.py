@@ -4,7 +4,13 @@ from rest_framework import serializers
 from appointments.models import Appointment, AppointmentStatus
 from owners.models import OwnerProfile
 from pets.models import Pet
-from pets.services.public_pet_service import PublicPetService
+from pets.services.public_pet_service import (
+    OVERALL_DUE_SOON,
+    OVERALL_NONE_RECORDED,
+    OVERALL_OVERDUE,
+    OVERALL_UP_TO_DATE,
+    PublicPetService,
+)
 from vaccinations.models import VaccinationRecord
 
 
@@ -48,14 +54,14 @@ class ClinicPatientListSerializer(serializers.ModelSerializer):
     total_appointments = serializers.IntegerField(read_only=True)
     no_show_count = serializers.IntegerField(read_only=True)
     cancelled_count = serializers.IntegerField(read_only=True)
-    
+    vaccination_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Pet
         fields = [
             'id', 'name', 'profile_picture', 'breed', 'sex', 'age', 'owner',
             'last_visit_date', 'next_appointment_date', 'total_appointments',
-            'no_show_count', 'cancelled_count',
+            'no_show_count', 'cancelled_count', 'vaccination_status',
         ]
 
     def get_breed(self, obj):
@@ -73,7 +79,14 @@ class ClinicPatientListSerializer(serializers.ModelSerializer):
     def get_next_appointment_date(self, obj):
         return _clinic_date(obj.next_appointment_at, self.context.get('timezone'))
 
-
+    def get_vaccination_status(self, obj):
+        if not obj.has_any_vaccination:
+            return OVERALL_NONE_RECORDED
+        if obj.has_overdue_vaccination:
+            return OVERALL_OVERDUE
+        if obj.has_due_soon_vaccination:
+            return OVERALL_DUE_SOON
+        return OVERALL_UP_TO_DATE
 
 
 class ClinicPatientVaccinationSerializer(serializers.ModelSerializer):
@@ -158,7 +171,11 @@ class ClinicPatientDetailSerializer(serializers.ModelSerializer):
 
     def get_vaccination_status(self, obj):
         return PublicPetService.overall_vaccination_status(
-            [record.vac_next_due for record in self.context.get('vaccinations', [])],
+            [
+                record.vac_next_due
+                for record in self.context.get('vaccinations', [])
+                if getattr(record, 'is_latest_in_series', True)
+            ],
             self.context.get('today'),
         )
 

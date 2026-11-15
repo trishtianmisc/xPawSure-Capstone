@@ -1,22 +1,20 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import type { PrescriptionItemRecord } from '../../../src/services/records'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { PrescriptionImageModal } from '../components/PrescriptionImageModal'
 import { usePrescription } from '../hooks/usePrescription'
 import { usePrescriptionPdfExport } from '../hooks/usePrescriptionPdfExport'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function MedicationCard({ item }: { item: PrescriptionItemRecord }) {
@@ -46,7 +44,9 @@ export default function PrescriptionDetailScreen() {
     fromConsultation?: string
   }>()
   const { colors } = useTheme()
-  const { data: prescription, isLoading, isError, error } = usePrescription(id)
+  const { data: prescription, isLoading, isError, error, refetch } = usePrescription(id)
+  const refreshPrescription = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshPrescription)
   const { exportPdf, isExporting } = usePrescriptionPdfExport()
   const [imageModalVisible, setImageModalVisible] = useState(false)
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -100,11 +100,22 @@ export default function PrescriptionDetailScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader()}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.headerCard}>
           <Text style={styles.petName}>{prescription.pet_name}</Text>
           <Text style={styles.meta}>
-            {formatDate(prescription.created_at)} · {prescription.veterinarian}
+            {formatLongDate(prescription.created_at)} · {prescription.veterinarian}
           </Text>
         </View>
 

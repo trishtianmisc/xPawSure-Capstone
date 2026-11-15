@@ -33,7 +33,7 @@ export function PrescriptionImageModal({
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
   const { width: windowWidth } = useWindowDimensions()
-  const captureRef = useRef<ScrollView>(null)
+  const captureRef = useRef<View>(null)
   const autoCaptureStartedRef = useRef(false)
   const modalShownRef = useRef(false)
   const documentLaidOutRef = useRef(false)
@@ -158,13 +158,16 @@ export function PrescriptionImageModal({
           ) : (
             <View style={styles.captureStage}>
               <ScrollView
-                ref={captureRef}
                 contentContainerStyle={styles.captureContent}
                 scrollEnabled={false}
                 showsVerticalScrollIndicator={false}
                 style={{ alignSelf: 'center', flex: 1, width: documentWidth }}
               >
-                <View collapsable={false} onLayout={handleDocumentLayout}>
+                <View
+                  ref={captureRef}
+                  collapsable={false}
+                  onLayout={handleDocumentLayout}
+                >
                   <PrescriptionImageDocument
                     prescription={prescription}
                     width={documentWidth}

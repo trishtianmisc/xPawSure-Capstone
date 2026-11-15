@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 import { useDeclineVetRequest } from '../hooks/useAppointments'
-import { formatDateTime, formatPhone } from '../../../utils/format'
+import { formatDateTime } from '../../../utils/format'
 import type { AppointmentDetail, VetRequest } from '../types/receptionist.types'
 import { RescheduleModal } from './RescheduleModal'
 
@@ -100,15 +100,13 @@ function elapsedLabel(from: string, to: string): string | null {
 /**
  * The veterinarian's open request on the appointment detail page. The
  * reason text is receptionist-only and must never reach owner or clinic
- * admin payloads; the owner phone sits here so the desk can call while
- * handling the request.
+ * admin payloads.
  */
 export function VetRequestCard({ appointment }: VetRequestCardProps) {
   const request = appointment.vet_request
   const [showDeclineModal, setShowDeclineModal] = useState(false)
   const [declineNote, setDeclineNote] = useState('')
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
-  const [phoneCopied, setPhoneCopied] = useState(false)
   const decline = useDeclineVetRequest()
 
   if (!request) return null
@@ -233,7 +231,26 @@ export function VetRequestCard({ appointment }: VetRequestCardProps) {
           )}
         </div>
 
-        
+        {isOpen && (
+          <div className="mt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowDeclineModal(true)}
+              className="rounded-lg border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50 dark:border-stone-700 dark:text-stone-300"
+            >
+              Decline
+            </button>
+            {canReschedule && (
+              <button
+                type="button"
+                onClick={() => setShowRescheduleModal(true)}
+                className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800"
+              >
+                Reschedule
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {showDeclineModal && (

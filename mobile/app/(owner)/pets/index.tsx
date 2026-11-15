@@ -1,11 +1,12 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
-import { useMemo, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
+import { useCallback, useMemo, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { usePets } from '../../../features/pet/hooks/usePets'
 import type { Pet } from '../../../features/pet/types'
 
@@ -38,7 +39,9 @@ export default function PetsScreen() {
   const styles = useMemo(() => createStyles(colors), [colors])
   const [search, setSearch] = useState('')
   const [sortDescending, setSortDescending] = useState(false)
-  const { data: pets = [], isError, isLoading } = usePets(user?.id)
+  const { data: pets = [], isError, isLoading, refetch } = usePets(user?.id)
+  const refreshPets = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshPets)
 
   const filteredPets = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -52,7 +55,18 @@ export default function PetsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.titleRow}>
           <Text style={styles.title}>My Pets</Text>
           <Pressable accessibilityRole="button" onPress={() => router.push('/(owner)/pets/new')} style={styles.addButton}>
@@ -99,7 +113,7 @@ export default function PetsScreen() {
             </View>
           )}
         </View>
-      </View>
+      </ScrollView>
     </View>
   )
 }

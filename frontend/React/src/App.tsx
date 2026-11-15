@@ -1,10 +1,11 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 
 import { SessionWatcher } from './components/SessionWatcher'
 import { NotFoundPage } from './components/NotFoundPage'
 import { ProtectedRoute } from './features/auth/components/ProtectedRoute'
 
+const LandingPage = lazy(() => import('./features/landing/pages/LandingPage').then(m => ({ default: m.LandingPage })))
 const LoginPage = lazy(() => import('./features/auth/login/pages/LoginPage').then(m => ({ default: m.LoginPage })))
 const PublicPetPage = lazy(() => import('./features/public/pet/pages/PublicPetPage').then(m => ({ default: m.PublicPetPage })))
 const MockCheckoutPage = lazy(() => import('./features/payments/pages/MockCheckoutPage').then(m => ({ default: m.MockCheckoutPage })))
@@ -50,6 +51,7 @@ const VetDashboardPage = lazy(() => import('./features/veterinarian/dashboard/pa
 const VetConsultationsPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationsPage').then(m => ({ default: m.ConsultationsPage })))
 const VetAppointmentDetailPage = lazy(() => import('./features/veterinarian/dashboard/pages/AppointmentDetailPage').then(m => ({ default: m.AppointmentDetailPage })))
 const VetConsultationFormPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationFormPage').then(m => ({ default: m.ConsultationFormPage })))
+const VetConsultationHistoryPage = lazy(() => import('./features/veterinarian/dashboard/pages/ConsultationHistoryPage').then(m => ({ default: m.ConsultationHistoryPage })))
 const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPage').then(m => ({ default: m.PrescriptionPage })))
 const VetPrescriptionPreviewPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPreviewPage').then(m => ({ default: m.PrescriptionPreviewPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
@@ -72,7 +74,7 @@ function App() {
       <SessionWatcher />
       <Suspense fallback={<PageLoader />}>
         <Routes>
-          <Route element={<Navigate replace to="/login" />} path="/" />
+          <Route element={<LandingPage />} path="/" />
           <Route element={<LoginPage />} path="/login" />
           <Route element={<PublicPetPage />} path="/pets/:qrCode/public" />
           <Route element={<MockCheckoutPage />} path="/payments/mock/:reference" />
@@ -181,10 +183,18 @@ function App() {
   <Route path="manage-profile" element={<UserProfilePage />} />
 </Route>
 
-          <Route element={<VetDashboardLayout />} path="/veterinarian">
+          <Route
+            element={
+              <ProtectedRoute allowedRoles={['VETERINARIAN']}>
+                <VetDashboardLayout />
+              </ProtectedRoute>
+            }
+            path="/veterinarian"
+          >
             <Route element={<VetDashboardPage />} path="dashboard" />
             <Route element={<VetConsultationsPage />} path="consultations" />
             <Route element={<VetAppointmentDetailPage />} path="appointments/:id" />
+            <Route element={<VetConsultationHistoryPage />} path="pets/:petId/history" />
             <Route element={<VetPrescriptionPreviewPage />} path="appointments/:id/prescription/preview" />
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />

@@ -1,3 +1,5 @@
+import { clinicToday } from '../../../../utils/format'
+
 export interface DateWindow {
   date_from: string
   date_to: string
@@ -13,6 +15,11 @@ export type RangePreset =
 // The page only resolves fixed presets itself; 'custom' keeps whatever window
 // the date inputs already hold, so presetWindow never sees it.
 export type FixedRangePreset = Exclude<RangePreset, 'custom'>
+
+// The backend defaults to the last 30 clinic-local days when no dates are
+// sent. The page always sends explicit dates so the comparison label and the
+// CSV filename have concrete values, so the client mirrors that same span.
+export const DEFAULT_WINDOW_DAYS = 30
 
 const MS_PER_DAY = 86_400_000
 
@@ -31,7 +38,7 @@ function parseISODate(value: string): Date {
 // en-CA formats as YYYY-MM-DD, so the clinic's "today" is a plain calendar
 // string that never depends on the browser's own timezone. Mirrors the
 // backend's datetime.now(get_clinic_timezone(...)).date() default window.
-function clinicToday(timeZone: string, now: Date): string {
+function clinicISODate(timeZone: string, now: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
@@ -40,12 +47,19 @@ function clinicToday(timeZone: string, now: Date): string {
   }).format(now)
 }
 
+export function defaultWindow(now = clinicToday()): DateWindow {
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const from = new Date(to)
+  from.setDate(from.getDate() - (DEFAULT_WINDOW_DAYS - 1))
+  return { date_from: toISODate(from), date_to: toISODate(to) }
+}
+
 export function presetWindow(
   preset: FixedRangePreset,
   timeZone: string,
   now = new Date(),
 ): DateWindow {
-  const to = parseISODate(clinicToday(timeZone, now))
+  const to = parseISODate(clinicISODate(timeZone, now))
   switch (preset) {
     case 'today':
       return { date_from: toISODate(to), date_to: toISODate(to) }

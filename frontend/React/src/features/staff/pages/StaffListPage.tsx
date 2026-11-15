@@ -12,6 +12,7 @@ import { useToast } from '../../../components/ui/ToastContext'
 import { PageHero } from '../../receptionist/components/PageHero'
 import { StatCard } from '../../clinic-admin/dashboard/components/StatCard'
 import { formatPhone } from '../../../utils/format'
+import { formatDate } from '../../../utils/format'
 import type { StaffMember } from '../types/staff.types'
 
 type Tab = 'ALL' | 'VETERINARIAN' | 'RECEPTIONIST'
@@ -69,7 +70,7 @@ function LicenseCell({ staff }: { staff: StaffMember }) {
       <div className="mt-0.5 flex flex-nowrap items-center gap-1.5">
         {expiry && (
           <span className="whitespace-nowrap text-xs text-stone-400">
-            {expiry.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+            {expiry ? formatDate(expiry) : '\u2014'}
           </span>
         )}
         {icon && (

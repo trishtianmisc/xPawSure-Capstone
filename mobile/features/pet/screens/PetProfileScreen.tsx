@@ -1,7 +1,7 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
@@ -10,6 +10,7 @@ import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../src/utils/error'
 import { font } from '../../../src/theme/typography'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { useConsultations } from '../../records/hooks/useConsultations'
 import { useVaccinations } from '../../records/hooks/useVaccinations'
 import { useScreenings } from '../../screening/hooks/useScreenings'
@@ -49,11 +50,21 @@ export default function PetProfileScreen() {
   const { colors } = useTheme()
   const { user } = useAuth()
   const { id } = useLocalSearchParams<{ id: string }>()
-  const { data: pet, isLoading, isError, error } = usePet(id)
+  const { data: pet, isLoading, isError, error, refetch: refetchPet } = usePet(id)
   const deletePet = useDeletePet(user?.id ?? '')
   const vaccinations = useVaccinations(pet?.id, !!pet)
   const consultations = useConsultations(pet?.id, !!pet)
   const screenings = useScreenings(pet?.id, !!pet)
+  const refreshPetProfile = useCallback(
+    () => Promise.all([
+      refetchPet(),
+      vaccinations.refetch(),
+      consultations.refetch(),
+      screenings.refetch(),
+    ]),
+    [consultations.refetch, refetchPet, screenings.refetch, vaccinations.refetch],
+  )
+  const { refreshing, onRefresh } = usePullToRefresh(refreshPetProfile)
   const styles = useMemo(() => createStyles(colors), [colors])
   const insets = useSafeAreaInsets()
   const scrollViewRef = useRef<ScrollView>(null)
@@ -130,7 +141,19 @@ export default function PetProfileScreen() {
 
   return (
     <View style={styles.screen}>
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.coverSection, { height: 160 + insets.top }]}>
           <View style={styles.coverGradient}>
             <Pressable
@@ -201,21 +224,6 @@ export default function PetProfileScreen() {
             <InfoCard icon="scale-outline" label="Weight" value={pet.weight ? `${pet.weight} kg` : 'N/A'} />
             <InfoCard icon="color-palette-outline" label="Color" value={pet.color || 'N/A'} />
             <InfoCard icon="male-female-outline" label="Sex" value={pet.sex === 'MALE' ? 'Male' : 'Female'} />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Identification</Text>
-          <View style={styles.identificationCard}>
-            <View style={styles.identificationRow}>
-              <Text style={styles.identificationLabel}>Microchip</Text>
-              <Text style={styles.identificationValue}>{pet.microchip_number || 'Not registered'}</Text>
-            </View>
-            <View style={styles.identificationDivider} />
-            <View style={styles.identificationRow}>
-              <Text style={styles.identificationLabel}>QR Code ID</Text>
-              <Text style={styles.identificationValue} numberOfLines={1}>{pet.qr_code || pet.id}</Text>
-            </View>
           </View>
         </View>
 
@@ -545,37 +553,6 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     ...font.bold,
     color: colors.text,
     fontSize: 16,
-  },
-
-  identificationCard: {
-    backgroundColor: colors.surfaceAlt,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  identificationRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 36,
-  },
-  identificationLabel: {
-    ...font.medium,
-    color: colors.textSecondary,
-    fontSize: 13,
-  },
-  identificationValue: {
-    ...font.bold,
-    color: colors.text,
-    flex: 1,
-    fontSize: 13,
-    marginLeft: 16,
-    textAlign: 'right',
-  },
-  identificationDivider: {
-    backgroundColor: colors.border,
-    height: 1,
-    marginVertical: 4,
   },
 
   qrCard: {

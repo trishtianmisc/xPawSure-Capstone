@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { Button, Modal } from '../../../../components/ui'
 import { PageHero } from '../../../receptionist/components/PageHero'
-import { OTHER_DISEASE, isSkinDisease } from '../constants/diseases'
+import { OTHER_DISEASE, formatDiseaseLabel, isSkinDisease } from '../constants/diseases'
 import { DiseaseCombobox } from '../components/DiseaseCombobox'
 import { useAppointmentDetail, useSaveConsultation } from '../hooks/useVetAppointments'
 import type { VetAppointmentDetail } from '../types/dashboard.types'
 import { apiErrorMessage } from '../../../../utils/error'
+import { clinicDateKey, clinicToday } from '../../../../utils/format'
 
 function ageFromBirthDate(birthDate: string | null): string {
   if (!birthDate) return ''
   const birth = new Date(birthDate)
-  const now = new Date()
+  const now = clinicToday()
   let years = now.getFullYear() - birth.getFullYear()
   const monthDiff = now.getMonth() - birth.getMonth()
   if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) years -= 1
@@ -25,15 +27,19 @@ function toLocalDateInputValue(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`
 }
 
+function clinicDay(value: string | Date): Date {
+  const [year, month, day] = clinicDateKey(value).split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 function minFollowUpDate(scheduledAt: string): string {
-  const scheduled = new Date(scheduledAt)
+  const scheduled = clinicDay(scheduledAt)
   const dayAfter = new Date(
     scheduled.getFullYear(),
     scheduled.getMonth(),
     scheduled.getDate() + 1,
   )
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const today = clinicToday()
   return toLocalDateInputValue(dayAfter > today ? dayAfter : today)
 }
 
@@ -89,6 +95,27 @@ export function ConsultationFormPage() {
   return <ConsultationForm appointment={appointment} />
 }
 
+function ReviewCell({
+  children,
+  className = '',
+  label,
+}: {
+  children: ReactNode
+  className?: string
+  label: string
+}) {
+  return (
+    <td className={`px-4 py-3 align-top ${className}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+        {label}
+      </p>
+      <div className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800 dark:text-stone-200">
+        {children}
+      </div>
+    </td>
+  )
+}
+
 function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }) {
   const navigate = useNavigate()
   const aptId = appointment.apt_id
@@ -96,6 +123,7 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
 
   const [form, setForm] = useState(() => buildInitialForm(appointment))
   const [error, setError] = useState('')
+  const [pendingConfirm, setPendingConfirm] = useState(false)
 
   function handleChange(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
@@ -116,15 +144,31 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     })
   }
 
-  async function handleNext() {
-    const selection = form.diagnosis
-    if (!selection) {
+  function resolvedDiagnosis(): string {
+    return form.diagnosis === OTHER_DISEASE ? form.custom_diagnosis.trim() : form.diagnosis
+  }
+
+  function consultationPayload() {
+    return {
+      chief_complaint: form.chief_complaint,
+      objective: form.observations,
+      diagnosis: resolvedDiagnosis(),
+      specific_disease: form.specific_disease.trim(),
+      notes: form.notes,
+      follow_up_required: form.follow_up_required,
+      follow_up_target_date: form.follow_up_required
+        ? form.follow_up_target_date
+        : null,
+    }
+  }
+
+  function handleNext() {
+    if (!form.diagnosis) {
       setError('Please select a diagnosis.')
       return
     }
 
-    const diagnosis = selection === OTHER_DISEASE ? form.custom_diagnosis.trim() : selection
-    if (!diagnosis) {
+    if (!resolvedDiagnosis()) {
       setError('Please enter the disease name.')
       return
     }
@@ -143,24 +187,24 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
     }
 
     setError('')
+    setPendingConfirm(true)
+  }
+
+  function closeConfirm() {
+    if (!saveConsultation.isPending) setPendingConfirm(false)
+  }
+
+  async function confirmSave() {
     try {
       await saveConsultation.mutateAsync({
         aptId,
         conId: appointment.consultation?.id ?? null,
-        payload: {
-          chief_complaint: form.chief_complaint,
-          objective: form.observations,
-          diagnosis,
-          specific_disease: form.specific_disease.trim(),
-          notes: form.notes,
-          follow_up_required: form.follow_up_required,
-          follow_up_target_date: form.follow_up_required
-            ? form.follow_up_target_date
-            : null,
-        },
+        payload: consultationPayload(),
       })
+      setPendingConfirm(false)
       navigate(`/veterinarian/consultations/${aptId}/prescription`)
     } catch (err) {
+      setPendingConfirm(false)
       setError(apiErrorMessage(err))
     }
   }
@@ -364,8 +408,84 @@ function ConsultationForm({ appointment }: { appointment: VetAppointmentDetail }
             {saveConsultation.isPending ? 'Saving…' : 'Next'}
           </button>
         </div>
+        </div>
       </div>
-      </div>
+
+      <Modal
+        open={pendingConfirm}
+        onClose={closeConfirm}
+        title="Review consultation"
+        widthClassName="max-w-2xl"
+      >
+        <p className="text-sm leading-6 text-stone-600 dark:text-stone-300">
+          Check the details below for spelling and accuracy before continuing.
+        </p>
+        <div className="mt-4 max-h-[60vh] overflow-y-auto rounded-lg border border-stone-200 dark:border-stone-700">
+          <table className="w-full table-fixed border-collapse text-left">
+            <tbody className="divide-y divide-stone-200 dark:divide-stone-700">
+              <tr>
+                <td className="border-r border-stone-200 px-4 py-4 align-top dark:border-stone-700">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    Diagnosis
+                  </p>
+                  <p className="my-2 break-words text-xl font-bold text-stone-900 dark:text-stone-100">
+                    {formatDiseaseLabel(resolvedDiagnosis()) || '—'}
+                  </p>
+                </td>
+                <td className="px-4 py-4 align-top">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                    Specific disease
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800 dark:text-stone-200">
+                    {form.specific_disease.trim() || '—'}
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  label="Chief complaint"
+                >
+                  {form.chief_complaint.trim() || '—'}
+                </ReviewCell>
+                <ReviewCell label="Follow-up">
+                  {form.follow_up_required
+                    ? `Required by ${form.follow_up_target_date}`
+                    : 'Not required'}
+                </ReviewCell>
+              </tr>
+              <tr>
+                <ReviewCell
+                  className="border-r border-stone-200 dark:border-stone-700"
+                  label="Observations"
+                >
+                  {form.observations.trim() || '—'}
+                </ReviewCell>
+                <ReviewCell label="Notes">
+                  {form.notes.trim() || '—'}
+                </ReviewCell>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-5 flex justify-end gap-3">
+          <Button
+            disabled={saveConsultation.isPending}
+            onClick={closeConfirm}
+            type="button"
+            variant="secondary"
+          >
+            Go back
+          </Button>
+          <Button
+            loading={saveConsultation.isPending}
+            onClick={confirmSave}
+            type="button"
+          >
+            Confirm and continue
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

@@ -79,12 +79,304 @@ input {
   animation: slide-in 0.25s ease-out;
 }
 
+/* Prescription document, mirroring mobile/features/records/components/PrescriptionImageDocument.tsx.
+   The mobile sheet is designed at 440px wide; --rx-unit scales it onto A4. */
+.prescription-preview-sheet {
+  --rx-unit: calc(210mm / 440);
+  background: #ffffff;
+  color: #1c1917;
+  display: flex;
+  flex-direction: column;
+  font-family: Poppins, ui-sans-serif, system-ui, sans-serif;
+  max-width: 100%;
+  min-height: 296mm;
+  padding: calc(24 * var(--rx-unit));
+  width: 210mm;
+}
+
+.rx-doc-content {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+.rx-doc-header {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.rx-doc-vet {
+  color: #1f6f8b;
+  font-size: calc(19 * var(--rx-unit));
+  font-weight: 800;
+  letter-spacing: calc(0.7 * var(--rx-unit));
+  margin: 0;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.rx-doc-subtitle {
+  color: #1f6f8b;
+  font-size: calc(7 * var(--rx-unit));
+  font-weight: 600;
+  letter-spacing: calc(1.8 * var(--rx-unit));
+  margin: calc(2 * var(--rx-unit)) 0 0;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.rx-doc-phone {
+  color: #57534e;
+  font-size: calc(8 * var(--rx-unit));
+  margin: calc(5 * var(--rx-unit)) 0 0;
+  text-align: center;
+}
+
+.rx-doc-clinic {
+  color: #57534e;
+  font-size: calc(7 * var(--rx-unit));
+  font-weight: 600;
+  letter-spacing: calc(0.6 * var(--rx-unit));
+  margin: calc(2 * var(--rx-unit)) 0 0;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.rx-doc-rule-thick {
+  background: #1f6f8b;
+  height: calc(3 * var(--rx-unit));
+  margin-top: calc(12 * var(--rx-unit));
+  width: 100%;
+}
+
+.rx-doc-rule-thin {
+  background: #1f6f8b;
+  height: calc(1 * var(--rx-unit));
+  margin-top: calc(3 * var(--rx-unit));
+  width: 100%;
+}
+
+.rx-doc-info {
+  margin-top: calc(16 * var(--rx-unit));
+}
+
+.rx-doc-field-row {
+  display: flex;
+  gap: calc(18 * var(--rx-unit));
+  margin-bottom: calc(9 * var(--rx-unit));
+}
+
+.rx-doc-field {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.rx-doc-field-label {
+  color: #57534e;
+  font-size: calc(7 * var(--rx-unit));
+  font-weight: 600;
+  letter-spacing: calc(0.4 * var(--rx-unit));
+  margin: 0 0 calc(2 * var(--rx-unit));
+  text-transform: uppercase;
+}
+
+.rx-doc-field-value {
+  border-bottom: calc(1 * var(--rx-unit)) solid #78716c;
+  color: #1c1917;
+  font-size: calc(10 * var(--rx-unit));
+  font-weight: 500;
+  line-height: calc(14 * var(--rx-unit));
+  margin: 0;
+  min-height: calc(17 * var(--rx-unit));
+  padding-bottom: calc(2 * var(--rx-unit));
+  word-break: break-word;
+}
+
+.rx-doc-info-rule {
+  background: #1f6f8b;
+  height: calc(2 * var(--rx-unit));
+  margin-bottom: calc(12 * var(--rx-unit));
+  margin-top: calc(3 * var(--rx-unit));
+}
+
+.rx-doc-rx-section {
+  display: flex;
+  gap: calc(10 * var(--rx-unit));
+  margin-top: calc(14 * var(--rx-unit));
+}
+
+.rx-doc-rx-mark {
+  color: #1f6f8b;
+  flex-shrink: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: calc(38 * var(--rx-unit));
+  font-weight: 700;
+  line-height: calc(42 * var(--rx-unit));
+  width: calc(42 * var(--rx-unit));
+  word-break: break-all;
+}
+
+.rx-doc-rx-body {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.rx-doc-table-header {
+  border-top: calc(2 * var(--rx-unit)) solid #1f6f8b;
+  display: flex;
+  gap: calc(10 * var(--rx-unit));
+  padding-bottom: calc(4 * var(--rx-unit));
+  padding-top: calc(6 * var(--rx-unit));
+}
+
+.rx-doc-table-header-text {
+  color: #1f6f8b;
+  font-size: calc(7 * var(--rx-unit));
+  font-weight: 600;
+  letter-spacing: calc(0.5 * var(--rx-unit));
+  text-transform: uppercase;
+}
+
+.rx-doc-medicine-col {
+  flex: 1.15 1 0%;
+  min-width: 0;
+}
+
+.rx-doc-schedule-col {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.rx-doc-med-row {
+  border-bottom: calc(1 * var(--rx-unit)) solid #e7e5e4;
+  display: flex;
+  gap: calc(10 * var(--rx-unit));
+  padding-bottom: calc(8 * var(--rx-unit));
+  padding-top: calc(8 * var(--rx-unit));
+}
+
+.rx-doc-med-name {
+  color: #1c1917;
+  font-size: calc(10 * var(--rx-unit));
+  font-weight: 600;
+  line-height: calc(13 * var(--rx-unit));
+  margin: 0;
+}
+
+.rx-doc-med-generic {
+  color: #78716c;
+  font-size: calc(8 * var(--rx-unit));
+  line-height: calc(11 * var(--rx-unit));
+  margin: calc(1 * var(--rx-unit)) 0 0;
+}
+
+.rx-doc-med-notes {
+  color: #57534e;
+  font-size: calc(8 * var(--rx-unit));
+  font-style: italic;
+  line-height: calc(11 * var(--rx-unit));
+  margin: calc(2 * var(--rx-unit)) 0 0;
+}
+
+.rx-doc-schedule-primary {
+  color: #1c1917;
+  font-size: calc(9 * var(--rx-unit));
+  font-weight: 600;
+  line-height: calc(12 * var(--rx-unit));
+  margin: 0;
+}
+
+.rx-doc-schedule-secondary {
+  color: #57534e;
+  font-size: calc(8 * var(--rx-unit));
+  line-height: calc(11 * var(--rx-unit));
+  margin: calc(1 * var(--rx-unit)) 0 0;
+}
+
+.rx-doc-empty {
+  color: #78716c;
+  font-size: calc(9 * var(--rx-unit));
+  font-style: italic;
+  margin: 0;
+  padding-bottom: calc(10 * var(--rx-unit));
+  padding-top: calc(10 * var(--rx-unit));
+}
+
+.rx-doc-instructions {
+  color: #57534e;
+  font-size: calc(9 * var(--rx-unit));
+  line-height: calc(13 * var(--rx-unit));
+  margin: calc(10 * var(--rx-unit)) 0 0;
+  white-space: pre-line;
+}
+
+.rx-doc-instructions-label {
+  color: #1c1917;
+  font-weight: 600;
+}
+
+.rx-doc-signature {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  margin-top: auto;
+  padding-top: calc(24 * var(--rx-unit));
+}
+
+.rx-doc-signature-line {
+  border-top: calc(1 * var(--rx-unit)) solid #78716c;
+  margin-bottom: calc(5 * var(--rx-unit));
+  width: calc(150 * var(--rx-unit));
+}
+
+.rx-doc-signature-name {
+  color: #1f6f8b;
+  font-size: calc(10 * var(--rx-unit));
+  font-weight: 700;
+  margin: 0;
+}
+
+.rx-doc-license-row {
+  align-items: flex-end;
+  display: flex;
+  margin-top: calc(6 * var(--rx-unit));
+}
+
+.rx-doc-license-label {
+  color: #57534e;
+  font-size: calc(8 * var(--rx-unit));
+}
+
+.rx-doc-license-value {
+  border-bottom: calc(1 * var(--rx-unit)) solid #78716c;
+  color: #1c1917;
+  font-size: calc(8 * var(--rx-unit));
+  font-weight: 500;
+  margin-left: calc(4 * var(--rx-unit));
+  min-width: calc(70 * var(--rx-unit));
+  padding-bottom: calc(1 * var(--rx-unit));
+}
+
+.rx-doc-brand-bar {
+  background: #1f6f8b;
+  flex-shrink: 0;
+  height: calc(8 * var(--rx-unit));
+  margin-top: calc(18 * var(--rx-unit));
+  width: 100%;
+}
+
 /* Print: the reports page swaps its screen layout for the off-screen
    PrintableReport document (print-report/print-section classes). */
 @media print {
   @page {
     size: A4;
     margin: 14mm;
+  }
+
+  @page prescription {
+    size: A4;
+    margin: 0;
   }
 
   html,
@@ -121,9 +413,11 @@ input {
   }
 
   .prescription-preview-sheet {
-    width: 100% !important;
-    max-width: none !important;
-    padding: 0 !important;
+    page: prescription;
+    border: 0 !important;
     box-shadow: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 210mm !important;
   }
 }

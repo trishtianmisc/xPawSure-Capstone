@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom'
 import { useTheme } from '../../../../context/ThemeContext'
 import { useAuth } from '../../../auth/context/AuthContext'
 import { roleLabel } from '../../../../utils/roles'
+import { VetNotificationsMenu } from './VetNotificationsMenu'
 
 interface NavItem {
   label: string
@@ -197,15 +198,7 @@ export function VetDashboardLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            <button
-              className="relative grid size-9 place-items-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
-              type="button"
-              aria-label="Notifications"
-            >
-              <svg className="size-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </button>
+            <VetNotificationsMenu />
 
             <button
               className="grid size-9 place-items-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
@@ -242,7 +235,7 @@ export function VetDashboardLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto print:overflow-visible">
+        <main className="flex-1 overflow-y-auto [scrollbar-gutter:stable] print:overflow-visible">
           <Outlet />
         </main>
       </div>

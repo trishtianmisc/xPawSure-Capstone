@@ -1,21 +1,20 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo, type ComponentProps } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo, type ComponentProps } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
+import { formatDate } from '../../../src/utils/datetime'
 import { useConsultation } from '../hooks/useConsultation'
+import { useMedicalRecordLinks } from '../hooks/useMedicalRecordLinks'
 import { useRecordDetailBack } from '../lib/recordNavigation'
 
 type IconName = ComponentProps<typeof MaterialCommunityIcons>['name']
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
+function formatLongDate(iso: string): string {
+  return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 function formatDateOnly(value: string): string {
@@ -81,12 +80,18 @@ function ClinicalSection({ icon, title, value }: ClinicalSectionProps) {
 }
 
 export default function ConsultationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>()
+  const { id, fromScreening } = useLocalSearchParams<{ id: string; fromScreening?: string }>()
   const router = useRouter()
   const { colors } = useTheme()
-  const { data: consultation, isLoading, isError, error } = useConsultation(id)
+  const { data: consultation, isLoading, isError, error, refetch } = useConsultation(id)
+  const refreshConsultation = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshConsultation)
   const styles = useMemo(() => createStyles(colors), [colors])
-  const handleBack = useRecordDetailBack('consultations')
+  const { viewScreening } = useMedicalRecordLinks()
+  const handleBack = useRecordDetailBack(
+    'consultations',
+    fromScreening ? `/(owner)/screenings/${fromScreening}` : undefined,
+  )
 
   const renderHeader = () => (
     <View style={styles.header}>
@@ -140,7 +145,18 @@ export default function ConsultationDetailScreen() {
   return (
     <View style={styles.screen}>
       {renderHeader()}
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.heroCard}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
@@ -159,7 +175,7 @@ export default function ConsultationDetailScreen() {
                 name="calendar-blank-outline"
                 size={15}
               />
-              <Text style={styles.metaText}>{formatDate(consultation.created_at)}</Text>
+              <Text style={styles.metaText}>{formatLongDate(consultation.created_at)}</Text>
             </View>
             <View style={styles.metaRow}>
               <MaterialCommunityIcons color={colors.textMuted} name="stethoscope" size={15} />
@@ -202,6 +218,24 @@ export default function ConsultationDetailScreen() {
               <ClinicalSection key={section.title} {...section} />
             ))}
           </View>
+        ) : null}
+
+        {consultation.screening_id ? (
+          <Pressable
+            accessibilityLabel="View Screening"
+            accessibilityRole="button"
+            onPress={() => viewScreening(consultation.id, consultation.screening_id!, fromScreening)}
+            style={({ pressed }) => [styles.prescriptionCard, pressed && styles.prescriptionCardPressed]}
+          >
+            <View style={styles.prescriptionIcon}>
+              <MaterialCommunityIcons color={colors.primary} name="image-search-outline" size={20} />
+            </View>
+            <View style={styles.prescriptionCopy}>
+              <Text style={styles.prescriptionTitle}>View Screening</Text>
+              <Text style={styles.prescriptionText}>Open the skin screening linked to this visit.</Text>
+            </View>
+            <MaterialCommunityIcons color={colors.textMuted} name="chevron-right" size={20} />
+          </Pressable>
         ) : null}
 
         {prescriptionId ? (

@@ -137,10 +137,32 @@ describe('results UI no longer renders the Independent Image Review', () => {
     assert.ok(careIndex < symptomIndex, 'care guidelines must render before symptom summary')
   })
 
+  it('only shows disease-specific care guidelines for a detected result', () => {
+    assert.match(
+      resultSource,
+      /screeningState === 'DISEASE_DETECTED' && top && \(\s*<CareGuidelinesCard prediction=\{top\.disease\} \/>/,
+    )
+  })
+
   it('result.tsx keeps the claude gate and save payload wiring intact', () => {
     assert.match(resultSource, /claudeResponse\?\.token/)
     assert.match(resultSource, /claudeToken:/)
     assert.match(resultSource, /gateFindings/)
+  })
+
+  it('uses a simple Scan label instead of implementation details', () => {
+    assert.match(resultSource, /<Text style=\{styles\.timestamp\}>Scan<\/Text>/)
+    assert.doesNotMatch(resultSource, /image validation and on-device model/)
+  })
+
+  it('uses one analyzing message while image screening runs', () => {
+    const captureSource = readFileSync(
+      join(mobileRoot, 'app', '(owner)', 'pets', 'screening', 'index.tsx'),
+      'utf8',
+    )
+    assert.match(captureSource, /pickerLoading \? 'Preparing photo\.\.\.' : 'Analyzing photo'/)
+    assert.doesNotMatch(captureSource, /Checking photo\.\.\.|Running screening\.\.\./)
+    assert.doesNotMatch(captureSource, /Independent image review is checking/)
   })
 
   it('AnalysisCards.tsx has been removed', () => {

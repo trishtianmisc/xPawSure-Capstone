@@ -14,7 +14,25 @@ export function AppHeader() {
   const insets = useSafeAreaInsets()
   const router = useRouter()
   const isOwner = user?.role === 'OWNER'
-  const { data: unreadCount } = useUnreadCount(isOwner)
+  const isVet = user?.role === 'VETERINARIAN'
+  const canUseNotifications = isOwner || isVet
+  const { data: unreadCount } = useUnreadCount(canUseNotifications)
+
+  function openNotifications() {
+    if (isOwner) {
+      router.push('/(owner)/notifications')
+    } else if (isVet) {
+      router.push('/(vet)/notifications')
+    }
+  }
+
+  function openProfile() {
+    if (isOwner) {
+      router.push('/(owner)/profile')
+    } else if (isVet) {
+      router.push('/(vet)/profile')
+    }
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.bg, borderBottomColor: colors.border, paddingTop: insets.top + 4 }]}>
@@ -33,12 +51,31 @@ export function AppHeader() {
       <View style={styles.right}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Notifications"
-          disabled={!isOwner}
-          onPress={isOwner ? () => router.push('/(owner)/notifications') : undefined}
+          accessibilityLabel={
+            isVet && (unreadCount ?? 0) > 0
+              ? `Notifications, ${unreadCount} unread`
+              : 'Notifications'
+          }
+          disabled={!canUseNotifications}
+          onPress={openNotifications}
           style={[styles.iconBtn, { backgroundColor: colors.iconBg }]}
         >
-          {(unreadCount ?? 0) > 0 && <View style={[styles.notifDot, { backgroundColor: colors.error }]} />}
+          {isVet ? (
+            (unreadCount ?? 0) > 0 && (
+              <View
+                style={[
+                  styles.notifBadge,
+                  { backgroundColor: colors.error, borderColor: colors.bg },
+                ]}
+              >
+                <Text style={styles.notifBadgeText}>{unreadCount}</Text>
+              </View>
+            )
+          ) : (
+            (unreadCount ?? 0) > 0 && (
+              <View style={[styles.notifDot, { backgroundColor: colors.error }]} />
+            )
+          )}
           <MaterialCommunityIcons color={colors.iconColor} name="bell-outline" size={19} />
         </Pressable>
 
@@ -48,14 +85,18 @@ export function AppHeader() {
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Profile"
+          accessibilityLabel="Open profile"
           hitSlop={8}
-          onPress={() => router.push(user?.role === 'VETERINARIAN' ? '/(vet)/profile' : '/(owner)/profile')}
+          onPress={openProfile}
           style={[styles.avatar, { backgroundColor: colors.primary }]}
         >
-          <Text style={styles.avatarText}>
-            {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
-          </Text>
+          {user?.profile_picture ? (
+            <Image source={{ uri: user.profile_picture }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>
+              {(user?.first_name?.[0] || user?.email?.[0] || '?').toUpperCase()}
+            </Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -101,6 +142,25 @@ const styles = StyleSheet.create({
     width: 8,
     zIndex: 1,
   },
+  notifBadge: {
+    alignItems: 'center',
+    borderRadius: 9,
+    borderWidth: 1.5,
+    justifyContent: 'center',
+    minHeight: 18,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -5,
+    top: -5,
+    zIndex: 1,
+  },
+  notifBadgeText: {
+    ...font.bold,
+    color: '#FFFFFF',
+    fontSize: 9,
+    lineHeight: 12,
+  },
   avatar: {
     alignItems: 'center',
     borderRadius: 16,
@@ -109,5 +169,6 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     width: 32,
   },
+  avatarImage: { borderRadius: 16, height: 32, width: 32 },
   avatarText: { ...font.bold, color: '#FFFFFF', fontSize: 14 },
 })

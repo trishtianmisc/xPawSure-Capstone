@@ -1,4 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist
+from django.utils import timezone
 from rest_framework import serializers
 
 from ai_screenings.serializers import ScreeningSummarySerializer
@@ -6,6 +7,7 @@ from appointments.models import (
     Appointment,
     AppointmentRequestStatus,
     AppointmentRequestType,
+    AppointmentStatus,
     AppointmentType,
     VetSlot,
 )
@@ -69,6 +71,24 @@ def _vet_request_block(obj):
 
 def _has_open_request(obj):
     return obj.apt_request_status == AppointmentRequestStatus.OPEN
+
+
+def reschedule_approval_pending(obj):
+    """True while the owner still needs to acknowledge a reschedule.
+
+    Approval is only meaningful for a future PENDING/CONFIRMED appointment;
+    cancelled, completed, or already-approved rows never require action.
+    """
+    if obj.apt_rescheduled_at is None:
+        return False
+    if obj.apt_reschedule_acknowledged_at is not None:
+        return False
+    if obj.apt_status not in (
+        AppointmentStatus.PENDING,
+        AppointmentStatus.CONFIRMED,
+    ):
+        return False
+    return obj.apt_scheduled_at > timezone.now()
 
 
 # Clinic Admin oversight sees that a vet raised a request and how the clinic
@@ -137,6 +157,9 @@ class VetSlotSerializer(serializers.ModelSerializer):
 class AppointmentListSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_species = serializers.SerializerMethodField()
+    pet_profile_image = serializers.CharField(
+        source='pet_id.pet_profile_image', read_only=True, allow_null=True
+    )
     vet_name = serializers.SerializerMethodField()
     owner_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
@@ -145,7 +168,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Appointment
         fields = [
-            'apt_id', 'pet_id', 'pet_name', 'pet_species',
+            'apt_id', 'pet_id', 'pet_name', 'pet_species', 'pet_profile_image',
             'cln_id', 'stf_id', 'vet_name', 'owner_name',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name', 'screening',
@@ -208,6 +231,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         source='pet_id.pet_weight', max_digits=5, decimal_places=2, read_only=True
     )
     pet_color = serializers.CharField(source='pet_id.pet_color', read_only=True)
+    pet_profile_image = serializers.CharField(
+        source='pet_id.pet_profile_image', read_only=True, allow_null=True
+    )
     owner_name = serializers.SerializerMethodField()
     owner_phone = serializers.SerializerMethodField()
     owner_email = serializers.SerializerMethodField()
@@ -227,12 +253,14 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     # which strips these fields together with the raw reason columns.
     vet_request = serializers.SerializerMethodField()
     has_open_request = serializers.SerializerMethodField()
+    reschedule_approval_pending = serializers.SerializerMethodField()
+    payment_provider_ref = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
-            'pet_birth_date', 'pet_weight', 'pet_color',
+            'pet_birth_date', 'pet_weight', 'pet_color', 'pet_profile_image',
             'cln_id', 'clinic_name', 'consultation_fee',
             'clinic_address', 'clinic_phone',
             'stf_id', 'vet_name', 'vet_license_number',
@@ -242,9 +270,11 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
             'apt_reschedule_request_reason', 'apt_cancellation_request_reason',
+            'apt_rescheduled_at', 'apt_reschedule_acknowledged_at',
+            'reschedule_approval_pending',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
-            'vet_request', 'has_open_request',
+            'vet_request', 'has_open_request', 'payment_provider_ref',
         ]
 
     def get_consultation_fee(self, obj):
@@ -266,6 +296,12 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         except ObjectDoesNotExist:
             return None
         return PrescriptionResponseSerializer(prescription).data
+
+    def get_payment_provider_ref(self, obj):
+        try:
+            return obj.payment.pay_provider_ref
+        except ObjectDoesNotExist:
+            return None
 
     def get_pet_breed(self, obj):
         if obj.pet_id and obj.pet_id.brd_id:
@@ -314,6 +350,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
 
     def get_has_open_request(self, obj):
         return _has_open_request(obj)
+
+    def get_reschedule_approval_pending(self, obj):
+        return reschedule_approval_pending(obj)
 
 
 class ReceptionistAppointmentDetailSerializer(AppointmentDetailSerializer):

@@ -15,6 +15,7 @@ import {
 } from 'react-native'
 import Ionicons from '@expo/vector-icons/Ionicons'
 
+import { PhotoPicker } from '../../../features/pet/components/PhotoPicker'
 import { useSaveVetProfile } from '../../../features/vet/hooks/useSaveVetProfile'
 import { useVetProfile } from '../../../features/vet/hooks/useVetProfile'
 import { formatPosition } from '../../../features/vet/lib/format'
@@ -31,16 +32,18 @@ export default function EditVetProfileScreen() {
   const { data: profile } = useVetProfile()
   const saveProfile = useSaveVetProfile()
 
-  const { control, handleSubmit, setValue, reset, formState: { errors } } = useForm<VetProfileFormValues>({
+  const { control, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm<VetProfileFormValues>({
     resolver: zodResolver(vetProfileSchema),
     defaultValues: {
       first_name: user?.first_name ?? '',
       last_name: user?.last_name ?? '',
       phone: '',
+      profile_picture: undefined,
     },
   })
 
   const styles = useMemo(() => createStyles(colors), [colors])
+  const watchedProfilePicture = watch('profile_picture')
 
   useEffect(() => {
     if (profile) {
@@ -48,16 +51,23 @@ export default function EditVetProfileScreen() {
         first_name: profile.first_name ?? user?.first_name ?? '',
         last_name: profile.last_name ?? user?.last_name ?? '',
         phone: profile.phone ?? '',
+        profile_picture: profile.profile_picture || undefined,
       })
     }
   }, [profile, user, reset])
 
   const onSubmit = async (data: VetProfileFormValues) => {
+    const initialPicture = profile?.profile_picture || undefined
+    const profilePicture = data.profile_picture !== initialPicture
+      ? data.profile_picture ?? null
+      : undefined
+
     saveProfile.mutate(
       {
         first_name: data.first_name,
         last_name: data.last_name,
         phone: data.phone ?? '',
+        profile_picture: profilePicture,
       },
       {
         onSuccess: async () => {
@@ -91,6 +101,15 @@ export default function EditVetProfileScreen() {
           </Pressable>
           <Text style={styles.headerTitle}>Edit Profile</Text>
           <Text style={styles.headerHint}>Keep your contact details up to date</Text>
+        </View>
+
+        <View style={styles.section}>
+          <PhotoPicker
+            icon="account"
+            onChange={(uri) => setValue('profile_picture', uri, { shouldDirty: true })}
+            title="Add Profile Photo"
+            value={watchedProfilePicture}
+          />
         </View>
 
         <View style={styles.section}>

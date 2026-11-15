@@ -13,7 +13,6 @@ export const petSchema = z.object({
     .optional(),
   weight: z.string().optional(),
   color: z.string().optional(),
-  microchip_number: z.string().optional(),
   profile_picture: z.string().optional(),
 })
 

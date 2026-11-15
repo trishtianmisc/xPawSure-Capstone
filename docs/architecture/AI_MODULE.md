@@ -292,7 +292,7 @@ Below 80%
 
 Low confidence — reported as-is; does not block screening
 
-Screening decision: similarity ≥ 50% → Possible Condition Detected; 10–50% → Unable to Determine; < 10% → Not a Skin Image.
+Screening decision: similarity ≥ 30% → Possible Condition Detected; 10–<30% → Unable to Determine; < 10% → Not a Skin Image. Similarity is a separate safety score, not disease confidence.
 
 Confidence thresholds may be adjusted after clinical evaluation.
 

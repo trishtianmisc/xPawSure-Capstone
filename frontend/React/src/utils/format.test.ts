@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CLINIC_TIME_ZONE,
+  clinicDateKey,
+  clinicToday,
   formatClockTime,
   formatDate,
   formatDateTime,
@@ -60,5 +62,34 @@ describe('clinic time zone formatting', () => {
   it('keeps em dash for empty values regardless of time zone', () => {
     expect(formatDateTime(null, CLINIC_TIME_ZONE)).toBe('—')
     expect(formatDate(undefined, CLINIC_TIME_ZONE)).toBe('—')
+  })
+})
+
+describe('default clinic time zone', () => {
+  it('formats without an explicit time zone in Asia/Manila', () => {
+    expect(formatDateTime('2026-10-08T10:40:00Z')).toBe('Oct 8, 2026 · 6:40 PM')
+    expect(formatDate('2026-10-01T16:30:00Z')).toBe('Oct 2, 2026')
+    expect(formatTime('2026-10-01T16:30:00Z')).toBe('12:30 AM')
+  })
+})
+
+describe('clinic calendar helpers', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('builds the Manila date key for a timestamp', () => {
+    expect(clinicDateKey('2026-10-01T15:59:00Z')).toBe('2026-10-01')
+    expect(clinicDateKey('2026-10-01T16:30:00Z')).toBe('2026-10-02')
+  })
+
+  it('returns today in Manila even when UTC is still the previous day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
+    const today = clinicToday()
+    expect(today.getFullYear()).toBe(2026)
+    expect(today.getMonth()).toBe(9)
+    expect(today.getDate()).toBe(2)
+    expect(clinicDateKey()).toBe('2026-10-02')
   })
 })

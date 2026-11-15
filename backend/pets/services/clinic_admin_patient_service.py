@@ -29,6 +29,7 @@ from consultations.models import Consultation
 from pets.models import Pet
 from pets.services.public_pet_service import DUE_SOON_DAYS
 from vaccinations.models import VaccinationRecord
+from vaccinations.services import VaccinationService
 
 UPCOMING_APPOINTMENT_STATUSES = (
     AppointmentStatus.PENDING,
@@ -156,12 +157,13 @@ class ClinicAdminPatientService:
         base = ClinicAdminPatientService._base_queryset(clinic_id)
         total_patients = base.count()
 
-        vaccinations = VaccinationRecord.objects.filter(
-            pet_id=OuterRef('pk'),
+        latest_vaccinations = VaccinationService.annotate_latest_in_series(
+            VaccinationRecord.objects.filter(pet_id=OuterRef('pk')),
         )
-        has_any_vaccination = Exists(vaccinations)
-        has_overdue = Exists(vaccinations.filter(vac_next_due__lt=today))
-        has_due_soon = Exists(vaccinations.filter(
+        latest_vaccinations = latest_vaccinations.filter(is_latest_in_series=True)
+        has_any_vaccination = Exists(latest_vaccinations)
+        has_overdue = Exists(latest_vaccinations.filter(vac_next_due__lt=today))
+        has_due_soon = Exists(latest_vaccinations.filter(
             vac_next_due__gte=today,
             vac_next_due__lte=today + timedelta(days=DUE_SOON_DAYS),
         ))
@@ -257,7 +259,8 @@ class ClinicAdminPatientService:
             Prefetch(
                 'vaccinations',
                 queryset=VaccinationRecord.objects.only(
-                    'vac_id', 'pet_id', 'vac_name', 'vac_date_given', 'vac_next_due',
+                    'vac_id', 'pet_id', 'vac_name', 'vac_series_id', 'vac_date_given',
+                    'vac_created_at', 'vac_next_due',
                 ).order_by('-vac_date_given', '-vac_created_at'),
                 to_attr='admin_vaccinations',
             ),
@@ -294,9 +297,11 @@ class ClinicAdminPatientService:
             VaccinationRecord.objects.filter(
                 pet_id=pet,
             ).only(
-                'vac_id', 'pet_id', 'vac_name', 'vac_date_given', 'vac_next_due',
+                'vac_id', 'pet_id', 'vac_name', 'vac_series_id', 'vac_date_given',
+                'vac_created_at', 'vac_next_due',
             ).order_by('-vac_date_given', '-vac_created_at')
         )
+        VaccinationService.latest_by_series(vaccinations)
 
         appointments = list(
             Appointment.objects.filter(

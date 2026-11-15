@@ -3,7 +3,7 @@ from datetime import date
 from django.utils import timezone
 
 from pets.models import Pet
-from vaccinations.models import VaccinationRecord
+from vaccinations.services import VaccinationService
 
 DUE_SOON_DAYS = 30
 
@@ -108,9 +108,10 @@ class PublicPetService:
 
     @staticmethod
     def vaccination_statuses(pet: Pet) -> list[str]:
-        next_due_dates = VaccinationRecord.objects.filter(
-            pet_id=pet,
-        ).values_list('vac_next_due', flat=True)
+        next_due_dates = [
+            vaccination.vac_next_due
+            for vaccination in VaccinationService.latest_for_pet(pet)
+        ]
         statuses = [
             PublicPetService.vaccination_status(next_due)
             for next_due in next_due_dates

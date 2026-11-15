@@ -188,6 +188,7 @@ class VetRequestSubmitTests(VetRequestHandlingBase):
         self.assertFalse(
             Notification.objects.filter(
                 usr_id_id=self.vet_user.usr_id,
+                ntf_type=NotificationType.SYSTEM,
                 ntf_reference_id=apt_id,
             ).exists(),
         )
@@ -596,7 +597,9 @@ class RescheduleEndpointTests(VetRequestHandlingBase):
         response = self._reschedule(apt_id, target['vsl_id'])
 
         self.assertEqual(response.status_code, 200, response.data)
-        notifs = self._owner_notifs(apt_id)
+        notifs = self._owner_notifs(
+            apt_id, NotificationType.APPOINTMENT_RESCHEDULED,
+        )
         self.assertTrue(notifs.exists())
         body = notifs.first().ntf_message
         self.assertIn('has been rescheduled to', body)
@@ -617,7 +620,9 @@ class RescheduleEndpointTests(VetRequestHandlingBase):
         )
         self.assertEqual(appointment.apt_resolved_by_id, self.receptionist_user.usr_id)
 
-        notifs = self._owner_notifs(apt_id)
+        notifs = self._owner_notifs(
+            apt_id, NotificationType.APPOINTMENT_RESCHEDULED,
+        )
         self.assertTrue(notifs.exists())
         body = notifs.first().ntf_message
         self.assertIn('Your veterinarian is unavailable', body)
@@ -636,7 +641,9 @@ class RescheduleEndpointTests(VetRequestHandlingBase):
         self.assertEqual(
             appointment.apt_request_status, AppointmentRequestStatus.OPEN,
         )
-        notifs = self._owner_notifs(apt_id)
+        notifs = self._owner_notifs(
+            apt_id, NotificationType.APPOINTMENT_RESCHEDULED,
+        )
         body = notifs.first().ntf_message
         self.assertIn('has been rescheduled to', body)
         self.assertNotIn('veterinarian is unavailable', body)

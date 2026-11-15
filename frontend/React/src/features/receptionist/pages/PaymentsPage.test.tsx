@@ -3,10 +3,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { formatPeso } from '../../../utils/currency'
+import { useAuth } from '../../auth/context/AuthContext'
 import { usePayments } from '../../payments/hooks/usePayments'
 import { useClinicSettings } from '../hooks/useClinicSettings'
 import { PaymentsPage } from './PaymentsPage'
 
+vi.mock('../../auth/context/AuthContext', () => ({
+  useAuth: vi.fn(),
+}))
 vi.mock('../../payments/hooks/usePayments', () => ({
   usePayments: vi.fn(),
 }))
@@ -52,6 +56,9 @@ function renderPage() {
 
 describe('PaymentsPage (receptionist)', () => {
   beforeEach(() => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: null,
+    } as unknown as ReturnType<typeof useAuth>)
     vi.mocked(useClinicSettings).mockReturnValue({
       data: { timezone: 'Asia/Manila' },
     } as unknown as ReturnType<typeof useClinicSettings>)

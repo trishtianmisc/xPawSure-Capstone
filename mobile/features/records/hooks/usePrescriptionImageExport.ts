@@ -1,12 +1,12 @@
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { useCallback, useRef, useState, type RefObject } from 'react'
-import { Alert, Linking, Platform, type ScrollView } from 'react-native'
+import { Alert, Linking, Platform, type View } from 'react-native'
 import { captureRef } from 'react-native-view-shot'
 
 import { normalizeCapturedImageUri } from '../lib/prescriptionImage'
 
-type CaptureViewRef = RefObject<ScrollView | null>
+type CaptureViewRef = RefObject<View | null>
 
 function showPermissionAlert(canAskAgain: boolean) {
   if (canAskAgain) {
@@ -69,7 +69,6 @@ export function usePrescriptionImageExport() {
         format: 'png',
         quality: 1,
         result: 'tmpfile',
-        snapshotContentContainer: true,
       })
       if (operationRef.current !== operation) return
       setImageUri(normalizeCapturedImageUri(uri))

@@ -1,26 +1,22 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useMemo } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { useCallback, useMemo } from 'react'
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
+import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { font } from '../../../src/theme/typography'
-import { BOOKED_PILL } from '../constants'
+import { formatDate } from '../../../src/utils/datetime'
+import { screeningStatusPill } from '../constants'
 import { useAllScreenings } from '../hooks/useAllScreenings'
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 export default function ScreeningHistoryScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data, isLoading, isError } = useAllScreenings()
+  const { data, isLoading, isError, refetch } = useAllScreenings()
+  const refreshScreenings = useCallback(() => refetch(), [refetch])
+  const { refreshing, onRefresh } = usePullToRefresh(refreshScreenings)
   const { petId } = useLocalSearchParams<{ petId?: string }>()
 
   const handleBack = () => {
@@ -45,7 +41,18 @@ export default function ScreeningHistoryScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            colors={[colors.primary]}
+            onRefresh={() => void onRefresh()}
+            refreshing={refreshing}
+            tintColor={colors.primary}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      >
         {isLoading ? (
           <View style={styles.statusState}>
             <ActivityIndicator color={colors.primary} />
@@ -56,14 +63,15 @@ export default function ScreeningHistoryScreen() {
           </Text>
         ) : screenings.length > 0 ? (
           screenings.map((screening) => {
+            const statusPill = screeningStatusPill(screening.is_consulted, screening.is_booked)
             return (
               <View key={screening.ais_id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text numberOfLines={1} style={styles.petName}>{screening.pet_name}</Text>
-                  {screening.is_booked ? (
-                    <View style={[styles.statusPill, { backgroundColor: BOOKED_PILL.bg }]}>
-                      <Text style={[styles.statusPillText, { color: BOOKED_PILL.fg }]}>
-                        {BOOKED_PILL.label}
+                  {statusPill ? (
+                    <View style={[styles.statusPill, { backgroundColor: statusPill.bg }]}>
+                      <Text style={[styles.statusPillText, { color: statusPill.fg }]}>
+                        {statusPill.label}
                       </Text>
                     </View>
                   ) : null}

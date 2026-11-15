@@ -519,7 +519,7 @@ export function ClinicAdminPatientDetailPage() {
                         )}
                       </td>
                       <td className="px-4 py-3.5">
-                        <AppointmentStatusBadge status={appointment.apt_status} />
+                        <AppointmentStatusBadge status={appointment.apt_status} uniform />
                         {appointment.apt_status === 'CANCELLED' &&
                           appointment.apt_cancellation_reason && (
                             <p className="mt-1.5 max-w-xs border-l-2 border-stone-200 pl-2 text-xs text-stone-500 dark:border-stone-700 dark:text-stone-400">
