@@ -33,7 +33,6 @@ vi.mock('../../payments/hooks/usePayments', () => ({
   useCancelPayment: vi.fn(),
 }))
 vi.mock('../../../components/ui/ToastContext', () => ({ useToast: vi.fn() }))
-vi.mock('../components/PetRegisterModal', () => ({ PetRegisterModal: () => null }))
 
 function renderPage() {
   return render(<CreateAppointmentPage />)

@@ -13,7 +13,6 @@ import { useAvailableSlots, useVetsForDate } from '../hooks/useAvailableSlots'
 import { useClinicSettings } from '../hooks/useClinicSettings'
 import { useOwners } from '../hooks/useOwners'
 import { usePets } from '../hooks/usePets'
-import { PetRegisterModal } from '../components/PetRegisterModal'
 import { createAppointmentSchema, type CreateAppointmentForm } from '../schemas/receptionist.schema'
 import type { VetSlot } from '../types/receptionist.types'
 
@@ -46,7 +45,6 @@ export function CreateAppointmentPage() {
   const [ownerSearch, setOwnerSearch] = useState('')
   const [selectedOwnerId, setSelectedOwnerId] = useState('')
   const [petSearch, setPetSearch] = useState('')
-  const [petRegisterOpen, setPetRegisterOpen] = useState(false)
   const [method, setMethod] = useState<PaymentMethod>('GCASH')
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null)
   const [submittedForm, setSubmittedForm] = useState<CreateAppointmentForm | null>(null)
@@ -262,15 +260,6 @@ export function CreateAppointmentPage() {
             <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
               No pets found for this owner.
             </p>
-          )}
-          {selectedOwnerId && (
-            <button
-              type="button"
-              onClick={() => setPetRegisterOpen(true)}
-              className="mt-2 text-xs font-semibold text-amber-700 transition hover:text-amber-800 hover:underline dark:text-amber-400"
-            >
-              + Register a new pet for this owner
-            </button>
           )}
           {errors.pet_id && <p className="mt-1 text-xs text-red-500">{errors.pet_id.message}</p>}
         </div>
@@ -544,20 +533,6 @@ export function CreateAppointmentPage() {
           </button>
         </div>
       </form>
-
-      <PetRegisterModal
-        open={petRegisterOpen}
-        onClose={() => setPetRegisterOpen(false)}
-        ownerId={selectedOwnerId || undefined}
-        ownerLabel={
-          ownersData?.results.find((owner) => owner.own_id === selectedOwnerId)
-            ?.full_name
-        }
-        onCreated={(pet) => {
-          setValue('pet_id', pet.id, { shouldValidate: true })
-          setPetSearch('')
-        }}
-      />
     </div>
   )
 }

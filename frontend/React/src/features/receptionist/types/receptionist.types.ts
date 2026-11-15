@@ -233,17 +233,6 @@ export interface PetHistory {
   appointments: Appointment[]
 }
 
-export interface CreatePetPayload {
-  owner_id: string
-  pet_name: string
-  pet_sex: string
-  brd_id?: string | null
-  pet_birth_date?: string | null
-  pet_weight?: number | null
-  pet_color?: string | null
-  pet_microchip_no?: string | null
-}
-
 export interface UpdatePetPayload {
   pet_name?: string
   pet_sex?: string
