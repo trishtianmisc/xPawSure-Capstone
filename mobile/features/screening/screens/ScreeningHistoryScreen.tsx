@@ -108,7 +108,7 @@ export default function ScreeningHistoryScreen() {
             <Text style={styles.statusText}>No screenings yet.</Text>
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/(owner)/pets/screening')}
+              onPress={() => router.push('/(owner)/pets/screening', { withAnchor: true })}
               style={styles.emptyButton}
             >
               <Text style={styles.emptyButtonText}>Start a skin screening</Text>
