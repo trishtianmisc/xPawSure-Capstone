@@ -13,6 +13,10 @@ export const LANDING_NAV_ITEMS: LandingNavItem[] = [
 
 const NAV_OFFSET = 80
 
+export const APP_LINKS = {
+  googlePlay: 'https://expo.dev/accounts/trishtianmisc/projects/xpawsure/builds/814a49d9-7c6a-4e0f-bf32-b7cbafbd84d6',
+}
+
 export function scrollToSection(id: string): void {
   const target = document.getElementById(id)
   if (!target) return

@@ -27,15 +27,16 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .landing-reveal,
-  .landing-reveal[data-visible='true'] {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
+@keyframes landing-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes landing-scan  { 0% { top: 6%; } 50% { top: 90%; } 100% { top: 6%; } }
+@keyframes landing-paw   {
+  0%, 100% { opacity: .25; transform: rotate(var(--r, 0deg)) scale(.95); }
+  50%      { opacity: .7;  transform: rotate(var(--r, 0deg)) scale(1.05); }
+}
+.landing-float { animation: landing-float 6s ease-in-out infinite; }
+.landing-scan  { animation: landing-scan 3.6s ease-in-out infinite; }
+.landing-paw   { animation: landing-paw 4s ease-in-out infinite; }
 
-  .landing-preview-screen {
-    animation: none;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .landing-float, .landing-scan, .landing-paw { animation: none; }
 }

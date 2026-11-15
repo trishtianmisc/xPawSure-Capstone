@@ -1,4 +1,5 @@
 import { LoginForm } from '../components/LoginForm'
+import { Wordmark } from '../components/LabelIcon'
 
 export function LoginPage() {
   return (
@@ -62,11 +63,7 @@ export function LoginPage() {
                 Welcome back
               </p>
               <h2 className="mt-3 text-3xl font-extrabold tracking-tight text-stone-950 dark:text-stone-100 sm:text-4xl">
-                Sign in to <span><img
-                  src="/Component 1.png"
-                  alt="XPawSure"
-                  className="inline-block h-[1.8em] w-auto align-middle drop-shadow-2xl"
-                /></span>
+                Sign in to <span><Wordmark /></span>
               </h2>
               <p className="mt-3 text-base leading-7 text-stone-600 dark:text-stone-400">
                 Enter your credentials to access your clinic workspace.
