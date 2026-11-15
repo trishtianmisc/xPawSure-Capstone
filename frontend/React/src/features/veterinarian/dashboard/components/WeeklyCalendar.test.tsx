@@ -78,9 +78,18 @@ describe('WeeklyCalendar', () => {
 
     expect(card.style.height).toBe('64px')
 
-    // Even when a browser clamps font-size up to 16px minimum, three lines
-    // (3 × 16 × 1.1 = 52.8px) plus py-1 padding (8px) must fit the card.
     const clampedContentPx = 3 * 16 * 1.1 + 8
     expect(clampedContentPx).toBeLessThanOrEqual(64)
+  })
+
+  it('keeps light-mode appointment colors in dark mode', () => {
+    render(<WeeklyCalendar days={days} slots={[makeSlot()]} onSlotClick={vi.fn()} />)
+
+    const card = screen.getByText('fg').closest('button')!
+
+    expect(card.className).toContain('bg-amber-100')
+    expect(card.className).toContain('text-amber-900')
+    expect(card.className).not.toContain('dark:bg-')
+    expect(card.className).not.toContain('dark:text-')
   })
 })

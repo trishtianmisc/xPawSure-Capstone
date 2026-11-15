@@ -6,18 +6,14 @@ const HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
 const HOUR_PX = 64
 
 const STATUS_COLORS: Record<string, string> = {
-  CONFIRMED:
-    'bg-blue-100 border-l-4 border-blue-500 text-blue-900 dark:bg-blue-900/30 dark:text-blue-300',
-  CHECKED_IN:
-    'bg-amber-100 border-l-4 border-amber-500 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300',
-  IN_PROGRESS:
-    'bg-violet-100 border-l-4 border-violet-500 text-violet-900 dark:bg-violet-900/30 dark:text-violet-300',
-  COMPLETED:
-    'bg-green-100 border-l-4 border-green-500 text-green-900 dark:bg-green-900/30 dark:text-green-300',
+  CONFIRMED: 'bg-blue-100 border-l-4 border-blue-500 text-blue-900',
+  CHECKED_IN: 'bg-amber-100 border-l-4 border-amber-500 text-amber-900',
+  IN_PROGRESS: 'bg-violet-100 border-l-4 border-violet-500 text-violet-900',
+  COMPLETED: 'bg-green-100 border-l-4 border-green-500 text-green-900',
 }
 
 const DEFAULT_SLOT_COLOR =
-  'bg-stone-100 border-l-4 border-stone-400 text-stone-700 dark:bg-stone-800 dark:text-stone-300'
+  'bg-stone-100 border-l-4 border-stone-400 text-stone-700'
 
 function toDateKey(date: Date): string {
   const month = `${date.getMonth() + 1}`.padStart(2, '0')

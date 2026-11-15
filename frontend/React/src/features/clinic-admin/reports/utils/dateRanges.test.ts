@@ -68,6 +68,13 @@ describe('presetWindow', () => {
     })
   })
 
+  it('resolves the full-month preset through the last calendar day', () => {
+    expect(presetWindow('this-month-full', TZ, NOW)).toEqual({
+      date_from: '2026-10-01',
+      date_to: '2026-10-31',
+    })
+  })
+
   it('resolves This year as year-to-date, never a full calendar year', () => {
     expect(presetWindow('this-year', TZ, NOW)).toEqual({
       date_from: '2026-01-01',
@@ -89,6 +96,10 @@ describe('presetWindow', () => {
       date_from: '2026-11-01',
       date_to: '2026-11-02',
     })
+    expect(presetWindow('this-month-full', TZ, lateUtc)).toEqual({
+      date_from: '2026-11-01',
+      date_to: '2026-11-30',
+    })
     expect(presetWindow('this-year', TZ, lateUtc).date_from).toBe('2026-01-01')
     expect(presetWindow('last-30', TZ, lateUtc).date_from).toBe('2026-10-04')
   })
@@ -101,6 +112,9 @@ describe('presetWindow', () => {
     expect(
       presetWindow('last-30', TZ, new Date('2028-03-01T12:00:00Z')),
     ).toEqual({ date_from: '2028-02-01', date_to: '2028-03-01' })
+    expect(
+      presetWindow('this-month-full', TZ, new Date('2028-02-01T12:00:00Z')),
+    ).toEqual({ date_from: '2028-02-01', date_to: '2028-02-29' })
   })
 })
 
