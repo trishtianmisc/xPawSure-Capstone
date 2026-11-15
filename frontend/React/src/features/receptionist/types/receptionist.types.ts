@@ -23,6 +23,11 @@ export interface ScreeningSummary {
   symptom_answers?: { question: string; answer: string }[] | null
 }
 
+/** Attached screening, reduced to a status line; null when none attached. */
+export interface ScreeningStatusSummary {
+  review_status: 'PENDING_REVIEW' | 'REVIEWED'
+}
+
 export interface VetSlot {
   vsl_id: string
   stf_id: string
@@ -79,7 +84,12 @@ export interface Appointment {
   vet_request?: VetRequest | null
 }
 
-export interface AppointmentDetail extends Appointment {
+/**
+ * Detail payload: the AI screening block is vet-only, so only its presence and
+ * review state reach the reception desk and clinic admin.
+ */
+export interface AppointmentDetail extends Omit<Appointment, 'screening'> {
+  screening_status: ScreeningStatusSummary | null
   pet_breed: string | null
   pet_sex: string
   clinic_name: string

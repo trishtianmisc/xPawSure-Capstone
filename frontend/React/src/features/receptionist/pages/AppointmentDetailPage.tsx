@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 
-import { SymptomAnswersList } from '../../../components/SymptomAnswersList'
 import { useAppointmentDetail, useUpdateAppointmentStatus } from '../hooks/useAppointments'
 import { usePaymentsByAppointment } from '../../payments/hooks/usePayments'
 import { PaymentStatusBadge } from '../../payments/components/PaymentStatusBadge'
@@ -29,7 +28,7 @@ function initial(name: string | null | undefined): string {
 
 function SectionHeader({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-3 text-xs font-semibold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+    <h2 className="mt-5 mb-5 text-sm font-bold uppercase tracking-widest text-stone-500 dark:text-stone-400">
       {children}
     </h2>
   )
@@ -52,6 +51,55 @@ function DetailCell({ label, value, className = '' }: DetailCellProps) {
 
 const ROW_CLASS = 'grid grid-cols-1 border-b border-stone-200 last:border-b-0 dark:border-stone-700'
 const FIRST_CELL_CLASS = 'sm:border-r sm:border-stone-200 dark:sm:border-stone-700'
+const PAYMENT_PANEL_TONE: Record<string, string> = {
+  PAID: 'bg-emerald-300/30 dark:bg-emerald-900/25',
+  PENDING: 'bg-amber-100/80 dark:bg-amber-900/25',
+  FAILED: 'bg-rose-100/80 dark:bg-rose-900/25',
+  EXPIRED: 'bg-stone-200/70 dark:bg-stone-800',
+  REFUNDED: 'bg-stone-200/70 dark:bg-stone-800',
+  VOID: 'bg-stone-200/70 dark:bg-stone-800',
+}
+const PAYMENT_PANEL_FALLBACK = 'bg-stone-100 dark:bg-stone-800/70'
+
+function initials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((part) => part[0] ?? '')
+      .join('')
+      .toUpperCase() || '?'
+  )
+}
+
+function DetailLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <dt className="text-sm text-stone-500 dark:text-stone-400">{label}</dt>
+      <dd className="min-w-0 text-right text-sm font-semibold text-stone-900 dark:text-stone-100">
+        {children}
+      </dd>
+    </div>
+  )
+}
+
+function PersonChip({ name, tone }: { name: string; tone: 'sky' | 'stone' }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className={`grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-bold ${tone === 'sky'
+            ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300'
+            : 'bg-stone-100 text-stone-600 dark:bg-stone-700 dark:text-stone-300'
+          }`}
+      >
+        {initials(name)}
+      </span>
+      <span className="truncate">{name}</span>
+    </span>
+  )
+}
+
 
 // Mirrors NO_SHOW_GRACE_MINUTES in backend appointments/services.py.
 const GRACE_PERIOD_MINUTES = 60
@@ -141,18 +189,18 @@ export function AppointmentDetailPage() {
 
   const aptId = appointment.apt_id
   const petSubtitle = appointment.pet_breed ?? labelize(appointment.pet_sex)
-  const paymentLabel =
+  // A recorded payment already renders its own status badge, so this fallback
+  // only covers appointments that still owe a payment or await scheduling.
+  const pendingPaymentLabel =
     appointment.apt_status === 'CONFIRMATION'
       ? 'Awaiting Payment'
       : appointment.apt_status === 'REVIEW'
         ? 'Not Yet Scheduled'
-        : 'Payment Verified'
+        : null
   const paymentClasses =
     appointment.apt_status === 'CONFIRMATION'
       ? 'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-900/40 dark:text-fuchsia-300'
-      : appointment.apt_status === 'REVIEW'
-        ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
-        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300'
+      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
 
   return (
     <div className="p-6">
@@ -214,6 +262,25 @@ export function AppointmentDetailPage() {
         )}
       </div>
 
+      {/* Screening presence only: the report itself is vet-only */}
+      <p className="mb-5 flex items-center gap-4 text-sm font-bold text-stone-500 dark:text-stone-400">
+        <span
+          aria-hidden="true"
+          className={
+            appointment.screening_status
+              ? 'size-1.5 shrink-0 rounded-full bg-blue-500'
+              : 'size-1.5 shrink-0 rounded-full bg-stone-300 dark:bg-stone-600'
+          }
+        />
+        {appointment.screening_status
+          ? `AI screening attached · ${
+              appointment.screening_status.review_status === 'PENDING_REVIEW'
+                ? 'Awaiting vet review'
+                : 'Reviewed by vet'
+            }`
+          : 'No AI screening attached'}
+      </p>
+
       {appointment.vet_request && (
         <VetRequestCard appointment={appointment} />
       )}
@@ -223,118 +290,149 @@ export function AppointmentDetailPage() {
       {/* Appointment Details */}
       <section>
         <SectionHeader>Appointment Details</SectionHeader>
-        <dl className="overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
-          <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-            <DetailCell
-              label="Date"
-              value={formatDateLong(appointment.apt_scheduled_at)}
-              className={FIRST_CELL_CLASS}
-            />
-            <DetailCell label="Time" value={formatTime(appointment.apt_scheduled_at) || '—'} />
-          </div>
-          <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-            <DetailCell label="Type" value={labelize(appointment.apt_type)} className={FIRST_CELL_CLASS} />
-            <DetailCell label="Veterinarian" value={appointment.vet_name ?? 'Unassigned'} />
-          </div>
-          <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-            <DetailCell label="Sex" value={labelize(appointment.pet_sex)} className={FIRST_CELL_CLASS} />
-            <DetailCell label="Created by" value={appointment.created_by_name ?? '—'} />
-          </div>
-          {appointment.apt_reason && (
-            <div className={ROW_CLASS}>
-              <DetailCell label="Reason" value={appointment.apt_reason} />
-            </div>
-          )}
-          <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-            <DetailCell
-              label="Payment"
-              value={
-                paymentsLoading ? (
-                  <span className="text-stone-400">Loading…</span>
-                ) : payment ? (
-                  <PaymentStatusBadge status={payment.status} />
-                ) : (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${paymentClasses}`}>
-                    <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    {paymentLabel}
-                  </span>
-                )
-              }
-              className={FIRST_CELL_CLASS}
-            />
-            <DetailCell
-              label="Receipt"
-              value={payment ? `${payment.reference_no} · ${payment.method}` : '—'}
-            />
-          </div>
-          {payment && (
-            <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-              <DetailCell
-                label="Amount"
-                value={`₱${Number(payment.amount).toFixed(2)}`}
-                className={FIRST_CELL_CLASS}
-              />
-              <DetailCell
-                label="Paid at"
-                value={payment.paid_at ? formatDateTime(payment.paid_at) : '—'}
-              />
-            </div>
-          )}
-          {appointment.apt_checked_in_at && (
-            <div className={`${ROW_CLASS} grid-cols-1 sm:grid-cols-2`}>
-              <DetailCell
-                label="Checked in"
-                value={formatDateTime(appointment.apt_checked_in_at)}
-                className={FIRST_CELL_CLASS}
-              />
-              <DetailCell
-                label="Completed"
-                value={
-                  appointment.apt_completed_at
-                    ? formatDateTime(appointment.apt_completed_at)
-                    : '—'
-                }
-              />
-            </div>
-          )}
-          {appointment.apt_cancellation_reason && (
-            <div className={ROW_CLASS}>
-              <DetailCell
-                label="Cancellation Reason"
-                value={appointment.apt_cancellation_reason}
-              />
-            </div>
-          )}
-        </dl>
-      </section>
 
-      {/* AI Screening Result */}
-      {appointment.screening && (
-        <section className="mt-6">
-          <SectionHeader>AI Screening Result</SectionHeader>
-          <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-800 dark:bg-blue-900/20">
-            <div className="mb-3 flex items-center gap-2">
-              <svg className="size-4 shrink-0 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-              </svg>
-              <span className="text-xs font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300">
-                {appointment.screening.ais_source === 'MOCK'
-                  ? 'Demo Analysis'
-                  : 'On-Device Analysis'}
-              </span>
+        <div className="grid gap-3 lg:grid-cols-[1.15fr_1fr]">
+          {/* Visit: schedule headline, then who and what */}
+          <div className="rounded-3xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+            <div className="flex items-center gap-4">
+              <div className="grid size-12 shrink-0 place-items-center rounded-2xl bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300">
+                <svg className="size-6" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <p className="text-base font-semibold leading-tight text-stone-900 dark:text-stone-100">
+                  {formatDateLong(appointment.apt_scheduled_at)}
+                </p>
+                <p className="mt-1 flex items-center gap-1.5 text-sm text-stone-500 dark:text-stone-400">
+                  <svg className="size-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {formatTime(appointment.apt_scheduled_at) || '—'}
+                </p>
+              </div>
             </div>
-            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {appointment.screening.disease} ({Math.round(Number(appointment.screening.ais_confidence))}%)
-            </p>
-            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
-              Model {appointment.screening.ais_model_version} · {appointment.screening.ais_status.replace(/_/g, ' ')}
-            </p>
-            <SymptomAnswersList rows={appointment.screening.symptom_answers} />
+
+            <dl className="mt-5 space-y-3.5 border-t border-stone-100 pt-4 dark:border-stone-700">
+              <DetailLine label="Type">
+                <span className="inline-block rounded-full bg-sky-100 px-3 py-0.5 text-xs font-semibold text-sky-800 dark:bg-sky-900/40 dark:text-sky-300">
+                  {labelize(appointment.apt_type)}
+                </span>
+              </DetailLine>
+              <DetailLine label="Veterinarian">
+                {appointment.vet_name ? (
+                  <PersonChip name={appointment.vet_name} tone="sky" />
+                ) : (
+                  <span className="font-normal italic text-stone-400 dark:text-stone-500">Unassigned</span>
+                )}
+              </DetailLine>
+              <DetailLine label="Created by">
+                {appointment.created_by_name ? (
+                  <PersonChip name={appointment.created_by_name} tone="stone" />
+                ) : (
+                  '—'
+                )}
+              </DetailLine>
+              <DetailLine label="Patient sex">{labelize(appointment.pet_sex)}</DetailLine>
+            </dl>
           </div>
-        </section>
-      )}
+
+          {/* Payment: tinted by status */}
+          <div
+            className={`rounded-3xl p-5 ${(payment && PAYMENT_PANEL_TONE[payment.status]) || PAYMENT_PANEL_FALLBACK
+              }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-stone-600 dark:text-stone-300">Payment</p>
+              {paymentsLoading ? (
+                <span className="text-xs text-stone-400">Loading…</span>
+              ) : payment ? (
+                <PaymentStatusBadge status={payment.status} />
+              ) : pendingPaymentLabel ? (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${paymentClasses}`}>
+                  <svg className="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {pendingPaymentLabel}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-4">
+              <p className="text-xs text-stone-500 dark:text-stone-400">Amount</p>
+              <p className="mt-0.5 text-3xl font-bold leading-tight tabular-nums text-stone-900 dark:text-stone-50">
+                {payment ? `₱${Number(payment.amount).toFixed(2)}` : '—'}
+              </p>
+            </div>
+
+            <dl className="mt-5 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
+              <DetailLine label="Receipt">
+                {payment ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="font-mono text-xs">{payment.reference_no}</span>
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </DetailLine>
+              <DetailLine label="Method">
+                {payment ? (
+                  <span className="inline-block rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-semibold dark:bg-stone-900/40">
+                    {payment.method}
+                  </span>
+                ) : (
+                  '—'
+                )}
+              </DetailLine>
+              <DetailLine label="Paid at">
+                {payment?.paid_at ? formatDateTime(payment.paid_at) : '—'}
+              </DetailLine>
+            </dl>
+          </div>
+        </div>
+
+        {/* Notes and history: only shown when there's something to show */}
+        {(appointment.apt_reason ||
+          appointment.apt_checked_in_at ||
+          appointment.apt_cancellation_reason) && (
+            <div className="mt-3 space-y-5 rounded-3xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
+              {appointment.apt_reason && (
+                <div>
+                  <p className="mb-2 text-xs font-medium text-stone-500 dark:text-stone-400">Reason</p>
+                  <blockquote className="rounded-none border-l-4 border-stone-300 py-0.5 pl-4 text-base leading-relaxed text-stone-900 dark:border-stone-600 dark:text-stone-100">
+                    {appointment.apt_reason}
+                  </blockquote>
+                </div>
+              )}
+
+              {appointment.apt_checked_in_at && (
+                <dl className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-stone-50 px-4 py-3 dark:bg-stone-900/40">
+                    <dt className="text-xs text-stone-500 dark:text-stone-400">Checked in</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-stone-900 dark:text-stone-100">
+                      {formatDateTime(appointment.apt_checked_in_at)}
+                    </dd>
+                  </div>
+                  <div className="rounded-2xl bg-stone-50 px-4 py-3 dark:bg-stone-900/40">
+                    <dt className="text-xs text-stone-500 dark:text-stone-400">Completed</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-stone-900 dark:text-stone-100">
+                      {appointment.apt_completed_at ? formatDateTime(appointment.apt_completed_at) : '—'}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+
+              {appointment.apt_cancellation_reason && (
+                <div className="rounded-2xl bg-rose-100/80 px-4 py-3 dark:bg-rose-900/25">
+                  <p className="text-xs font-medium text-rose-800 dark:text-rose-300">Cancellation reason</p>
+                  <p className="mt-1 text-sm text-stone-900 dark:text-stone-100">
+                    {appointment.apt_cancellation_reason}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+      </section>
 
       {/* Actions */}
       <div className="mb-6 p-5 flex flex-wrap justify-end gap-3">
@@ -354,9 +452,9 @@ export function AppointmentDetailPage() {
             title={
               checkInTooEarly
                 ? `Check-in opens on ${formatDateLong(
-                    appointment.apt_scheduled_at,
-                    CLINIC_TIME_ZONE,
-                  )}`
+                  appointment.apt_scheduled_at,
+                  CLINIC_TIME_ZONE,
+                )}`
                 : undefined
             }
             className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800 disabled:opacity-50"

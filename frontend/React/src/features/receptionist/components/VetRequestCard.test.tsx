@@ -44,7 +44,7 @@ function appointment(
     apt_scheduled_at: '2026-10-02T09:00:00+08:00',
     apt_reason: null,
     created_by_name: 'Rita',
-    screening: null,
+    screening_status: null,
     apt_checked_in_at: null,
     apt_completed_at: null,
     apt_cancelled_at: null,
