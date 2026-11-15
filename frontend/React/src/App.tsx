@@ -55,6 +55,7 @@ const VetPrescriptionPage = lazy(() => import('./features/veterinarian/dashboard
 const VetPrescriptionPreviewPage = lazy(() => import('./features/veterinarian/dashboard/pages/PrescriptionPreviewPage').then(m => ({ default: m.PrescriptionPreviewPage })))
 const VetSchedulePage = lazy(() => import('./features/veterinarian/dashboard/pages/SchedulePage').then(m => ({ default: m.SchedulePage })))
 const VetProfilePage = lazy(() => import('./features/veterinarian/dashboard/pages/ProfilePage').then(m => ({ default: m.ProfilePage })))
+const VetAnalyticsPage = lazy(() => import('./features/veterinarian/analytics/pages/AnalyticsPage').then(m => ({ default: m.VetAnalyticsPage })))
 
 function PageLoader() {
   return (
@@ -198,6 +199,7 @@ function App() {
             <Route element={<VetConsultationFormPage />} path="consultations/:id" />
             <Route element={<VetPrescriptionPage />} path="consultations/:id/prescription" />
             <Route element={<VetSchedulePage />} path="schedule" />
+            <Route element={<VetAnalyticsPage />} path="analytics" />
             <Route element={<VetProfilePage />} path="profile" />
           </Route>
           <Route

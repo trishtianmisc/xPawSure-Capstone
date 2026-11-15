@@ -4,7 +4,12 @@ import type { RangePreset } from '../utils/dateRanges'
 const INPUT_CLASSES =
   'rounded-md border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40'
 
-const PRESETS: Array<{ value: RangePreset; label: string }> = [
+export interface ReportPresetOption {
+  value: RangePreset
+  label: string
+}
+
+const DEFAULT_PRESETS: ReportPresetOption[] = [
   { value: 'today', label: 'Today' },
   { value: 'this-month', label: 'This month' },
   { value: 'this-year', label: 'This year' },
@@ -19,10 +24,10 @@ export interface FilterVeterinarian {
 }
 
 interface ReportFiltersProps {
-  vets: FilterVeterinarian[] | undefined
-  vetsLoading: boolean
-  vetId: string
-  onVetIdChange: (value: string) => void
+  vets?: FilterVeterinarian[]
+  vetsLoading?: boolean
+  vetId?: string
+  onVetIdChange?: (value: string) => void
   preset: RangePreset
   onPresetChange: (preset: RangePreset) => void
   dateFrom: string
@@ -31,12 +36,14 @@ interface ReportFiltersProps {
   onDateToChange: (value: string) => void
   onClear: () => void
   hasActiveFilters: boolean
+  showVetFilter?: boolean
+  presets?: ReportPresetOption[]
 }
 
 export function ReportFilters({
   vets,
-  vetsLoading,
-  vetId,
+  vetsLoading = false,
+  vetId = '',
   onVetIdChange,
   preset,
   onPresetChange,
@@ -46,6 +53,8 @@ export function ReportFilters({
   onDateToChange,
   onClear,
   hasActiveFilters,
+  showVetFilter = true,
+  presets = DEFAULT_PRESETS,
 }: ReportFiltersProps) {
   return (
     <Card padding="sm">
@@ -55,7 +64,7 @@ export function ReportFilters({
           role="group"
           aria-label="Date range presets"
         >
-          {PRESETS.map((option) => (
+          {presets.map((option) => (
             <button
               key={option.value}
               type="button"
@@ -72,22 +81,24 @@ export function ReportFilters({
           ))}
         </div>
 
-        <select
-          className={`${INPUT_CLASSES} w-56 shrink-0`}
-          value={vetId}
-          disabled={vetsLoading}
-          onChange={(e) => onVetIdChange(e.target.value)}
-          aria-label="Filter by veterinarian"
-        >
-          <option value="">
-            {vetsLoading ? 'Loading veterinarians...' : 'All veterinarians'}
-          </option>
-          {vets?.map((vet) => (
-            <option key={vet.id} value={vet.id}>
-              {vet.first_name} {vet.last_name}
+        {showVetFilter && (
+          <select
+            className={`${INPUT_CLASSES} w-56 shrink-0`}
+            value={vetId}
+            disabled={vetsLoading}
+            onChange={(e) => onVetIdChange?.(e.target.value)}
+            aria-label="Filter by veterinarian"
+          >
+            <option value="">
+              {vetsLoading ? 'Loading veterinarians...' : 'All veterinarians'}
             </option>
-          ))}
-        </select>
+            {vets?.map((vet) => (
+              <option key={vet.id} value={vet.id}>
+                {vet.first_name} {vet.last_name}
+              </option>
+            ))}
+          </select>
+        )}
 
         <input
           className={`${INPUT_CLASSES} w-44 shrink-0`}

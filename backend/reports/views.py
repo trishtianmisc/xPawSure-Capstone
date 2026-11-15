@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from core.permissions import IsClinicAdminReadOnly
+from core.permissions import IsClinicAdminReadOnly, IsVeterinarianReadOnly
 from reports.services import (
     MAX_REPORT_DAYS,
     ReportService,
@@ -25,19 +25,7 @@ def _parse_date_param(query_params, name):
         return None, f"Invalid '{name}'; expected YYYY-MM-DD."
 
 
-def _report_params(request):
-    """Resolve and validate shared report query params.
-
-    Returns (params, error_response). Exactly one of the two is not None.
-    """
-    try:
-        clinic_id = request.user.staffprofile.cln_id_id
-    except Exception:
-        return None, Response(
-            {'detail': 'Staff profile not found.'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
+def _resolve_report_window(request, clinic_id):
     date_from, date_from_error = _parse_date_param(
         request.query_params, 'date_from',
     )
@@ -71,6 +59,26 @@ def _report_params(request):
             },
             status=status.HTTP_400_BAD_REQUEST,
         )
+    return (date_from, date_to), None
+
+
+def _report_params(request):
+    """Resolve and validate shared report query params.
+
+    Returns (params, error_response). Exactly one of the two is not None.
+    """
+    try:
+        clinic_id = request.user.staffprofile.cln_id_id
+    except Exception:
+        return None, Response(
+            {'detail': 'Staff profile not found.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    window, error = _resolve_report_window(request, clinic_id)
+    if error:
+        return None, error
+    date_from, date_to = window
 
     vet_id = request.query_params.get('vet_id') or None
     if vet_id:
@@ -93,6 +101,29 @@ def _report_params(request):
             )
 
     return (clinic_id, date_from, date_to, vet_id), None
+
+
+def _vet_report_params(request):
+    try:
+        staff = request.user.staffprofile
+    except Exception:
+        return None, Response(
+            {'detail': 'Staff profile not found.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    clinic_id = staff.cln_id_id
+    if clinic_id is None:
+        return None, Response(
+            {'detail': 'Staff profile not found.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    window, error = _resolve_report_window(request, clinic_id)
+    if error:
+        return None, error
+    date_from, date_to = window
+    return (clinic_id, date_from, date_to, staff.stf_id), None
 
 
 class ReportSummaryView(APIView):
@@ -153,3 +184,23 @@ class ReportRevenueView(APIView):
         if error:
             return error
         return Response(ReportService.get_revenue(*params))
+
+
+class VetReportSummaryView(APIView):
+    permission_classes = [IsVeterinarianReadOnly]
+
+    def get(self, request):
+        params, error = _vet_report_params(request)
+        if error:
+            return error
+        return Response(ReportService.get_vet_summary(*params))
+
+
+class VetReportAppointmentsView(APIView):
+    permission_classes = [IsVeterinarianReadOnly]
+
+    def get(self, request):
+        params, error = _vet_report_params(request)
+        if error:
+            return error
+        return Response(ReportService.get_appointments_report(*params))

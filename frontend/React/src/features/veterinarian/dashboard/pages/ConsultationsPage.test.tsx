@@ -75,6 +75,12 @@ function renderPage() {
   )
 }
 
+function selectStatus(value: string) {
+  fireEvent.change(screen.getByLabelText('Filter by status'), {
+    target: { value },
+  })
+}
+
 const startConsultationMutate = vi.fn()
 
 describe('ConsultationsPage filters', () => {
@@ -97,9 +103,30 @@ describe('ConsultationsPage filters', () => {
     expect(screen.getByPlaceholderText('Search pets or breed')).toBeInTheDocument()
   })
 
+  it('offers status options without Today or Upcoming', () => {
+    renderPage()
+
+    expect(screen.getByLabelText('Filter by status')).toHaveValue('All')
+    expect(
+      screen.queryByRole('option', { name: 'Today' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('option', { name: 'Upcoming' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Confirmed' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'Checked In' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('option', { name: 'In Progress' }),
+    ).toBeInTheDocument()
+  })
+
   it('searches by breed', () => {
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    selectStatus('All')
     fireEvent.change(screen.getByPlaceholderText('Search pets or breed'), {
       target: { value: 'beagle' },
     })
@@ -135,9 +162,77 @@ describe('ConsultationsPage filters', () => {
     expect(screen.queryByText('Kiwi')).not.toBeInTheDocument()
   })
 
+  it('filters by confirmed, checked-in, and in-progress statuses', () => {
+    vi.mocked(useVetAppointments).mockReturnValue({
+      data: [
+        appointment({
+          apt_id: 'apt-rex',
+          pet_name: 'Rex',
+          apt_status: 'CONFIRMED',
+        }),
+        appointment({
+          apt_id: 'apt-luna',
+          pet_name: 'Luna',
+          apt_status: 'CHECKED_IN',
+        }),
+        appointment({
+          apt_id: 'apt-nova',
+          pet_name: 'Nova',
+          apt_status: 'IN_PROGRESS',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVetAppointments>)
+
+    renderPage()
+
+    selectStatus('Confirmed')
+    expect(screen.getByText('Rex')).toBeInTheDocument()
+    expect(screen.queryByText('Luna')).not.toBeInTheDocument()
+    expect(screen.queryByText('Nova')).not.toBeInTheDocument()
+
+    selectStatus('Checked In')
+    expect(screen.getByText('Luna')).toBeInTheDocument()
+    expect(screen.queryByText('Rex')).not.toBeInTheDocument()
+
+    selectStatus('In Progress')
+    expect(screen.getByText('Nova')).toBeInTheDocument()
+    expect(screen.queryByText('Luna')).not.toBeInTheDocument()
+  })
+
+  it('filters no-show appointments separately from cancellations', () => {
+    vi.mocked(useVetAppointments).mockReturnValue({
+      data: [
+        appointment({
+          apt_id: 'apt-milo',
+          pet_name: 'Milo',
+          apt_status: 'CANCELLED',
+        }),
+        appointment({
+          apt_id: 'apt-nina',
+          pet_name: 'Nina',
+          apt_status: 'NO_SHOW',
+        }),
+      ],
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useVetAppointments>)
+
+    renderPage()
+
+    selectStatus('No Show')
+    expect(screen.getByText('Nina')).toBeInTheDocument()
+    expect(screen.queryByText('Milo')).not.toBeInTheDocument()
+
+    selectStatus('Cancelled')
+    expect(screen.getByText('Milo')).toBeInTheDocument()
+    expect(screen.queryByText('Nina')).not.toBeInTheDocument()
+  })
+
   it('follows the receptionist table format and sorts by date', () => {
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    selectStatus('All')
 
     expect(screen.getByRole('columnheader', { name: 'Pet' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Owner' })).toBeInTheDocument()
@@ -170,7 +265,7 @@ describe('ConsultationsPage filters', () => {
     } as unknown as ReturnType<typeof useVetAppointments>)
 
     renderPage()
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    selectStatus('All')
 
     expect(screen.getByRole('img', { name: 'Rex' })).toHaveAttribute(
       'src',

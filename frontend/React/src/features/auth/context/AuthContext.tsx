@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
 
-import type { AuthUser, LoginCredentials } from '../login/types/auth.types'
+import type { AuthUser, LoginCredentials, UpdateProfilePayload } from '../login/types/auth.types'
 
 export interface AuthContextValue {
   user: AuthUser | null
@@ -10,7 +10,7 @@ export interface AuthContextValue {
   getAccessToken: () => string | null
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>
   getProfile: () => Promise<AuthUser>
-  updateProfile: (data: { first_name?: string; last_name?: string; phone?: string }) => Promise<AuthUser>
+  updateProfile: (data: UpdateProfilePayload) => Promise<AuthUser>
   revokeAllSessions: () => Promise<void>
   updateUser: (updated: AuthUser) => void
 }
