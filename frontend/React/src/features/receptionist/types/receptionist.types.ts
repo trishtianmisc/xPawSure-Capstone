@@ -107,15 +107,6 @@ export interface AppointmentListResponse {
   results: Appointment[]
 }
 
-export interface CreateAppointmentPayload {
-  pet_id: string
-  slot_id: string
-  apt_type: AppointmentType
-  reason?: string
-  /** Set once the clinic's consultation fee has been paid. */
-  pay_id?: string
-}
-
 export interface Owner {
   own_id: string
   full_name: string

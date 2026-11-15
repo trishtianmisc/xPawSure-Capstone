@@ -75,9 +75,9 @@ function appointment(scheduledAt: string): AppointmentDetail {
   }
 }
 
-function renderPage() {
+function renderPage(path = '/receptionist/appointments/apt-1') {
   return render(
-    <MemoryRouter initialEntries={['/receptionist/appointments/apt-1']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route
           path="/receptionist/appointments/:id"
@@ -164,5 +164,60 @@ describe('AppointmentDetailPage check-in gate', () => {
       aptId: 'apt-1',
       status: 'CHECKED_IN',
     })
+  })
+})
+
+describe('AppointmentDetailPage not-found state', () => {
+  beforeEach(() => {
+    vi.mocked(usePaymentsByAppointment).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+    } as unknown as ReturnType<typeof usePaymentsByAppointment>)
+    vi.mocked(useAvailableSlots).mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useAvailableSlots>)
+    vi.mocked(useConfirmFollowUp).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useConfirmFollowUp>)
+    vi.mocked(useDeclineVetRequest).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useDeclineVetRequest>)
+    vi.mocked(useRescheduleAppointment).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useRescheduleAppointment>)
+    vi.mocked(useUpdateAppointmentStatus).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useUpdateAppointmentStatus>)
+  })
+
+  it('shows a friendly not-found state for an invalid id like "new"', () => {
+    vi.mocked(useAppointmentDetail).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: Object.assign(new Error('Request failed with status code 404'), {
+        response: { status: 404, data: { detail: 'Not found.' } },
+      }),
+      refetch: vi.fn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useAppointmentDetail>)
+
+    renderPage('/receptionist/appointments/new')
+
+    expect(screen.getByText('Appointment not found')).toBeInTheDocument()
+    expect(
+      screen.getByText('It may have been removed, or the link is incorrect.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Not found.')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Go back' }),
+    ).toBeInTheDocument()
   })
 })

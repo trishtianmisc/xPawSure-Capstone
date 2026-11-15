@@ -8,7 +8,7 @@ describe('getClinicSettings', () => {
     vi.resetAllMocks()
   })
 
-  it('reads the clinic settings the booking flow needs', async () => {
+  it('reads the clinic settings the web app displays', async () => {
     const settings = {
       opening_time: '09:00:00',
       closing_time: '17:00:00',
@@ -26,7 +26,7 @@ describe('getClinicSettings', () => {
     expect(result.consultation_fee).toBe(500)
   })
 
-  it('treats a missing fee as 0 so free clinics book normally', async () => {
+  it('treats a missing fee as 0 for clinics that charge nothing', async () => {
     vi.mocked(http.get).mockResolvedValue({
       data: {
         opening_time: '09:00:00',

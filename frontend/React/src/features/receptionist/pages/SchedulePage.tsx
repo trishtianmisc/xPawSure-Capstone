@@ -81,13 +81,11 @@ type GridSlot = {
 function SlotCell({
   slot,
   week,
-  onBook,
   onAppointmentClick,
   onToggleBlock,
 }: {
   slot: GridSlot
   week: boolean
-  onBook?: () => void
   onAppointmentClick?: (aptId: string) => void
   onToggleBlock?: (slotId: string, currentStatus: SlotStatus) => void
 }) {
@@ -188,11 +186,7 @@ function SlotCell({
 
   if (slot.status === 'AVAILABLE') {
     return (
-      <td
-        onClick={onBook}
-        title="Click to book"
-        className="relative cursor-pointer border border-green-200 bg-green-50 px-2 py-1.5 text-center transition hover:bg-green-100 dark:border-green-800 dark:bg-green-900/20 dark:hover:bg-green-900/30"
-      >
+      <td className="relative cursor-default border border-green-200 bg-green-50 px-2 py-1.5 text-center dark:border-green-800 dark:bg-green-900/20">
         <span className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-400">
           Available
         </span>
@@ -607,18 +601,6 @@ export function SchedulePage() {
                             key={`${date}-${vet.stf_id}-${time}`}
                             slot={slot}
                             week={isWeek}
-                            onBook={
-                              slot.status === 'AVAILABLE' && !slot.is_past
-                                ? () =>
-                                    navigate(
-                                      `/receptionist/appointments/new?${new URLSearchParams({
-                                        vet_id: vet.stf_id,
-                                        date,
-                                        slot_id: slot.vsl_id,
-                                      })}`,
-                                    )
-                                : undefined
-                            }
                             onAppointmentClick={(aptId) => navigate(`/receptionist/appointments/${aptId}`)}
                             onToggleBlock={handleToggleBlock}
                           />
@@ -641,6 +623,9 @@ export function SchedulePage() {
               </li>
             ))}
           </ul>
+          <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
+            Open slots are booked by owners in the app.
+          </p>
         </>
       )}
 
