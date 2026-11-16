@@ -32,6 +32,30 @@ def _screening_status(obj):
     return {'review_status': 'REVIEWED' if reviewed else 'PENDING_REVIEW'}
 
 
+def _payment_block(obj):
+    """Payment/refund summary shared by every appointment-detail surface."""
+    try:
+        payment = obj.payment
+    except ObjectDoesNotExist:
+        return None
+
+    def iso(value):
+        return value.isoformat() if value else None
+
+    return {
+        'status': payment.pay_status,
+        'amount': float(payment.pay_amount),
+        'currency': payment.pay_currency,
+        'method': payment.pay_method,
+        'reference_no': payment.pay_reference,
+        'provider_ref': payment.pay_provider_ref,
+        'paid_at': iso(payment.pay_paid_at),
+        'refunded_at': iso(payment.pay_refunded_at),
+        'refund_reason': payment.pay_refund_reason,
+        'refund_reference': payment.pay_refund_reference,
+    }
+
+
 def _vet_request_block(obj):
     """The vet's request payload for receptionist/vet responses only.
 
@@ -271,6 +295,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     vet_request = serializers.SerializerMethodField()
     has_open_request = serializers.SerializerMethodField()
     reschedule_approval_pending = serializers.SerializerMethodField()
+    payment = serializers.SerializerMethodField()
     payment_provider_ref = serializers.SerializerMethodField()
 
     class Meta:
@@ -291,7 +316,8 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'reschedule_approval_pending',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
-            'vet_request', 'has_open_request', 'payment_provider_ref',
+            'vet_request', 'has_open_request', 'payment',
+            'payment_provider_ref',
         ]
 
     def get_consultation_fee(self, obj):
@@ -313,6 +339,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         except ObjectDoesNotExist:
             return None
         return PrescriptionResponseSerializer(prescription).data
+
+    def get_payment(self, obj):
+        return _payment_block(obj)
 
     def get_payment_provider_ref(self, obj):
         try:
@@ -440,7 +469,7 @@ class ClinicAdminAppointmentDetailSerializer(ReceptionistAppointmentDetailSerial
             'status_change', 'screening_status', 'vet_request',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
-            'apt_created_at',
+            'payment', 'apt_created_at',
         ]
 
     def get_created_by_role(self, obj):

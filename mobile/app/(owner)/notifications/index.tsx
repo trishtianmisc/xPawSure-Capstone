@@ -30,6 +30,7 @@ const TYPE_ICONS: Record<string, IconName> = {
   AI_SCREENING_REVIEWED: 'clipboard-check-outline',
   PAYMENT_COMPLETED: 'cash',
   PAYMENT_EXPIRED: 'clock-outline',
+  PAYMENT_REFUNDED: 'cash-refund',
   SYSTEM: 'information-outline',
 }
 

@@ -153,6 +153,7 @@ Until the password is changed, the Clinic Admin must not access protected applic
 Receptionists can
 
 - Reschedule appointments and confirm follow-up requests
+- Cancel appointments; a cancellation automatically refunds a linked `PAID` fee
 - Check patients in
 - Collect the consultation fee (GCash, card) and record cash payments
 
@@ -169,7 +170,8 @@ Receptionists cannot
 - Run AI screening
 - Manage user accounts
 - Access records outside their own clinic
-- Refund or void a payment that has already been paid
+- Manually refund or void a payment that has already been paid (cancelling the
+  appointment triggers the automatic refund instead)
 
 Patient visibility: a pet is a clinic patient once it has a non-deleted
 appointment at that clinic whose status is not `CANCELLED` or `NO_SHOW`.
@@ -325,7 +327,9 @@ its current `PENDING`/`CONFIRMED` status and the owner is notified with
 - Approve the new time. This only records `APT_RESCHEDULE_ACKNOWLEDGED_AT`; the
   appointment status and slot do not change.
 - Cancel the appointment through the normal owner cancellation flow. The
-  appointment becomes `CANCELLED` and the slot is freed.
+  appointment becomes `CANCELLED` and the slot is freed. If the consultation
+  fee was already `PAID`, the backend records a full ledger refund in the same
+  transaction; this is automatic and does not require staff approval.
 
 If the owner takes no action, the appointment stays scheduled at the new time.
 There is no automatic cancellation or slot hold. A second reschedule clears the
@@ -348,10 +352,26 @@ Payment comes before the appointment when the clinic charges a consultation fee.
   never send an amount.
 - Owners pay online (`GCASH` or `CARD`). Cash is recorded by clinic staff at the
   counter and is never available to owners.
-- Unpaid checkouts can be cancelled (`VOID`). Settled payments are never edited
-  or deleted; refunds are a separate, audited operation.
+- Unpaid checkouts can be cancelled (`VOID`). A settled payment keeps its
+  amount and original receipt; a full refund flips its status to `REFUNDED`
+  instead of editing or deleting the record.
+- When an owner cancels an appointment after the clinic rescheduled it, a
+  linked `PAID` payment is automatically marked `REFUNDED` (full amount) and
+  stamped with `PAY_REFUNDED_AT`, `PAY_REFUND_REASON`, and a unique
+  `PAY_REFUND_REFERENCE` (`RFD-YYYYMMDD-XXXXXX`). The operation is idempotent
+  and audited; no provider refund API is called.
+- When a receptionist cancels an appointment through
+  `PATCH /api/appointments/{id}/`, a linked `PAID` payment is automatically
+  marked `REFUNDED` in full regardless of reschedule, with reason
+  `Receptionist cancelled the appointment.` The same ledger, audit, event, and
+  notification rules apply.
+- Refunds are ledger-only. Revenue and `paid_total` count `PAID` rows, so the
+  refunded amount drops out of the clinic's revenue for the original
+  `PAY_PAID_AT` period. `refunded_total` remains a separate figure, not a
+  negative adjustment.
 - Payment history is visible to the clinic's Receptionists and Clinic Admin, and
-  to the owner who paid.
+  to the owner who paid. Refunded receipts show the refund date, reason, and
+  reference.
 
 ---
 
@@ -705,6 +725,7 @@ Notify owners when:
 - Appointment reminder
 - Screening results reviewed by veterinarian
 - Vaccination due
+- Consultation-fee refund recorded (`PAYMENT_REFUNDED`)
 
 For clinic staff, notify when:
 

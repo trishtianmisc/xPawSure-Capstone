@@ -14,6 +14,7 @@ import { useVetAppointment } from '../../../features/vet/hooks/useVetAppointment
 import { useRequestVetCancel } from '../../../features/vet/hooks/useRequestVetCancel'
 import { useRequestVetReschedule } from '../../../features/vet/hooks/useRequestVetReschedule'
 import { VetPetHero } from '../../../features/vet/components/VetPetHero'
+import { PAYMENT_PRESENTATION } from '../../../features/payment/lib/presentation'
 import { formatDiseaseName } from '../../../features/vet/lib/diseaseNames'
 import { formatAppointmentStatus, formatNumericDateTime, formatShortDate, formatTime } from '../../../features/vet/lib/format'
 import { getDiagnosisAgreement } from '../../../features/vet/lib/screeningMatch'
@@ -239,6 +240,44 @@ export default function VetConsultationDetailScreen() {
                 )}
                 {renderCell('Ref. No', detail.payment_provider_ref ?? 'Not yet added')}
               </View>
+              <View style={[styles.detailRow, styles.detailRowDivider]}>
+                {renderCell(
+                  'Payment',
+                  detail.payment ? (
+                    <View
+                      style={[
+                        styles.statusBadge,
+                        { backgroundColor: PAYMENT_PRESENTATION[detail.payment.status].bg },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusBadgeText,
+                          { color: PAYMENT_PRESENTATION[detail.payment.status].text },
+                        ]}
+                      >
+                        {PAYMENT_PRESENTATION[detail.payment.status].label}
+                      </Text>
+                    </View>
+                  ) : (
+                    'Not yet added'
+                  ),
+                  true,
+                )}
+                {renderCell('Receipt No.', detail.payment?.reference_no ?? '—')}
+              </View>
+              {detail.payment?.status === 'REFUNDED' ? (
+                <View style={[styles.detailRow, styles.detailRowDivider]}>
+                  {renderCell(
+                    'Refunded at',
+                    detail.payment.refunded_at
+                      ? formatNumericDateTime(detail.payment.refunded_at)
+                      : '—',
+                    true,
+                  )}
+                  {renderCell('Refund ref.', detail.payment.refund_reference ?? '—')}
+                </View>
+              ) : null}
               {detail.apt_reschedule_request_reason && (
                 <View style={[styles.detailRow, styles.detailRowDivider]}>
                   {renderCell(

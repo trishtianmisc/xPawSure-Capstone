@@ -445,11 +445,13 @@ class AppointmentDetailView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        is_cancelling = new_status == AppointmentStatus.CANCELLED
+
         # A receptionist cancelling while a vet request is open is acting on
         # that request: give the cancellation a neutral, owner-safe reason
         # (the stored text may be shown to the owner) when none was supplied.
         if (
-            new_status == AppointmentStatus.CANCELLED
+            is_cancelling
             and not cancellation_reason
             and appointment.apt_request_status == AppointmentRequestStatus.OPEN
         ):
@@ -461,6 +463,10 @@ class AppointmentDetailView(APIView):
                 new_status=new_status,
                 user_id=request.user.usr_id,
                 cancellation_reason=cancellation_reason,
+                refund_on_cancellation=is_cancelling,
+                refund_requires_reschedule=False,
+                refund_reason='Receptionist cancelled the appointment.',
+                ip_address=request.META.get('REMOTE_ADDR'),
             )
         except InvalidTransitionError as e:
             return Response(

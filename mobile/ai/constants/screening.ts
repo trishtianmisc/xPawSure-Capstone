@@ -19,7 +19,7 @@ export const SCREENING_STATE_MESSAGES: Record<ScreeningResultState, { title: str
     message: 'The AI analysis suggests a potential skin condition. Please consult a veterinarian for definitive diagnosis.',
   },
   NOT_SKIN_IMAGE: {
-    title: 'Not a Skin Image',
+    title: 'Not a Dog Skin Image',
     message: "The image doesn't appear to show a pet skin condition. Please upload a close-up photo of the affected skin area.",
   },
   UNCERTAIN: {

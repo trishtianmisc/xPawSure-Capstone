@@ -226,7 +226,8 @@ on the message text:
 | `SCREENING_REQUIRED` | Missing (or invalid) `screening_id` | Send the owner back to the skin scanner — booking only exists downstream of a scan |
 
 The owner also receives an in-app notification (`PAYMENT_COMPLETED`,
-`PAYMENT_EXPIRED`) when a payment settles or lapses.
+`PAYMENT_EXPIRED`, `PAYMENT_REFUNDED`) when a payment settles, lapses, or is
+refunded.
 
 Owners may view upcoming appointments.
 
@@ -234,10 +235,14 @@ The appointment details screen presents the record formally: a status banner
 with a per-status explanation, the schedule (date block, time, clinic,
 veterinarian, type), the patient, the visit reason, the linked skin scan
 (with a shortcut to its full screening log), and the consultation-fee payment
-receipt (amount, method, status, reference). Cancelling optionally captures an
-owner-stated reason, which the record then displays.
+receipt (amount, method, status, reference). When a `PAID` fee is refunded, the
+receipt shows the refund date, reason, and `RFD-` reference. Cancelling
+optionally captures an owner-stated reason, which the record then displays.
 
-Owners may cancel appointments.
+Owners may cancel appointments. Cancelling an appointment the clinic had
+rescheduled uses the normal cancellation endpoint; the backend automatically
+refunds a `PAID` consultation fee in the same transaction. The confirmation
+dialog warns about this before submission.
 
 ### Consultation and screening history links
 
@@ -271,8 +276,8 @@ surfaced.
 `GET /api/owner/payments/` lists the owner's own payments with the same
 envelope as the staff list: `{ total, page, page_size, total_pages, results }`.
 
-Filters: `status`, `method`, `reference`, `appointment`, `date_from`,
-`date_to`, `page`, `page_size`.
+Filters: `status` (including `REFUNDED`), `method`, `reference`, `appointment`,
+`date_from`, `date_to`, `page`, `page_size`.
 
 `?status=PENDING` is how an abandoned checkout is found again and resumed.
 `?appointment=` also matches pending follow-up attempts tracked in
@@ -283,7 +288,10 @@ Screen: `app/(owner)/payments/` — reached from the Appointments header
 (receipt icon) or from a `PAYMENT_*` notification; it is registered as a hidden
 tab (`href: null`).
 
-Refunds and cancellations of settled payments are out of scope until phase 3.
+Refunded receipts remain in the list with a `REFUNDED` badge and show the
+refund date, reason, and reference. Refunds are ledger-only and are created
+automatically when an owner cancels a rescheduled appointment or a receptionist
+cancels a paid appointment; there is no staff- or owner-initiated refund button.
 
 ---
 

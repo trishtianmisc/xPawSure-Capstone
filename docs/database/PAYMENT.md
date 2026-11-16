@@ -62,12 +62,19 @@ when the payment settles.
 | PAY_EXPIRES_AT | TIMESTAMP | NULL |
 | PAY_PAID_AT | TIMESTAMP | NULL |
 | PAY_FAILURE_REASON | TEXT | NULL |
+| PAY_REFUNDED_AT | TIMESTAMP | NULL, INDEXED |
+| PAY_REFUND_REASON | TEXT | NULL |
+| PAY_REFUND_REFERENCE | VARCHAR(40) | NULL, UNIQUE |
 | PAY_METADATA | JSON | DEFAULT '{}' |
 | PAY_CREATED_AT | TIMESTAMP | DEFAULT NOW() |
 | PAY_UPDATED_AT | TIMESTAMP | DEFAULT NOW() |
 
 `PAY_REFERENCE` is the human-readable receipt number shown on receipts and
 used as PayMongo's `reference_number` (format `XPS-YYYYMMDD-XXXXXX`).
+
+`PAY_REFUND_REFERENCE` is the human-readable refund reference (format
+`RFD-YYYYMMDD-XXXXXX`). It is generated only when a payment is refunded and is
+unique across the ledger. `PAY_REFUNDED_AT` is indexed for refund reporting.
 
 `PAY_METADATA` snapshots the booking context (pet, slot, appointment type,
 booking channel) so the record stays meaningful after checkout. Follow-up
@@ -105,7 +112,8 @@ PAY_STATUS
 - `PAID` – money collected; the payment can be attached to an appointment
 - `FAILED` – gateway declined the payment
 - `EXPIRED` – the checkout window (`PAY_EXPIRES_AT`) closed
-- `REFUNDED` – money returned (phase 3)
+- `REFUNDED` – full ledger refund recorded after an eligible appointment
+  cancellation
 - `VOID` – an unpaid checkout was cancelled
 
 PAY_METHOD
@@ -125,7 +133,7 @@ PAY_PROVIDER
 # State Transitions
 
 ```
-PENDING ── success ──▶ PAID ──▶ REFUNDED   (phase 3)
+PENDING ── success ──▶ PAID ──▶ REFUNDED
    │
    ├── decline ──────▶ FAILED
    ├── TTL / expire ─▶ EXPIRED
@@ -220,9 +228,18 @@ The owner app never sees clinic-wide data:
 | `GET /api/owner/payments/` | Own receipts; `?status=PENDING` finds an abandoned checkout to resume, and `?appointment={id}` includes pending follow-up attempts |
 | `POST /api/payments/{id}/cancel/` | Discard an unpaid checkout |
 
-Settlement and expiry also write an owner notification
-(`PAYMENT_COMPLETED`, `PAYMENT_EXPIRED`, `NTF_REFERENCE_TABLE = 'PAYMENT'`), so
-money that moved without the owner watching the screen is never a surprise.
+Settlement, expiry, and refund also write an owner notification
+(`PAYMENT_COMPLETED`, `PAYMENT_EXPIRED`, `PAYMENT_REFUNDED`,
+`NTF_REFERENCE_TABLE = 'PAYMENT'`), so money that moved without the owner
+watching the screen is never a surprise.
+
+Refunds are ledger-only: `POST /api/owner/appointments/{id}/cancel/`
+automatically flips a linked `PAID` payment to `REFUNDED` when the appointment
+had been rescheduled by the clinic. `PATCH /api/appointments/{id}/` does the
+same when a receptionist cancels, regardless of reschedule. The payment keeps
+its `APT_ID` and original receipt; the refund fields and `REFUNDED` event record
+the reversal. No provider refund API is called, and staff have no manual refund
+endpoint.
 
 ---
 

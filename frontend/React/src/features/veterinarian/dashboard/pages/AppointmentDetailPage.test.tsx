@@ -50,6 +50,7 @@ function makeAppointment(petProfileImage: string | null): VetAppointmentDetail {
     screening: null,
     consultation: null,
     prescription: null,
+    payment: null,
     payment_provider_ref: 'PROV-REF-123',
   }
 }
@@ -170,6 +171,29 @@ describe('AppointmentDetailPage pet avatar', () => {
     renderPage(makeAppointment(null))
 
     expect(screen.getByText('PROV-REF-123')).toBeInTheDocument()
+  })
+
+  it('shows refund date and reference for a refunded consultation fee', () => {
+    const appointment = makeAppointment(null)
+    appointment.payment = {
+      status: 'REFUNDED',
+      amount: 500,
+      currency: 'PHP',
+      method: 'GCASH',
+      reference_no: 'XPS-REFUND-1',
+      provider_ref: 'PROV-REF-123',
+      paid_at: '2026-01-04T10:00:00+08:00',
+      refunded_at: '2026-01-05T11:00:00+08:00',
+      refund_reason: 'Owner cancelled a rescheduled appointment.',
+      refund_reference: 'RFD-20260105-ABC123',
+    }
+
+    renderPage(appointment)
+
+    expect(screen.getByText('Refunded')).toBeInTheDocument()
+    expect(screen.getByText('Refunded at')).toBeInTheDocument()
+    expect(screen.getByText('Refund ref.')).toBeInTheDocument()
+    expect(screen.getByText('RFD-20260105-ABC123')).toBeInTheDocument()
   })
 
   it('shows full names for bacterial and fungal screening results', () => {

@@ -199,7 +199,7 @@ export default function HomeScreen() {
                   accessibilityHint="Opens this pet's medical profile"
                   accessibilityLabel={`Open profile of ${pet.name}`}
                   accessibilityRole="button"
-                  onPress={() => router.push(`/(owner)/pets/${pet.id}`)}
+                  onPress={() => router.push(`/(owner)/pets/${pet.id}`, { withAnchor: true })}
                   style={styles.petCard}
                 >
                   {pet.profile_picture ? (

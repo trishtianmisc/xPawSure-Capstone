@@ -20,6 +20,7 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'PAID', label: 'Paid' },
   { value: 'FAILED', label: 'Failed' },
   { value: 'EXPIRED', label: 'Expired' },
+  { value: 'REFUNDED', label: 'Refunded' },
 ]
 
 function statusColors(status: PaymentStatus, colors: AppColors) {
@@ -28,6 +29,8 @@ function statusColors(status: PaymentStatus, colors: AppColors) {
       return { backgroundColor: colors.primaryLight, color: colors.primaryDark }
     case 'PENDING':
       return { backgroundColor: colors.iconBg, color: colors.iconColor }
+    case 'REFUNDED':
+      return { backgroundColor: colors.surfaceAlt, color: colors.textSecondary }
     case 'FAILED':
     case 'VOID':
       return { backgroundColor: colors.errorBg, color: colors.error }
@@ -64,6 +67,17 @@ function PaymentCard({ payment }: { payment: Payment }) {
       </Text>
       <Text style={styles.reference}>Ref {payment.reference_no}</Text>
       <Text style={styles.date}>{formatDateTime(payment.created_at)}</Text>
+      {payment.status === 'REFUNDED' && payment.refunded_at ? (
+        <>
+          <Text style={styles.refund}>
+            Refunded {formatDateTime(payment.refunded_at)}
+            {payment.refund_reference ? ` · ${payment.refund_reference}` : ''}
+          </Text>
+          {payment.refund_reason ? (
+            <Text style={styles.refundNote}>{payment.refund_reason}</Text>
+          ) : null}
+        </>
+      ) : null}
 
       {payment.status === 'PENDING' && payment.checkout_url ? (
         <Pressable
@@ -219,6 +233,8 @@ const createStyles = (colors: AppColors) =>
     meta: { ...font.semibold, color: colors.textSecondary, fontSize: 14 },
     reference: { ...font.regular, color: colors.textMuted, fontSize: 13 },
     date: { ...font.regular, color: colors.textMuted, fontSize: 13 },
+    refund: { ...font.semibold, color: colors.text, fontSize: 13 },
+    refundNote: { ...font.regular, color: colors.textSecondary, fontSize: 12.5, lineHeight: 18 },
     resumeButton: {
       alignItems: 'center',
       backgroundColor: colors.primary,

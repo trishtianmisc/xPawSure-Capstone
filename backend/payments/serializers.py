@@ -43,6 +43,15 @@ class PaymentSerializer(serializers.ModelSerializer):
     failure_reason = serializers.CharField(
         source='pay_failure_reason', read_only=True, allow_null=True,
     )
+    refunded_at = serializers.DateTimeField(
+        source='pay_refunded_at', read_only=True, allow_null=True,
+    )
+    refund_reason = serializers.CharField(
+        source='pay_refund_reason', read_only=True, allow_null=True,
+    )
+    refund_reference = serializers.CharField(
+        source='pay_refund_reference', read_only=True, allow_null=True,
+    )
     owner_name = serializers.SerializerMethodField()
     pet_name = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(source='pay_created_at', read_only=True)
@@ -54,7 +63,8 @@ class PaymentSerializer(serializers.ModelSerializer):
             'pay_id', 'reference_no', 'clinic_id', 'owner_id', 'owner_name',
             'appointment_id', 'pet_name', 'amount', 'currency', 'method',
             'status', 'provider', 'checkout_url', 'expires_at', 'paid_at',
-            'failure_reason', 'created_at', 'updated_at',
+            'failure_reason', 'refunded_at', 'refund_reason',
+            'refund_reference', 'created_at', 'updated_at',
         ]
         read_only_fields = fields
 

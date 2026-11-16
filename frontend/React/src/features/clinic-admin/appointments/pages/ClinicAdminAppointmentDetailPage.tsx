@@ -348,6 +348,23 @@ export function ClinicAdminAppointmentDetailPage() {
               <DetailLine label="Paid at">
                 {payment?.paid_at ? formatDateTime(payment.paid_at, displayTimeZone) : '—'}
               </DetailLine>
+              {payment?.status === 'REFUNDED' && (
+                <>
+                  <DetailLine label="Refunded at">
+                    {payment.refunded_at
+                      ? formatDateTime(payment.refunded_at, displayTimeZone)
+                      : '—'}
+                  </DetailLine>
+                  <DetailLine label="Refund ref.">
+                    {payment.refund_reference ?? '—'}
+                  </DetailLine>
+                  {payment.refund_reason && (
+                    <DetailLine label="Refund reason">
+                      {payment.refund_reason}
+                    </DetailLine>
+                  )}
+                </>
+              )}
             </dl>
           </div>
         </div>

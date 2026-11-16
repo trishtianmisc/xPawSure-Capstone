@@ -976,13 +976,18 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
-    def update_status(apt_id, new_status, user_id, cancellation_reason=None):
+    def update_status(
+        apt_id, new_status, user_id, cancellation_reason=None,
+        refund_on_cancellation=False, refund_requires_reschedule=True,
+        refund_reason=None, ip_address=None,
+    ):
         try:
             appointment = Appointment.objects.select_for_update().get(apt_id=apt_id)
         except Appointment.DoesNotExist:
             raise ValueError('Appointment not found.')
 
         current = appointment.apt_status
+        was_rescheduled = appointment.apt_rescheduled_at is not None
         allowed = AppointmentService.VALID_TRANSITIONS.get(current, [])
 
         if new_status not in allowed:
@@ -1036,6 +1041,22 @@ class AppointmentService:
                 slot.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
 
         appointment.save()
+
+        if (
+            new_status == AppointmentStatus.CANCELLED
+            and refund_on_cancellation
+            and (was_rescheduled or not refund_requires_reschedule)
+        ):
+            # Owner cancellation keeps its reschedule gate; receptionist
+            # cancellation refunds any linked paid fee.
+            from payments.services import PaymentService
+
+            PaymentService.refund_for_cancelled_appointment(
+                appointment=appointment,
+                actor_user_id=user_id,
+                reason=refund_reason,
+                ip_address=ip_address,
+            )
 
         # System-triggered changes (the past-due reconcile on read) pass
         # user_id=None; there is no system user to attribute and a failed
