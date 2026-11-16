@@ -102,6 +102,35 @@ export function CreateClinicPage() {
                 rows={3}
               />
 
+              <div>
+                <h3 className="text-sm font-semibold text-stone-800 dark:text-stone-200">Map coordinates</h3>
+                <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                  Optional. Enter both values to use these coordinates instead of the address lookup.
+                </p>
+                <div className="mt-3 grid gap-5 sm:grid-cols-2">
+                  <Input
+                    {...register('latitude', { valueAsNumber: true })}
+                    error={errors.latitude?.message}
+                    label="Latitude"
+                    min={-90}
+                    max={90}
+                    placeholder="e.g. 14.599512"
+                    step="any"
+                    type="number"
+                  />
+                  <Input
+                    {...register('longitude', { valueAsNumber: true })}
+                    error={errors.longitude?.message}
+                    label="Longitude"
+                    min={-180}
+                    max={180}
+                    placeholder="e.g. 120.984222"
+                    step="any"
+                    type="number"
+                  />
+                </div>
+              </div>
+
               <Input
                 {...register('license_number')}
                 label="License number"

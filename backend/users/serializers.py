@@ -1,5 +1,7 @@
 from django.conf import settings
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 
 from rest_framework import serializers
@@ -41,6 +43,30 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError(e.detail)
 
         return result
+
+
+class RequestPasswordResetSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+
+class ConfirmPasswordResetSerializer(serializers.Serializer):
+    token = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+        max_length=4096,
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+        min_length=8,
+    )
+
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+        return value
 
 
 class RegisterSerializer(serializers.Serializer):

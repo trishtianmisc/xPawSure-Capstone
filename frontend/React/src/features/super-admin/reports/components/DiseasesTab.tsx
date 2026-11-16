@@ -1,21 +1,13 @@
-import { Alert, Badge, Card } from '../../../../components/ui'
+import { Alert, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
 import { useDiseaseReport } from '../hooks/useReports'
+import { formatReportMonth } from '../utils/dateFormat'
 
-import type { DiseaseReportParams, DiseaseSeverity } from '../types/report.types'
+import type { DiseaseReportParams } from '../types/report.types'
 
 interface DiseasesTabProps {
   params: DiseaseReportParams
 }
-
-const SEVERITY_VARIANTS: Record<DiseaseSeverity, 'success' | 'warning' | 'error' | 'default'> = {
-  LOW: 'success',
-  MODERATE: 'warning',
-  HIGH: 'error',
-  UNKNOWN: 'default',
-}
-
-const SEVERITY_ORDER: DiseaseSeverity[] = ['HIGH', 'MODERATE', 'LOW', 'UNKNOWN']
 
 export function DiseasesTab({ params }: DiseasesTabProps) {
   const { data, isLoading, error } = useDiseaseReport(params)
@@ -55,27 +47,13 @@ export function DiseasesTab({ params }: DiseasesTabProps) {
         </Card>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        {SEVERITY_ORDER.map((severity) => (
-          <div
-            key={severity}
-            className="flex items-center gap-2 rounded-lg border border-stone-200 bg-white px-4 py-2.5 dark:border-stone-700 dark:bg-stone-800"
-          >
-            <Badge variant={SEVERITY_VARIANTS[severity]}>{severity}</Badge>
-            <span className="text-sm font-semibold text-stone-800 dark:text-stone-200">
-              {data.severity_breakdown[severity]}
-            </span>
-          </div>
-        ))}
-      </div>
-
       <div className="grid gap-6 lg:grid-cols-2">
         <Card padding="md">
           <h3 className="mb-1 text-sm font-semibold text-stone-700 dark:text-stone-300">
             Screenings by disease
           </h3>
           <p className="mb-4 text-xs text-stone-400 dark:text-stone-500">
-            Structured predictions with severity
+            Structured predictions by disease
           </p>
           {data.screenings_by_disease.length === 0 ? (
             <p className="py-6 text-center text-sm text-stone-400 dark:text-stone-500">
@@ -86,7 +64,6 @@ export function DiseasesTab({ params }: DiseasesTabProps) {
               <thead>
                 <tr className="border-b border-stone-100 text-stone-400 dark:border-stone-700 dark:text-stone-500">
                   <th className="py-2 pr-3 font-semibold">Disease</th>
-                  <th className="py-2 pr-3 font-semibold">Severity</th>
                   <th className="py-2 font-semibold">Count</th>
                 </tr>
               </thead>
@@ -94,9 +71,6 @@ export function DiseasesTab({ params }: DiseasesTabProps) {
                 {data.screenings_by_disease.map((row) => (
                   <tr key={row.disease}>
                     <td className="py-2.5 pr-3 text-stone-700 dark:text-stone-300">{row.disease}</td>
-                    <td className="py-2.5 pr-3">
-                      <Badge variant={SEVERITY_VARIANTS[row.severity]}>{row.severity}</Badge>
-                    </td>
                     <td className="py-2.5 font-semibold text-stone-800 dark:text-stone-200">
                       {row.count}
                     </td>
@@ -158,7 +132,9 @@ export function DiseasesTab({ params }: DiseasesTabProps) {
             <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
               {data.trend.map((point) => (
                 <tr key={point.month}>
-                  <td className="py-2.5 pr-3 text-stone-700 dark:text-stone-300">{point.month}</td>
+                  <td className="py-2.5 pr-3 text-stone-700 dark:text-stone-300">
+                    {formatReportMonth(point.month)}
+                  </td>
                   <td className="py-2.5 text-stone-800 dark:text-stone-200">{point.count}</td>
                 </tr>
               ))}

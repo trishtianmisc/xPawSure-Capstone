@@ -137,6 +137,50 @@ Response (200):
 
 ---
 
+## POST /api/auth/password-reset/
+
+Public. Requests a password reset email for eligible mobile accounts (`OWNER`
+or `VETERINARIAN`). The response is the same whether or not the email belongs
+to an eligible account, to avoid exposing account existence. The endpoint is
+rate limited.
+
+Request:
+
+{
+  "email": "string"
+}
+
+Response (200):
+
+{
+  "detail": "If an account with that email exists, we sent a password reset link."
+}
+
+The email link expires after one hour and can be used once. Email delivery
+failure does not reveal whether the account exists.
+
+---
+
+## POST /api/auth/password-reset/confirm/
+
+Public. Exchanges a valid email reset token for a new password and invalidates
+all existing sessions for that user.
+
+Request:
+
+{
+  "token": "string",
+  "new_password": "string (at least 8 characters; password validators apply)"
+}
+
+Responses:
+
+- 200: password reset successfully
+- 400: invalid, expired, or already-used link; or invalid password
+- 429: request rate limit exceeded
+
+---
+
 ## GET /api/auth/profile/
 
 Requires authentication.
@@ -2672,6 +2716,23 @@ Cross-clinic disease distribution. Query params: `clinic_id`, `date_from` /
 `date_to`. Returns `totals`, `screenings_by_disease` (structured prediction
 with severity), `confirmed_by_disease` (consultation free text grouped
 case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
+
+## GET /api/super-admin/analytics/consultation-outcomes/
+
+Super Admin only. Paginated, read-only comparison of the on-device AI
+prediction with the veterinarian's primary diagnosis. Claude image-review
+results are not included. Only linked consultations with an image, a saved
+comparison, and one of the five supported primary diagnoses (Allergic
+Dermatitis, Bacterial, Fungal, Hotspot, Mange) are returned. Query params:
+`clinic_id`, `disease_code`, `outcome` (`matched` or `not_matched`),
+`date_from` / `date_to` (consultation creation date), `page`, `page_size`.
+
+## POST /api/super-admin/analytics/consultation-outcomes/
+
+Super Admin only. Downloads a ZIP for the requested `disease_code` and
+`outcome`, with screening images and a `manifest.csv` containing consultation
+and prediction metadata. Accepts the same clinic/date filters. Exports are
+limited to 50 images and 50 MB, and each export is audit-logged.
 
 ---
 

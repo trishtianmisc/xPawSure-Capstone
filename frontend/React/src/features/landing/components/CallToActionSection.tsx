@@ -9,8 +9,6 @@ import { APP_LINKS } from '../landing.utils'
 const focusRing = 'focus-visible:outline-2 focus-visible:outline-offset-2'
 const pill = `inline-flex h-12 items-center justify-center gap-2 rounded-full border-2 px-6 text-sm font-semibold transition hover:-translate-y-0.5 ${focusRing}`
 
-const SAMPLE_ROWS = ['Needs review', 'Verified', 'Follow-up']
-
 export function CallToActionSection() {
   return (
     <section

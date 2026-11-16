@@ -2,7 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 
 import { reportService } from '../services/report.service'
 
-import type { AccuracyReportParams, DiseaseReportParams } from '../types/report.types'
+import type {
+  AccuracyReportParams,
+  ConsultationOutcomeParams,
+  DiseaseReportParams,
+} from '../types/report.types'
 
 export function useAccuracyReport(params?: AccuracyReportParams) {
   return useQuery({
@@ -16,6 +20,14 @@ export function useDiseaseReport(params?: DiseaseReportParams) {
   return useQuery({
     queryKey: ['super-admin-disease-report', params],
     queryFn: () => reportService.getDiseases(params),
+    staleTime: 60_000,
+  })
+}
+
+export function useConsultationOutcomes(params: ConsultationOutcomeParams) {
+  return useQuery({
+    queryKey: ['super-admin-consultation-outcomes', params],
+    queryFn: () => reportService.getConsultationOutcomes(params),
     staleTime: 60_000,
   })
 }

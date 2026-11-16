@@ -54,6 +54,11 @@ Registration requires:
 
 On successful registration, the backend creates a User with role=OWNER and an associated OwnerProfile.
 
+The login screen provides **Forgot password?** for owner and veterinarian
+accounts. The backend emails a single-use, one-hour reset link that opens the
+mobile app's password-reset screen. Resetting the password invalidates existing
+sessions; the API response does not reveal whether an email is registered.
+
 The owner may also optionally provide:
 
 - Address

@@ -1,5 +1,9 @@
+import csv
+import io
 import logging
 import secrets
+import uuid
+import zipfile
 from datetime import timedelta
 
 from django.conf import settings
@@ -8,6 +12,7 @@ from django.db.models import Count, Q, Sum
 from django.db.models.functions import Lower, TruncMonth, Trim
 from django.utils import timezone
 
+from ai_screenings.image_service import read_stored_screening_image
 from ai_screenings.models import AiScreening, DiseaseSeverity
 from appointments.models import Appointment, AppointmentStatus
 from audit_log.models import AuditAction, AuditLog
@@ -28,6 +33,22 @@ from vaccinations.services import VaccinationService
 logger = logging.getLogger(__name__)
 
 GROWTH_MONTHS = 12
+
+SUPPORTED_VET_DIAGNOSES = {
+    'ALLERGIC_DERMATITIS': 'Allergic Dermatitis',
+    'BACTERIAL': 'Bacterial',
+    'FUNGAL': 'Fungal',
+    'HOTSPOT': 'Hotspot',
+    'MANGE': 'Mange',
+}
+MAX_OUTCOME_EXPORT_IMAGES = 50
+MAX_OUTCOME_EXPORT_BYTES = 50 * 1024 * 1024
+
+
+def _safe_csv_value(value):
+    if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
+        return f"'{value}"
+    return value
 
 
 def _audit(**kwargs):
@@ -933,3 +954,161 @@ class DiseaseReportService:
             'severity_breakdown': severity_breakdown,
             'trend': trend,
         }
+
+
+class ConsultationOutcomeReportService:
+    """Read-only cases where a supported vet diagnosis can be compared to AI."""
+
+    @staticmethod
+    def _queryset(*, clinic_id=None, disease_code=None, outcome=None,
+                  date_from=None, date_to=None):
+        queryset = AiScreening.objects.filter(
+            con_id__isnull=False,
+            con_id__con_diagnosis__isnull=False,
+            con_id__apt_id__apt_deleted_at__isnull=True,
+            image__isnull=False,
+            ais_compared_at__isnull=False,
+        )
+        diagnosis_filter = Q()
+        for label in SUPPORTED_VET_DIAGNOSES.values():
+            diagnosis_filter |= Q(con_id__con_diagnosis__iexact=label)
+        queryset = queryset.filter(diagnosis_filter)
+
+        if clinic_id:
+            queryset = queryset.filter(con_id__apt_id__cln_id_id=clinic_id)
+        if disease_code:
+            label = SUPPORTED_VET_DIAGNOSES[disease_code]
+            queryset = queryset.filter(con_id__con_diagnosis__iexact=label)
+        if outcome == 'matched':
+            queryset = queryset.filter(ais_is_correct=True)
+        elif outcome == 'not_matched':
+            queryset = queryset.filter(ais_is_correct=False)
+        if date_from:
+            queryset = queryset.filter(con_id__con_created_at__gte=date_from)
+        if date_to:
+            queryset = queryset.filter(con_id__con_created_at__lte=date_to)
+
+        return queryset.select_related(
+            'dis_id', 'con_id', 'con_id__apt_id__cln_id',
+            'con_id__stf_id__usr_id', 'image',
+        ).order_by('-con_id__con_created_at', 'ais_id')
+
+    @classmethod
+    def get_report(cls, *, clinic_id=None, disease_code=None, outcome='matched',
+                   date_from=None, date_to=None, page=1, page_size=20):
+        queryset = cls._queryset(
+            clinic_id=clinic_id,
+            disease_code=disease_code,
+            outcome=outcome,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        total = queryset.count()
+        start = (page - 1) * page_size
+        results = []
+        for screening in queryset[start:start + page_size]:
+            consultation = screening.con_id
+            results.append({
+                'screening_id': str(screening.ais_id),
+                'consultation_id': str(consultation.con_id),
+                'clinic_name': consultation.apt_id.cln_id.cln_name,
+                'consultation_date': consultation.con_created_at.isoformat(),
+                'veterinarian': (
+                    f'{consultation.stf_id.usr_id.usr_first_name} '
+                    f'{consultation.stf_id.usr_id.usr_last_name}'
+                ).strip(),
+                'vet_diagnosis': consultation.con_diagnosis,
+                'ai_prediction': screening.dis_id.dis_name,
+                'ai_prediction_code': screening.dis_id.dis_code,
+                'confidence': float(screening.ais_confidence),
+                'model_version': screening.ais_model_version,
+                'outcome': 'matched' if screening.ais_is_correct else 'not_matched',
+                'image_url': screening.image.asi_url,
+            })
+
+        return {
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': (total + page_size - 1) // page_size,
+            'results': results,
+        }
+
+    @classmethod
+    def create_zip(cls, *, clinic_id=None, disease_code, outcome,
+                   date_from=None, date_to=None, user_id, ip_address=None):
+        queryset = cls._queryset(
+            clinic_id=clinic_id,
+            disease_code=disease_code,
+            outcome=outcome,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        count = queryset.count()
+        total_bytes = queryset.aggregate(size=Sum('image__asi_size_bytes'))['size'] or 0
+        if count > MAX_OUTCOME_EXPORT_IMAGES or total_bytes > MAX_OUTCOME_EXPORT_BYTES:
+            return None
+
+        buffer = io.BytesIO()
+        written_bytes = 0
+        with zipfile.ZipFile(buffer, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+            manifest = io.StringIO(newline='')
+            writer = csv.writer(manifest)
+            writer.writerow([
+                'screening_id', 'consultation_id', 'clinic', 'consultation_date',
+                'veterinarian', 'vet_diagnosis', 'ai_prediction', 'confidence',
+                'model_version', 'outcome', 'image_file',
+            ])
+            for screening in queryset:
+                image = screening.image
+                content = read_stored_screening_image(image)
+                written_bytes += len(content)
+                if written_bytes > MAX_OUTCOME_EXPORT_BYTES:
+                    return None
+                extension = {
+                    'image/jpeg': 'jpg',
+                    'image/png': 'png',
+                    'image/webp': 'webp',
+                }.get(image.asi_content_type)
+                if extension is None:
+                    raise ValueError('Unsupported screening image type.')
+
+                image_name = f'images/{screening.ais_id}.{extension}'
+                archive.writestr(image_name, content)
+                consultation = screening.con_id
+                writer.writerow([
+                    _safe_csv_value(screening.ais_id),
+                    _safe_csv_value(consultation.con_id),
+                    _safe_csv_value(consultation.apt_id.cln_id.cln_name),
+                    _safe_csv_value(consultation.con_created_at.isoformat()),
+                    _safe_csv_value(
+                        f'{consultation.stf_id.usr_id.usr_first_name} '
+                        f'{consultation.stf_id.usr_id.usr_last_name}'.strip(),
+                    ),
+                    _safe_csv_value(consultation.con_diagnosis),
+                    _safe_csv_value(screening.dis_id.dis_name),
+                    screening.ais_confidence,
+                    _safe_csv_value(screening.ais_model_version),
+                    _safe_csv_value(outcome),
+                    _safe_csv_value(image_name),
+                ])
+            archive.writestr('manifest.csv', manifest.getvalue())
+
+        _audit(
+            user_id=user_id,
+            action=AuditAction.EXPORT_REPORT,
+            module='AI_SCREENING',
+            table_name='AI_SCREENING',
+            record_id=str(uuid.uuid4()),
+            description='Super Admin downloaded consultation outcome images',
+            new_values={
+                'clinic_id': str(clinic_id) if clinic_id else None,
+                'disease_code': disease_code,
+                'outcome': outcome,
+                'image_count': count,
+            },
+            ip_address=ip_address,
+        )
+        buffer.seek(0)
+        filename = f'{outcome}_{disease_code.lower()}_consultations.zip'
+        return buffer.getvalue(), filename

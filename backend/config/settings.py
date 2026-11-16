@@ -345,6 +345,8 @@ REST_FRAMEWORK = {
         'vision-analysis': env('VISION_ANALYSIS_THROTTLE_RATE', default='10/hour'),
         'screening-create': env('SCREENING_CREATE_THROTTLE_RATE', default='30/hour'),
         'admin-credentials': env('ADMIN_CREDENTIALS_THROTTLE_RATE', default='10/hour'),
+        'password-reset-request': env('PASSWORD_RESET_REQUEST_THROTTLE_RATE', default='5/hour'),
+        'password-reset-confirm': env('PASSWORD_RESET_CONFIRM_THROTTLE_RATE', default='10/hour'),
     },
 }
 

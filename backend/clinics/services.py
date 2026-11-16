@@ -57,7 +57,13 @@ class ClinicService:
     @staticmethod
     def create(data: dict, user_id: str | None = None, ip_address: str | None = None) -> Clinic:
         clinic_address = data.get('cln_address') or None
-        coordinates = _coordinates_for_address(clinic_address)
+        if data.get('cln_latitude') is not None and data.get('cln_longitude') is not None:
+            coordinates = {
+                'cln_latitude': data['cln_latitude'],
+                'cln_longitude': data['cln_longitude'],
+            }
+        else:
+            coordinates = _coordinates_for_address(clinic_address)
 
         with transaction.atomic():
             clinic_name = data['cln_name']

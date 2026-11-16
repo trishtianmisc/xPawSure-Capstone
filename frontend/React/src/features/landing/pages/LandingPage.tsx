@@ -2,14 +2,12 @@ import { useEffect } from 'react'
 
 import '../landing.css'
 import { AboutSection } from '../components/AboutSection'
-import { AIScreeningSection } from '../components/AIScreeningSection'
 import { CallToActionSection } from '../components/CallToActionSection'
 import { FeaturesSection } from '../components/FeaturesSection'
 import { HeroSection } from '../components/HeroSection'
 import { HowItWorksSection } from '../components/HowItWorksSection'
 import { LandingFooter } from '../components/LandingFooter'
 import { LandingNavbar } from '../components/LandingNavbar'
-import { RolesSection } from '../components/RolesSection'
 
 export function LandingPage() {
   useEffect(() => {

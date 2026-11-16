@@ -9,6 +9,7 @@ from super_admin.views import (
     ClinicAppointmentsListView,
     ClinicOverviewView,
     ClinicOwnersListView,
+    ConsultationOutcomeReportView,
     ClinicPetsListView,
     ClinicStaffListView,
     DiseaseReportView,
@@ -33,6 +34,11 @@ urlpatterns = [
         'super-admin/analytics/diseases/',
         DiseaseReportView.as_view(),
         name='super-admin-analytics-diseases',
+    ),
+    path(
+        'super-admin/analytics/consultation-outcomes/',
+        ConsultationOutcomeReportView.as_view(),
+        name='super-admin-consultation-outcomes',
     ),
     path(
         'super-admin/owners/',

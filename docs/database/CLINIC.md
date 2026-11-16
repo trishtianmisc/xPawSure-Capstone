@@ -71,6 +71,9 @@ Clinic coordinates are resolved automatically from `CLN_ADDRESS` through the
 OpenStreetMap Nominatim service. They are displayed as pins in the owner mobile
 appointment booking flow.
 
+- Super Admins may provide latitude and longitude when creating a clinic. Both
+  values must be provided together and must be within the valid geographic
+  ranges. Manually supplied coordinates take precedence over address geocoding.
 - `CLN_LATITUDE` and `CLN_LONGITUDE` are nullable because geocoding is
   best-effort. A clinic without coordinates still appears in the owner clinic
   list, but it has no map pin.

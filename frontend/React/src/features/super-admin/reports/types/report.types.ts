@@ -95,3 +95,35 @@ export interface DiseaseReportParams {
   date_from?: string
   date_to?: string
 }
+
+export type ConsultationOutcome = 'matched' | 'not_matched'
+
+export interface ConsultationOutcomeRow {
+  screening_id: string
+  consultation_id: string
+  clinic_name: string
+  consultation_date: string
+  veterinarian: string
+  vet_diagnosis: string
+  ai_prediction: string
+  ai_prediction_code: string
+  confidence: number
+  model_version: string
+  outcome: ConsultationOutcome
+  image_url: string
+}
+
+export interface ConsultationOutcomeReport {
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  results: ConsultationOutcomeRow[]
+}
+
+export interface ConsultationOutcomeParams extends DiseaseReportParams {
+  disease_code?: string
+  outcome?: ConsultationOutcome
+  page?: number
+  page_size?: number
+}

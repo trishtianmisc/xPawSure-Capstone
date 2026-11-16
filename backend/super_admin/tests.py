@@ -1,3 +1,5 @@
+import io
+import zipfile
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -7,7 +9,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from ai_screenings.models import AiScreening, Disease, DiseaseSeverity
+from ai_screenings.models import AiScreening, AiScreeningImage, Disease, DiseaseSeverity
 from appointments.models import Appointment, AppointmentStatus, AppointmentType
 from audit_log.models import AuditAction, AuditLog
 from clinics.models import Clinic, ClinicStatus
@@ -108,6 +110,8 @@ class PermissionTests(SuperAdminTestBase):
         ('get', 'super-admin-vaccinations', []),
         ('get', 'super-admin-analytics-accuracy', []),
         ('get', 'super-admin-analytics-diseases', []),
+        ('get', 'super-admin-consultation-outcomes', []),
+        ('post', 'super-admin-consultation-outcomes', []),
     ]
 
     def _resolve_args(self, names):
@@ -974,6 +978,130 @@ class AccuracyReportTests(SuperAdminTestBase):
             **self._auth_header(self.super_admin),
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ConsultationOutcomeReportTests(SuperAdminTestBase):
+
+    def setUp(self):
+        super().setUp()
+        self.disease = Disease.objects.get(dis_code='MANGE')
+        self.fungal = Disease.objects.get(dis_code='FUNGAL')
+
+    def _make_case(self, *, diagnosis='Mange', matched=True, image=True, clinic=None, prediction=None):
+        appointment = Appointment.objects.create(
+            pet_id=self.pet,
+            cln_id=clinic or self.clinic,
+            stf_id=self.vet_profile if clinic in (None, self.clinic) else None,
+            apt_type=AppointmentType.CONSULTATION,
+            apt_status=AppointmentStatus.COMPLETED,
+            apt_scheduled_at=timezone.now(),
+            apt_created_by=self.owner_user,
+        )
+        consultation = Consultation.objects.create(
+            apt_id=appointment,
+            stf_id=self.vet_profile,
+            con_diagnosis=diagnosis,
+        )
+        screening = AiScreening.objects.create(
+            pet_id=self.pet,
+            dis_id=prediction or self.disease,
+            usr_id=self.owner_user,
+            con_id=consultation,
+            ais_confidence=Decimal('88.50'),
+            ais_model_version='tfjs-v2',
+            ais_is_correct=matched,
+            ais_compared_diagnosis=diagnosis,
+            ais_compared_at=timezone.now(),
+        )
+        if image:
+            AiScreeningImage.objects.create(
+                ais_id=screening,
+                asi_url='https://storage.test/screening.jpg',
+                asi_storage_path=f'screenings/{screening.ais_id}.jpg',
+                asi_content_type='image/jpeg',
+                asi_size_bytes=4,
+                asi_sha256='a' * 64,
+            )
+        return screening
+
+    def _outcomes_url(self):
+        return self._url('super-admin-consultation-outcomes')
+
+    def test_lists_only_supported_compared_cases_with_images(self):
+        included = self._make_case(diagnosis='Mange')
+        self._make_case(diagnosis='Other', matched=False)
+        self._make_case(diagnosis='Mange', matched=False, image=False)
+
+        response = self.client.get(
+            self._outcomes_url(),
+            {'disease_code': 'MANGE', 'outcome': 'matched'},
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        row = response.data['results'][0]
+        self.assertEqual(row['screening_id'], str(included.ais_id))
+        self.assertEqual(row['ai_prediction'], 'Mange')
+        self.assertEqual(row['vet_diagnosis'], 'Mange')
+        self.assertEqual(row['outcome'], 'matched')
+        self.assertNotIn('claude', row)
+
+    def test_not_matched_filter(self):
+        included = self._make_case(diagnosis='Mange', matched=False, prediction=self.fungal)
+        self._make_case(diagnosis='Mange', matched=True)
+
+        response = self.client.get(
+            self._outcomes_url(),
+            {'outcome': 'not_matched'},
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        row = response.data['results'][0]
+        self.assertEqual(row['screening_id'], str(included.ais_id))
+        self.assertEqual(row['ai_prediction'], 'Fungal')
+        self.assertEqual(row['vet_diagnosis'], 'Mange')
+
+    @patch('super_admin.services.read_stored_screening_image', return_value=b'jpeg')
+    def test_download_contains_images_and_manifest_for_selected_disease(self, mock_read):
+        self._make_case(diagnosis='Mange', matched=False, prediction=self.fungal)
+        self._make_case(diagnosis='Fungal', matched=False, prediction=self.fungal)
+        url = f'{self._outcomes_url()}?disease_code=MANGE&outcome=not_matched'
+
+        response = self.client.post(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            self.assertEqual(len(archive.namelist()), 2)
+            self.assertIn('manifest.csv', archive.namelist())
+            self.assertTrue(archive.namelist()[0].startswith('images/'))
+            manifest = archive.read('manifest.csv').decode()
+            self.assertIn('Mange', manifest)
+            self.assertIn('Fungal', manifest)  # AI prediction may differ from the selected vet diagnosis.
+        mock_read.assert_called_once()
+        self.assertTrue(AuditLog.objects.filter(adl_action=AuditAction.EXPORT_REPORT).exists())
+
+    def test_rejects_unsupported_download_disease(self):
+        response = self.client.post(
+            f'{self._outcomes_url()}?disease_code=OTHER&outcome=matched',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch('super_admin.services.MAX_OUTCOME_EXPORT_IMAGES', 0)
+    def test_export_limit_returns_payload_too_large(self):
+        self._make_case()
+
+        response = self.client.post(
+            f'{self._outcomes_url()}?disease_code=MANGE&outcome=matched',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
 
 
 class DiseaseReportTests(SuperAdminTestBase):

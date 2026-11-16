@@ -438,8 +438,11 @@ a background worker process. Everything runs inside the request lifecycle:
 ## Email delivery (synchronous, after commit)
 
 Welcome emails for clinics, staff, and veterinarians — plus the staff
-`reset-password` and `resend-welcome` re-sends — are sent synchronously
-through `transaction.on_commit()` → `core.email_service.send_templated_email()`:
+`reset-password` and `resend-welcome` re-sends — are sent synchronously through
+`transaction.on_commit()` → `core.email_service.send_templated_email()`. The
+mobile Owner/Veterinarian forgot-password request also uses the same email
+service synchronously; it does not need an `on_commit` callback because the
+request does not change database state until the reset link is used:
 
 - The transport is selected by `EMAIL_BACKEND`, so callers and templates are
   unchanged between environments:
