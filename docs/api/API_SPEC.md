@@ -874,7 +874,25 @@ timestamp. The vet history endpoint also adds the source appointment's
 
 The detail response also includes `payment_provider_ref`, the linked payment's
 provider reference (`null` when no payment is linked or the provider did not
-return one).
+return one), and a read-only `payment` summary (`null` when no payment is
+linked):
+
+{
+  "status": "PENDING | PAID | FAILED | EXPIRED | REFUNDED | VOID",
+  "amount": 500.0,
+  "currency": "PHP",
+  "method": "GCASH | CARD | CASH",
+  "reference_no": "XPS-20261026-A1B2C3",
+  "provider_ref": "string | null",
+  "paid_at": "timestamp | null",
+  "refunded_at": "timestamp | null",
+  "refund_reason": "string | null",
+  "refund_reference": "RFD-YYYYMMDD-XXXXXX | null"
+}
+
+The `payment` summary is included for receptionist, veterinarian, owner, and
+clinic-admin appointment details. Web/mobile receipts also read the same refund
+fields from the payment endpoints.
 
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
@@ -1016,6 +1034,13 @@ Time-based rules (clinic timezone "now"):
 - Invalid status transitions still return `400` as before.
 - `REVIEW` and `CONFIRMATION` may only transition to `CANCELLED` through this
   endpoint. Scheduling a `REVIEW` follow-up uses the dedicated confirm endpoint.
+- Cancelling an appointment with a linked `PAID` payment refunds it
+  automatically in full, regardless of reschedule. The response `payment`
+  summary becomes `REFUNDED`; the refund is stamped with
+  `refund_reason = "Receptionist cancelled the appointment."`, a unique
+  `RFD-YYYYMMDD-XXXXXX` reference, a `REFUNDED` payment event,
+  `PAYMENT_REFUNDED` audit row, and `PAYMENT_REFUNDED` owner notification. This
+  is ledger-only and idempotent.
 - Marking an appointment `COMPLETED` creates its consultation's linked
   `FOLLOW_UP` appointment in `REVIEW` status when follow-up was requested.
   Cancelling the source appointment before completion creates no follow-up.
@@ -1114,6 +1139,44 @@ Responses:
 
 If the owner ignores the notification, the appointment stays scheduled at the
 new time; there is no automatic cancellation or hold.
+
+---
+
+## POST /api/owner/appointments/{id}/cancel/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets and be `PENDING` or `CONFIRMED`.
+
+Request body (optional):
+
+{
+  "reason": "string"
+}
+
+The appointment becomes `CANCELLED`, the slot is freed, and an
+`APPOINTMENT_CANCELLED` notification is sent. If the appointment was rescheduled
+by the clinic (`APT_RESCHEDULED_AT` is set) and its linked payment is `PAID`,
+the payment is atomically refunded in full:
+
+- `status` becomes `REFUNDED`
+- `refunded_at` is stamped
+- `refund_reason` is `Owner cancelled a rescheduled appointment.`
+- `refund_reference` is a unique `RFD-YYYYMMDD-XXXXXX`
+- a `REFUNDED` payment event, `PAYMENT_REFUNDED` audit row, and
+  `PAYMENT_REFUNDED` owner notification are written
+
+Refund is ledger-only (no provider refund API). Repeating the cancellation
+cannot refund twice. Owner cancellations without a prior reschedule and
+appointments whose payment is not `PAID` do not refund. Receptionist
+cancellations use the automatic refund on `PATCH /api/appointments/{id}/` above
+and refund a linked `PAID` fee regardless of reschedule.
+
+Responses:
+
+- 200: updated owner appointment detail, including the `payment` summary
+- 400: no owner profile, or the appointment is no longer cancellable
+- 403: caller is not an owner
+- 404: unknown appointment, or it belongs to another owner
 
 ---
 
@@ -1309,6 +1372,9 @@ Payment object:
   "expires_at": "2026-10-26T12:34:56Z",
   "paid_at": null,
   "failure_reason": null,
+  "refunded_at": null,
+  "refund_reason": null,
+  "refund_reference": null,
   "created_at": "…",
   "updated_at": "…"
 }
@@ -1445,7 +1511,9 @@ Requires authentication. Receptionist or owner (the payer) — clinic admins get
 admins may read the payment.
 
 Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
-`409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
+`409 { "code": "PAYMENT_PROCESSED" }`; there is no staff endpoint to manually
+void or refund a settled payment. Automatic refunds are created by owner
+cancellation after reschedule or receptionist cancellation, as described above.
 
 ---
 
@@ -2813,7 +2881,12 @@ patient checks in. Both reference the appointment through
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_RESCHEDULED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE,
 PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED,
-AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, PAYMENT_REFUNDED,
+SYSTEM.
+
+`PAYMENT_REFUNDED` is sent to the owner when an appointment cancellation (owner
+or receptionist) refunds a `PAID` consultation fee, and its
+`ntf_reference_table` is `PAYMENT`.
 
 `APPOINTMENT_RESCHEDULED` notifications are sent to the owner when the clinic
 moves an appointment. Only the notification for the latest move carries
@@ -3181,7 +3254,9 @@ Scoping notes:
   on `PAY_PAID_AT` (the moment the money was confirmed: cash recorded at
   checkout, or the provider webhook/mocked confirmation). `PENDING`, `FAILED`,
   `EXPIRED`, `REFUNDED`, and `VOID` never count; a payment collected but never
-  booked still counts.
+  booked still counts. Refunding a payment flips its status, so its amount
+  leaves the revenue of the original `PAY_PAID_AT` period; no negative
+  adjustment is written on the refund date.
 - `vet_id` narrows the sum to payments linked to that veterinarian's
   appointments (`PAYMENT.APT_ID → APPOINTMENT.STF_ID`); payments without an
   appointment link are excluded only under `vet_id`, never in the unfiltered

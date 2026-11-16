@@ -74,6 +74,7 @@ function makeAppointment(prescription: VetPrescriptionInfo | null): VetAppointme
     screening: null,
     consultation: null,
     prescription,
+    payment: null,
     payment_provider_ref: null,
   }
 }

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import QRCode from 'react-native-qrcode-svg'
 
 import { ConfirmDialog } from '../../../src/components/ConfirmDialog'
+import { XPawBottomSheet } from '../../../src/components/XPawBottomSheet'
 import { useAuth } from '../../../src/context/AuthContext'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { apiErrorMessage } from '../../../src/utils/error'
@@ -14,10 +15,12 @@ import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { useConsultations } from '../../records/hooks/useConsultations'
 import { useVaccinations } from '../../records/hooks/useVaccinations'
 import { useScreenings } from '../../screening/hooks/useScreenings'
+import { PetQrImageDocument } from '../components/PetQrImageDocument'
 import { PetRecordSection } from '../components/PetRecordSection'
 import { ConsultationRow, ScreeningRow, VaccinationRow } from '../components/PetRecordRows'
 import { useDeletePet } from '../hooks/useDeletePet'
 import { usePet } from '../hooks/usePet'
+import { useQrImageDownload } from '../hooks/useQrImageDownload'
 import { buildPetPublicUrl } from '../utils/qr'
 
 function computeAge(birthDate: string | null): string {
@@ -69,6 +72,12 @@ export default function PetProfileScreen() {
   const insets = useSafeAreaInsets()
   const scrollViewRef = useRef<ScrollView>(null)
   const qrSectionY = useRef(0)
+  const qrImageRef = useRef<View>(null)
+  const [qrSavedVisible, setQrSavedVisible] = useState(false)
+  const handleQrSaved = useCallback(() => setQrSavedVisible(true), [])
+  const { download: downloadQrImage, isDownloading: isDownloadingQr } = useQrImageDownload({
+    onSaved: handleQrSaved,
+  })
   const [confirmVisible, setConfirmVisible] = useState(false)
   const publicProfileUrl = pet ? buildPetPublicUrl(pet.qr_code || pet.id) : null
 
@@ -256,6 +265,30 @@ export default function PetProfileScreen() {
               </Text>
             )}
           </View>
+          {publicProfileUrl && (
+            <Pressable
+              accessibilityHint="Saves a PNG copy to your photo library."
+              accessibilityLabel={`Download ${pet.name}'s QR code as an image`}
+              accessibilityRole="button"
+              accessibilityState={{ busy: isDownloadingQr, disabled: isDownloadingQr }}
+              disabled={isDownloadingQr}
+              onPress={() => void downloadQrImage(qrImageRef)}
+              style={({ pressed }) => [
+                styles.qrDownloadButton,
+                pressed && !isDownloadingQr && styles.qrDownloadButtonPressed,
+                isDownloadingQr && styles.qrDownloadButtonDisabled,
+              ]}
+            >
+              {isDownloadingQr ? (
+                <ActivityIndicator color={colors.inverse} size="small" />
+              ) : (
+                <MaterialCommunityIcons color={colors.inverse} name="download" size={20} />
+              )}
+              <Text style={styles.qrDownloadButtonText}>
+                {isDownloadingQr ? 'Saving image...' : 'Download as Image'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <PetRecordSection
@@ -358,6 +391,31 @@ export default function PetProfileScreen() {
 
         <View style={styles.spacer} />
       </ScrollView>
+
+      {publicProfileUrl && (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={styles.qrImageStage}
+        >
+          <View ref={qrImageRef} collapsable={false}>
+            <PetQrImageDocument pet={pet} publicProfileUrl={publicProfileUrl} />
+          </View>
+        </View>
+      )}
+
+      <XPawBottomSheet
+        visible={qrSavedVisible}
+        icon="check-bold"
+        title="QR code saved"
+        message={`${pet.name}'s QR code was saved to your photo library.`}
+        onClose={() => setQrSavedVisible(false)}
+        primaryAction={{
+          label: 'Done',
+          onPress: () => setQrSavedVisible(false),
+        }}
+      />
 
       {pet && (
         <ConfirmDialog
@@ -574,6 +632,27 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
   },
+  qrDownloadButton: {
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    flexDirection: 'row',
+    gap: 8,
+    height: 44,
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  qrDownloadButtonPressed: {
+    opacity: 0.85,
+  },
+  qrDownloadButtonDisabled: {
+    opacity: 0.6,
+  },
+  qrDownloadButtonText: {
+    ...font.bold,
+    color: colors.inverse,
+    fontSize: 14,
+  },
 
   deleteButton: {
     alignItems: 'center',
@@ -652,5 +731,10 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
 
   spacer: {
     height: 32,
+  },
+  qrImageStage: {
+    left: -10000,
+    position: 'absolute',
+    top: 0,
   },
 })

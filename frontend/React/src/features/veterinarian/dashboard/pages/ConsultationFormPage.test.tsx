@@ -49,6 +49,7 @@ function makeAppointment(): VetAppointmentDetail {
     screening: null,
     consultation: null,
     prescription: null,
+    payment: null,
     payment_provider_ref: null,
   }
 }

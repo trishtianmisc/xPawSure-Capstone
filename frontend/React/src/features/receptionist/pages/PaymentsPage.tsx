@@ -443,6 +443,11 @@ export function PaymentsPage() {
                           {payment.paid_at
                             ? formatDateTime(payment.paid_at, displayTimeZone)
                             : '—'}
+                          {payment.refunded_at && (
+                            <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                              Refunded {formatDateTime(payment.refunded_at, displayTimeZone)}
+                            </div>
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-5 py-4 text-stone-500 dark:text-stone-400">
                           {formatDateTime(payment.created_at, displayTimeZone)}

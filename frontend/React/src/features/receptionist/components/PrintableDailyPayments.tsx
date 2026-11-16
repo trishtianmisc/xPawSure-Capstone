@@ -66,8 +66,16 @@ export function PrintableDailyPayments({ data, timeZone, clinicName, filters }: 
               <td className="pr-2">{p.owner_name ?? '—'}</td>
               <td className="pr-2">{p.method}</td>
               <td className="pr-2">{formatPeso(p.amount)}</td>
-              <td className="pr-2">{p.status}</td>
-              <td>{p.paid_at ? formatDateTime(p.paid_at, timeZone) : '—'}</td>
+              <td className="pr-2">
+                {p.status}
+                {p.refund_reference ? ` · ${p.refund_reference}` : ''}
+              </td>
+              <td>
+                {p.paid_at ? formatDateTime(p.paid_at, timeZone) : '—'}
+                {p.refunded_at
+                  ? ` · Refunded ${formatDateTime(p.refunded_at, timeZone)}`
+                  : ''}
+              </td>
             </tr>
           ))}
         </tbody>

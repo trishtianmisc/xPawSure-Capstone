@@ -507,11 +507,21 @@ export function ClinicAdminPaymentsPage() {
                       </td>
                       <td className="px-5 py-4">
                         <PaymentStatusBadge status={payment.status} />
+                        {payment.status === 'REFUNDED' && payment.refund_reference && (
+                          <div className="mt-1 font-mono text-[11px] text-stone-500 dark:text-stone-400">
+                            {payment.refund_reference}
+                          </div>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-4 text-stone-600 dark:text-stone-300">
                         {payment.paid_at
                           ? formatDateTime(payment.paid_at, displayTimeZone)
                           : '—'}
+                        {payment.refunded_at && (
+                          <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                            Refunded {formatDateTime(payment.refunded_at, displayTimeZone)}
+                          </div>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-4 text-stone-500 dark:text-stone-400">
                         {formatDateTime(payment.created_at, displayTimeZone)}

@@ -23,8 +23,25 @@ export interface Payment {
   expires_at: string | null
   paid_at: string | null
   failure_reason: string | null
+  refunded_at: string | null
+  refund_reason: string | null
+  refund_reference: string | null
   created_at: string
   updated_at: string
+}
+
+/** Read-only payment summary embedded in every appointment-detail payload. */
+export interface AppointmentPaymentSummary {
+  status: PaymentStatus
+  amount: number
+  currency: string
+  method: PaymentMethod
+  reference_no: string
+  provider_ref: string | null
+  paid_at: string | null
+  refunded_at: string | null
+  refund_reason: string | null
+  refund_reference: string | null
 }
 
 export interface CheckoutPayload {

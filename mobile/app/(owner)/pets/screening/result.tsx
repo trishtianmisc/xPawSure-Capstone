@@ -62,7 +62,7 @@ const GATE_META: Record<
   NOT_DOG_SKIN: {
     color: '#E67E22',
     icon: 'image-off-outline',
-    title: 'Not a Skin Image',
+    title: 'Not a Dog Skin Image',
   },
   NO_VISIBLE_LESIONS: {
     color: '#27AE60',

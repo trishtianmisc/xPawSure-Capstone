@@ -778,16 +778,105 @@ class PaymentService:
         return payment
 
     # ------------------------------------------------------------------
-    # Cancellation and provider callbacks
+    # Refunds, cancellation, and provider callbacks
     # ------------------------------------------------------------------
+    @classmethod
+    @transaction.atomic
+    def refund_for_cancelled_appointment(
+        cls, *, appointment, actor_user_id, reason=None, ip_address=None,
+    ):
+        """Refund the paid fee for a cancelled appointment.
+
+        Only the payment currently linked to the appointment and still PAID is
+        touched. Unpaid, voided, or already-refunded attempts are left alone,
+        which makes retries and double cancellations harmless.
+        """
+        payment = Payment.objects.filter(
+            apt_id=appointment,
+            pay_status=PaymentStatus.PAID,
+        ).first()
+        if payment is None:
+            return None
+        return cls.refund(
+            payment=payment,
+            actor_user_id=actor_user_id,
+            reason=reason or 'Owner cancelled a rescheduled appointment.',
+            ip_address=ip_address,
+        )
+
+    @classmethod
+    @transaction.atomic
+    def refund(cls, *, payment, actor_user_id, reason='', ip_address=None) -> Payment:
+        """Record a full refund and remove the amount from revenue.
+
+        This is a ledger operation: no provider refund API is called. The
+        payment stays linked to the appointment so the owner and clinic can
+        see the original receipt and the refund reference.
+        """
+        payment = (
+            Payment.objects
+            .select_for_update()
+            .select_related('own_id', 'cln_id')
+            .get(pk=payment.pk)
+        )
+
+        if payment.pay_status == PaymentStatus.REFUNDED:
+            return payment
+        if payment.pay_status != PaymentStatus.PAID:
+            raise PaymentError(
+                'Only paid payments can be refunded.',
+                code='PAYMENT_NOT_REFUNDABLE',
+                status_code=409,
+            )
+
+        refunded_at = timezone.now()
+        refund_reference = cls._new_refund_reference()
+        payment.pay_status = PaymentStatus.REFUNDED
+        payment.pay_refunded_at = refunded_at
+        payment.pay_refund_reason = (
+            reason or 'Owner cancelled a rescheduled appointment.'
+        )
+        payment.pay_refund_reference = refund_reference
+        payment.save(update_fields=[
+            'pay_status', 'pay_refunded_at', 'pay_refund_reason',
+            'pay_refund_reference', 'pay_updated_at',
+        ])
+
+        if cls._record_event(
+            payment,
+            PaymentEventType.REFUNDED,
+            {
+                'refund_reference': refund_reference,
+                'reason': payment.pay_refund_reason,
+            },
+        ):
+            cls._notify_owner(payment, PaymentEventType.REFUNDED)
+        cls._audit(
+            action=AuditAction.PAYMENT_REFUNDED,
+            payment=payment,
+            user_id=actor_user_id,
+            description=(
+                f'Payment {payment.pay_reference} refunded '
+                f'({refund_reference})'
+            ),
+            old_values={'pay_status': PaymentStatus.PAID},
+            new_values={
+                'pay_status': PaymentStatus.REFUNDED,
+                'pay_refunded_at': str(refunded_at),
+                'pay_refund_reference': refund_reference,
+            },
+            ip_address=ip_address,
+        )
+        return payment
+
     @classmethod
     @transaction.atomic
     def cancel(cls, *, payment, actor_user_id, ip_address=None) -> Payment:
         payment = Payment.objects.select_for_update().get(pk=payment.pk)
 
         if payment.pay_status != PaymentStatus.PENDING:
-            # Settled money needs a refund, which phase 3 handles with the
-            # provider; a void here would silently lose the record.
+            # Settled money needs a refund; a void here would silently lose
+            # the original receipt.
             raise PaymentError(
                 'Only unpaid checkouts can be cancelled.',
                 code='PAYMENT_PROCESSED',
@@ -923,6 +1012,21 @@ class PaymentService:
         )
 
     @staticmethod
+    def _new_refund_reference() -> str:
+        stamp = timezone.localdate().strftime('%Y%m%d')
+        for _ in range(6):
+            candidate = f'RFD-{stamp}-{secrets.token_hex(3).upper()}'
+            if not Payment.objects.filter(
+                pay_refund_reference=candidate,
+            ).exists():
+                return candidate
+        raise PaymentError(
+            'Could not allocate a refund reference. Please try again.',
+            code='PAYMENT_ERROR',
+            status_code=503,
+        )
+
+    @staticmethod
     def _resolve_provider():
         try:
             return get_provider()
@@ -1004,6 +1108,7 @@ class PaymentService:
         notification_types = {
             PaymentEventType.PAID: 'PAYMENT_COMPLETED',
             PaymentEventType.EXPIRED: 'PAYMENT_EXPIRED',
+            PaymentEventType.REFUNDED: 'PAYMENT_REFUNDED',
         }
         ntf_type = notification_types.get(event_type)
         if ntf_type is None:
@@ -1017,6 +1122,14 @@ class PaymentService:
                 f'We received {payment.pay_amount} {payment.pay_currency} for your '
                 f'{visit_label} at {payment.cln_id.cln_name}. '
                 f'Receipt {payment.pay_reference}.'
+            )
+        elif event_type == PaymentEventType.REFUNDED:
+            title = 'Refund recorded'
+            refund_ref = payment.pay_refund_reference or '—'
+            message = (
+                f'A refund of {payment.pay_amount} {payment.pay_currency} was '
+                f'recorded for your cancelled {visit_label} at '
+                f'{payment.cln_id.cln_name}. Refund {refund_ref}.'
             )
         else:
             title = 'Payment checkout expired'

@@ -80,6 +80,8 @@ PAYMENT_COMPLETED
 
 PAYMENT_EXPIRED
 
+PAYMENT_REFUNDED
+
 SYSTEM
 
 ---
@@ -98,6 +100,10 @@ APPOINTMENT_RESCHEDULED notifications tell the owner that the clinic moved an
 appointment. They include the referenced appointment's status and whether the
 owner still needs to approve the new time. Only the notification for the latest
 move is actionable; earlier reschedule notifications remain informational.
+
+`PAYMENT_REFUNDED` notifications tell the owner that a consultation fee was
+refunded after cancelling a rescheduled appointment. `NTF_REFERENCE_TABLE` is
+`PAYMENT` and the body includes the refund amount, clinic, and refund reference.
 
 Notifications should never be permanently deleted.
 

@@ -448,6 +448,8 @@ class OwnerAppointmentCancelView(APIView):
                 new_status=AppointmentStatus.CANCELLED,
                 user_id=request.user.usr_id,
                 cancellation_reason=reason,
+                refund_on_cancellation=True,
+                ip_address=request.META.get('REMOTE_ADDR'),
             )
         except InvalidTransitionError as e:
             return Response(

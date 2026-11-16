@@ -1,0 +1,16 @@
+export const xpawBrand = {
+  background: '#21130D',
+  surface: '#2D1D15',
+  border: '#4A3225',
+  borderLight: '#5A3D2B',
+  text: '#FFF8F2',
+  textSecondary: '#C7B3A5',
+  textMuted: '#9C8678',
+  accent: '#E0924F',
+  accentSoft: 'rgba(224, 146, 79, 0.16)',
+  accentBorder: 'rgba(224, 146, 79, 0.38)',
+  iconBackground: '#452A1C',
+  qrSurface: '#FFFFFF',
+  divider: '#4A3225',
+  overlay: 'rgba(9, 5, 3, 0.72)',
+} as const

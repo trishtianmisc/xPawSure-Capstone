@@ -25,11 +25,12 @@ from notifications.models import Notification, NotificationType
 from payments.models import (
     Payment,
     PaymentEvent,
+    PaymentEventType,
     PaymentMethod,
     PaymentProvider,
     PaymentStatus,
 )
-from payments.services import PaymentService
+from payments.services import PaymentError, PaymentService
 from reports.services import ReportService
 from users.models import StaffPosition, StaffProfile, UserRole
 
@@ -579,6 +580,32 @@ class PaymentReadTests(PaymentTestBase):
         self.assertEqual(own.data['reference_no'], payment.pay_reference)
         self.assertEqual(other.status_code, status.HTTP_404_NOT_FOUND)
 
+    def test_owner_receipt_exposes_refund_details(self):
+        payment = self._pay(email=OWNER_EMAIL)
+        payment.pay_status = PaymentStatus.REFUNDED
+        payment.pay_refunded_at = timezone.now()
+        payment.pay_refund_reason = 'Owner cancelled a rescheduled appointment.'
+        payment.pay_refund_reference = 'RFD-20260101-ABC123'
+        payment.save(update_fields=[
+            'pay_status', 'pay_refunded_at', 'pay_refund_reason',
+            'pay_refund_reference',
+        ])
+
+        response = self.client.get(
+            f'/api/payments/{payment.pay_id}/', **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data['status'], PaymentStatus.REFUNDED)
+        self.assertEqual(
+            response.data['refund_reference'], 'RFD-20260101-ABC123',
+        )
+        self.assertEqual(
+            response.data['refund_reason'],
+            'Owner cancelled a rescheduled appointment.',
+        )
+        self.assertIsNotNone(response.data['refunded_at'])
+
     def test_owner_cannot_use_the_clinic_list(self):
         response = self.client.get('/api/payments/', **self._auth(OWNER_EMAIL))
 
@@ -754,6 +781,50 @@ class PaymentReadTests(PaymentTestBase):
             self.assertEqual(
                 response.data['results'][0]['pay_id'], str(payment.pay_id),
             )
+
+
+class PaymentRefundServiceTests(PaymentTestBase):
+
+    def test_refund_records_ledger_fields_and_is_idempotent(self):
+        payment = self._make_payment()
+
+        first = PaymentService.refund(
+            payment=payment,
+            actor_user_id=self.owner_user.usr_id,
+            reason='Goodwill refund',
+        )
+        second = PaymentService.refund(
+            payment=first,
+            actor_user_id=self.owner_user.usr_id,
+            reason='Duplicate retry',
+        )
+
+        self.assertEqual(first.pay_status, PaymentStatus.REFUNDED)
+        self.assertTrue(first.pay_refund_reference.startswith('RFD-'))
+        self.assertEqual(first.pay_refund_reason, 'Goodwill refund')
+        self.assertEqual(
+            second.pay_refund_reference, first.pay_refund_reference,
+        )
+        self.assertEqual(
+            PaymentEvent.objects.filter(
+                pay_id=payment,
+                evt_type=PaymentEventType.REFUNDED,
+            ).count(),
+            1,
+        )
+
+    def test_unpaid_payment_cannot_be_refunded(self):
+        pending = self._owner_checkout()
+
+        with self.assertRaises(PaymentError) as caught:
+            PaymentService.refund(
+                payment=pending,
+                actor_user_id=self.owner_user.usr_id,
+            )
+
+        self.assertEqual(caught.exception.code, 'PAYMENT_NOT_REFUNDABLE')
+        pending.refresh_from_db()
+        self.assertEqual(pending.pay_status, PaymentStatus.PENDING)
 
 
 class PaymentClinicAdminWriteTests(PaymentTestBase):

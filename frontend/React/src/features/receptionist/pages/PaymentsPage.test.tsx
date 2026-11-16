@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -101,6 +101,42 @@ describe('PaymentsPage (receptionist)', () => {
     renderPage()
 
     expect(screen.getByText(/Today · Nov 14, 2026/)).toBeInTheDocument()
+  })
+
+  it('shows the refunded badge without the refund reference', () => {
+    const state = paymentsState()
+
+    vi.mocked(usePayments).mockReturnValue({
+      ...state,
+      data: {
+        ...state.data,
+        results: [
+          {
+            pay_id: 'pay-1',
+            reference_no: 'XPS-20261116-10DE9D',
+            pet_name: 'Theo',
+            owner_name: 'Arianne Tampan',
+            method: 'GCASH',
+            amount: 500,
+            currency: 'PHP',
+            status: 'REFUNDED',
+            paid_at: '2026-11-16T15:07:05+08:00',
+            refunded_at: '2026-11-16T15:47:36+08:00',
+            refund_reference: 'RFD-20261116-612316',
+            created_at: '2026-11-16T15:07:05+08:00',
+            appointment_id: 'apt-1',
+          },
+        ],
+      },
+    } as unknown as ReturnType<typeof usePayments>)
+
+    renderPage()
+
+    const table = screen.getByRole('table')
+    expect(within(table).getByText('Refunded')).toBeInTheDocument()
+    expect(
+      within(table).queryByText('RFD-20261116-612316'),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps the status filter flowing into the query', () => {

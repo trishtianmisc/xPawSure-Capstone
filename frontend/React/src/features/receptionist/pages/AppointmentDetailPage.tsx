@@ -349,27 +349,35 @@ export function AppointmentDetailPage() {
             </div>
 
             <dl className="mt-5 space-y-3 border-t border-black/10 pt-4 dark:border-white/10">
-              <DetailLine label="Receipt">
-                {payment ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="font-mono text-xs">{payment.reference_no}</span>
-                  </span>
-                ) : (
-                  '—'
-                )}
-              </DetailLine>
-              <DetailLine label="Method">
-                {payment ? (
-                  <span className="inline-block rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-semibold dark:bg-stone-900/40">
-                    {payment.method}
-                  </span>
-                ) : (
-                  '—'
-                )}
-              </DetailLine>
-              <DetailLine label="Paid at">
-                {payment?.paid_at ? formatDateTime(payment.paid_at) : '—'}
-              </DetailLine>
+              {payment?.status === 'REFUNDED' ? (
+                <DetailLine label="Refunded at">
+                  {payment.refunded_at ? formatDateTime(payment.refunded_at) : '—'}
+                </DetailLine>
+              ) : (
+                <>
+                  <DetailLine label="Receipt">
+                    {payment ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="font-mono text-xs">{payment.reference_no}</span>
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </DetailLine>
+                  <DetailLine label="Method">
+                    {payment ? (
+                      <span className="inline-block rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-semibold dark:bg-stone-900/40">
+                        {payment.method}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </DetailLine>
+                  <DetailLine label="Paid at">
+                    {payment?.paid_at ? formatDateTime(payment.paid_at) : '—'}
+                  </DetailLine>
+                </>
+              )}
             </dl>
           </div>
         </div>

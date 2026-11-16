@@ -92,6 +92,16 @@ class Payment(models.Model):
     pay_failure_reason = models.TextField(
         null=True, blank=True, db_column='PAY_FAILURE_REASON',
     )
+    pay_refunded_at = models.DateTimeField(
+        null=True, blank=True, db_index=True, db_column='PAY_REFUNDED_AT',
+    )
+    pay_refund_reason = models.TextField(
+        null=True, blank=True, db_column='PAY_REFUND_REASON',
+    )
+    pay_refund_reference = models.CharField(
+        max_length=40, unique=True, null=True, blank=True,
+        db_column='PAY_REFUND_REFERENCE',
+    )
     # Snapshot of what was paid for (pet/slot/appointment type) so the record
     # stays meaningful after the checkout window closes.
     pay_metadata = models.JSONField(default=dict, db_column='PAY_METADATA')
