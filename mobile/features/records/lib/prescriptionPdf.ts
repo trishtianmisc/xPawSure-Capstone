@@ -118,7 +118,7 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
 
   const medicationRows =
     prescription.items.length === 0
-      ? '<tr><td class="empty" colspan="6">No medications listed.</td></tr>'
+      ? '<tr><td class="empty" colspan="2">No medications listed.</td></tr>'
       : prescription.items
           .map((item) => {
             const details = [
@@ -130,17 +130,21 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
                 : '',
             ].join('')
 
+            const schedule = [
+              `<p class="med-schedule-primary">${escapeHtml(item.dosage)}</p>`,
+              `<p class="med-schedule-secondary">${escapeHtml(item.frequency)} · ${escapeHtml(item.duration)}</p>`,
+              `<p class="med-schedule-secondary">${escapeHtml(formatRoute(item.route))} · Qty: ${item.quantity == null ? '—' : escapeHtml(item.quantity)}</p>`,
+            ].join('')
+
             return `
               <tr>
                 <td>
                   <p class="med-name">${escapeHtml(item.medicine_name)}</p>
                   ${details}
                 </td>
-                <td>${escapeHtml(item.dosage)}</td>
-                <td>${escapeHtml(item.frequency)}</td>
-                <td>${escapeHtml(item.duration)}</td>
-                <td>${escapeHtml(formatRoute(item.route))}</td>
-                <td>${item.quantity == null ? '—' : escapeHtml(item.quantity)}</td>
+                <td>
+                  ${schedule}
+                </td>
               </tr>
             `
           })
@@ -180,7 +184,7 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
       .sheet {
         display: flex;
         flex-direction: column;
-        min-height: 265mm;
+        min-height: 272mm;
       }
 
       .content {
@@ -237,6 +241,7 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
       }
 
       .info {
+        margin-bottom: 9px;
         margin-top: 18px;
       }
 
@@ -248,9 +253,9 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
       }
 
       .field {
-        align-items: flex-end;
         display: flex;
-        gap: 8px;
+        flex-direction: column;
+        min-width: 0;
       }
 
       .field-label {
@@ -259,18 +264,26 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
         font-size: 7.5pt;
         font-weight: 600;
         letter-spacing: 0.04em;
+        line-height: 1.45;
+        margin: 0 0 2px;
         text-transform: uppercase;
       }
 
       .field-value {
         border-bottom: 1px solid #78716c;
         color: #1c1917;
-        flex: 1;
         font-size: 9.5pt;
         font-weight: 500;
-        min-width: 0;
+        line-height: 1.45;
+        min-height: 17px;
         padding-bottom: 2px;
         word-break: break-word;
+      }
+
+      .info-rule {
+        background: #1f6f8b;
+        height: 2px;
+        margin: 14px 0 12px;
       }
 
       .rx-section {
@@ -286,7 +299,7 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
         font-family: Georgia, "Times New Roman", serif;
         font-size: 54pt;
         font-weight: 700;
-        line-height: 1;
+        line-height: 1.1;
         padding-top: 5px;
         width: 84px;
       }
@@ -322,8 +335,9 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
         vertical-align: top;
       }
 
-      tbody tr:last-child td {
-        border-bottom: 0;
+      th:last-child,
+      td:last-child {
+        padding-right: 0;
       }
 
       tr {
@@ -346,6 +360,17 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
         font-size: 7.5pt;
         font-style: italic;
         margin: 2px 0 0;
+      }
+
+      .med-schedule-primary {
+        font-weight: 600;
+        margin: 0;
+      }
+
+      .med-schedule-secondary {
+        color: #57534e;
+        font-size: 8pt;
+        margin: 1px 0 0;
       }
 
       .empty {
@@ -427,8 +452,8 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
             ${field("Owner's Name", prescription.owner_name)}
             ${field('Date', formatPrescriptionDate(prescription.created_at))}
           </div>
-          <div class="rule-thick" style="margin-top: 14px;"></div>
-          <div class="grid" style="margin-top: 12px;">
+          <div class="info-rule"></div>
+          <div class="grid">
             ${field("Pet's Name", prescription.pet_name)}
             ${field("Pet's Age", calculatePetAge(prescription.pet_birth_date))}
             ${field('Sex', formatPetSex(prescription.pet_sex))}
@@ -443,21 +468,13 @@ export function buildPrescriptionPdfHtml(prescription: PrescriptionRecord): stri
           <div class="rx-body">
             <table>
               <colgroup>
-                <col style="width: 30%;" />
-                <col style="width: 15%;" />
-                <col style="width: 15%;" />
-                <col style="width: 14%;" />
-                <col style="width: 14%;" />
-                <col style="width: 12%;" />
+                <col style="width: 54%;" />
+                <col style="width: 46%;" />
               </colgroup>
               <thead>
                 <tr>
                   <th>Medicine</th>
-                  <th>Dosage</th>
-                  <th>Frequency</th>
-                  <th>Duration</th>
-                  <th>Route</th>
-                  <th>Qty</th>
+                  <th>Dosage &amp; schedule</th>
                 </tr>
               </thead>
               <tbody>

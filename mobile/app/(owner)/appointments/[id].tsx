@@ -82,6 +82,16 @@ export default function AppointmentDetailScreen() {
     cancelAppointment.mutate(
       { aptId: id, reason: cancelReason.trim() || undefined },
       {
+        onSuccess: () => {
+          const refunded =
+            appointment?.apt_rescheduled_at && payment?.status === 'PAID'
+          Alert.alert(
+            'Appointment cancelled',
+            refunded
+              ? 'Your slot is released and your consultation fee has been refunded.'
+              : 'Your slot has been released.',
+          )
+        },
         onError: (error) => {
           Alert.alert('Cancellation failed', apiErrorMessage(error))
         },
@@ -175,6 +185,15 @@ export default function AppointmentDetailScreen() {
   })
   const paidOn = payment?.paid_at
     ? formatDateTime(payment.paid_at, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null
+  const refundedOn = payment?.refunded_at
+    ? formatDateTime(payment.refunded_at, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',
@@ -451,6 +470,15 @@ export default function AppointmentDetailScreen() {
             <InfoRow icon="credit-card-outline" label="Method" value={payment.method} />
             <InfoRow icon="receipt" label="Reference" value={payment.reference_no} />
             {paidOn ? <InfoRow icon="calendar-check" label="Paid on" value={paidOn} /> : null}
+            {refundedOn ? (
+              <InfoRow icon="cash-refund" label="Refunded on" value={refundedOn} />
+            ) : null}
+            {payment.refund_reference ? (
+              <InfoRow icon="receipt-text-outline" label="Refund ref" value={payment.refund_reference} />
+            ) : null}
+            {payment.refund_reason ? (
+              <InfoRow icon="information-outline" label="Refund note" value={payment.refund_reason} />
+            ) : null}
           </View>
         ) : null}
 
@@ -477,7 +505,11 @@ export default function AppointmentDetailScreen() {
       <ConfirmDialog
         visible={confirmVisible}
         title="Cancel appointment?"
-        message="This releases your slot at the clinic. This action cannot be undone."
+        message={
+          appointment.apt_rescheduled_at && payment?.status === 'PAID'
+            ? 'This releases your slot at the clinic and refunds your consultation fee. This action cannot be undone.'
+            : 'This releases your slot at the clinic. This action cannot be undone.'
+        }
         icon="calendar-remove-outline"
         confirmLabel="Cancel appointment"
         cancelLabel="Keep appointment"

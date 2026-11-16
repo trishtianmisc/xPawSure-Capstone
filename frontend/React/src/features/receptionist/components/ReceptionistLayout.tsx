@@ -5,6 +5,7 @@ import { useTheme } from '../../../context/ThemeContext'
 import { useAuth } from '../../auth/context/AuthContext'
 import { roleLabel } from '../../../utils/roles'
 import { NotificationDropdown } from '../../notifications/components/NotificationDropdown'
+import { UserAvatar } from '../../../components/ui/UserAvatar'
 
 interface NavItem {
   label: string
@@ -44,7 +45,7 @@ export function ReceptionistLayout() {
   const [isCollapsed, setIsCollapsed] = useState(false)
 
   useEffect(() => {
-    if (user && user.clinic_name === undefined) {
+    if (user && (user.clinic_name === undefined || user.profile_picture === undefined)) {
       void getProfile().catch(() => undefined)
     }
   }, [user, getProfile])
@@ -67,10 +68,10 @@ export function ReceptionistLayout() {
     .join(' / ') || 'Dashboard'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-stone-50 dark:bg-stone-950">
+    <div className="flex h-screen overflow-hidden bg-stone-50 dark:bg-stone-950 print:h-auto print:overflow-visible">
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
+        className={`print:hidden fixed inset-y-0 left-0 z-40 flex h-screen flex-col border-r border-stone-200 bg-white transition-all duration-200 dark:border-stone-800 dark:bg-stone-900 lg:static lg:translate-x-0 ${isCollapsed ? 'w-20' : 'w-64'
           } ${isMobileNavOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
         {/* Branding */}
@@ -164,9 +165,11 @@ export function ReceptionistLayout() {
             className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition hover:bg-stone-100 dark:hover:bg-stone-800 ${isCollapsed ? 'justify-center' : ''}`}
             onClick={() => setIsMobileNavOpen(false)}
           >
-            <div className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-sm font-bold text-white shadow-sm">
-              {user?.first_name?.[0]}{user?.last_name?.[0]}
-            </div>
+            <UserAvatar
+              picture={user?.profile_picture}
+              initials={`${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`}
+              className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-sm font-bold text-white shadow-sm"
+            />
             {!isCollapsed && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-stone-900 dark:text-stone-100">
@@ -182,15 +185,15 @@ export function ReceptionistLayout() {
       {/* Mobile overlay */}
       {isMobileNavOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/20 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/20 lg:hidden print:hidden"
           onClick={() => setIsMobileNavOpen(false)}
         />
       )}
 
       {/* Main content area */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden print:overflow-visible">
         {/* Header */}
-        <header className="flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900 sm:px-6">
+        <header className="print:hidden flex h-16 shrink-0 items-center justify-between border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-900 sm:px-6">
           <button
             className="grid size-10 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 lg:hidden"
             onClick={() => setIsMobileNavOpen((open) => !open)}
@@ -234,9 +237,14 @@ export function ReceptionistLayout() {
             <div className="hidden items-center gap-3 sm:flex">
               <Link
                 to="/receptionist/profile"
-                className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-amber-400/50"
+                aria-label="Open profile"
+                className="shrink-0 rounded-full transition hover:ring-2 hover:ring-amber-400/50"
               >
-                {user?.first_name?.[0]}{user?.last_name?.[0]}
+                <UserAvatar
+                  picture={user?.profile_picture}
+                  initials={`${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`}
+                  className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm"
+                />
               </Link>
               <button
                 className="rounded-lg px-3 py-2 text-sm font-semibold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
@@ -250,7 +258,7 @@ export function ReceptionistLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto print:overflow-visible">
           <Outlet />
         </main>
       </div>

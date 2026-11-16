@@ -23,6 +23,11 @@ export interface ScreeningSummary {
   symptom_answers?: { question: string; answer: string }[] | null
 }
 
+/** Attached screening, reduced to a status line; null when none attached. */
+export interface ScreeningStatusSummary {
+  review_status: 'PENDING_REVIEW' | 'REVIEWED'
+}
+
 export interface VetSlot {
   vsl_id: string
   stf_id: string
@@ -79,7 +84,12 @@ export interface Appointment {
   vet_request?: VetRequest | null
 }
 
-export interface AppointmentDetail extends Appointment {
+/**
+ * Detail payload: the AI screening block is vet-only, so only its presence and
+ * review state reach the reception desk and clinic admin.
+ */
+export interface AppointmentDetail extends Omit<Appointment, 'screening'> {
+  screening_status: ScreeningStatusSummary | null
   pet_breed: string | null
   pet_sex: string
   clinic_name: string
@@ -95,15 +105,6 @@ export interface AppointmentListResponse {
   page_size: number
   total_pages: number
   results: Appointment[]
-}
-
-export interface CreateAppointmentPayload {
-  pet_id: string
-  slot_id: string
-  apt_type: AppointmentType
-  reason?: string
-  /** Set once the clinic's consultation fee has been paid. */
-  pay_id?: string
 }
 
 export interface Owner {
@@ -144,6 +145,9 @@ export interface Pet {
   qr_code: string | null
   qr_code_url: string | null
   created_at: string
+  owner_name: string | null
+  last_visit_date: string | null
+  next_appointment_date: string | null
 }
 
 export interface PetListResponse {
@@ -154,45 +158,13 @@ export interface PetListResponse {
   results: Pet[]
 }
 
-export interface ConsultationRecord {
-  id: string
-  appointment_id: string
-  /** The visit's scan, resolved through its appointment; null when unlinked. */
-  screening_id: string | null
-  pet_id: string
-  pet_name: string
-  veterinarian: string
-  chief_complaint: string | null
-  subjective: string | null
-  objective: string | null
-  assessment: string | null
-  plan: string | null
-  diagnosis: string
-  treatment: string | null
-  notes: string | null
-  created_at: string
-}
-
-export interface PrescriptionItemRecord {
-  id: string
-  medicine_name: string
-  dosage: string
-  frequency: string
-  duration: string
-  route: string
-  quantity: number | null
-  notes: string | null
-}
-
-export interface PrescriptionRecord {
-  id: string
-  consultation_id: string
-  pet_id: string
-  pet_name: string
-  veterinarian: string
-  instructions: string | null
-  items: PrescriptionItemRecord[]
-  created_at: string
+/** Single-pet payload: the owner block is detail-only, never on list rows. */
+export interface PetDetail extends Pet {
+  owner: {
+    name: string
+    phone: string | null
+    email: string
+  } | null
 }
 
 export interface VaccinationRecord {
@@ -215,23 +187,22 @@ export interface VaccinationRecord {
   created_at: string
 }
 
-export interface PetHistory {
-  consultations: ConsultationRecord[]
-  prescriptions: PrescriptionRecord[]
-  vaccinations: VaccinationRecord[]
-  screenings: ScreeningSummary[]
-  appointments: Appointment[]
+/** Appointment row in a pet's history; deliberately free of clinical data. */
+export interface AppointmentHistoryItem {
+  apt_id: string
+  apt_scheduled_at: string
+  apt_type: AppointmentType
+  apt_status: AppointmentStatus
+  vet_name: string | null
 }
 
-export interface CreatePetPayload {
-  owner_id: string
-  pet_name: string
-  pet_sex: string
-  brd_id?: string | null
-  pet_birth_date?: string | null
-  pet_weight?: number | null
-  pet_color?: string | null
-  pet_microchip_no?: string | null
+/**
+ * Reception desk history: who treated the pet and when, plus its vaccines.
+ * Consultations, prescriptions, and screenings are vet/clinic-admin only.
+ */
+export interface PetHistory {
+  vaccinations: VaccinationRecord[]
+  appointments: AppointmentHistoryItem[]
 }
 
 export interface UpdatePetPayload {

@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../auth/context/AuthContext'
 import { useTheme } from '../../../context/ThemeContext'
+import { UserAvatar } from '../../../components/ui/UserAvatar'
 import type { ReactNode } from 'react'
 
 interface ClinicAdminTopBarProps {
@@ -86,9 +87,11 @@ export function ClinicAdminTopBar({ children, breadcrumb }: ClinicAdminTopBarPro
             >
               Profile
             </button>
-            <div className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm">
-              {user?.first_name?.[0]}{user?.last_name?.[0]}
-            </div>
+            <UserAvatar
+              picture={user?.profile_picture}
+              initials={`${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`}
+              className="grid size-8 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-xs font-bold text-white shadow-sm"
+            />
             <button
               className="rounded-lg px-3 py-2 text-sm font-semibold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
               onClick={logout}

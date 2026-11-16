@@ -170,6 +170,7 @@ export default function ScreeningDetailsScreen() {
               rows={symptomRows}
               answeredCount={symptomRows.length}
               totalQuestions={KNOWLEDGE.questions.length}
+              collapsible={true}
             />
 
             <View style={styles.infoCard}>

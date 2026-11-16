@@ -110,7 +110,7 @@ export default function HomeScreen() {
           accessibilityHint="Opens the skin screening camera"
           accessibilityLabel="Start a pet skin health check"
           accessibilityRole="button"
-          onPress={() => router.push('/(owner)/pets/screening')}
+          onPress={() => router.push('/(owner)/pets/screening', { withAnchor: true })}
           style={styles.hero}
         >
           <View style={styles.heroWatermark}>
@@ -199,7 +199,7 @@ export default function HomeScreen() {
                   accessibilityHint="Opens this pet's medical profile"
                   accessibilityLabel={`Open profile of ${pet.name}`}
                   accessibilityRole="button"
-                  onPress={() => router.push(`/(owner)/pets/${pet.id}`)}
+                  onPress={() => router.push(`/(owner)/pets/${pet.id}`, { withAnchor: true })}
                   style={styles.petCard}
                 >
                   {pet.profile_picture ? (
@@ -294,7 +294,7 @@ export default function HomeScreen() {
             <Pressable
               accessibilityLabel="Start your first skin screening"
               accessibilityRole="button"
-              onPress={() => router.push('/(owner)/pets/screening')}
+              onPress={() => router.push('/(owner)/pets/screening', { withAnchor: true })}
               style={styles.emptyCard}
             >
               <MaterialCommunityIcons color={colors.textMuted} name="camera-outline" size={18} />

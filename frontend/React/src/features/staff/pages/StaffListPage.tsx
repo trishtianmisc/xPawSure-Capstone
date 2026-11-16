@@ -28,6 +28,15 @@ function AvatarCell({ staff }: { staff: StaffMember }) {
   const bg = staff.role === 'VETERINARIAN'
     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
     : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+  if (staff.profile_picture) {
+    return (
+      <img
+        alt={`${staff.first_name} ${staff.last_name}`}
+        className="h-8 w-8 shrink-0 rounded-full object-cover"
+        src={staff.profile_picture}
+      />
+    )
+  }
   return (
     <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${bg}`}>
       {getInitials(staff.first_name, staff.last_name)}
@@ -128,16 +137,25 @@ function ActionsCell({
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
               Edit
             </button>
+            {!staff.is_active && (
+              <p className="px-4 py-2 text-xs text-stone-500 dark:text-stone-400">
+                Reactivate this staff member to resend credentials.
+              </p>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); handleAction('reset-password') }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-stone-700 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800"
+              disabled={!staff.is_active}
+              title={!staff.is_active ? 'Reactivate this staff member first.' : undefined}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-300 dark:hover:bg-stone-800 dark:disabled:hover:bg-transparent"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
               Reset Password
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); handleAction('resend-welcome') }}
-              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-stone-700 hover:bg-stone-50 dark:text-stone-300 dark:hover:bg-stone-800"
+              disabled={!staff.is_active}
+              title={!staff.is_active ? 'Reactivate this staff member first.' : undefined}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-stone-700 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-stone-300 dark:hover:bg-stone-800 dark:disabled:hover:bg-transparent"
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} /></svg>
               Resend Welcome
@@ -459,17 +477,17 @@ export function StaffListPage() {
                         <LicenseCell staff={staff} />
                       </td>
                       <td className="px-5 py-4">
-                        {staff.must_change_password ? (
+                        {!staff.is_active ? (
+                          <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
+                            Deactivated
+                          </span>
+                        ) : staff.must_change_password ? (
                           <span className="inline-flex items-center whitespace-nowrap rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
                             Pending Setup
                           </span>
-                        ) : staff.is_active ? (
+                        ) : (
                           <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
                             Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                            Inactive
                           </span>
                         )}
                       </td>

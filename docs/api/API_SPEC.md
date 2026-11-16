@@ -461,13 +461,19 @@ Query parameters: `search`, `owner_id`, `scope`, `page`, `page_size`
   receptionist's own clinic whose status is not `CANCELLED` or `NO_SHOW`. A pet
   becomes a clinic patient once it has a non-cancelled, non-no-show appointment
   there; a pet whose only appointments were cancelled or no-show is not listed.
-- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic.
-  Used by the booking form so walk-in owners can be booked; after a non-cancelled
-  booking the pet appears in the clinic's Patients tab.
+- `scope=owner` (requires `owner_id`): that owner's active pets from any clinic,
+  regardless of appointment history at the caller's clinic.
 - Detail and history endpoints still require only a non-deleted appointment at
   the clinic, so a pet removed from the directory by the rule above remains
   reachable by direct link (read-only access is unchanged).
 - Invalid `page` / `page_size` values fall back to defaults (never a 500).
+- Each `results[]` item carries the base pet fields plus `owner_name`
+  (`"First Last"`, `null` if missing), `last_visit_date`, and
+  `next_appointment_date`. Both dates are clinic-local `YYYY-MM-DD` strings in
+  the receptionist's clinic timezone and are `null` when no such appointment
+  exists: `last_visit_date` is the latest past appointment that is neither
+  `CANCELLED` nor `NO_SHOW`; `next_appointment_date` is the next
+  `PENDING`/`CONFIRMED` appointment from now onward.
 
 ## POST /api/receptionist/pets/
 
@@ -484,6 +490,11 @@ Requires authentication. Receptionist.
 Returns the pet only if it has an appointment at the receptionist's clinic,
 otherwise `404`.
 
+Payload: the base pet fields plus an `owner` block
+(`{ "name": "First Last", "phone": "+63..." | null, "email": "..." }`) so the
+detail page can show who to call. The owner block is detail-only — list rows
+carry `owner_name` instead.
+
 ## PATCH /api/receptionist/pets/{id}/
 
 Requires authentication. Receptionist.
@@ -494,37 +505,36 @@ Same clinic rule as GET — otherwise `404`.
 
 Requires authentication. Receptionist.
 
-Full read-only medical record for the Patient record page. The pet must have an
-appointment at the receptionist's clinic (`404` otherwise); a receptionist without
-a staff profile gets `400`.
+Visit history for the Patient record page: who saw the pet, when, and its
+vaccines. The pet must have an appointment at the receptionist's clinic (`404`
+otherwise); a receptionist without a staff profile gets `400`.
 
 Response:
 
 ```json
 {
-  "consultations": [],
-  "prescriptions": [],
   "vaccinations": [],
-  "screenings": [],
   "appointments": []
 }
 ```
 
+Each `appointments[]` item carries exactly `apt_id`, `apt_scheduled_at`,
+`apt_type`, `apt_status`, and `vet_name` (`null` when unassigned).
+
 Scoping (shared patients — a pet treated at multiple clinics):
 
-- `consultations`, `prescriptions`, `appointments`: only records from the
-  receptionist's own clinic (per `BUSINESS_RULES.md` — no records outside their
-  own clinic).
-- `vaccinations`, `screenings`: **pet-level** — returned in full, including
-  owner-reported vaccinations and phone AI screenings that belong to the pet
-  rather than any clinic.
+- `appointments`: only records from the receptionist's own clinic (per
+  `BUSINESS_RULES.md` — no records outside their own clinic).
+- `vaccinations`: **pet-level** — returned in full, including owner-reported
+  vaccinations that belong to the pet rather than any clinic.
+
+Privacy: this is deliberately not the medical record. Consultations (SOAP notes,
+diagnosis, treatment), prescriptions (items, instructions), and AI screenings are
+vet- and clinic-admin-only, so they are never serialised here — no consultations,
+prescriptions, or screenings keys, and no clinical values inside the appointment
+rows. Any client needing those fields must use the vet or clinic-admin endpoints.
 
 Read-only: the endpoint never mutates records (medical history is immutable).
-
-Web UI presentation: prescriptions are rendered inside their (one-to-one)
-consultation, and a consultation's AI screening is resolved through
-`appointments[].screening` — only screenings tied to a consultation are shown.
-Response shape is unchanged.
 
 ---
 
@@ -542,8 +552,7 @@ Query parameters: `search`, `scope`, `page`, `page_size`
 
 - `scope=clinic`: only owners whose pets are clinic patients (same rule as
   `GET /api/receptionist/pets/`). Used by the receptionist Owners tab, so it
-  never lists owners with no record at that clinic. The booking and patient
-  registration pickers omit it to search every owner.
+  never lists owners with no record at that clinic.
 - A receptionist without a staff profile gets `400` when `scope=clinic`.
 
 ## GET /api/owners/{id}/
@@ -831,7 +840,9 @@ counts are taken — `needs_attention` therefore surfaces late-but-actionable
 Requires authentication. Owner or receptionist.
 
 Owner: Books appointment for own pet (`POST /api/owner/appointments/`).
-Receptionist: Books appointment for any pet at clinic (`POST /api/appointments/`).
+The receptionist web app no longer offers booking — owners book through the
+mobile app. The endpoint still accepts a receptionist token for API clients
+and books any pet at that clinic.
 
 Owner booking rule: the owner must attach a skin screening result for the booked pet.
 If `screening_id` is missing, does not belong to the pet, or the pet has no screening,
@@ -907,7 +918,25 @@ timestamp. The vet history endpoint also adds the source appointment's
 
 The detail response also includes `payment_provider_ref`, the linked payment's
 provider reference (`null` when no payment is linked or the provider did not
-return one).
+return one), and a read-only `payment` summary (`null` when no payment is
+linked):
+
+{
+  "status": "PENDING | PAID | FAILED | EXPIRED | REFUNDED | VOID",
+  "amount": 500.0,
+  "currency": "PHP",
+  "method": "GCASH | CARD | CASH",
+  "reference_no": "XPS-20261026-A1B2C3",
+  "provider_ref": "string | null",
+  "paid_at": "timestamp | null",
+  "refunded_at": "timestamp | null",
+  "refund_reason": "string | null",
+  "refund_reference": "RFD-YYYYMMDD-XXXXXX | null"
+}
+
+The `payment` summary is included for receptionist, veterinarian, owner, and
+clinic-admin appointment details. Web/mobile receipts also read the same refund
+fields from the payment endpoints.
 
 Clinic Admin receives a narrower, read-only summary for oversight: no
 consultation, prescription, or other clinical records, and no owner contact
@@ -1049,6 +1078,13 @@ Time-based rules (clinic timezone "now"):
 - Invalid status transitions still return `400` as before.
 - `REVIEW` and `CONFIRMATION` may only transition to `CANCELLED` through this
   endpoint. Scheduling a `REVIEW` follow-up uses the dedicated confirm endpoint.
+- Cancelling an appointment with a linked `PAID` payment refunds it
+  automatically in full, regardless of reschedule. The response `payment`
+  summary becomes `REFUNDED`; the refund is stamped with
+  `refund_reason = "Receptionist cancelled the appointment."`, a unique
+  `RFD-YYYYMMDD-XXXXXX` reference, a `REFUNDED` payment event,
+  `PAYMENT_REFUNDED` audit row, and `PAYMENT_REFUNDED` owner notification. This
+  is ledger-only and idempotent.
 - Marking an appointment `COMPLETED` creates its consultation's linked
   `FOLLOW_UP` appointment in `REVIEW` status when follow-up was requested.
   Cancelling the source appointment before completion creates no follow-up.
@@ -1147,6 +1183,44 @@ Responses:
 
 If the owner ignores the notification, the appointment stays scheduled at the
 new time; there is no automatic cancellation or hold.
+
+---
+
+## POST /api/owner/appointments/{id}/cancel/
+
+Requires authentication. Owner only; the appointment must belong to one of the
+caller's pets and be `PENDING` or `CONFIRMED`.
+
+Request body (optional):
+
+{
+  "reason": "string"
+}
+
+The appointment becomes `CANCELLED`, the slot is freed, and an
+`APPOINTMENT_CANCELLED` notification is sent. If the appointment was rescheduled
+by the clinic (`APT_RESCHEDULED_AT` is set) and its linked payment is `PAID`,
+the payment is atomically refunded in full:
+
+- `status` becomes `REFUNDED`
+- `refunded_at` is stamped
+- `refund_reason` is `Owner cancelled a rescheduled appointment.`
+- `refund_reference` is a unique `RFD-YYYYMMDD-XXXXXX`
+- a `REFUNDED` payment event, `PAYMENT_REFUNDED` audit row, and
+  `PAYMENT_REFUNDED` owner notification are written
+
+Refund is ledger-only (no provider refund API). Repeating the cancellation
+cannot refund twice. Owner cancellations without a prior reschedule and
+appointments whose payment is not `PAID` do not refund. Receptionist
+cancellations use the automatic refund on `PATCH /api/appointments/{id}/` above
+and refund a linked `PAID` fee regardless of reschedule.
+
+Responses:
+
+- 200: updated owner appointment detail, including the `payment` summary
+- 400: no owner profile, or the appointment is no longer cancellable
+- 403: caller is not an owner
+- 404: unknown appointment, or it belongs to another owner
 
 ---
 
@@ -1342,6 +1416,9 @@ Payment object:
   "expires_at": "2026-10-26T12:34:56Z",
   "paid_at": null,
   "failure_reason": null,
+  "refunded_at": null,
+  "refund_reason": null,
+  "refund_reference": null,
   "created_at": "…",
   "updated_at": "…"
 }
@@ -1390,30 +1467,61 @@ Responses:
 Requires authentication. Receptionist or clinic admin. Scoped to the caller's
 clinic; owners get `403`.
 
+**Role split.** A receptionist request shows only the clinic's collection for
+the current clinic-local day: the server forces the paid window to today and
+IGNORES every client date parameter (`date_from`, `date_to`, `paid_from`,
+`paid_to`) outright — not even a malformed value returns `400`, because the
+parameter is not part of a receptionist request. The one exception is an
+appointment-scoped request (`appointment` supplied): that already narrows to a
+single clinic-checked appointment, so no paid window is applied and that
+appointment's payments — including unpaid attempts — are returned regardless
+of day. Clinic admins keep the full history and the date filters below.
+
 Query params: `status`, `method`, `reference` (partial match on receipt
 number, owner first/last name, or pet name), `appointment` (uuid),
-`date_from`, `date_to` (creation date, `Asia/Manila` calendar days),
-`paid_from`, `paid_to` (payment date, clinic-local calendar days — excludes
-unpaid rows, so a range here reconciles with the revenue KPI for the same
-range), `page`, `page_size` (max 100).
+`date_from`, `date_to` (creation date, `Asia/Manila` calendar days — clinic
+admin only), `paid_from`, `paid_to` (payment date, clinic-local calendar days —
+clinic admin only; excludes unpaid rows, so a range here reconciles with the
+revenue KPI for the same range), `page`, `page_size` (max 100).
 
 `paid_from`/`paid_to` are inclusive clinic-local days (`[from 00:00, to+1
-00:00)` in the clinic's time zone). Validation: `400 VALIDATION_ERROR` when a
-date is malformed, `paid_from` is after `paid_to`, or the paid range exceeds
-366 days.
+00:00)` in the clinic's time zone). Validation (clinic admin only): `400
+VALIDATION_ERROR` when a date is malformed, `paid_from` is after `paid_to`,
+or the paid range exceeds 366 days.
 
 Response (200):
 
 { "total", "page", "page_size", "total_pages",
+  "paid_from", "paid_to",
   "summary": { "paid_total", "pending_total", "refunded_total", "payment_count" },
   "results": [payment] }
+
+`paid_from`/`paid_to` echo the paid window the server actually applied —
+`today`/`today` for a receptionist (except an appointment-scoped request,
+which echoes `null`/`null` because no window was applied), the parsed
+parameters (or `null` when unbounded) for a clinic admin — so a UI can render
+its own date line without trusting the client clock.
 
 `summary` aggregates EVERY payment matching the filters (independent of
 `page`/`page_size`) with one conditional-sum query on the same queryset.
 Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
-(never netted against refunds) and honours the `paid_from`/`paid_to`
-payment-date window, so it equals the Reports revenue KPI for the same range.
-`payment_count` equals `total`.
+(never netted against refunds) and honours the paid window, so it equals the
+Reports revenue KPI for the same range — for a receptionist the strip IS the
+clinic admin's `paid_from=paid_to=today` figure. On that strip a receptionist's
+`pending_total` is always `0.00`: unpaid rows have no `PAY_PAID_AT`, so no
+paid window can hold them. An appointment-scoped request has no window, so its
+`pending_total` can be non-zero (unpaid attempts for that appointment count).
+
+**Exact-receipt exception (receptionist only).** With `reference`, the search
+narrows only the list — `summary` still describes the whole windowed day, so
+a lookup never moves a total. When `reference` is an exact `pay_reference`
+(unique), that one payment is pulled into the list from outside today's
+window (an owner asking about an older visit): scope, `status` and `method`
+still apply; only the paid window is lifted for that single row. Owner/pet
+name searches stay inside the window. `total` counts the list (including the
+escaped row), while `payment_count` stays with the summary (windowed).
+Without the escape — every clinic admin and owner request — `payment_count`
+equals `total`.
 
 ---
 
@@ -1447,7 +1555,9 @@ Requires authentication. Receptionist or owner (the payer) — clinic admins get
 admins may read the payment.
 
 Only `PENDING` payments can be cancelled → `VOID`. Settled payments return
-`409 { "code": "PAYMENT_PROCESSED" }` (refunds are handled separately).
+`409 { "code": "PAYMENT_PROCESSED" }`; there is no staff endpoint to manually
+void or refund a settled payment. Automatic refunds are created by owner
+cancellation after reschedule or receptionist cancellation, as described above.
 
 ---
 
@@ -2617,6 +2727,11 @@ Clinic Admin.
 
 Returns staff members within the admin's own clinic.
 
+Responses include `profile_picture` — the staff member's uploaded profile
+picture URL (saved through `PUT /api/auth/profile/`), or `null` when no
+picture has been uploaded. `GET /api/staff/{staff_id}/` returns the same
+field.
+
 Query parameters: `page`, `page_size`, `role`, `search`, `status`, and `sort`.
 `sort` accepts `first_name` (default, A→Z) or `-first_name` (Z→A); unknown
 values fall back to the default ordering. Ordering happens in SQL before
@@ -2810,7 +2925,12 @@ patient checks in. Both reference the appointment through
 `ntf_type` values: APPOINTMENT_CREATED, APPOINTMENT_CONFIRMED, APPOINTMENT_CANCELLED,
 APPOINTMENT_RESCHEDULED, APPOINTMENT_REMINDER, CONSULTATION_AVAILABLE,
 PRESCRIPTION_AVAILABLE, VACCINATION_REMINDER, AI_SCREENING_COMPLETED,
-AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, SYSTEM.
+AI_SCREENING_REVIEWED, PAYMENT_COMPLETED, PAYMENT_EXPIRED, PAYMENT_REFUNDED,
+SYSTEM.
+
+`PAYMENT_REFUNDED` is sent to the owner when an appointment cancellation (owner
+or receptionist) refunds a `PAID` consultation fee, and its
+`ntf_reference_table` is `PAYMENT`.
 
 `APPOINTMENT_RESCHEDULED` notifications are sent to the owner when the clinic
 moves an appointment. Only the notification for the latest move carries
@@ -3178,7 +3298,9 @@ Scoping notes:
   on `PAY_PAID_AT` (the moment the money was confirmed: cash recorded at
   checkout, or the provider webhook/mocked confirmation). `PENDING`, `FAILED`,
   `EXPIRED`, `REFUNDED`, and `VOID` never count; a payment collected but never
-  booked still counts.
+  booked still counts. Refunding a payment flips its status, so its amount
+  leaves the revenue of the original `PAY_PAID_AT` period; no negative
+  adjustment is written on the refund date.
 - `vet_id` narrows the sum to payments linked to that veterinarian's
   appointments (`PAYMENT.APT_ID → APPOINTMENT.STF_ID`); payments without an
   appointment link are excluded only under `vet_id`, never in the unfiltered
@@ -3197,3 +3319,61 @@ Scoping notes:
   labels and daily/monthly subtitle from the key shape.
 - This endpoint is read-only and never triggers payment expiry or
   reconciliation side effects.
+
+---
+
+# 16. Veterinarian Appointment Analytics Endpoints (Web)
+
+Both endpoints are Veterinarian only and `GET` only
+(`IsVeterinarianReadOnly`). Any write method returns `403`; unauthenticated
+requests return `401`; clinic admins, receptionists, and owners receive `403`.
+Clinic and veterinarian scope always come from the caller's staff profile, so a
+veterinarian can only read appointments assigned to them. A client-supplied
+`vet_id` is ignored on these endpoints.
+
+Date parameters, validation errors, default window, comparison window, and
+rate denominators are identical to section 15.
+
+## GET /api/veterinarian/reports/summary/
+
+Response 200:
+
+```json
+{
+  "total_appointments": 10,
+  "completion_rate": 33.3,
+  "no_show_rate": 50.0,
+  "cancellation_rate": 40.0,
+  "previous": {
+    "total_appointments": 4,
+    "completion_rate": 0.0,
+    "no_show_rate": 100.0,
+    "cancellation_rate": 25.0
+  }
+}
+```
+
+Unlike `/api/reports/summary/`, this payload has no `new_patients` key:
+new-patient counts are clinic-wide and are not part of a veterinarian's
+appointment analytics.
+
+## GET /api/veterinarian/reports/appointments/
+
+Response 200 has the same `series` and `by_status` shape as
+`/api/reports/appointments/`, zero-filled across every day and all seven
+statuses, but every figure is restricted to appointments assigned to the
+caller.
+
+Frontend: `frontend/React/src/features/veterinarian/analytics/` (page route
+`/veterinarian/analytics`). The page reuses the clinic report appointment and
+status charts, shows Total Appointments, Completion Rate, No-Show Rate, and
+Cancellation Rate, and deliberately omits the vet selector, new patients,
+demographics, screenings, revenue, workload, CSV export, and print.
+
+Its "This month" preset spans the full calendar month (the 1st through the
+last day), matching the Consultations month filter, so a cancellation
+scheduled later in the month is included. This differs from Clinic Admin
+Reports, whose This month and This year presets are month-to-date and
+year-to-date. Vet Analytics keeps This year as year-to-date. Completion and
+no-show rates still use elapsed, non-cancelled appointments; the cancellation
+rate uses every appointment in the range, including upcoming ones.

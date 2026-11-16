@@ -2,10 +2,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from rest_framework import serializers
 
-from ai_screenings.serializers import (
-    ClinicAdminScreeningSummarySerializer,
-    ScreeningSummarySerializer,
-)
+from ai_screenings.serializers import ScreeningSummarySerializer
 from appointments.models import (
     Appointment,
     AppointmentRequestStatus,
@@ -17,6 +14,46 @@ from appointments.models import (
 from clinics.models import Clinic
 from consultations.serializers import ConsultationResponseSerializer
 from prescriptions.serializers import PrescriptionResponseSerializer
+
+
+def _screening_status(obj):
+    """Presence plus review state of the attached screening, nothing clinical.
+
+    Receptionists and clinic admins get only enough to say whether the owner
+    attached an AI screening and whether a vet has looked at it yet.
+    """
+    screening = getattr(obj, 'apt_screening', None)
+    if screening is None:
+        return None
+    reviewed = (
+        screening.ais_compared_at is not None
+        or screening.ais_status != 'PENDING_REVIEW'
+    )
+    return {'review_status': 'REVIEWED' if reviewed else 'PENDING_REVIEW'}
+
+
+def _payment_block(obj):
+    """Payment/refund summary shared by every appointment-detail surface."""
+    try:
+        payment = obj.payment
+    except ObjectDoesNotExist:
+        return None
+
+    def iso(value):
+        return value.isoformat() if value else None
+
+    return {
+        'status': payment.pay_status,
+        'amount': float(payment.pay_amount),
+        'currency': payment.pay_currency,
+        'method': payment.pay_method,
+        'reference_no': payment.pay_reference,
+        'provider_ref': payment.pay_provider_ref,
+        'paid_at': iso(payment.pay_paid_at),
+        'refunded_at': iso(payment.pay_refunded_at),
+        'refund_reason': payment.pay_refund_reason,
+        'refund_reference': payment.pay_refund_reference,
+    }
 
 
 def _vet_request_block(obj):
@@ -78,6 +115,26 @@ def reschedule_approval_pending(obj):
     return obj.apt_scheduled_at > timezone.now()
 
 
+# Clinic Admin oversight sees that a vet raised a request and how the clinic
+# handled it, but the message body stays receptionist/vet-only.
+_CLINIC_ADMIN_VET_REQUEST_FIELDS = (
+    'type',
+    'status',
+    'requested_by',
+    'requested_at',
+    'resolved_by',
+    'resolved_at',
+)
+
+
+def _clinic_admin_vet_request_block(obj):
+    """Timeline-only view of the vet's request: no reason, no decline note."""
+    block = _vet_request_block(obj)
+    if block is None:
+        return None
+    return {field: block[field] for field in _CLINIC_ADMIN_VET_REQUEST_FIELDS}
+
+
 class OwnerClinicSerializer(serializers.ModelSerializer):
     # Shown in the booking wizard so an owner sees what they must pay before
     # they reach the payment step; 0 means booking is free.
@@ -121,6 +178,12 @@ class VetSlotSerializer(serializers.ModelSerializer):
         return None
 
 
+def _staff_full_name(stf):
+    if stf and stf.usr_id:
+        return f'{stf.usr_id.usr_first_name} {stf.usr_id.usr_last_name}'
+    return None
+
+
 class AppointmentListSerializer(serializers.ModelSerializer):
     pet_name = serializers.CharField(source='pet_id.pet_name', read_only=True)
     pet_species = serializers.SerializerMethodField()
@@ -149,9 +212,7 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         return None
 
     def get_vet_name(self, obj):
-        if obj.stf_id and obj.stf_id.usr_id:
-            return f'{obj.stf_id.usr_id.usr_first_name} {obj.stf_id.usr_id.usr_last_name}'
-        return None
+        return _staff_full_name(obj.stf_id)
 
     def get_owner_name(self, obj):
         if obj.pet_id and obj.pet_id.own_id and obj.pet_id.own_id.usr_id:
@@ -164,6 +225,19 @@ class AppointmentListSerializer(serializers.ModelSerializer):
             u = obj.apt_created_by
             return f'{u.usr_first_name} {u.usr_last_name}'
         return None
+
+
+class AppointmentHistorySerializer(serializers.ModelSerializer):
+    vet_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = [
+            'apt_id', 'apt_scheduled_at', 'apt_type', 'apt_status', 'vet_name',
+        ]
+
+    def get_vet_name(self, obj):
+        return _staff_full_name(obj.stf_id)
 
 
 class ReceptionistAppointmentListSerializer(AppointmentListSerializer):
@@ -221,6 +295,7 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
     vet_request = serializers.SerializerMethodField()
     has_open_request = serializers.SerializerMethodField()
     reschedule_approval_pending = serializers.SerializerMethodField()
+    payment = serializers.SerializerMethodField()
     payment_provider_ref = serializers.SerializerMethodField()
 
     class Meta:
@@ -241,7 +316,8 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
             'reschedule_approval_pending',
             'apt_created_at', 'apt_updated_at',
             'consultation', 'prescription',
-            'vet_request', 'has_open_request', 'payment_provider_ref',
+            'vet_request', 'has_open_request', 'payment',
+            'payment_provider_ref',
         ]
 
     def get_consultation_fee(self, obj):
@@ -263,6 +339,9 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         except ObjectDoesNotExist:
             return None
         return PrescriptionResponseSerializer(prescription).data
+
+    def get_payment(self, obj):
+        return _payment_block(obj)
 
     def get_payment_provider_ref(self, obj):
         try:
@@ -322,6 +401,28 @@ class AppointmentDetailSerializer(serializers.ModelSerializer):
         return reschedule_approval_pending(obj)
 
 
+class ReceptionistAppointmentDetailSerializer(AppointmentDetailSerializer):
+    """Receptionist-facing detail: never carries the AI screening payload.
+
+    The screening result and the owner's questionnaire answers are clinical
+    context that belongs to the veterinarian reviewing them, so the reception
+    desk only receives the booking and payment-facing fields plus
+    screening_status (attached or not, and whether a vet reviewed it). Vets
+    keep AppointmentDetailSerializer, which still includes the screening block.
+    """
+
+    screening_status = serializers.SerializerMethodField()
+
+    class Meta(AppointmentDetailSerializer.Meta):
+        fields = ['screening_status'] + [
+            f for f in AppointmentDetailSerializer.Meta.fields
+            if f != 'screening'
+        ]
+
+    def get_screening_status(self, obj):
+        return _screening_status(obj)
+
+
 class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):
     """Owner-facing detail: never carries the vet's request data.
 
@@ -342,32 +443,33 @@ class OwnerAppointmentDetailSerializer(AppointmentDetailSerializer):
         ]
 
 
-class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
+class ClinicAdminAppointmentDetailSerializer(ReceptionistAppointmentDetailSerializer):
     """Read-only appointment summary for Clinic Admin oversight.
 
     Narrower than the receptionist detail: no consultation, prescription, or
-    other clinical records, and no owner contact details. Adds who booked the
-    appointment (by role) and who/when the current status was set. The vet's
-    request reason is receptionist/vet-only and is never included here.
+    other clinical records. Carries the owner's contact details and an
+    oversight view of the vet's request (type, status, who asked and how it
+    ended), but never the request message or the decline note, which stay
+    receptionist/vet-only, and never the AI screening result or the owner's
+    questionnaire answers. Adds who booked the appointment (by role) and
+    who/when the current status was set.
     """
 
     created_by_role = serializers.SerializerMethodField()
     status_change = serializers.SerializerMethodField()
-    screening = ClinicAdminScreeningSummarySerializer(
-        source='apt_screening', read_only=True,
-    )
+    vet_request = serializers.SerializerMethodField()
 
     class Meta(AppointmentDetailSerializer.Meta):
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
-            'owner_name', 'screening',
+            'owner_name', 'owner_phone', 'owner_email',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name', 'created_by_role',
-            'status_change',
+            'status_change', 'screening_status', 'vet_request',
             'apt_checked_in_at', 'apt_completed_at',
             'apt_cancelled_at', 'apt_cancellation_reason',
-            'apt_created_at',
+            'payment', 'apt_created_at',
         ]
 
     def get_created_by_role(self, obj):
@@ -379,6 +481,9 @@ class ClinicAdminAppointmentDetailSerializer(AppointmentDetailSerializer):
         from appointments.services import AppointmentService
 
         return AppointmentService.get_status_change(obj)
+
+    def get_vet_request(self, obj):
+        return _clinic_admin_vet_request_block(obj)
 
 
 class CreateAppointmentSerializer(serializers.Serializer):

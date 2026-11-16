@@ -69,6 +69,7 @@ function makeAppointment(withConsultation = false): VetAppointmentDetail {
         }
       : null,
     prescription: null,
+    payment: null,
     payment_provider_ref: null,
   }
 }

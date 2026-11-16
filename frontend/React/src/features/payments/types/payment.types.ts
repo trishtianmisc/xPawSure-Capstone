@@ -23,8 +23,25 @@ export interface Payment {
   expires_at: string | null
   paid_at: string | null
   failure_reason: string | null
+  refunded_at: string | null
+  refund_reason: string | null
+  refund_reference: string | null
   created_at: string
   updated_at: string
+}
+
+/** Read-only payment summary embedded in every appointment-detail payload. */
+export interface AppointmentPaymentSummary {
+  status: PaymentStatus
+  amount: number
+  currency: string
+  method: PaymentMethod
+  reference_no: string
+  provider_ref: string | null
+  paid_at: string | null
+  refunded_at: string | null
+  refund_reason: string | null
+  refund_reference: string | null
 }
 
 export interface CheckoutPayload {
@@ -67,6 +84,13 @@ export interface PaymentListResponse {
   page: number
   page_size: number
   total_pages: number
+  /**
+   * Echo of the paid window the server actually applied (clinic-local days),
+   * so a page can render its own date line without trusting the client clock.
+   * Receptionist requests are always today; `null` means an unbounded list.
+   */
+  paid_from: string | null
+  paid_to: string | null
   summary: PaymentListSummary
   results: Payment[]
 }

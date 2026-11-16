@@ -15,6 +15,7 @@ export interface StaffMember {
   clinic_name?: string
   license_number?: string | null
   license_expiration_date?: string | null
+  profile_picture?: string | null
 }
 
 export interface StaffStats {

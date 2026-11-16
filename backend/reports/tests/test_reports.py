@@ -33,6 +33,10 @@ ENDPOINTS = (
     '/api/reports/revenue/',
 )
 
+VET_SUMMARY_ENDPOINT = '/api/veterinarian/reports/summary/'
+VET_APPOINTMENTS_ENDPOINT = '/api/veterinarian/reports/appointments/'
+VET_ENDPOINTS = (VET_SUMMARY_ENDPOINT, VET_APPOINTMENTS_ENDPOINT)
+
 
 class ReportsBase(TestCase):
 
@@ -289,6 +293,104 @@ class ReportPermissionTests(ReportsBase):
         # 8 appointments of Happy Paws.
         self.assertEqual(response.data['total_appointments'], 1)
         self.assertEqual(response.data['completion_rate'], 100.0)
+
+    def test_vet_forbidden_on_every_admin_endpoint(self):
+        for endpoint in ENDPOINTS:
+            response = self._get(endpoint, user=self.vet_a.usr_id)
+            self.assertEqual(response.status_code, 403, endpoint)
+
+    def test_clinic_admin_forbidden_on_vet_endpoints(self):
+        for endpoint in VET_ENDPOINTS:
+            response = self._get(endpoint)
+            self.assertEqual(response.status_code, 403, endpoint)
+
+    def test_other_roles_forbidden_on_vet_endpoints(self):
+        for endpoint in VET_ENDPOINTS:
+            for user in (self.receptionist, self.owner):
+                response = self._get(endpoint, user=user)
+                self.assertEqual(response.status_code, 403, endpoint)
+
+    def test_anonymous_forbidden_on_vet_endpoints(self):
+        for endpoint in VET_ENDPOINTS:
+            response = self.client.get(endpoint)
+            self.assertIn(response.status_code, (401, 403), endpoint)
+
+    def test_vet_reports_are_read_only(self):
+        for endpoint in VET_ENDPOINTS:
+            response = self.client.post(
+                endpoint, {}, format='json',
+                **self._auth(self.vet_a.usr_id),
+            )
+            self.assertEqual(response.status_code, 403, endpoint)
+
+
+class VetReportTests(ReportsBase):
+
+    def test_summary_is_scoped_to_the_callers_appointments(self):
+        response = self._get(
+            VET_SUMMARY_ENDPOINT, user=self.vet_a.usr_id, **WINDOW,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_appointments'], 2)
+        self.assertEqual(response.data['completion_rate'], 100.0)
+        self.assertEqual(response.data['no_show_rate'], 0.0)
+        self.assertEqual(response.data['cancellation_rate'], 0.0)
+        self.assertEqual(response.data['previous']['total_appointments'], 0)
+        self.assertNotIn('new_patients', response.data)
+        self.assertNotIn('new_patients', response.data['previous'])
+
+    def test_appointments_report_is_scoped_to_the_caller(self):
+        response = self._get(
+            VET_APPOINTMENTS_ENDPOINT, user=self.vet_a.usr_id, **WINDOW,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['series']), 8)
+        self.assertEqual(
+            sum(point['count'] for point in response.data['series']), 2,
+        )
+        counts = {
+            row['status']: row['count']
+            for row in response.data['by_status']
+        }
+        self.assertEqual(counts['COMPLETED'], 2)
+        self.assertEqual(sum(counts.values()), 2)
+
+    def test_each_vet_only_sees_their_own_appointments(self):
+        response = self._get(
+            VET_SUMMARY_ENDPOINT, user=self.vet_b.usr_id, **WINDOW,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_appointments'], 1)
+        self.assertEqual(response.data['completion_rate'], 0.0)
+        self.assertEqual(response.data['no_show_rate'], 100.0)
+
+    def test_client_supplied_vet_id_is_ignored(self):
+        response = self._get(
+            VET_SUMMARY_ENDPOINT,
+            user=self.vet_a.usr_id,
+            vet_id=str(self.vet_b.stf_id),
+            **WINDOW,
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_appointments'], 2)
+
+    def test_vet_report_dates_are_validated(self):
+        invalid = self._get(
+            VET_SUMMARY_ENDPOINT,
+            user=self.vet_a.usr_id,
+            date_from='10-01-2026',
+        )
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('YYYY-MM-DD', invalid.data['detail'])
+
+        too_wide = self._get(
+            VET_APPOINTMENTS_ENDPOINT,
+            user=self.vet_a.usr_id,
+            date_from='2025-01-01',
+            date_to='2026-03-01',
+        )
+        self.assertEqual(too_wide.status_code, 400)
+        self.assertIn('at most 366 days', too_wide.data['detail'])
 
 
 class ReportValidationTests(ReportsBase):

@@ -1,9 +1,9 @@
-from django.utils import timezone
 from rest_framework import serializers
 
 from appointments.models import Appointment, AppointmentStatus
 from owners.models import OwnerProfile
 from pets.models import Pet
+from pets.serializers import clinic_date, person_name
 from pets.services.public_pet_service import (
     OVERALL_DUE_SOON,
     OVERALL_NONE_RECORDED,
@@ -12,20 +12,6 @@ from pets.services.public_pet_service import (
     PublicPetService,
 )
 from vaccinations.models import VaccinationRecord
-
-
-def _clinic_date(value, tz):
-    if value is None:
-        return None
-    if tz is None:
-        return value.date().isoformat()
-    return timezone.localtime(value, tz).date().isoformat()
-
-
-def _person_name(user):
-    if user is None:
-        return ''
-    return f'{user.usr_first_name} {user.usr_last_name}'.strip()
 
 
 class ClinicPatientOwnerSerializer(serializers.ModelSerializer):
@@ -38,7 +24,7 @@ class ClinicPatientOwnerSerializer(serializers.ModelSerializer):
         fields = ['name', 'phone', 'email']
 
     def get_name(self, obj):
-        return _person_name(obj.usr_id)
+        return person_name(obj.usr_id)
 
 
 class ClinicPatientListSerializer(serializers.ModelSerializer):
@@ -74,10 +60,10 @@ class ClinicPatientListSerializer(serializers.ModelSerializer):
         )
 
     def get_last_visit_date(self, obj):
-        return _clinic_date(obj.last_visit_at, self.context.get('timezone'))
+        return clinic_date(obj.last_visit_at, self.context.get('timezone'))
 
     def get_next_appointment_date(self, obj):
-        return _clinic_date(obj.next_appointment_at, self.context.get('timezone'))
+        return clinic_date(obj.next_appointment_at, self.context.get('timezone'))
 
     def get_vaccination_status(self, obj):
         if not obj.has_any_vaccination:
@@ -116,7 +102,7 @@ class ClinicPatientAppointmentSerializer(serializers.ModelSerializer):
 
     def get_vet_name(self, obj):
         if obj.stf_id and obj.stf_id.usr_id:
-            return _person_name(obj.stf_id.usr_id)
+            return person_name(obj.stf_id.usr_id)
         return None
 
     def get_apt_cancellation_reason(self, obj):

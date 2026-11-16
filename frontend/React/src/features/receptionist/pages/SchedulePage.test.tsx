@@ -201,7 +201,7 @@ describe('SchedulePage (stage 1)', () => {
     expect(cells[2].textContent).toContain('Available')
   })
 
-  it('keeps passed slots inert, books on cell click, and blocks via the menu', () => {
+  it('keeps passed and open slots inert and blocks via the menu', () => {
     const updateMutate = vi.fn()
     vi.mocked(useUpdateSlotStatus).mockReturnValue(
       mockMutation<ReturnType<typeof useUpdateSlotStatus>>({ mutate: updateMutate }),
@@ -227,11 +227,9 @@ describe('SchedulePage (stage 1)', () => {
     fireEvent.click(within(table).getByText('Passed'))
     expect(updateMutate).not.toHaveBeenCalled()
 
-    // The open cell itself books; blocking lives in the slot options menu.
+    // Open cells are inert on click; blocking lives in the slot options menu.
     fireEvent.click(within(table).getByText('Available'))
-    expect(navigateMock).toHaveBeenCalledWith(
-      `/receptionist/appointments/new?vet_id=vet-1&date=${TODAY_ISO}&slot_id=open-1`,
-    )
+    expect(navigateMock).not.toHaveBeenCalled()
     expect(updateMutate).not.toHaveBeenCalled()
 
     const cell = within(table).getByText('Available').closest('td') as HTMLElement
@@ -587,23 +585,6 @@ describe('SchedulePage (stage 2)', () => {
 })
 
 describe('SchedulePage (stage 3)', () => {
-  it('books an open slot with vet, date and slot prefilled', () => {
-    mockSchedule(() =>
-      schedule([
-        { date: dayOffsetIso(0), is_working: true, slots: [slot({ vsl_id: 'open-1' })] },
-        closedDay(dayOffsetIso(1)),
-        closedDay(dayOffsetIso(2)),
-      ]),
-    )
-
-    renderPage()
-
-    fireEvent.click(within(screen.getByRole('table')).getByText('Available'))
-    expect(navigateMock).toHaveBeenCalledWith(
-      `/receptionist/appointments/new?vet_id=vet-1&date=${TODAY_ISO}&slot_id=open-1`,
-    )
-  })
-
   it('exposes block/unblock through a keyboard-friendly slot options menu', () => {
     const updateMutate = vi.fn()
     vi.mocked(useUpdateSlotStatus).mockReturnValue(
@@ -631,7 +612,7 @@ describe('SchedulePage (stage 3)', () => {
     const menuButton = within(openCell).getByRole('button', { name: 'Slot options' })
     expect(menuButton).toHaveAttribute('aria-haspopup', 'menu')
 
-    // Opening the menu must not fire the cell's book action.
+    // Opening the menu must not navigate anywhere.
     fireEvent.click(menuButton)
     expect(navigateMock).not.toHaveBeenCalled()
     expect(menuButton).toHaveAttribute('aria-expanded', 'true')

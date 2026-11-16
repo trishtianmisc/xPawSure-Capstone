@@ -118,3 +118,65 @@ describe('StaffListPage name sorting', () => {
     })
   })
 })
+
+describe('StaffListPage avatars', () => {
+  beforeEach(() => {
+    vi.mocked(useStaffStats).mockReturnValue({
+      data: {
+        total: 12,
+        veterinarians: 1,
+        receptionists: 11,
+        active: 12,
+        pending_setup: 0,
+        deactivated: 0,
+        licenses_expiring_soon: 0,
+      },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useStaffStats>)
+    vi.mocked(useStaff).mockReturnValue({
+      data: {
+        total: 2,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+        results: [
+          {
+            ...staffRow,
+            profile_picture: 'https://cdn.example.com/staff/alice.png',
+          },
+          {
+            ...staffRow,
+            id: 'staff-2',
+            user_id: 'user-2',
+            email: 'bob@test.com',
+            first_name: 'Bob',
+            last_name: 'Brown',
+            profile_picture: null,
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      isFetching: false,
+    } as unknown as ReturnType<typeof useStaff>)
+  })
+
+  it('renders the uploaded profile picture instead of initials', () => {
+    renderPage()
+
+    const img = screen.getByRole('img', { name: 'Alice Anderson' })
+    expect(img).toHaveAttribute(
+      'src', 'https://cdn.example.com/staff/alice.png',
+    )
+  })
+
+  it('falls back to initials when no picture was uploaded', () => {
+    renderPage()
+
+    expect(screen.getByText('BB')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Bob Brown' }),
+    ).not.toBeInTheDocument()
+  })
+})

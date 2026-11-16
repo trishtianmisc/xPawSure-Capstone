@@ -246,8 +246,13 @@ class StaffService:
 
     @staticmethod
     def resend_welcome(staff: StaffProfile, user_id: str | None = None, ip_address: str | None = None) -> None:
-        temp_password = secrets.token_urlsafe(16)
         user = staff.usr_id
+        if not user.usr_is_active:
+            raise ValueError(
+                'This staff account is deactivated. Reactivate it before '
+                'resending credentials.'
+            )
+        temp_password = secrets.token_urlsafe(16)
         user.set_password(temp_password)
         user.usr_must_change_password = True
         user.save(update_fields=['usr_password_hash', 'usr_must_change_password', 'usr_updated_at'])
@@ -279,8 +284,13 @@ class StaffService:
 
     @staticmethod
     def reset_password(staff: StaffProfile, user_id: str | None = None, ip_address: str | None = None) -> dict:
-        temp_password = secrets.token_urlsafe(16)
         user = staff.usr_id
+        if not user.usr_is_active:
+            raise ValueError(
+                'This staff account is deactivated. Reactivate it before '
+                'resending credentials.'
+            )
+        temp_password = secrets.token_urlsafe(16)
         user.set_password(temp_password)
         user.usr_must_change_password = True
         user.save(update_fields=['usr_password_hash', 'usr_must_change_password', 'usr_updated_at'])
@@ -457,7 +467,12 @@ class StaffService:
             if status_upper == 'ACTIVE':
                 queryset = queryset.filter(usr_id__usr_is_active=True, usr_id__usr_must_change_password=False)
             elif status_upper == 'PENDING':
-                queryset = queryset.filter(usr_id__usr_must_change_password=True)
+                # A deactivated account keeps must_change_password=True, but it
+                # is reported as deactivated, not pending setup.
+                queryset = queryset.filter(
+                    usr_id__usr_is_active=True,
+                    usr_id__usr_must_change_password=True,
+                )
             elif status_upper == 'DEACTIVATED':
                 queryset = queryset.filter(usr_id__usr_is_active=False)
 

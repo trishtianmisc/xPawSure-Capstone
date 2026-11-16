@@ -25,6 +25,14 @@ export interface AuthUser {
   position?: string | null
   license_number?: string | null
   license_expiration_date?: string | null
+  profile_picture?: string | null
+}
+
+export interface UpdateProfilePayload {
+  first_name?: string
+  last_name?: string
+  phone?: string
+  profile_picture?: File | null
 }
 
 export interface AuthResponse {

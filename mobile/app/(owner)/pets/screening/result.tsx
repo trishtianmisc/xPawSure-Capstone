@@ -62,7 +62,7 @@ const GATE_META: Record<
   NOT_DOG_SKIN: {
     color: '#E67E22',
     icon: 'image-off-outline',
-    title: 'Not a Skin Image',
+    title: 'Not a Dog Skin Image',
   },
   NO_VISIBLE_LESIONS: {
     color: '#27AE60',
@@ -307,7 +307,7 @@ export default function ResultScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView edges={['left', 'right']} style={styles.safeArea}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={styles.safeArea.backgroundColor} />
 
       <View style={styles.header}>

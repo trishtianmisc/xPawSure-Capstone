@@ -1,3 +1,5 @@
+import type { AppointmentPaymentSummary } from '../../../payments/types/payment.types'
+
 export type AppointmentStatus =
   | 'PENDING'
   | 'CONFIRMED'
@@ -87,6 +89,7 @@ export interface VetAppointmentDetail {
   screening: ScreeningSummary | null
   consultation: VetConsultationInfo | null
   prescription: VetPrescriptionInfo | null
+  payment: AppointmentPaymentSummary | null
   payment_provider_ref: string | null
 }
 

@@ -2,6 +2,63 @@ from rest_framework import serializers
 
 from owners.models import OwnerProfile
 from pets.models import Breed, Pet, Sex
+from pets.serializers import PetResponseSerializer, clinic_date, person_name
+
+
+class ReceptionistPetListSerializer(PetResponseSerializer):
+    owner_name = serializers.SerializerMethodField()
+    last_visit_date = serializers.SerializerMethodField()
+    next_appointment_date = serializers.SerializerMethodField()
+
+    class Meta(PetResponseSerializer.Meta):
+        fields = PetResponseSerializer.Meta.fields + [
+            'owner_name',
+            'last_visit_date',
+            'next_appointment_date',
+        ]
+
+    def get_owner_name(self, obj):
+        if obj.own_id is None or obj.own_id.usr_id is None:
+            return None
+        return person_name(obj.own_id.usr_id)
+
+    def get_last_visit_date(self, obj):
+        return clinic_date(obj.last_visit_at, self.context.get('timezone'))
+
+    def get_next_appointment_date(self, obj):
+        return clinic_date(obj.next_appointment_at, self.context.get('timezone'))
+
+
+class ReceptionistPetOwnerSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+    phone = serializers.CharField(source='usr_id.usr_phone', allow_null=True, read_only=True)
+    email = serializers.CharField(source='usr_id.usr_email', read_only=True)
+
+    class Meta:
+        model = OwnerProfile
+        fields = ['name', 'phone', 'email']
+
+    def get_name(self, obj):
+        return person_name(obj.usr_id)
+
+
+class ReceptionistPetDetailSerializer(PetResponseSerializer):
+    """Single-pet payload: base fields plus the owner's contact block.
+
+    Only the detail GET carries the owner; list rows stay lean.
+    """
+
+    owner = serializers.SerializerMethodField()
+
+    class Meta(PetResponseSerializer.Meta):
+        fields = PetResponseSerializer.Meta.fields + ['owner']
+
+    def get_owner(self, obj):
+        if obj.own_id is None:
+            return None
+        return ReceptionistPetOwnerSerializer(
+            obj.own_id, context=self.context,
+        ).data
 
 
 class ReceptionistPetCreateSerializer(serializers.Serializer):

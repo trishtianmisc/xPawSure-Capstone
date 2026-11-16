@@ -29,6 +29,11 @@ import { formatMoney } from '../../../features/payment/lib/format'
 import { OWNER_METHODS } from '../../../features/payment/lib/methods'
 import type { Payment, PaymentMethod } from '../../../features/payment/types'
 import { useScreenings } from '../../../features/screening/hooks/useScreenings'
+import {
+  XPawBottomSheet,
+  XPawSheetDetailRow,
+  XPawSheetDetails,
+} from '../../../src/components/XPawBottomSheet'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { apiErrorCode, apiErrorMessage, apiErrorStatus } from '../../../src/utils/error'
@@ -65,6 +70,12 @@ interface DayChip {
   weekday: string
   day: string
   month: string
+}
+
+interface BookingConflict {
+  clinic: { cln_id: string; cln_name: string }
+  when: string
+  vetName: string | null
 }
 
 function buildDays(count: number): DayChip[] {
@@ -117,6 +128,7 @@ export default function BookAppointmentScreen() {
   const [paymentError, setPaymentError] = useState<string | null>(null)
   // Set when the booking endpoint reports a fee the clinic list did not show.
   const [feeRequired, setFeeRequired] = useState(false)
+  const [bookingConflict, setBookingConflict] = useState<BookingConflict | null>(null)
   const bookingInFlight = useRef(false)
 
   const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError } = useClinics()
@@ -195,10 +207,11 @@ export default function BookAppointmentScreen() {
   function handleGoScan() {
     router.replace(
       petId ? `/(owner)/pets/screening?petId=${petId}` : '/(owner)/pets/screening',
+      { withAnchor: true },
     )
   }
 
-  function selectClinic(clinic: { cln_id: string; cln_name: string }) {
+  function applyClinicSelection(clinic: { cln_id: string; cln_name: string }) {
     if (clinic.cln_id !== clinicId) {
       setClinicId(clinic.cln_id)
       setClinicName(clinic.cln_name)
@@ -211,7 +224,9 @@ export default function BookAppointmentScreen() {
       setPaymentError(null)
       setFeeRequired(false)
     }
+  }
 
+  function selectClinic(clinic: { cln_id: string; cln_name: string }) {
     // Soft guard: the pet may already have a live appointment at this clinic.
     // The owner can override — the booking API itself stays permissive.
     const conflict = findConflictingAppointment(
@@ -226,16 +241,22 @@ export default function BookAppointmentScreen() {
         hour: 'numeric',
         minute: '2-digit',
       })
-      Alert.alert(
-        'Pet already booked',
-        `${screening?.pet_name ?? 'Your pet'} already has an upcoming appointment at ${clinic.cln_name} on ${when}${conflict.vet_name ? ` with ${conflict.vet_name}` : ''}. Book another consultation anyway?`,
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Book anyway', onPress: () => setStep(2) },
-        ],
-      )
+      setBookingConflict({
+        clinic,
+        when,
+        vetName: conflict.vet_name,
+      })
       return
     }
+
+    applyClinicSelection(clinic)
+    setStep(2)
+  }
+
+  function bookAnotherAppointment() {
+    if (!bookingConflict) return
+    applyClinicSelection(bookingConflict.clinic)
+    setBookingConflict(null)
     setStep(2)
   }
 
@@ -864,6 +885,36 @@ export default function BookAppointmentScreen() {
           </Pressable>
         )}
       </View>
+
+      <XPawBottomSheet
+        visible={!!bookingConflict}
+        icon="calendar-remove-outline"
+        title={`${screening?.pet_name ?? 'Your pet'} already has a visit booked`}
+        message="You already have an upcoming appointment at this clinic. Keep the current booking, or book another visit anyway."
+        note="You can reschedule or cancel the current booking anytime from Appointments."
+        onClose={() => setBookingConflict(null)}
+        primaryAction={{
+          label: 'Keep current booking',
+          onPress: () => setBookingConflict(null),
+        }}
+        secondaryAction={{
+          label: 'Book another anyway',
+          onPress: bookAnotherAppointment,
+        }}
+      >
+        {bookingConflict ? (
+          <XPawSheetDetails>
+            <XPawSheetDetailRow icon="calendar-clock" value={bookingConflict.when} />
+            <XPawSheetDetailRow
+              icon="map-marker-outline"
+              value={bookingConflict.clinic.cln_name}
+            />
+            {bookingConflict.vetName ? (
+              <XPawSheetDetailRow icon="stethoscope" value={bookingConflict.vetName} />
+            ) : null}
+          </XPawSheetDetails>
+        ) : null}
+      </XPawBottomSheet>
     </View>
   )
 }

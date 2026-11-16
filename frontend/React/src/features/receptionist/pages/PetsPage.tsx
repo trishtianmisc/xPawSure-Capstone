@@ -5,38 +5,16 @@ import { Button, Card } from '../../../components/ui'
 import { useDebounce } from '../../../hooks/useDebounce'
 import { usePets } from '../hooks/usePets'
 import { PageHero } from '../components/PageHero'
-import { PetRegisterModal } from '../components/PetRegisterModal'
 import { apiErrorMessage } from '../../../utils/error'
 import { formatDate } from '../../../utils/format'
 
 const INPUT_CLASSES =
   'rounded-md border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none transition placeholder:text-stone-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100 dark:placeholder:text-stone-500 dark:focus:border-amber-500 dark:focus:ring-amber-900/40'
 
-function sexLabel(sex: string): string {
-  if (!sex) return '—'
-  return sex.charAt(0).toUpperCase() + sex.slice(1).toLowerCase()
-}
-
-function SexCell({ sex }: { sex: string }) {
-  const dot =
-    sex?.toUpperCase() === 'MALE'
-      ? 'bg-sky-400'
-      : sex?.toUpperCase() === 'FEMALE'
-        ? 'bg-pink-400'
-        : 'bg-stone-300 dark:bg-stone-600'
-  return (
-    <span className="inline-flex items-center gap-2 text-stone-500 dark:text-stone-400">
-      <span className={`size-1.5 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-      {sexLabel(sex)}
-    </span>
-  )
-}
-
 export function PetsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [registerOpen, setRegisterOpen] = useState(false)
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -62,18 +40,9 @@ export function PetsPage() {
             meta={
               data && (
                 <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-amber-100">
-                  {search ? `${data.total} matching` : `${data.total} ${data.total === 1 ? 'patient' : 'patients'}`}
-                </span>
-              )
-            }
-            actions={
-              <button
-                type="button"
-                onClick={() => setRegisterOpen(true)}
-                className="shrink-0 rounded-md bg-amber-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-800"
-              >
-                + Register patient
-              </button>
+              {search ? `${data.total} matching` : `${data.total} ${data.total === 1 ? 'patient' : 'patients'}`}
+            </span>
+            )
             }
           />
         </div>
@@ -124,9 +93,9 @@ export function PetsPage() {
                 <thead>
                   <tr className="border-b border-stone-100 bg-stone-50 text-stone-500 dark:border-stone-700 dark:bg-stone-800/50 dark:text-stone-400">
                     <th className="px-5 py-4 font-semibold">Patient</th>
-                    <th className="px-5 py-4 font-semibold">Sex</th>
-                    <th className="px-5 py-4 font-semibold">Weight</th>
-                    <th className="px-5 py-4 font-semibold">Registered</th>
+                    <th className="px-5 py-4 font-semibold">Owner</th>
+                    <th className="px-5 py-4 font-semibold">Last visit</th>
+                    <th className="px-5 py-4 font-semibold">Next appointment</th>
                     <th className="px-5 py-4 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -164,14 +133,14 @@ export function PetsPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4">
-                        <SexCell sex={pet.sex} />
+                      <td className="px-5 py-4 font-medium text-stone-800 dark:text-stone-200">
+                        {pet.owner_name || '—'}
                       </td>
-                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {pet.weight ? `${pet.weight} kg` : '—'}
+                      <td className="whitespace-nowrap px-5 py-4 text-stone-600 dark:text-stone-300">
+                        {formatDate(pet.last_visit_date)}
                       </td>
-                      <td className="px-5 py-4 text-stone-500 dark:text-stone-400">
-                        {formatDate(pet.created_at)}
+                      <td className="whitespace-nowrap px-5 py-4 text-stone-600 dark:text-stone-300">
+                        {formatDate(pet.next_appointment_date)}
                       </td>
                       <td className="px-5 py-4 text-right" onClick={(e) => e.stopPropagation()}>
                         <Link
@@ -241,13 +210,9 @@ export function PetsPage() {
                   ? 'Try a different name or breed, or clear the search.'
                   : 'Patients appear here after their first appointment at your clinic.'}
               </p>
-              {search ? (
+              {search && (
                 <Button type="button" size="sm" variant="secondary" className="mt-4" onClick={clearSearch}>
                   Clear search
-                </Button>
-              ) : (
-                <Button type="button" size="sm" className="mt-4" onClick={() => setRegisterOpen(true)}>
-                  + Register patient
                 </Button>
               )}
             </div>
@@ -283,8 +248,6 @@ export function PetsPage() {
           )}
         </div>
       </div>
-
-      <PetRegisterModal open={registerOpen} onClose={() => setRegisterOpen(false)} />
     </div>
   )
 }

@@ -96,6 +96,7 @@ class PaymentService:
         date_to=None,
         paid_from=None,
         paid_to=None,
+        exact_reference_escape=False,
         page=1,
         page_size=20,
     ) -> dict:
@@ -106,6 +107,12 @@ class PaymentService:
         days - the exact window the revenue report uses - so a list filtered
         to a range reconciles with the revenue KPI for that same range.
         ``date_from``/``date_to`` remain the original creation-date filter.
+
+        ``exact_reference_escape`` (receptionist requests only) lets an exact
+        receipt number pull its payment in from outside the forced window -
+        one row, for an owner asking about an older visit. The escape only
+        ever widens the LIST; the summary aggregates the windowed queryset,
+        so finding an older receipt never moves the totals.
         """
         qs = Payment.objects.all().select_related('own_id__usr_id', 'apt_id')
         if clinic_id:
@@ -117,15 +124,6 @@ class PaymentService:
             qs = qs.filter(pay_status=pay_status)
         if method:
             qs = qs.filter(pay_method=method)
-        if reference:
-            # Receipt number, owner name, or pet name - the three things a
-            # human has in hand when looking for a payment.
-            qs = qs.filter(
-                Q(pay_reference__icontains=reference)
-                | Q(own_id__usr_id__usr_first_name__icontains=reference)
-                | Q(own_id__usr_id__usr_last_name__icontains=reference)
-                | Q(pay_metadata__pet_name__icontains=reference)
-            )
         if appointment_id:
             # Follow-up checkouts are intentionally not linked to the
             # appointment until they are paid, so a failed or expired attempt
@@ -155,12 +153,55 @@ class PaymentService:
                 )
                 qs = qs.filter(pay_paid_at__lt=paid_end_exclusive)
 
-        total = qs.count()
-        # One conditional aggregate over the SAME filtered, unsliced queryset,
-        # so the totals cover every matching row (not just this page) and obey
-        # every filter - including the clinic-local PAY_PAID_AT window that
-        # Reports revenue uses, which is what makes the two figures reconcile.
-        summary = qs.aggregate(
+        # The summary always describes the fully windowed, status/method
+        # filtered queryset. The list narrows further (search, receipt
+        # escape) but never feeds the totals, so a lookup can never move
+        # them.
+        summary_qs = qs
+        rows_qs = qs
+        if reference:
+            # Receipt number, owner name, or pet name - the three things a
+            # human has in hand when looking for a payment.
+            text_q = (
+                Q(pay_reference__icontains=reference)
+                | Q(own_id__usr_id__usr_first_name__icontains=reference)
+                | Q(own_id__usr_id__usr_last_name__icontains=reference)
+                | Q(pay_metadata__pet_name__icontains=reference)
+            )
+            if exact_reference_escape:
+                # Receptionist receipt lookup: the search narrows only the
+                # list, and an exact receipt number may pull its payment in
+                # from outside the forced today window - an owner asking
+                # about an older visit. pay_reference is unique, so that
+                # branch adds at most one row; scope, status and method still
+                # apply, only the paid window is lifted for it. Owner/pet
+                # name searches stay inside the window.
+                escape = Payment.objects.all().select_related(
+                    'own_id__usr_id', 'apt_id',
+                )
+                if clinic_id:
+                    escape = escape.filter(cln_id_id=clinic_id)
+                if owner_id:
+                    escape = escape.filter(own_id_id=owner_id)
+                if pay_status:
+                    escape = escape.filter(pay_status=pay_status)
+                if method:
+                    escape = escape.filter(pay_method=method)
+                rows_qs = (
+                    qs.filter(text_q)
+                    | escape.filter(pay_reference__iexact=reference)
+                )
+            else:
+                qs = qs.filter(text_q)
+                summary_qs = rows_qs = qs
+
+        # One conditional aggregate over the summary queryset, so the totals
+        # cover every matching row (not just this page) and obey every filter
+        # - including the clinic-local PAY_PAID_AT window that Reports
+        # revenue uses, which is what makes the two figures reconcile.
+        summary_total = summary_qs.count()
+        total = summary_total if rows_qs is summary_qs else rows_qs.count()
+        summary = summary_qs.aggregate(
             paid_total=Coalesce(
                 Sum('pay_amount', filter=Q(pay_status=PaymentStatus.PAID)),
                 Decimal('0'),
@@ -178,7 +219,7 @@ class PaymentService:
             ),
         )
         start = (page - 1) * page_size
-        results = list(qs[start:start + page_size])
+        results = list(rows_qs[start:start + page_size])
 
         return {
             'total': total,
@@ -187,12 +228,14 @@ class PaymentService:
             'total_pages': (total + page_size - 1) // page_size if page_size else 0,
             'results': results,
             # Fixed two-decimal strings: no float ever touches an amount,
-            # matching ReportService.get_revenue.
+            # matching ReportService.get_revenue. payment_count counts the
+            # windowed rows (summary_total), so the escaped receipt shows up
+            # in the list and its total, never in the summary figures.
             'summary': {
                 'paid_total': f"{summary['paid_total']:.2f}",
                 'pending_total': f"{summary['pending_total']:.2f}",
                 'refunded_total': f"{summary['refunded_total']:.2f}",
-                'payment_count': total,
+                'payment_count': summary_total,
             },
         }
 
@@ -735,16 +778,105 @@ class PaymentService:
         return payment
 
     # ------------------------------------------------------------------
-    # Cancellation and provider callbacks
+    # Refunds, cancellation, and provider callbacks
     # ------------------------------------------------------------------
+    @classmethod
+    @transaction.atomic
+    def refund_for_cancelled_appointment(
+        cls, *, appointment, actor_user_id, reason=None, ip_address=None,
+    ):
+        """Refund the paid fee for a cancelled appointment.
+
+        Only the payment currently linked to the appointment and still PAID is
+        touched. Unpaid, voided, or already-refunded attempts are left alone,
+        which makes retries and double cancellations harmless.
+        """
+        payment = Payment.objects.filter(
+            apt_id=appointment,
+            pay_status=PaymentStatus.PAID,
+        ).first()
+        if payment is None:
+            return None
+        return cls.refund(
+            payment=payment,
+            actor_user_id=actor_user_id,
+            reason=reason or 'Owner cancelled a rescheduled appointment.',
+            ip_address=ip_address,
+        )
+
+    @classmethod
+    @transaction.atomic
+    def refund(cls, *, payment, actor_user_id, reason='', ip_address=None) -> Payment:
+        """Record a full refund and remove the amount from revenue.
+
+        This is a ledger operation: no provider refund API is called. The
+        payment stays linked to the appointment so the owner and clinic can
+        see the original receipt and the refund reference.
+        """
+        payment = (
+            Payment.objects
+            .select_for_update()
+            .select_related('own_id', 'cln_id')
+            .get(pk=payment.pk)
+        )
+
+        if payment.pay_status == PaymentStatus.REFUNDED:
+            return payment
+        if payment.pay_status != PaymentStatus.PAID:
+            raise PaymentError(
+                'Only paid payments can be refunded.',
+                code='PAYMENT_NOT_REFUNDABLE',
+                status_code=409,
+            )
+
+        refunded_at = timezone.now()
+        refund_reference = cls._new_refund_reference()
+        payment.pay_status = PaymentStatus.REFUNDED
+        payment.pay_refunded_at = refunded_at
+        payment.pay_refund_reason = (
+            reason or 'Owner cancelled a rescheduled appointment.'
+        )
+        payment.pay_refund_reference = refund_reference
+        payment.save(update_fields=[
+            'pay_status', 'pay_refunded_at', 'pay_refund_reason',
+            'pay_refund_reference', 'pay_updated_at',
+        ])
+
+        if cls._record_event(
+            payment,
+            PaymentEventType.REFUNDED,
+            {
+                'refund_reference': refund_reference,
+                'reason': payment.pay_refund_reason,
+            },
+        ):
+            cls._notify_owner(payment, PaymentEventType.REFUNDED)
+        cls._audit(
+            action=AuditAction.PAYMENT_REFUNDED,
+            payment=payment,
+            user_id=actor_user_id,
+            description=(
+                f'Payment {payment.pay_reference} refunded '
+                f'({refund_reference})'
+            ),
+            old_values={'pay_status': PaymentStatus.PAID},
+            new_values={
+                'pay_status': PaymentStatus.REFUNDED,
+                'pay_refunded_at': str(refunded_at),
+                'pay_refund_reference': refund_reference,
+            },
+            ip_address=ip_address,
+        )
+        return payment
+
     @classmethod
     @transaction.atomic
     def cancel(cls, *, payment, actor_user_id, ip_address=None) -> Payment:
         payment = Payment.objects.select_for_update().get(pk=payment.pk)
 
         if payment.pay_status != PaymentStatus.PENDING:
-            # Settled money needs a refund, which phase 3 handles with the
-            # provider; a void here would silently lose the record.
+            # Settled money needs a refund; a void here would silently lose
+            # the original receipt.
             raise PaymentError(
                 'Only unpaid checkouts can be cancelled.',
                 code='PAYMENT_PROCESSED',
@@ -880,6 +1012,21 @@ class PaymentService:
         )
 
     @staticmethod
+    def _new_refund_reference() -> str:
+        stamp = timezone.localdate().strftime('%Y%m%d')
+        for _ in range(6):
+            candidate = f'RFD-{stamp}-{secrets.token_hex(3).upper()}'
+            if not Payment.objects.filter(
+                pay_refund_reference=candidate,
+            ).exists():
+                return candidate
+        raise PaymentError(
+            'Could not allocate a refund reference. Please try again.',
+            code='PAYMENT_ERROR',
+            status_code=503,
+        )
+
+    @staticmethod
     def _resolve_provider():
         try:
             return get_provider()
@@ -961,6 +1108,7 @@ class PaymentService:
         notification_types = {
             PaymentEventType.PAID: 'PAYMENT_COMPLETED',
             PaymentEventType.EXPIRED: 'PAYMENT_EXPIRED',
+            PaymentEventType.REFUNDED: 'PAYMENT_REFUNDED',
         }
         ntf_type = notification_types.get(event_type)
         if ntf_type is None:
@@ -974,6 +1122,14 @@ class PaymentService:
                 f'We received {payment.pay_amount} {payment.pay_currency} for your '
                 f'{visit_label} at {payment.cln_id.cln_name}. '
                 f'Receipt {payment.pay_reference}.'
+            )
+        elif event_type == PaymentEventType.REFUNDED:
+            title = 'Refund recorded'
+            refund_ref = payment.pay_refund_reference or '—'
+            message = (
+                f'A refund of {payment.pay_amount} {payment.pay_currency} was '
+                f'recorded for your cancelled {visit_label} at '
+                f'{payment.cln_id.cln_name}. Refund {refund_ref}.'
             )
         else:
             title = 'Payment checkout expired'

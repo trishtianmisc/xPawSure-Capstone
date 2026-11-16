@@ -9,6 +9,19 @@ export type AppointmentStatus =
 
 export type ConsultationTab = 'TODAY' | 'UPCOMING' | 'COMPLETED' | 'CANCELLED'
 
+export interface VetAppointmentPayment {
+  status: 'PENDING' | 'PAID' | 'FAILED' | 'EXPIRED' | 'REFUNDED' | 'VOID'
+  amount: number
+  currency: string
+  method: string
+  reference_no: string
+  provider_ref: string | null
+  paid_at: string | null
+  refunded_at: string | null
+  refund_reason: string | null
+  refund_reference: string | null
+}
+
 export interface VetScreeningAnswer {
   question: string
   answer: string
@@ -51,6 +64,7 @@ export interface VetAppointment {
   apt_created_at?: string | null
   apt_checked_in_at?: string | null
   apt_completed_at?: string | null
+  payment?: VetAppointmentPayment | null
   payment_provider_ref?: string | null
   apt_reason: string | null
   apt_cancellation_reason?: string | null

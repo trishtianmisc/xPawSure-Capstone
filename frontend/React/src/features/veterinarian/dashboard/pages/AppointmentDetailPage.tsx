@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { PaymentStatusBadge } from '../../../payments/components/PaymentStatusBadge'
 import { AppointmentStatusBadge } from '../../../receptionist/components/AppointmentStatusBadge'
 import { PageHero } from '../../../receptionist/components/PageHero'
 import { clinicToday, formatDateTime } from '../../../../utils/format'
@@ -331,10 +332,48 @@ export function AppointmentDetailPage() {
               value={<AppointmentStatusBadge status={appointment.apt_status} uniform />}
             />
             <DetailCell
-              label="Ref. No"
-              value={appointment.payment_provider_ref ?? 'Not yet added'}
+              label="Payment"
+              value={
+                appointment.payment ? (
+                  <PaymentStatusBadge status={appointment.payment.status} />
+                ) : (
+                  'Not yet added'
+                )
+              }
             />
           </DetailRowGroup>
+          <DetailRowGroup>
+            <DetailCell
+              divider
+              label="Receipt No."
+              value={appointment.payment?.reference_no ?? '—'}
+            />
+            <DetailCell
+              label="Ref. No"
+              value={
+                appointment.payment?.provider_ref ??
+                appointment.payment_provider_ref ??
+                'Not yet added'
+              }
+            />
+          </DetailRowGroup>
+          {appointment.payment?.status === 'REFUNDED' && (
+            <DetailRowGroup>
+              <DetailCell
+                divider
+                label="Refunded at"
+                value={
+                  appointment.payment.refunded_at
+                    ? formatDateTime(appointment.payment.refunded_at)
+                    : '—'
+                }
+              />
+              <DetailCell
+                label="Refund ref."
+                value={appointment.payment.refund_reference ?? '—'}
+              />
+            </DetailRowGroup>
+          )}
           {appointment.apt_reschedule_request_reason && (
             <DetailCell
               label="Reschedule request"

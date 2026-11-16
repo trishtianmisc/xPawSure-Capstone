@@ -2,7 +2,6 @@ import http from '../../../services/http'
 import type {
   AppointmentDetail,
   AppointmentListResponse,
-  CreateAppointmentPayload,
 } from '../types/receptionist.types'
 
 export async function listAppointments(params: {
@@ -25,13 +24,6 @@ export async function listAppointments(params: {
 
 export async function getAppointmentDetail(aptId: string): Promise<AppointmentDetail> {
   const { data } = await http.get(`/appointments/${aptId}/`)
-  return data
-}
-
-export async function createAppointment(
-  payload: CreateAppointmentPayload,
-): Promise<AppointmentDetail> {
-  const { data } = await http.post('/appointments/', payload)
   return data
 }
 

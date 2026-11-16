@@ -238,19 +238,25 @@ class StaffActionView(APIView):
             return error_response
 
         if action == 'reset-password':
-            result = StaffService.reset_password(
-                staff=staff,
-                user_id=str(request.user.usr_id),
-                ip_address=request.META.get('REMOTE_ADDR'),
-            )
+            try:
+                StaffService.reset_password(
+                    staff=staff,
+                    user_id=str(request.user.usr_id),
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'detail': 'Password reset. New temp password sent via email.'}, status=status.HTTP_200_OK)
 
         if action == 'resend-welcome':
-            StaffService.resend_welcome(
-                staff=staff,
-                user_id=str(request.user.usr_id),
-                ip_address=request.META.get('REMOTE_ADDR'),
-            )
+            try:
+                StaffService.resend_welcome(
+                    staff=staff,
+                    user_id=str(request.user.usr_id),
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                )
+            except ValueError as exc:
+                return Response({'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             return Response({'detail': 'Welcome email resent with new temp password.'}, status=status.HTTP_200_OK)
 
         if action == 'activate':

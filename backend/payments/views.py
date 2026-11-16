@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 
 from ai_screenings.models import AiScreening
 from appointments.models import VetSlot
+from appointments.services import get_clinic_timezone
 from core.permissions import HasRole
 from owners.models import OwnerProfile
 from pets.models import Pet
@@ -158,7 +159,16 @@ class PaymentListView(APIView):
                 {'detail': 'Staff profile not found.', 'code': 'STAFF_NOT_FOUND'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return _list_response(request, clinic_id=staff.cln_id_id)
+        # Receptionists see the clinic's collection for the current
+        # clinic-local day - except when the request is scoped to a single
+        # appointment (`?appointment=`), where that appointment's payments
+        # are returned regardless of day; clinic admins keep the full
+        # history with date filters (their Reports and exports live behind
+        # the same endpoint).
+        is_receptionist = request.user.usr_role == UserRole.RECEPTIONIST
+        return _list_response(
+            request, clinic_id=staff.cln_id_id, receptionist=is_receptionist,
+        )
 
 
 class OwnerPaymentListView(APIView):
@@ -176,49 +186,66 @@ class OwnerPaymentListView(APIView):
         return _list_response(request, owner_id=owner.own_id)
 
 
-def _list_response(request, **scope) -> Response:
+def _list_response(request, receptionist=False, **scope) -> Response:
     """Shared filters, pagination and envelope for both payment lists.
 
     `scope` is the only difference between them: `clinic_id=` for staff,
-    `owner_id=` for an owner reading their own payments.
+    `owner_id=` for an owner reading their own payments. `receptionist=True`
+    forces today's clinic-local paid window and ignores every client date
+    parameter outright - not even a malformed value may 400, because the
+    parameter is simply not part of a receptionist request. The one exception
+    is an appointment-scoped request (`?appointment=`): that already narrows
+    to a single clinic-checked appointment, so no paid window is applied and
+    that appointment's payments (including unpaid attempts) are returned
+    regardless of day.
     """
-    date_from, date_from_error = _parse_date(request.query_params.get('date_from'))
-    if date_from_error:
-        return Response(
-            {'detail': date_from_error, 'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    date_to, date_to_error = _parse_date(request.query_params.get('date_to'))
-    if date_to_error:
-        return Response(
-            {'detail': date_to_error, 'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+    appointment_id = request.query_params.get('appointment')
+    if receptionist and appointment_id:
+        date_from = date_to = None
+        paid_from = paid_to = None
+    elif receptionist:
+        tz = get_clinic_timezone(scope.get('clinic_id'))
+        today = datetime.now(tz).date()
+        date_from = date_to = None
+        paid_from = paid_to = today
+    else:
+        date_from, date_from_error = _parse_date(request.query_params.get('date_from'))
+        if date_from_error:
+            return Response(
+                {'detail': date_from_error, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        date_to, date_to_error = _parse_date(request.query_params.get('date_to'))
+        if date_to_error:
+            return Response(
+                {'detail': date_to_error, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    paid_from, paid_from_error = _parse_date(request.query_params.get('paid_from'))
-    if paid_from_error:
-        return Response(
-            {'detail': paid_from_error, 'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    paid_to, paid_to_error = _parse_date(request.query_params.get('paid_to'))
-    if paid_to_error:
-        return Response(
-            {'detail': paid_to_error, 'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if paid_from and paid_to and paid_from > paid_to:
-        return Response(
-            {'detail': 'paid_from cannot be after paid_to.',
-             'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    if paid_from and paid_to and (paid_to - paid_from).days + 1 > MAX_PAID_RANGE_DAYS:
-        return Response(
-            {'detail': f'Paid date range cannot exceed {MAX_PAID_RANGE_DAYS} days.',
-             'code': 'VALIDATION_ERROR'},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        paid_from, paid_from_error = _parse_date(request.query_params.get('paid_from'))
+        if paid_from_error:
+            return Response(
+                {'detail': paid_from_error, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        paid_to, paid_to_error = _parse_date(request.query_params.get('paid_to'))
+        if paid_to_error:
+            return Response(
+                {'detail': paid_to_error, 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if paid_from and paid_to and paid_from > paid_to:
+            return Response(
+                {'detail': 'paid_from cannot be after paid_to.',
+                 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if paid_from and paid_to and (paid_to - paid_from).days + 1 > MAX_PAID_RANGE_DAYS:
+            return Response(
+                {'detail': f'Paid date range cannot exceed {MAX_PAID_RANGE_DAYS} days.',
+                 'code': 'VALIDATION_ERROR'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     try:
         page = max(int(request.query_params.get('page', 1)), 1)
@@ -234,11 +261,12 @@ def _list_response(request, **scope) -> Response:
         pay_status=request.query_params.get('status'),
         method=request.query_params.get('method'),
         reference=request.query_params.get('reference'),
-        appointment_id=request.query_params.get('appointment'),
+        appointment_id=appointment_id,
         date_from=date_from,
         date_to=date_to,
         paid_from=paid_from,
         paid_to=paid_to,
+        exact_reference_escape=receptionist,
         page=page,
         page_size=page_size,
     )
@@ -248,6 +276,10 @@ def _list_response(request, **scope) -> Response:
         'page': data['page'],
         'page_size': data['page_size'],
         'total_pages': data['total_pages'],
+        # Echo of the paid window the server actually applied, so the UI can
+        # show "Today · Nov 14, 2026" without trusting the client's clock.
+        'paid_from': paid_from.isoformat() if paid_from else None,
+        'paid_to': paid_to.isoformat() if paid_to else None,
         'summary': data['summary'],
         'results': serializer.data,
     })

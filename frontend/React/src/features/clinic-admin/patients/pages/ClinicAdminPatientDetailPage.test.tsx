@@ -3,11 +3,15 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useClinicSettings } from '../../../clinic-profile/hooks/useClinicSettings'
-import { useClinicPatient } from '../hooks/usePatients'
+import {
+  useClinicPatient,
+  useClinicPatientAppointments,
+} from '../hooks/usePatients'
 import { ClinicAdminPatientDetailPage } from './ClinicAdminPatientDetailPage'
 
 vi.mock('../hooks/usePatients', () => ({
   useClinicPatient: vi.fn(),
+  useClinicPatientAppointments: vi.fn(),
 }))
 vi.mock('../../../clinic-profile/hooks/useClinicSettings', () => ({
   useClinicSettings: vi.fn(),
@@ -85,13 +89,43 @@ describe('ClinicAdminPatientDetailPage', () => {
       error: null,
       refetch: vi.fn(),
     } as unknown as ReturnType<typeof useClinicPatient>)
+    vi.mocked(useClinicPatientAppointments).mockReturnValue({
+      data: {
+        total: 2,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+        results: [
+          {
+            apt_id: 'apt-1',
+            apt_scheduled_at: '2026-10-02T01:00:00Z',
+            apt_type: 'CONSULTATION',
+            apt_status: 'COMPLETED',
+            vet_name: 'Dr. Reyes',
+            apt_cancellation_reason: null,
+          },
+          {
+            apt_id: 'apt-2',
+            apt_scheduled_at: '2026-09-20T02:00:00Z',
+            apt_type: 'VACCINATION',
+            apt_status: 'CANCELLED',
+            vet_name: null,
+            apt_cancellation_reason: 'Owner requested cancellation',
+          },
+        ],
+      },
+      isLoading: false,
+      isFetching: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useClinicPatientAppointments>)
   })
 
   it('renders the read-only patient record with owner contacts and history', () => {
     renderPage()
 
     expect(screen.getByRole('heading', { name: 'Bella' })).toBeInTheDocument()
-    expect(screen.getByText('Read-only record')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: '0917 123 4567' })).toHaveAttribute(
       'href',
       'tel:09171234567',
@@ -102,9 +136,18 @@ describe('ClinicAdminPatientDetailPage', () => {
     expect(screen.getByText('Rabies')).toBeInTheDocument()
     expect(screen.getByText('Dr. Reyes')).toBeInTheDocument()
     expect(
-      screen.getByText('Reason: Owner requested cancellation'),
+      screen.getByText('Owner requested cancellation'),
     ).toBeInTheDocument()
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
-    expect(screen.queryAllByRole('button')).toHaveLength(0)
+    // Read-only record: the only buttons are the history pagination controls.
+    const buttonLabels = screen
+      .queryAllByRole('button')
+      .map((button) => button.textContent)
+    expect(buttonLabels.length).toBeGreaterThan(0)
+    expect(
+      buttonLabels.every(
+        (label) => label === 'Previous' || label === 'Next',
+      ),
+    ).toBe(true)
   })
 })

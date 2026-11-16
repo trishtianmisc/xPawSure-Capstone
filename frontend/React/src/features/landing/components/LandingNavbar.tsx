@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom'
 
 import { useTheme } from '../../../context/ThemeContext'
 import { LandingIcon } from './LandingIcon'
+import { Wordmark } from './PawIcon'
 import { LANDING_NAV_ITEMS, scrollToSection } from '../landing.utils'
+
+const focusRing =
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8a4b24]'
 
 export function LandingNavbar() {
   const { theme, toggleTheme } = useTheme()
@@ -15,22 +19,17 @@ export function LandingNavbar() {
       let current = LANDING_NAV_ITEMS[0].id
       for (const item of LANDING_NAV_ITEMS) {
         const section = document.getElementById(item.id)
-        if (section && section.getBoundingClientRect().top <= 120) {
-          current = item.id
-        }
+        if (section && section.getBoundingClientRect().top <= 120) current = item.id
       }
       setActiveSection(current)
     }
-
     function closeMenuOnEscape(event: KeyboardEvent) {
       if (event.key === 'Escape') setIsMenuOpen(false)
     }
-
     updateActiveSection()
     window.addEventListener('scroll', updateActiveSection, { passive: true })
     window.addEventListener('resize', updateActiveSection)
     window.addEventListener('keydown', closeMenuOnEscape)
-
     return () => {
       window.removeEventListener('scroll', updateActiveSection)
       window.removeEventListener('resize', updateActiveSection)
@@ -45,26 +44,28 @@ export function LandingNavbar() {
   }
 
   const navLinkClasses = (isActive: boolean) =>
-    `rounded-lg px-3 py-2 text-sm font-semibold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-700 ${
+    `rounded-full px-4 py-2 text-[15px] font-medium transition ${focusRing} ${
       isActive
-        ? 'bg-amber-50 text-amber-900 dark:bg-amber-900/30 dark:text-amber-300'
-        : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100'
+        ? 'bg-[#a0522d] text-[#fff3e0] dark:bg-amber-700/50 dark:text-amber-200'
+        : 'text-[#4a2210] hover:text-[#a0522d] dark:text-stone-300 dark:hover:text-amber-100'
     }`
 
+  const outlineBtn = `inline-flex h-11 items-center justify-center rounded-full border-2 border-[#4a2210] px-5 text-sm font-semibold text-[#4a2210] transition hover:-translate-y-0.5 hover:bg-[#4a2210]/10 dark:border-stone-300 dark:text-stone-100 dark:hover:bg-stone-100/10 ${focusRing}`
+  const solidBtn = `inline-flex h-11 items-center justify-center rounded-full border-2 border-[#4a2210] bg-[#4a2210] px-5 text-sm font-semibold text-[#fff3e0] transition hover:-translate-y-0.5 hover:bg-[#6b3a1f] dark:border-amber-900 dark:bg-amber-800 dark:text-stone-100 dark:hover:bg-amber-600 ${focusRing}`
+
   return (
-    <header className="sticky top-0 z-50 border-b border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-950">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 bg-[#f3d1a3]/90 backdrop-blur dark:bg-stone-950/90">
+      <div className="mx-auto flex h-[72px] max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <a
-          className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-700"
+          aria-label="Xpawsure home"
+          className={`flex shrink-0 items-center gap-2.5 rounded-full ${focusRing}`}
           href="#home"
           onClick={(event) => handleSectionClick(event, 'home')}
         >
-          <span className="grid size-9 place-items-center rounded-xl bg-amber-950/15 shadow-sm dark:bg-stone-300">
+          <span className="grid size-11 place-items-center rounded-full border-[3px] border-[#d2a97e] bg-[#fff3e0] dark:border-stone-600 dark:bg-stone-200">
             <img alt="" className="size-8 object-contain" src="/xpawsure-logo.png" />
           </span>
-          <span className="text-base font-extrabold tracking-tight text-amber-950/90 dark:text-stone-100">
-            XPawSure
-          </span>
+          <Wordmark className="text-[26px] text-[#4a2210] dark:text-stone-100" />
         </a>
 
         <nav aria-label="Main navigation" className="hidden items-center gap-1 lg:flex">
@@ -87,25 +88,27 @@ export function LandingNavbar() {
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            className="grid size-9 place-items-center rounded-lg text-stone-500 transition hover:bg-stone-100 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-200"
+            className={`grid size-10 place-items-center rounded-full text-[#6a3a1e] transition hover:bg-[#4a2210]/10 dark:text-stone-400 dark:hover:bg-stone-800 ${focusRing}`}
             onClick={toggleTheme}
             type="button"
           >
             <LandingIcon name={theme === 'dark' ? 'sun' : 'moon'} />
           </button>
-
-          <Link
-            className="hidden h-10 items-center justify-center rounded-xl bg-amber-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800 sm:inline-flex"
-            to="/login"
-          >
-            Login
+          <Link className={`hidden sm:inline-flex ${outlineBtn}`} to="/login">
+            Sign In
           </Link>
-
+          <a
+            className={`hidden sm:inline-flex ${solidBtn}`}
+            href="#download"
+            onClick={(event) => handleSectionClick(event, 'download')}
+          >
+            Download app
+          </a>
           <button
             aria-controls="landing-mobile-nav"
             aria-expanded={isMenuOpen}
             aria-label={isMenuOpen ? 'Close navigation' : 'Open navigation'}
-            className="grid size-10 place-items-center rounded-lg text-stone-600 transition hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-amber-700 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100 lg:hidden"
+            className={`grid size-10 place-items-center rounded-full text-[#4a2210] transition hover:bg-[#4a2210]/10 dark:text-stone-300 dark:hover:bg-stone-800 lg:hidden ${focusRing}`}
             onClick={() => setIsMenuOpen((open) => !open)}
             type="button"
           >
@@ -116,7 +119,7 @@ export function LandingNavbar() {
 
       {isMenuOpen ? (
         <div
-          className="animate-slide-in absolute inset-x-0 top-full border-b border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950 lg:hidden"
+          className="animate-slide-in absolute inset-x-0 top-full rounded-b-3xl bg-[#fff3e0] shadow-lg dark:bg-stone-900 lg:hidden"
           id="landing-mobile-nav"
         >
           <nav aria-label="Mobile navigation" className="mx-auto max-w-6xl space-y-1 px-4 py-4 sm:px-6">
@@ -134,13 +137,14 @@ export function LandingNavbar() {
                 </a>
               )
             })}
-            <Link
-              className="mt-3 flex h-11 items-center justify-center rounded-xl bg-amber-900 px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-800"
-              onClick={() => setIsMenuOpen(false)}
-              to="/login"
-            >
-              Login
-            </Link>
+            <div className="grid gap-2 pt-3 sm:hidden">
+              <Link className={outlineBtn} onClick={() => setIsMenuOpen(false)} to="/login">
+                Clinic login
+              </Link>
+              <a className={solidBtn} href="#download" onClick={(event) => handleSectionClick(event, 'download')}>
+                Download app
+              </a>
+            </div>
           </nav>
         </div>
       ) : null}

@@ -74,6 +74,11 @@ NON_PATIENT_APPOINTMENT_STATUSES = (
     AppointmentStatus.NO_SHOW,
 )
 
+UPCOMING_APPOINTMENT_STATUSES = (
+    AppointmentStatus.PENDING,
+    AppointmentStatus.CONFIRMED,
+)
+
 
 def clinic_patient_appointment_exists(clinic_id):
     """Canonical patient semi-join for row-scoped models (e.g. screenings).
@@ -94,6 +99,35 @@ def clinic_patient_appointment_exists(clinic_id):
 
 def filter_clinic_patients(qs, clinic_id):
     return qs.filter(clinic_patient_appointment_exists(clinic_id)).distinct()
+
+
+def last_visit_annotation(clinic_id, now):
+    latest = Appointment.objects.filter(
+        pet_id=models.OuterRef('pk'),
+        cln_id_id=clinic_id,
+        apt_deleted_at__isnull=True,
+        apt_scheduled_at__lt=now,
+    ).exclude(
+        apt_status__in=NON_PATIENT_APPOINTMENT_STATUSES,
+    ).values('pet_id').annotate(
+        value=models.Max('apt_scheduled_at'),
+    ).values('value')[:1]
+
+    return models.Subquery(latest, output_field=models.DateTimeField())
+
+
+def upcoming_appointment_annotation(clinic_id, now):
+    upcoming = Appointment.objects.filter(
+        pet_id=models.OuterRef('pk'),
+        cln_id_id=clinic_id,
+        apt_deleted_at__isnull=True,
+        apt_status__in=UPCOMING_APPOINTMENT_STATUSES,
+        apt_scheduled_at__gte=now,
+    ).values('pet_id').annotate(
+        value=models.Min('apt_scheduled_at'),
+    ).values('value')[:1]
+
+    return models.Subquery(upcoming, output_field=models.DateTimeField())
 
 
 class SlotUnavailableError(Exception):
@@ -153,8 +187,10 @@ def _assert_no_open_request(appointment):
 
 
 def _notify_request_submitted(appointment, verb):
-    """Neutral notice to every receptionist and clinic admin of the
-    appointment's clinic.
+    """Neutral notice to every receptionist of the appointment's clinic.
+
+    Only receptionists handle vet requests (reschedule/decline are
+    receptionist-only endpoints), so clinic admins are not addressed.
 
     The message never contains the vet's reason text; it only says which
     action was requested and when the appointment is scheduled.
@@ -162,7 +198,7 @@ def _notify_request_submitted(appointment, verb):
     from notifications.models import NotificationType
 
     staff_ids = User.objects.filter(
-        usr_role__in=[UserRole.RECEPTIONIST, UserRole.CLINIC_ADMIN],
+        usr_role=UserRole.RECEPTIONIST,
         staffprofile__cln_id=appointment.cln_id_id,
     ).values_list('usr_id', flat=True)
     for uid in staff_ids:
@@ -940,13 +976,18 @@ class AppointmentService:
 
     @staticmethod
     @transaction.atomic
-    def update_status(apt_id, new_status, user_id, cancellation_reason=None):
+    def update_status(
+        apt_id, new_status, user_id, cancellation_reason=None,
+        refund_on_cancellation=False, refund_requires_reschedule=True,
+        refund_reason=None, ip_address=None,
+    ):
         try:
             appointment = Appointment.objects.select_for_update().get(apt_id=apt_id)
         except Appointment.DoesNotExist:
             raise ValueError('Appointment not found.')
 
         current = appointment.apt_status
+        was_rescheduled = appointment.apt_rescheduled_at is not None
         allowed = AppointmentService.VALID_TRANSITIONS.get(current, [])
 
         if new_status not in allowed:
@@ -1000,6 +1041,22 @@ class AppointmentService:
                 slot.save(update_fields=['vsl_appointment', 'vsl_status', 'vsl_updated_at'])
 
         appointment.save()
+
+        if (
+            new_status == AppointmentStatus.CANCELLED
+            and refund_on_cancellation
+            and (was_rescheduled or not refund_requires_reschedule)
+        ):
+            # Owner cancellation keeps its reschedule gate; receptionist
+            # cancellation refunds any linked paid fee.
+            from payments.services import PaymentService
+
+            PaymentService.refund_for_cancelled_appointment(
+                appointment=appointment,
+                actor_user_id=user_id,
+                reason=refund_reason,
+                ip_address=ip_address,
+            )
 
         # System-triggered changes (the past-due reconcile on read) pass
         # user_id=None; there is no system user to attribute and a failed
@@ -2258,6 +2315,12 @@ class ReceptionistPetService:
                 | db_models.Q(own_id__usr_id__usr_last_name__icontains=search)
             )
 
+        now = timezone.now()
+        qs = qs.annotate(
+            last_visit_at=last_visit_annotation(clinic_id, now),
+            next_appointment_at=upcoming_appointment_annotation(clinic_id, now),
+        )
+
         total = qs.count()
         start = (page - 1) * page_size
         results = qs[start:start + page_size]
@@ -2286,10 +2349,7 @@ class ReceptionistPetService:
     @staticmethod
     def get_pet_history(pet_id, clinic_id):
         from pets.models import Pet
-        from consultations.models import Consultation
-        from prescriptions.models import Prescription
         from vaccinations.models import VaccinationRecord
-        from ai_screenings.models import AiScreening
         from appointments.models import Appointment
 
         try:
@@ -2299,31 +2359,11 @@ class ReceptionistPetService:
         if not ReceptionistPetService._pet_in_clinic(pet, clinic_id):
             return None
 
-        consultations = Consultation.objects.filter(
-            apt_id__pet_id=pet,
-            apt_id__cln_id_id=clinic_id,
-            apt_id__apt_deleted_at__isnull=True,
-        ).select_related(
-            'stf_id__usr_id', 'apt_id', 'apt_id__apt_screening',
-        ).order_by('-con_created_at')
-
-        prescriptions = Prescription.objects.filter(
-            con_id__apt_id__pet_id=pet,
-            con_id__apt_id__cln_id_id=clinic_id,
-            con_id__apt_id__apt_deleted_at__isnull=True,
-        ).select_related(
-            'stf_id__usr_id', 'con_id',
-        ).prefetch_related('items').order_by('-prs_created_at')
-
         vaccinations = VaccinationRecord.objects.filter(
             pet_id=pet,
         ).select_related(
             'stf_id__usr_id', 'con_id',
         ).order_by('-vac_date_given', '-vac_created_at')
-
-        screenings = AiScreening.objects.filter(
-            pet_id=pet,
-        ).select_related('dis_id').order_by('-ais_created_at')
 
         appointments = Appointment.objects.filter(
             pet_id=pet,
@@ -2334,10 +2374,7 @@ class ReceptionistPetService:
         ).order_by('-apt_scheduled_at')
 
         return {
-            'consultations': consultations,
-            'prescriptions': prescriptions,
             'vaccinations': vaccinations,
-            'screenings': screenings,
             'appointments': appointments,
         }
 

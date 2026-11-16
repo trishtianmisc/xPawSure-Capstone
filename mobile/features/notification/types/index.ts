@@ -11,6 +11,7 @@ export type NotificationTypeName =
   | 'AI_SCREENING_REVIEWED'
   | 'PAYMENT_COMPLETED'
   | 'PAYMENT_EXPIRED'
+  | 'PAYMENT_REFUNDED'
   | 'SYSTEM'
 
 export interface OwnerNotification {

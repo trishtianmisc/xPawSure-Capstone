@@ -1,12 +1,55 @@
-import { Fragment, useMemo, useState, type ReactNode } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { type ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
-import { formatDate, formatTime } from '../../../utils/format'
+import { Button, Card } from '../../../components/ui'
+import { apiErrorMessage } from '../../../utils/error'
+import {
+  CLINIC_TIME_ZONE,
+  formatDate,
+  formatDateTime,
+  formatPhone,
+} from '../../../utils/format'
+import { useClinicSettings } from '../../clinic-profile/hooks/useClinicSettings'
 import { AppointmentStatusBadge } from '../components/AppointmentStatusBadge'
 import { DetailLoadError } from '../components/DetailLoadError'
 import { PageHero } from '../components/PageHero'
 import { usePetDetail, usePetHistory } from '../hooks/usePets'
-import type { ConsultationRecord, PetHistory, ScreeningSummary } from '../types/receptionist.types'
+import type {
+  AppointmentHistoryItem,
+  PetDetail,
+  PetHistory,
+} from '../types/receptionist.types'
+
+const ICONS = {
+  back: 'M10 19l-7-7m0 0l7-7m-7 7h18',
+  appointments:
+    'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+  vaccinations:
+    'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z',
+  clock: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
+  phone:
+    'M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z',
+  mail: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z',
+  heart:
+    'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
+} as const
+
+type IconName = keyof typeof ICONS
+
+function Icon({ name, className = 'size-5' }: { name: IconName; className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      viewBox="0 0 24 24"
+    >
+      <path d={ICONS[name]} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 function labelize(value: string): string {
   if (value === 'AI_REVIEW') return 'AI Review'
@@ -14,16 +57,20 @@ function labelize(value: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
-function ageFrom(dob: string | null): string | null {
-  if (!dob) return null
+function ageFrom(dob: string | null): string {
+  if (!dob) return '-'
   const birth = new Date(dob)
-  if (Number.isNaN(birth.getTime())) return null
+  if (Number.isNaN(birth.getTime())) return '-'
   const now = new Date()
   let years = now.getFullYear() - birth.getFullYear()
   const monthDiff = now.getMonth() - birth.getMonth()
   if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) years -= 1
-  if (years < 0) return null
+  if (years < 0) return '-'
   return years === 0 ? '<1 yr' : `${years} ${years === 1 ? 'yr' : 'yrs'}`
+}
+
+function initial(name: string): string {
+  return name.trim()[0]?.toUpperCase() ?? '?'
 }
 
 function dueBadge(nextDue: string | null): { label: string; className: string } | null {
@@ -42,400 +89,338 @@ function dueBadge(nextDue: string | null): { label: string; className: string } 
   return { label: 'Up to date', className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' }
 }
 
-const SCREENING_STATUS: Record<string, { label: string; className: string }> = {
-  PENDING_REVIEW: {
-    label: 'Pending review',
-    className: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-  },
-  REVIEWED: {
-    label: 'Reviewed',
-    className: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400',
-  },
-  CONFIRMED: {
-    label: 'Confirmed',
-    className: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
-  },
-  DISMISSED: {
-    label: 'Dismissed',
-    className: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400',
-  },
+/**
+ * Earliest visit still ahead of the desk: PENDING/CONFIRMED only, soonest first.
+ * History arrives newest-first, so the order cannot be trusted for this.
+ */
+function nextAppointmentFrom(
+  appointments: AppointmentHistoryItem[],
+): AppointmentHistoryItem | null {
+  const now = Date.now()
+  const upcoming = appointments
+    .filter((apt) => apt.apt_status === 'PENDING' || apt.apt_status === 'CONFIRMED')
+    .filter((apt) => {
+      const at = new Date(apt.apt_scheduled_at).getTime()
+      return !Number.isNaN(at) && at >= now
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.apt_scheduled_at).getTime() -
+        new Date(b.apt_scheduled_at).getTime(),
+    )
+  return upcoming[0] ?? null
 }
 
-function ScreeningStatusBadge({ status }: { status: string }) {
-  const config = SCREENING_STATUS[status] ?? SCREENING_STATUS.PENDING_REVIEW
+const TILE_TONES = {
+  amber:
+    'bg-amber-50 text-amber-700 ring-amber-100 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-800/40',
+  emerald:
+    'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800/40',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-900/30 dark:text-sky-300 dark:ring-sky-800/40',
+} as const
+
+function SummaryTile({
+  label,
+  value,
+  icon,
+  tone,
+  compact = false,
+}: {
+  label: string
+  value: string
+  icon: IconName
+  tone: keyof typeof TILE_TONES
+  compact?: boolean
+}) {
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${config.className}`}>
-      {config.label}
-    </span>
+    <Card padding="md">
+      <div className="flex items-center gap-4">
+        <div
+          className={`grid size-12 shrink-0 place-items-center rounded-xl ring-1 ${TILE_TONES[tone]}`}
+        >
+          <Icon name={icon} className="size-6" />
+        </div>
+        <div className="min-w-0">
+          <p
+            className={`font-bold leading-none tabular-nums text-stone-900 dark:text-stone-50 ${
+              compact ? 'text-lg' : 'text-3xl'
+            }`}
+          >
+            {value}
+          </p>
+          <p className="mt-1.5 text-xs font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
+            {label}
+          </p>
+        </div>
+      </div>
+    </Card>
   )
 }
 
-function SectionShell({
+function SectionHeader({
+  icon,
   title,
-  count,
+  meta,
+}: {
+  icon: IconName
+  title: string
+  meta?: string
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 px-2 pb-4 dark:border-stone-700">
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-lg bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+          <Icon name={icon} className="size-5" />
+        </span>
+        <div>
+          <h2 className="text-base font-semibold text-stone-900 dark:text-stone-100">
+            {title}
+          </h2>
+          {meta && (
+            <p className="text-xs text-stone-500 dark:text-stone-400">{meta}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({ icon, message }: { icon: IconName; message: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-12 text-center">
+      <span className="grid size-12 place-items-center rounded-full bg-stone-100 text-stone-400 dark:bg-stone-800 dark:text-stone-500">
+        <Icon name={icon} className="size-6" />
+      </span>
+      <p className="text-sm text-stone-500 dark:text-stone-400">{message}</p>
+    </div>
+  )
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-stone-50 px-4 py-3 ring-1 ring-stone-100 dark:bg-stone-800/60 dark:ring-stone-700/60">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+        {label}
+      </dt>
+      <dd className="mt-1 text-sm font-semibold text-stone-900 dark:text-stone-100">
+        {value}
+      </dd>
+    </div>
+  )
+}
+
+function ContactRow({
+  icon,
+  label,
   children,
 }: {
-  title: string
-  count: number | null
+  icon: IconName
+  label: string
   children: ReactNode
 }) {
   return (
-    <section className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-stone-800 dark:bg-stone-900">
-      <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3 sm:px-5 dark:border-stone-800">
-        <h2 className="text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">{title}</h2>
-        {count !== null && (
-          <span className="rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-400">
-            {count}
-          </span>
-        )}
+    <div className="flex items-start gap-3">
+      <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+        <Icon name={icon} className="size-4" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+          {label}
+        </p>
+        <div className="mt-0.5 break-all text-sm font-medium text-stone-900 dark:text-stone-100">
+          {children}
+        </div>
       </div>
-      {children}
-    </section>
-  )
-}
-
-function EmptyState({ title, hint }: { title: string; hint: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-1 px-4 py-10 text-center">
-      <p className="text-sm font-medium text-stone-600 dark:text-stone-400">{title}</p>
-      <p className="text-xs text-stone-400 dark:text-stone-500">{hint}</p>
     </div>
   )
 }
 
-function SkeletonRows({ rows = 3 }: { rows?: number }) {
+function OwnerCard({ pet }: { pet: PetDetail }) {
+  const owner = pet.owner
+
   return (
-    <div className="space-y-3 px-4 py-5 sm:px-5">
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-5 w-full animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
-      ))}
-    </div>
+    <Card>
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+        Owner
+      </h2>
+      <div className="mt-4 flex items-center gap-3">
+        <div className="grid size-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-amber-600 to-amber-800 text-base font-bold text-white shadow-sm">
+          {owner?.name ? initial(owner.name) : '?'}
+        </div>
+        <p className="min-w-0 text-base font-semibold text-stone-900 dark:text-stone-100">
+          {owner?.name || '-'}
+        </p>
+      </div>
+      <div className="mt-5 space-y-4 border-t border-stone-100 pt-5 dark:border-stone-700">
+        <ContactRow icon="phone" label="Phone">
+          {owner?.phone ? (
+            <a
+              className="hover:text-amber-800 dark:hover:text-amber-400"
+              href={`tel:${owner.phone}`}
+            >
+              {formatPhone(owner.phone)}
+            </a>
+          ) : (
+            <span className="text-stone-400 dark:text-stone-500">-</span>
+          )}
+        </ContactRow>
+        <ContactRow icon="mail" label="Email">
+          {owner?.email ? (
+            <a
+              className="hover:text-amber-800 dark:hover:text-amber-400"
+              href={`mailto:${owner.email}`}
+            >
+              {owner.email}
+            </a>
+          ) : (
+            <span className="text-stone-400 dark:text-stone-500">-</span>
+          )}
+        </ContactRow>
+      </div>
+    </Card>
   )
 }
 
-const TH =
-  'px-5 py-4 text-left text-sm font-semibold text-stone-500 dark:text-stone-400'
-const TD = 'px-5 py-4 text-sm text-stone-700 dark:text-stone-300'
-const ROW =
-  'border-t border-stone-100 dark:border-stone-800/70 transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/40'
+const TH_CLASSES = 'px-4 py-3 text-xs font-semibold uppercase tracking-wide'
+const ROW_CLASSES = 'transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/50'
 
-function SoapField({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="rounded-lg bg-stone-50 p-3 dark:bg-stone-800/60">
-      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-        {label}
-      </p>
-      <p className="whitespace-pre-wrap text-sm text-stone-800 dark:text-stone-200">
-        {value?.trim() ? value : '—'}
-      </p>
-    </div>
-  )
-}
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-center dark:border-stone-800 dark:bg-stone-800/50">
-      <p className="text-xl font-bold text-stone-900 dark:text-stone-100">{value}</p>
-      <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">
-        {label}
-      </p>
-    </div>
-  )
-}
-
-function AiVsVetComparison({
-  screening,
-  diagnosis,
+function VaccinationHistory({
+  history,
+  timeZone,
 }: {
-  screening: ScreeningSummary | null
-  diagnosis: string
+  history: PetHistory
+  timeZone: string
 }) {
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3 dark:border-violet-900/50 dark:bg-violet-900/20">
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-300">
-          AI Screening
-        </p>
-        {screening ? (
-          <>
-            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-              {screening.disease}{' '}
-              <span className="font-normal text-stone-600 dark:text-stone-300">
-                · {Math.round(Number(screening.ais_confidence))}% confidence
-              </span>
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <ScreeningStatusBadge status={screening.ais_status} />
-              <span className="text-[11px] text-stone-500 dark:text-stone-400">
-                {formatDate(screening.ais_created_at)} · {screening.ais_model_version} · On-device
-              </span>
-              {screening.ais_is_correct !== null && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                    screening.ais_is_correct
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                      : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'
-                  }`}
-                >
-                  {screening.ais_is_correct ? 'AI correct' : 'AI incorrect'}
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            No AI screening linked to this visit.
-          </p>
-        )}
-      </div>
-      <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/50 dark:bg-blue-900/20">
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-300">
-          Veterinarian diagnosis
-        </p>
-        <p className="whitespace-pre-wrap text-sm font-semibold text-stone-900 dark:text-stone-100">
-          {diagnosis.trim() ? diagnosis : '—'}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function Sections({ history }: { history: PetHistory }) {
-  const navigate = useNavigate()
-  const [openConsultation, setOpenConsultation] = useState<string | null>(null)
-
-  const appointmentById = useMemo(
-    () => new Map(history.appointments.map((apt) => [apt.apt_id, apt])),
-    [history.appointments],
-  )
-  const prescriptionByCon = useMemo(
-    () => new Map(history.prescriptions.map((prs) => [prs.consultation_id, prs])),
-    [history.prescriptions],
-  )
-
-  function contextFor(con: ConsultationRecord) {
-    return {
-      screening: appointmentById.get(con.appointment_id)?.screening ?? null,
-      prescription: prescriptionByCon.get(con.id) ?? null,
-    }
-  }
+  const records = history.vaccinations
 
   return (
-    <>
-      <SectionShell title="Consultations" count={history.consultations.length}>
-        {history.consultations.length === 0 ? (
-          <EmptyState title="No consultations recorded" hint="Consultation notes will appear here after a visit." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-stone-50 dark:bg-stone-800/50">
-                <tr>
-                  <th className={TH}>Date</th>
-                  <th className={TH}>Veterinarian</th>
-                  <th className={`${TH} hidden lg:table-cell`}>AI Screening</th>
-                  <th className={TH}>Diagnosis</th>
-                  <th className={`${TH} w-8`} />
-                </tr>
-              </thead>
-              <tbody>
-                {history.consultations.map((con) => {
-                  const open = openConsultation === con.id
-                  const { screening, prescription } = contextFor(con)
-                  return (
-                    <Fragment key={con.id}>
-                      <tr
-                        onClick={() => setOpenConsultation(open ? null : con.id)}
-                        className={`${ROW} cursor-pointer`}
-                      >
-                        <td className={`${TD} whitespace-nowrap`}>{formatDate(con.created_at)}</td>
-                        <td className={TD}>{con.veterinarian}</td>
-                        <td className={`${TD} hidden lg:table-cell`}>
-                          {screening
-                            ? `${screening.disease} · ${Math.round(Number(screening.ais_confidence))}%`
-                            : '—'}
-                        </td>
-                        <td className={TD}>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium text-stone-900 dark:text-stone-100">
-                              {con.diagnosis}
-                            </span>
-                            {prescription && (
-                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                                Rx
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right text-stone-400">
-                          <span className={`inline-block text-xs transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
-                        </td>
-                      </tr>
-                      {open && (
-                        <tr className="border-t border-stone-100 bg-stone-50/70 dark:border-stone-800/70 dark:bg-stone-800/30">
-                          <td colSpan={5} className="px-4 py-4 sm:px-5">
-                            <div className="space-y-4">
-                              <AiVsVetComparison screening={screening} diagnosis={con.diagnosis} />
-
-                              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                                <SoapField label="Chief Complaint" value={con.chief_complaint} />
-                                <SoapField label="Subjective" value={con.subjective} />
-                                <SoapField label="Objective" value={con.objective} />
-                                <SoapField label="Assessment" value={con.assessment} />
-                                <SoapField label="Plan" value={con.plan} />
-                                <SoapField label="Treatment" value={con.treatment} />
-                                <SoapField label="Notes" value={con.notes} />
-                              </div>
-
-                              <div>
-                                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-stone-500 dark:text-stone-400">
-                                  Prescription
-                                </p>
-                                {prescription ? (
-                                  <>
-                                    {prescription.instructions && (
-                                      <p className="mb-2 text-sm text-stone-600 dark:text-stone-300">
-                                        <span className="font-semibold text-stone-800 dark:text-stone-100">
-                                          Instructions:
-                                        </span>{' '}
-                                        {prescription.instructions}
-                                      </p>
-                                    )}
-                                    <ul className="space-y-2">
-                                      {prescription.items.map((item) => (
-                                        <li
-                                          key={item.id}
-                                          className="rounded-lg border border-stone-200 bg-white p-3 dark:border-stone-700 dark:bg-stone-900"
-                                        >
-                                          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                                            <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                                              {item.medicine_name}
-                                            </p>
-                                            <p className="text-xs text-stone-500 dark:text-stone-400">
-                                              {item.dosage} · {item.frequency} · {item.duration} · {labelize(item.route)}
-                                            </p>
-                                          </div>
-                                          {item.notes && (
-                                            <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">{item.notes}</p>
-                                          )}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </>
-                                ) : (
-                                  <p className="text-sm text-stone-500 dark:text-stone-400">
-                                    No prescription issued for this visit.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionShell>
-
-      <SectionShell title="Vaccinations" count={history.vaccinations.length}>
-        {history.vaccinations.length === 0 ? (
-          <EmptyState title="No vaccinations recorded" hint="Vet-issued and owner-reported vaccines will appear here." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-stone-50 dark:bg-stone-800/50">
-                <tr>
-                  <th className={TH}>Vaccine</th>
-                  <th className={TH}>Given on</th>
-                  <th className={TH}>Next due</th>
-                  <th className={`${TH} hidden md:table-cell`}>Given by</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.vaccinations.map((vac) => {
-                  const badge = vac.is_latest_in_series ? dueBadge(vac.next_due) : null
-                  return (
-                    <tr key={vac.id} className={ROW}>
-                      <td className={TD}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-stone-900 dark:text-stone-100">{vac.name}</span>
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              vac.source === 'VET'
-                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                                : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
-                            }`}
-                          >
-                            {vac.source === 'VET' ? 'Veterinarian' : 'Owner'}
-                          </span>
-                        </div>
-                      </td>
-                      <td className={`${TD} whitespace-nowrap`}>{formatDate(vac.date_given)}</td>
-                      <td className={`${TD} whitespace-nowrap`}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span>{vac.next_due ? formatDate(vac.next_due) : '—'}</span>
-                          {badge && (
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}
-                            >
-                              {badge.label}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={`${TD} hidden md:table-cell`}>{vac.veterinarian ?? '—'}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionShell>
-
-      <SectionShell title="Appointments" count={history.appointments.length}>
-        {history.appointments.length === 0 ? (
-          <EmptyState title="No appointments at this clinic" hint="Booked visits will appear here." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-stone-50 dark:bg-stone-800/50">
-                <tr>
-                  <th className={TH}>Date</th>
-                  <th className={TH}>Type</th>
-                  <th className={`${TH} hidden md:table-cell`}>Veterinarian</th>
-                  <th className={TH}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.appointments.map((apt) => (
-                  <tr
-                    key={apt.apt_id}
-                    onClick={() => navigate(`/receptionist/appointments/${apt.apt_id}`)}
-                    className={`${ROW} cursor-pointer`}
-                  >
-                    <td className={`${TD} whitespace-nowrap`}>
-                      <span>{formatDate(apt.apt_scheduled_at)}</span>
-                      <span className="ml-2 text-xs text-stone-400 dark:text-stone-500">
-                        {formatTime(apt.apt_scheduled_at)}
-                      </span>
+    <Card padding="sm">
+      <SectionHeader
+        icon="vaccinations"
+        meta={`${records.length} record${records.length === 1 ? '' : 's'}`}
+        title="Vaccination history"
+      />
+      {records.length === 0 ? (
+        <EmptyState icon="vaccinations" message="No vaccination records." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-stone-50/70 text-stone-500 dark:bg-stone-800/40 dark:text-stone-400">
+                <th className={TH_CLASSES}>Vaccine</th>
+                <th className={TH_CLASSES}>Given on</th>
+                <th className={TH_CLASSES}>Next due</th>
+                <th className={`${TH_CLASSES} hidden md:table-cell`}>Given by</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
+              {records.map((vac) => {
+                const badge = vac.is_latest_in_series ? dueBadge(vac.next_due) : null
+                return (
+                  <tr className={ROW_CLASSES} key={vac.id}>
+                    <td className="px-4 py-3.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-stone-900 dark:text-stone-100">
+                          {vac.name}
+                        </span>
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                            vac.source === 'VET'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400'
+                          }`}
+                        >
+                          {vac.source === 'VET' ? 'Veterinarian' : 'Owner'}
+                        </span>
+                      </div>
                     </td>
-                    <td className={TD}>{labelize(apt.apt_type)}</td>
-                    <td className={`${TD} hidden md:table-cell`}>{apt.vet_name ?? '—'}</td>
-                    <td className={TD}>
-                      <AppointmentStatusBadge status={apt.apt_status} uniform />
+                    <td className="whitespace-nowrap px-4 py-3.5 text-stone-600 dark:text-stone-300">
+                      {formatDate(vac.date_given, timeZone)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3.5 text-stone-600 dark:text-stone-300">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span>{formatDate(vac.next_due, timeZone)}</span>
+                        {badge && (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="hidden px-4 py-3.5 text-stone-600 md:table-cell dark:text-stone-300">
+                      {vac.veterinarian ?? '-'}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SectionShell>
-    </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function AppointmentHistory({ history }: { history: PetHistory }) {
+  const navigate = useNavigate()
+  const records = history.appointments
+
+  return (
+    <Card padding="sm">
+      <SectionHeader
+        icon="appointments"
+        meta={`${records.length} appointment${records.length === 1 ? '' : 's'}`}
+        title="Appointment history"
+      />
+      {records.length === 0 ? (
+        <EmptyState icon="appointments" message="No appointments recorded." />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="bg-stone-50/70 text-stone-500 dark:bg-stone-800/40 dark:text-stone-400">
+                <th className={TH_CLASSES}>Date and time</th>
+                <th className={TH_CLASSES}>Type</th>
+                <th className={TH_CLASSES}>Veterinarian</th>
+                <th className={TH_CLASSES}>Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
+              {records.map((appointment) => (
+                <tr
+                  className={`${ROW_CLASSES} cursor-pointer`}
+                  key={appointment.apt_id}
+                  onClick={() =>
+                    navigate(`/receptionist/appointments/${appointment.apt_id}`)
+                  }
+                >
+                  <td className="whitespace-nowrap px-4 py-3.5 font-medium text-stone-800 dark:text-stone-200">
+                    {formatDateTime(appointment.apt_scheduled_at)}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <span className="inline-block rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-medium text-stone-700 dark:bg-stone-800 dark:text-stone-300">
+                      {labelize(appointment.apt_type)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5 text-stone-600 dark:text-stone-300">
+                    {appointment.vet_name ?? (
+                      <span className="italic text-stone-400 dark:text-stone-500">
+                        Unassigned
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5">
+                    <AppointmentStatusBadge status={appointment.apt_status} uniform />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -444,19 +429,31 @@ export function PetDetailPage() {
   const navigate = useNavigate()
   const petQuery = usePetDetail(id ?? '')
   const historyQuery = usePetHistory(id ?? '')
+  const settings = useClinicSettings()
+  const displayTimeZone = settings.data?.timezone ?? CLINIC_TIME_ZONE
 
   const pet = petQuery.data
   const history = historyQuery.data
-  const historyLoading = historyQuery.isLoading || historyQuery.isFetching
+  const historyLoading = historyQuery.isLoading && !history
 
   if (petQuery.isLoading) {
     return (
-      <div className="p-4 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-6">
-          <div className="h-8 w-48 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-          <div className="h-28 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
-          <div className="h-64 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+        <div className="h-5 w-40 animate-pulse rounded bg-stone-200 dark:bg-stone-800" />
+        <div className="h-36 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div
+              className="h-24 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800"
+              key={index}
+            />
+          ))}
         </div>
+        <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
+          <div className="h-56 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+          <div className="h-56 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
+        </div>
+        <div className="h-64 animate-pulse rounded-xl bg-stone-200 dark:bg-stone-800" />
       </div>
     )
   }
@@ -468,133 +465,140 @@ export function PetDetailPage() {
         error={petQuery.error}
         onRetry={petQuery.refetch}
         isRetrying={petQuery.isFetching}
-        onBack={() => navigate(-1)}
+        onBack={() => navigate('/receptionist/pets')}
       />
     )
   }
 
-  const age = ageFrom(pet.date_of_birth)
-  const initial = pet.name.charAt(0).toUpperCase()
-  const linkedScreenings = history
-    ? history.appointments.filter((apt) => apt.screening !== null).length
-    : 0
+  const nextAppointment = nextAppointmentFrom(history?.appointments ?? [])
+  const subtitle = [pet.breed_name ?? 'Unknown breed', labelize(pet.sex), ageFrom(pet.date_of_birth)]
+    .filter(Boolean)
+    .join(' | ')
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-sm font-medium text-stone-500 transition-colors hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
-        >
-          ← Back
-        </button>
+    <div className="mx-auto max-w-7xl space-y-6 px-6 py-6">
+      <Link
+        className="group inline-flex items-center gap-2 text-sm font-medium text-stone-500 transition hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+        to="/receptionist/pets"
+      >
+        <Icon
+          name="back"
+          className="size-4 transition-transform group-hover:-translate-x-0.5"
+        />
+        Back to patients
+      </Link>
 
-        <PageHero
-          title={pet.name}
-          avatar={
-            pet.profile_picture ? (
-              <img
-                src={pet.profile_picture}
-                alt={pet.name}
-                className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/20"
-              />
-            ) : (
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/15 text-xl font-bold text-white ring-2 ring-white/10">
-                {initial}
-              </div>
-            )
-          }
-          meta={
-            <>
-              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
-                {pet.breed_name ?? 'Unknown breed'}
-              </span>
-              <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
-                {labelize(pet.sex)}
-              </span>
-              {age && (
-                <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-amber-100">
-                  {age}
-                </span>
-              )}
-            </>
-          }
-          actions={
-            <button
-              onClick={() => navigate('/receptionist/appointments/new')}
-              className="shrink-0 rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-400"
-              type="button"
-            >
-              + Book Appointment
-            </button>
+      <PageHero
+        avatar={
+          pet.profile_picture ? (
+            <img
+              alt=""
+              className="size-16 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+              src={pet.profile_picture}
+            />
+          ) : (
+            <div className="grid size-16 shrink-0 place-items-center rounded-full bg-white/10 text-xl font-bold text-white ring-1 ring-white/20">
+              {initial(pet.name)}
+            </div>
+          )
+        }
+        subtitle={subtitle || undefined}
+        title={pet.name}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SummaryTile
+          icon="appointments"
+          label="Appointments"
+          tone="amber"
+          value={String(history?.appointments.length ?? 0)}
+        />
+        <SummaryTile
+          icon="vaccinations"
+          label="Vaccinations"
+          tone="emerald"
+          value={String(history?.vaccinations.length ?? 0)}
+        />
+        <SummaryTile
+          compact
+          icon="clock"
+          label="Next appointment"
+          tone="sky"
+          value={
+            nextAppointment
+              ? formatDateTime(nextAppointment.apt_scheduled_at, displayTimeZone)
+              : '-'
           }
         />
-
-        <div className="grid gap-6 lg:grid-cols-3">
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 lg:col-span-2 dark:border-stone-800 dark:bg-stone-900">
-            <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
-              Patient Information
-            </h2>
-            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 xl:grid-cols-3">
-              {[
-                ['Breed', pet.breed_name ?? '—'],
-                ['Sex', labelize(pet.sex)],
-                ['Date of Birth', pet.date_of_birth ? formatDate(pet.date_of_birth) : '—'],
-                ['Weight', pet.weight ? `${pet.weight} kg` : '—'],
-                ['Color', pet.color ?? '—'],
-                ['Microchip', pet.microchip_number ?? '—'],
-                ['QR Code', pet.qr_code ?? '—'],
-                ['Registered', formatDate(pet.created_at)],
-              ].map(([label, value]) => (
-                <div key={label} className="flex items-baseline justify-between gap-3 border-b border-stone-100 pb-2 sm:block sm:border-0 sm:pb-0 dark:border-stone-800/60">
-                  <dt className="text-xs text-stone-500 dark:text-stone-400">{label}</dt>
-                  <dd className="text-sm font-medium text-stone-900 sm:mt-0.5 dark:text-stone-100">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5 dark:border-stone-800 dark:bg-stone-900">
-            <h2 className="mb-4 text-sm font-semibold text-stone-900 sm:text-base dark:text-stone-100">
-              Record Summary
-            </h2>
-            {historyLoading && !history ? (
-              <div className="grid grid-cols-2 gap-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-16 animate-pulse rounded-lg bg-stone-200 dark:bg-stone-800" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Consultations" value={String(history?.consultations.length ?? 0)} />
-                <StatTile label="Prescriptions" value={String(history?.prescriptions.length ?? 0)} />
-                <StatTile label="Vaccinations" value={String(history?.vaccinations.length ?? 0)} />
-                <StatTile label="AI Screenings" value={String(linkedScreenings)} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {historyQuery.error ? (
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-400">
-            Could not load the medical history. Please try again.
-          </div>
-        ) : historyLoading && !history ? (
-          <div className="space-y-6">
-            <SectionShell title="Consultations" count={null}>
-              <SkeletonRows />
-            </SectionShell>
-            <SectionShell title="Vaccinations" count={null}>
-              <SkeletonRows />
-            </SectionShell>
-            <SectionShell title="Appointments" count={null}>
-              <SkeletonRows />
-            </SectionShell>
-          </div>
-        ) : history ? (
-          <Sections history={history} />
-        ) : null}
       </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_2fr]">
+        <OwnerCard pet={pet} />
+
+        <Card>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-stone-500 dark:text-stone-400">
+            Patient details
+          </h2>
+          <dl className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <DetailRow label="Breed" value={pet.breed_name ?? '-'} />
+            <DetailRow label="Sex" value={labelize(pet.sex)} />
+            <DetailRow label="Age" value={ageFrom(pet.date_of_birth)} />
+            <DetailRow
+              label="Date of birth"
+              value={pet.date_of_birth ? formatDate(pet.date_of_birth, displayTimeZone) : '-'}
+            />
+            <DetailRow
+              label="Weight"
+              value={pet.weight ? `${pet.weight} kg` : '-'}
+            />
+            <DetailRow label="Color" value={pet.color ?? '-'} />
+            <DetailRow label="Microchip" value={pet.microchip_number ?? '-'} />
+            <DetailRow
+              label="Registered"
+              value={formatDate(pet.created_at, displayTimeZone)}
+            />
+          </dl>
+        </Card>
+      </div>
+
+      {historyQuery.error ? (
+        <Card padding="sm">
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <p className="text-sm text-stone-500 dark:text-stone-400">
+              Could not load the medical history.
+            </p>
+            <p className="max-w-md text-xs text-stone-400 dark:text-stone-500">
+              {apiErrorMessage(historyQuery.error)}
+            </p>
+            <Button
+              className="mt-1"
+              loading={historyQuery.isFetching}
+              onClick={() => historyQuery.refetch()}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
+              Try again
+            </Button>
+          </div>
+        </Card>
+      ) : historyLoading ? (
+        <>
+          <Card padding="sm">
+            <SectionHeader icon="vaccinations" title="Vaccination history" />
+            <div className="mt-4 h-40 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+          </Card>
+          <Card padding="sm">
+            <SectionHeader icon="appointments" title="Appointment history" />
+            <div className="mt-4 h-40 animate-pulse rounded-lg bg-stone-100 dark:bg-stone-800" />
+          </Card>
+        </>
+      ) : history ? (
+        <>
+          <VaccinationHistory history={history} timeZone={displayTimeZone} />
+          <AppointmentHistory history={history} />
+        </>
+      ) : null}
     </div>
   )
 }

@@ -47,16 +47,6 @@ flowchart TD
     E --> J["View Owners"]
     E --> K["My Profile - edit name and phone, change password"]
 
-    subgraph CREATE["Create appointment - desk booking"]
-        F --> F1["New Appointment"]
-        F1 --> F2["Select owner and pet"]
-        F2 --> F3["Select date and veterinarian"]
-        F3 --> F4["Select time slot"]
-        F4 --> F5["Enter type and reason"]
-        F5 --> F6["Collect payment - only when clinic fee is set"]
-        F6 --> F7["Book appointment - created as CONFIRMED"]
-    end
-
     subgraph STATUS["Update appointment status"]
         F --> S1["Select appointment - list, dashboard, pet history, schedule"]
         S1 --> S2["Open appointment detail"]
@@ -81,7 +71,6 @@ flowchart TD
     subgraph PATIENTS["Patients"]
         I --> I1["Pet list and search"]
         I1 --> I2["Pet detail and medical history - read only"]
-        I2 --> I3["Book appointment"]
     end
 
     subgraph OWNERS["Owners"]
@@ -89,16 +78,13 @@ flowchart TD
         J1 --> J2["Owner detail - read only, owners self-register"]
     end
 
-    I3 --> F1
-
-    F6 -.-> FN["Cash: recorded PAID now. GCash/Card: checkout paid at gateway. Booking blocked until PAID. No fee: book directly."]
     S4 -.-> VET["Veterinarian starts consultation - CHECKED_IN to IN_PROGRESS - veterinarian only"]
     S2 -.-> AUTOCLOSE["Auto-close on view: past-due PENDING becomes CANCELLED; CONFIRMED more than 60 minutes late becomes NO_SHOW"]
-    FORBID["Not permitted: manage staff or vet accounts, create prescriptions or consultations, refund paid payments"]
+    FORBID["Not permitted: manage staff or vet accounts, book or create appointments, create prescriptions or consultations, refund paid payments"]
 
     classDef note fill:#fff3cd,stroke:#d6b656,stroke-dasharray: 5 5,color:#000;
     classDef forbid fill:#f8d7da,stroke:#c00,stroke-dasharray: 5 5,color:#000;
-    class FN,VET,AUTOCLOSE note;
+    class VET,AUTOCLOSE note;
     class FORBID forbid;
 ```
 
@@ -108,7 +94,7 @@ flowchart TD
 
 | From | Action | To | Notes |
 |---|---|---|---|
-| PENDING | Confirm | CONFIRMED | Owner mobile bookings only; desk bookings are created `CONFIRMED`. Past-time confirm is rejected. |
+| PENDING | Confirm | CONFIRMED | Owner mobile bookings only. Past-time confirm is rejected. |
 | CONFIRMED | Check In | CHECKED_IN | Sets `apt_checked_in_at`. |
 | CHECKED_IN / IN_PROGRESS | Complete | COMPLETED | Sets `apt_completed_at`. |
 | PENDING / CONFIRMED / CHECKED_IN | Cancel with reason | CANCELLED | Slot released to `AVAILABLE`; owner notified. |
@@ -178,7 +164,7 @@ flowchart TD
 
 - Dashboard data comes from `GET /api/staff/stats/`, `GET /api/appointments/volume/`, `GET /api/screenings/stats/`, and `GET /api/audit-logs/` — all `IsClinicAdmin`.
 - Appointment list is read-only: `GET /api/appointments/` allows `CLINIC_ADMIN`, but `POST` returns 403 and the detail view (`GET`/`PATCH`) allows only `RECEPTIONIST`/`VETERINARIAN`. The admin UI has no detail route or status buttons.
-- Clinic settings written here gate receptionist booking: consultation fee and "allow owner booking" are read by the booking flow (`GET /api/clinic/settings/` also admits receptionist).
+- Clinic settings written here are read elsewhere: the receptionist web app reads the consultation fee for Payments, and the mobile booking flow reads the fee and the "allow owner booking" flag (`GET /api/clinic/settings/` also admits receptionist).
 - Staff accounts created here are created with `usr_must_change_password = True`; the new staff member is forced through the change-password screen on first login.
 
 ---

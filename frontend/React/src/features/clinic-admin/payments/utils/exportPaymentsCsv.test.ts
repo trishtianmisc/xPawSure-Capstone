@@ -65,6 +65,9 @@ function makePayment(overrides: Partial<Payment> = {}): Payment {
     expires_at: null,
     paid_at: '2026-10-31T16:30:00Z',
     failure_reason: null,
+    refunded_at: null,
+    refund_reason: null,
+    refund_reference: null,
     created_at: '2026-10-31T16:00:00Z',
     updated_at: '2026-10-31T16:30:00Z',
     ...overrides,
@@ -85,6 +88,8 @@ function page(
     page: pageNumber,
     page_size: 100,
     total_pages: Math.max(Math.ceil(total / 100), 1),
+    paid_from: null,
+    paid_to: null,
     summary,
     results,
   }

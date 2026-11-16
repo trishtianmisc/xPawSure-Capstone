@@ -560,7 +560,7 @@ Manage their clinic profile, Veterinarians, Receptionists, and clinic reports
 
 Receptionist
 
-Register owners and pets, schedule appointments, and check patients in
+Reschedule appointments, confirm follow-ups, record payments, and check patients in
 
 Veterinarian
 

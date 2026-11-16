@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import serializers
 
 from pets.models import Breed, Pet, Sex
@@ -5,6 +6,20 @@ from pets.services.public_pet_service import STATUS_CHOICES
 
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2 MB
+
+
+def clinic_date(value, tz):
+    if value is None:
+        return None
+    if tz is None:
+        return value.date().isoformat()
+    return timezone.localtime(value, tz).date().isoformat()
+
+
+def person_name(user):
+    if user is None:
+        return ''
+    return f'{user.usr_first_name} {user.usr_last_name}'.strip()
 
 
 class BreedSerializer(serializers.ModelSerializer):
