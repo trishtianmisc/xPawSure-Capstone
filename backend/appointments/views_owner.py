@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from django.db import transaction
@@ -18,11 +18,13 @@ from appointments.serializers import (
 )
 from appointments.services import (
     BOOKABLE_VET_FILTERS,
+    OWNER_BOOKING_LEAD_MINUTES,
     AppointmentService,
     InvalidRequestError,
     InvalidTransitionError,
     SlotUnavailableError,
     VetSlotService,
+    get_clinic_timezone,
 )
 from clinics.models import Clinic, ClinicSettings
 from core.permissions import IsOwner
@@ -273,6 +275,22 @@ class OwnerAppointmentListCreateView(APIView):
         if not slot:
             return Response(
                 {'detail': 'This slot is no longer available.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        clinic_tz = get_clinic_timezone(slot.cln_id_id)
+        slot_start = datetime.combine(slot.vsl_date, slot.vsl_start_time, tzinfo=clinic_tz)
+        if slot_start <= datetime.now(clinic_tz) + timedelta(
+            minutes=OWNER_BOOKING_LEAD_MINUTES,
+        ):
+            return Response(
+                {
+                    'detail': (
+                        'This time slot is no longer bookable. '
+                        'Please pick a later slot.'
+                    ),
+                    'code': 'SLOT_TOO_SOON',
+                },
                 status=status.HTTP_409_CONFLICT,
             )
 

@@ -236,6 +236,10 @@ BOOKABLE_VET_FILTERS = {
     'usr_id__usr_must_change_password': False,
 }
 
+# Owner bookings must start this many minutes from now (clinic timezone);
+# slots that already started or start sooner are neither listed nor accepted.
+OWNER_BOOKING_LEAD_MINUTES = 30
+
 
 DAY_MAP = {
     0: 'MON',
@@ -319,13 +323,24 @@ class VetSlotService:
 
         Owner-facing reads never create slots, so a vet without a published
         schedule shows no times instead of silently being handed a full day.
+        Slots that already started or start within the owner booking lead
+        time are never offered.
         """
-        return VetSlot.objects.filter(
+        slots = VetSlot.objects.filter(
             cln_id_id=clinic_id,
             stf_id_id=vet_id,
             vsl_date=date,
             vsl_status=SlotStatus.AVAILABLE,
         ).order_by('vsl_start_time')
+
+        cutoff = datetime.now(get_clinic_timezone(clinic_id)) + timedelta(
+            minutes=OWNER_BOOKING_LEAD_MINUTES,
+        )
+        if date < cutoff.date():
+            return slots.none()
+        if date == cutoff.date():
+            return slots.filter(vsl_start_time__gt=cutoff.time())
+        return slots
 
     @staticmethod
     def get_vets_for_date(clinic_id, date):
