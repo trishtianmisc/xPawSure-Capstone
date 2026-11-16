@@ -93,6 +93,24 @@ describe('ConsultationFormPage review modal', () => {
     } as unknown as ReturnType<typeof useSaveConsultation>)
   })
 
+  it('shows the real pet profile image instead of a placeholder', () => {
+    vi.mocked(useAppointmentDetail).mockReturnValue({
+      data: {
+        ...makeAppointment(),
+        pet_profile_image: 'https://example.com/buddy.jpg',
+      },
+      isLoading: false,
+      error: null,
+    } as unknown as ReturnType<typeof useAppointmentDetail>)
+
+    render(<ConsultationFormPage />)
+
+    expect(screen.getByRole('img', { name: 'Buddy profile' })).toHaveAttribute(
+      'src',
+      'https://example.com/buddy.jpg',
+    )
+  })
+
   it('opens the review modal with the entered values instead of saving', () => {
     render(<ConsultationFormPage />)
     fillForm()
