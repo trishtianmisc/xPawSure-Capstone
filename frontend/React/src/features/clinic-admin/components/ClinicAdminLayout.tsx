@@ -95,8 +95,9 @@ export function ClinicAdminLayout() {
           </div>
           {!isCollapsed && (
             <span className="text-base font-extrabold tracking-tight text-amber-950/90 dark:text-stone-300">
-              XPawSure
+              XPawsure
             </span>
+            
           )}
 
         </div>

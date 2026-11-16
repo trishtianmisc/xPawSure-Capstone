@@ -99,6 +99,9 @@ class StaffListSerializer(serializers.ModelSerializer):
     created_at = serializers.DateTimeField(source='stf_created_at', read_only=True)
     license_number = serializers.CharField(source='stf_license_number', read_only=True)
     license_expiration_date = serializers.DateField(source='stf_license_expiration_date', read_only=True)
+    profile_picture = serializers.CharField(
+        source='stf_profile_image', read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = StaffProfile
@@ -106,6 +109,7 @@ class StaffListSerializer(serializers.ModelSerializer):
             'id', 'user_id', 'email', 'first_name', 'last_name', 'phone',
             'role', 'position', 'is_active', 'must_change_password',
             'created_at', 'license_number', 'license_expiration_date',
+            'profile_picture',
         ]
 
 
@@ -126,6 +130,9 @@ class StaffDetailSerializer(serializers.ModelSerializer):
     clinic_name = serializers.CharField(source='cln_id.cln_name', read_only=True)
     license_number = serializers.CharField(source='stf_license_number', read_only=True)
     license_expiration_date = serializers.DateField(source='stf_license_expiration_date', read_only=True)
+    profile_picture = serializers.CharField(
+        source='stf_profile_image', read_only=True, allow_null=True,
+    )
 
     class Meta:
         model = StaffProfile
@@ -133,7 +140,7 @@ class StaffDetailSerializer(serializers.ModelSerializer):
             'id', 'user_id', 'email', 'first_name', 'last_name', 'phone',
             'role', 'position', 'is_active', 'must_change_password',
             'created_at', 'updated_at', 'clinic_id', 'clinic_name',
-            'license_number', 'license_expiration_date',
+            'license_number', 'license_expiration_date', 'profile_picture',
         ]
 
 

@@ -28,6 +28,15 @@ function AvatarCell({ staff }: { staff: StaffMember }) {
   const bg = staff.role === 'VETERINARIAN'
     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
     : 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+  if (staff.profile_picture) {
+    return (
+      <img
+        alt={`${staff.first_name} ${staff.last_name}`}
+        className="h-8 w-8 shrink-0 rounded-full object-cover"
+        src={staff.profile_picture}
+      />
+    )
+  }
   return (
     <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${bg}`}>
       {getInitials(staff.first_name, staff.last_name)}
