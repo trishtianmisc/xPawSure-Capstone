@@ -37,7 +37,7 @@ export function CallToActionSection() {
                     rel="noopener noreferrer"
                     target="_blank"
                   >
-                    Google Play
+                    Link to App
                   </a>
                 </div>
                 <div aria-hidden="true" className="mt-9 flex items-end gap-4">
