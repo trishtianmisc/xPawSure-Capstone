@@ -1361,8 +1361,11 @@ clinic; owners get `403`.
 the current clinic-local day: the server forces the paid window to today and
 IGNORES every client date parameter (`date_from`, `date_to`, `paid_from`,
 `paid_to`) outright — not even a malformed value returns `400`, because the
-parameter is not part of a receptionist request. Clinic admins keep the full
-history and the date filters below.
+parameter is not part of a receptionist request. The one exception is an
+appointment-scoped request (`appointment` supplied): that already narrows to a
+single clinic-checked appointment, so no paid window is applied and that
+appointment's payments — including unpaid attempts — are returned regardless
+of day. Clinic admins keep the full history and the date filters below.
 
 Query params: `status`, `method`, `reference` (partial match on receipt
 number, owner first/last name, or pet name), `appointment` (uuid),
@@ -1384,18 +1387,20 @@ Response (200):
   "results": [payment] }
 
 `paid_from`/`paid_to` echo the paid window the server actually applied —
-`today`/`today` for a receptionist, the parsed parameters (or `null` when
-unbounded) for a clinic admin — so a UI can render its own date line without
-trusting the client clock.
+`today`/`today` for a receptionist (except an appointment-scoped request,
+which echoes `null`/`null` because no window was applied), the parsed
+parameters (or `null` when unbounded) for a clinic admin — so a UI can render
+its own date line without trusting the client clock.
 
 `summary` aggregates EVERY payment matching the filters (independent of
 `page`/`page_size`) with one conditional-sum query on the same queryset.
 Amounts are fixed two-decimal strings; `paid_total` counts only `PAID` rows
 (never netted against refunds) and honours the paid window, so it equals the
 Reports revenue KPI for the same range — for a receptionist the strip IS the
-clinic admin's `paid_from=paid_to=today` figure. A receptionist's
+clinic admin's `paid_from=paid_to=today` figure. On that strip a receptionist's
 `pending_total` is always `0.00`: unpaid rows have no `PAY_PAID_AT`, so no
-paid window can hold them.
+paid window can hold them. An appointment-scoped request has no window, so its
+`pending_total` can be non-zero (unpaid attempts for that appointment count).
 
 **Exact-receipt exception (receptionist only).** With `reference`, the search
 narrows only the list — `summary` still describes the whole windowed day, so
