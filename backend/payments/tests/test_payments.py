@@ -104,7 +104,7 @@ class PaymentTestBase(OwnerBookingBase):
 
     def _make_payment(self, *, paid_at=None, pay_status=PaymentStatus.PAID,
                       pet_name='Rexy', amount=FEE, method=PaymentMethod.CASH,
-                      clinic=None):
+                      clinic=None, metadata=None):
         """A raw row with an exact PAY_PAID_AT; the mock checkout flow only
         ever stamps "now", which cannot probe day boundaries."""
         return Payment.objects.create(
@@ -116,7 +116,9 @@ class PaymentTestBase(OwnerBookingBase):
             pay_status=pay_status,
             pay_provider=PaymentProvider.CASH,
             pay_paid_at=paid_at,
-            pay_metadata={'pet_name': pet_name},
+            pay_metadata=(
+                {'pet_name': pet_name} if metadata is None else metadata
+            ),
         )
 
     def _clinic_admin_auth(self):
@@ -968,7 +970,10 @@ class ReceptionistTodayOnlyTests(PaymentTestBase):
     """The counter page shows only the clinic's collection for the current
     clinic-local day: client date parameters are ignored outright, the strip
     equals the clinic admin's Today figure, and an exact receipt number may
-    surface one older payment in the list without ever moving a total."""
+    surface one older payment in the list without ever moving a total. The
+    one exception is `?appointment=`: scoped to a single appointment, the
+    window is dropped so that appointment's payments (including unpaid
+    attempts) are returned regardless of day."""
 
     def _get(self, query=''):
         response = self.client.get(
@@ -1135,6 +1140,50 @@ class ReceptionistTodayOnlyTests(PaymentTestBase):
         # never appear in a paid-date list - the documented caveat.
         self.assertEqual(pending['total'], 0)
         self.assertEqual(pending['summary']['payment_count'], 0)
+
+    def test_appointment_scope_shows_payments_from_other_days(self):
+        payment = self._pay()
+        booking = self._book(pay_id=payment.pay_id)
+        self.assertEqual(booking.status_code, status.HTTP_201_CREATED, booking.data)
+        payment.refresh_from_db()
+        Payment.objects.filter(pk=payment.pk).update(
+            pay_paid_at=timezone.now() - timedelta(days=1),
+        )
+
+        data = self._get(f'appointment={payment.apt_id_id}')
+
+        self.assertEqual(data['total'], 1, data)
+        self.assertEqual(data['results'][0]['pay_id'], str(payment.pay_id))
+        # No window applied, so the echo is null rather than today - and
+        # the unwindowed summary describes the appointment's own money.
+        self.assertIsNone(data['paid_from'])
+        self.assertIsNone(data['paid_to'])
+        self.assertEqual(data['summary']['paid_total'], '500.00')
+        # The counter strip (no appointment param) still pins to today, so
+        # the same backdated payment stays invisible there.
+        strip = self._get()
+        self.assertEqual(strip['total'], 0, strip)
+
+    def test_appointment_scope_returns_unpaid_attempts(self):
+        payment = self._pay()
+        booking = self._book(pay_id=payment.pay_id)
+        self.assertEqual(booking.status_code, status.HTTP_201_CREATED, booking.data)
+        payment.refresh_from_db()
+        attempt = self._make_payment(
+            paid_at=None, pay_status=PaymentStatus.PENDING,
+            amount=Decimal('700.00'),
+            metadata={'appointment_id': str(payment.apt_id_id)},
+        )
+
+        data = self._get(f'appointment={payment.apt_id_id}')
+
+        # The linked PAID row plus the metadata-linked pending attempt; a
+        # paid window would have held the unpaid row out entirely.
+        self.assertEqual(data['total'], 2, data)
+        self.assertIn(
+            str(attempt.pay_id), [row['pay_id'] for row in data['results']],
+        )
+        self.assertEqual(data['summary']['pending_total'], '700.00')
 
 
 class PaymentNotificationTests(PaymentTestBase):

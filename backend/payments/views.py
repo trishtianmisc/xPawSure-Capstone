@@ -159,9 +159,12 @@ class PaymentListView(APIView):
                 {'detail': 'Staff profile not found.', 'code': 'STAFF_NOT_FOUND'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        # Receptionists only ever see the clinic's collection for the current
-        # clinic-local day; clinic admins keep the full history with date
-        # filters (their Reports and exports live behind the same endpoint).
+        # Receptionists see the clinic's collection for the current
+        # clinic-local day - except when the request is scoped to a single
+        # appointment (`?appointment=`), where that appointment's payments
+        # are returned regardless of day; clinic admins keep the full
+        # history with date filters (their Reports and exports live behind
+        # the same endpoint).
         is_receptionist = request.user.usr_role == UserRole.RECEPTIONIST
         return _list_response(
             request, clinic_id=staff.cln_id_id, receptionist=is_receptionist,
@@ -190,9 +193,17 @@ def _list_response(request, receptionist=False, **scope) -> Response:
     `owner_id=` for an owner reading their own payments. `receptionist=True`
     forces today's clinic-local paid window and ignores every client date
     parameter outright - not even a malformed value may 400, because the
-    parameter is simply not part of a receptionist request.
+    parameter is simply not part of a receptionist request. The one exception
+    is an appointment-scoped request (`?appointment=`): that already narrows
+    to a single clinic-checked appointment, so no paid window is applied and
+    that appointment's payments (including unpaid attempts) are returned
+    regardless of day.
     """
-    if receptionist:
+    appointment_id = request.query_params.get('appointment')
+    if receptionist and appointment_id:
+        date_from = date_to = None
+        paid_from = paid_to = None
+    elif receptionist:
         tz = get_clinic_timezone(scope.get('clinic_id'))
         today = datetime.now(tz).date()
         date_from = date_to = None
@@ -250,7 +261,7 @@ def _list_response(request, receptionist=False, **scope) -> Response:
         pay_status=request.query_params.get('status'),
         method=request.query_params.get('method'),
         reference=request.query_params.get('reference'),
-        appointment_id=request.query_params.get('appointment'),
+        appointment_id=appointment_id,
         date_from=date_from,
         date_to=date_to,
         paid_from=paid_from,
