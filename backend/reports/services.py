@@ -168,6 +168,26 @@ def _counts(qs, now):
     }
 
 
+def _vet_counts(qs):
+    """Counts for Vet Analytics, where every rate divides by the total.
+
+    Unlike the clinic-admin summary, upcoming appointments stay in the
+    denominator so the KPI cards reconcile with the status donut. A
+    future-scheduled COMPLETED visit therefore still counts, and an early
+    completion can never push a rate above 100%.
+    """
+    total = qs.count()
+    completed = qs.filter(apt_status=AppointmentStatus.COMPLETED).count()
+    no_shows = qs.filter(apt_status=AppointmentStatus.NO_SHOW).count()
+    cancelled = qs.filter(apt_status=AppointmentStatus.CANCELLED).count()
+    return {
+        'total_appointments': total,
+        'completion_rate': _rate(completed, total),
+        'no_show_rate': _rate(no_shows, total),
+        'cancellation_rate': _rate(cancelled, total),
+    }
+
+
 def _new_patients(clinic_id, date_from, date_to):
     """Pets whose first qualifying appointment at this clinic is in the window.
 
@@ -249,19 +269,16 @@ class ReportService:
 
     @staticmethod
     def get_vet_summary(clinic_id, date_from, date_to, vet_id):
-        now = timezone.localtime()
-        current = _counts(
+        current = _vet_counts(
             _appointments_in_window(
                 clinic_id, date_from, date_to, vet_id=vet_id,
             ),
-            now,
         )
         prev_from, prev_to = previous_window(date_from, date_to)
-        previous = _counts(
+        previous = _vet_counts(
             _appointments_in_window(
                 clinic_id, prev_from, prev_to, vet_id=vet_id,
             ),
-            now,
         )
 
         return {

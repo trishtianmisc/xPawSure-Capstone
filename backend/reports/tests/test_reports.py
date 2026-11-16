@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 import uuid
 
@@ -338,6 +339,57 @@ class VetReportTests(ReportsBase):
         self.assertEqual(response.data['previous']['total_appointments'], 0)
         self.assertNotIn('new_patients', response.data)
         self.assertNotIn('new_patients', response.data['previous'])
+
+    def test_future_completed_visit_counts_in_completion_rate(self):
+        # The visit is completed but scheduled later than the request. Vet
+        # Analytics must still report 100%, not 0%.
+        self._apt(
+            datetime(2026, 10, 8, 14, 0, tzinfo=MNL),
+            vet=self.vet_a, status=AppointmentStatus.COMPLETED,
+        )
+        with patch(
+            'reports.services.timezone.localtime',
+            return_value=datetime(2026, 10, 8, 12, 0, tzinfo=MNL),
+        ):
+            response = self._get(
+                VET_SUMMARY_ENDPOINT, user=self.vet_a.usr_id,
+                date_from='2026-10-08', date_to='2026-10-08',
+            )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_appointments'], 1)
+        self.assertEqual(response.data['completion_rate'], 100.0)
+        self.assertEqual(response.data['no_show_rate'], 0.0)
+        self.assertEqual(response.data['cancellation_rate'], 0.0)
+
+    def test_completion_rate_divides_by_all_appointments(self):
+        # Mirrors the dashboard: 3 completed + 1 pending + 2 cancelled
+        # reads 3/6, never 100%.
+        statuses = (
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.PENDING,
+            AppointmentStatus.CANCELLED,
+            AppointmentStatus.CANCELLED,
+        )
+        for index, status in enumerate(statuses):
+            self._apt(
+                datetime(2026, 10, 8, 13 + index, 0, tzinfo=MNL),
+                vet=self.vet_a, status=status,
+            )
+        with patch(
+            'reports.services.timezone.localtime',
+            return_value=datetime(2026, 10, 8, 12, 0, tzinfo=MNL),
+        ):
+            response = self._get(
+                VET_SUMMARY_ENDPOINT, user=self.vet_a.usr_id,
+                date_from='2026-10-08', date_to='2026-10-08',
+            )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['total_appointments'], 6)
+        self.assertEqual(response.data['completion_rate'], 50.0)
+        self.assertEqual(response.data['no_show_rate'], 0.0)
+        self.assertEqual(response.data['cancellation_rate'], 33.3)
 
     def test_appointments_report_is_scoped_to_the_caller(self):
         response = self._get(

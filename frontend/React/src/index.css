@@ -81,7 +81,8 @@ input {
 
 /* Prescription document, mirroring the mobile A4 prescription preview:
    12mm padding, Poppins typography, 20pt vet name, 8pt medication table,
-   9mm brand bar. */
+   9mm brand bar. The on-screen sheet is scaled proportionally (see
+   .prescription-preview-scale) so narrow windows never reflow the A4 layout. */
 .prescription-preview-sheet {
   -webkit-print-color-adjust: exact;
   background: #ffffff;
@@ -433,6 +434,12 @@ input {
 
   .prescription-preview-toolbar {
     display: none !important;
+  }
+
+  .prescription-preview-scale {
+    margin: 0 !important;
+    width: auto !important;
+    zoom: 1 !important;
   }
 
   .prescription-preview-sheet {

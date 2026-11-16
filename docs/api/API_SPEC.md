@@ -939,8 +939,9 @@ clinic-admin appointment details. Web/mobile receipts also read the same refund
 fields from the payment endpoints.
 
 Clinic Admin receives a narrower, read-only summary for oversight: no
-consultation, prescription, or other clinical records, and no owner contact
-details. Beyond the shared appointment fields it adds:
+consultation, prescription, or other clinical records. It carries the owner's
+contact details and both profile images (`pet_profile_image` and
+`owner_profile_image`). Beyond the shared appointment fields it adds:
 
 - `created_by_role`: `RECEPTIONIST` or `OWNER` (null for legacy rows with no
   recorded creator).
@@ -3348,8 +3349,8 @@ Clinic and veterinarian scope always come from the caller's staff profile, so a
 veterinarian can only read appointments assigned to them. A client-supplied
 `vet_id` is ignored on these endpoints.
 
-Date parameters, validation errors, default window, comparison window, and
-rate denominators are identical to section 15.
+Date parameters, validation errors, default window, and comparison window
+are identical to section 15. Rate denominators differ: see below.
 
 ## GET /api/veterinarian/reports/summary/
 
@@ -3374,6 +3375,12 @@ Unlike `/api/reports/summary/`, this payload has no `new_patients` key:
 new-patient counts are clinic-wide and are not part of a veterinarian's
 appointment analytics.
 
+Vet Analytics uses `total_appointments` as the denominator for
+`completion_rate`, `no_show_rate`, and `cancellation_rate`, including
+upcoming and cancelled appointments. The KPIs therefore reconcile with the
+status breakdown: a future-scheduled `COMPLETED` visit still counts, and an
+early completion can never push a rate above 100%.
+
 ## GET /api/veterinarian/reports/appointments/
 
 Response 200 has the same `series` and `by_status` shape as
@@ -3391,6 +3398,6 @@ Its "This month" preset spans the full calendar month (the 1st through the
 last day), matching the Consultations month filter, so a cancellation
 scheduled later in the month is included. This differs from Clinic Admin
 Reports, whose This month and This year presets are month-to-date and
-year-to-date. Vet Analytics keeps This year as year-to-date. Completion and
-no-show rates still use elapsed, non-cancelled appointments; the cancellation
-rate uses every appointment in the range, including upcoming ones.
+year-to-date. Vet Analytics keeps This year as year-to-date. Completion,
+no-show, and cancellation rates all divide by every appointment in the
+range, including upcoming and cancelled ones.

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { apiErrorMessage } from '../../../../utils/error'
@@ -37,6 +37,48 @@ function initials(name: string): string {
       .map((part) => part[0] ?? '')
       .join('')
       .toUpperCase() || '?'
+  )
+}
+
+function PetHeroAvatar({ src, name }: { src: string | null; name: string }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <div className="grid size-14 shrink-0 place-items-center rounded-full bg-white/10 text-xl font-bold text-white ring-1 ring-white/20">
+        {initial(name)}
+      </div>
+    )
+  }
+
+  return (
+    <img
+      alt={name}
+      className="size-14 shrink-0 rounded-full object-cover ring-1 ring-white/20"
+      onError={() => setFailed(true)}
+      src={src}
+    />
+  )
+}
+
+function OwnerAvatar({ src, name }: { src: string | null; name: string | null }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!src || failed) {
+    return (
+      <div className="grid size-9 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold text-stone-600 dark:bg-stone-700 dark:text-stone-300">
+        {initial(name)}
+      </div>
+    )
+  }
+
+  return (
+    <img
+      alt={name ?? 'Owner'}
+      className="size-9 shrink-0 rounded-full object-cover"
+      onError={() => setFailed(true)}
+      src={src}
+    />
   )
 }
 
@@ -176,9 +218,10 @@ export function ClinicAdminAppointmentDetailPage() {
         title={appointment.pet_name}
         subtitle={petSubtitle || undefined}
         avatar={
-          <div className="grid size-14 shrink-0 place-items-center rounded-full bg-white/10 text-xl font-bold text-white ring-1 ring-white/20">
-            {initial(appointment.pet_name)}
-          </div>
+          <PetHeroAvatar
+            name={appointment.pet_name}
+            src={appointment.pet_profile_image}
+          />
         }
         meta={
           <>
@@ -210,32 +253,30 @@ export function ClinicAdminAppointmentDetailPage() {
       {/* Owner card: oversight gets the contact details for follow-up */}
       <div className="rounded-xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-800/60">
         <div className="flex items-center gap-3">
-          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-stone-200 text-sm font-bold text-stone-600 dark:bg-stone-700 dark:text-stone-300">
-            {initial(appointment.owner_name)}
+          <OwnerAvatar
+            name={appointment.owner_name}
+            src={appointment.owner_profile_image}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-stone-900 dark:text-stone-100">
+              {appointment.owner_name ?? 'Unknown owner'}
+            </p>
+            {appointment.owner_email && (
+              <p className="truncate text-xs text-stone-500 dark:text-stone-400">
+                {appointment.owner_email}
+              </p>
+            )}
           </div>
-          <p className="min-w-0 flex-1 truncate text-sm font-bold text-stone-900 dark:text-stone-100">
-            {appointment.owner_name ?? 'Unknown owner'}
-          </p>
           <span className="text-xs text-stone-400 dark:text-stone-500">Owner</span>
         </div>
-        {(appointment.owner_phone || appointment.owner_email) && (
+        {appointment.owner_phone && (
           <div className="mt-3 space-y-2 sm:pl-12">
-            {appointment.owner_phone && (
-              <div className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-                </svg>
-                {formatPhone(appointment.owner_phone)}
-              </div>
-            )}
-            {appointment.owner_email && (
-              <div className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
-                <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                </svg>
-                {appointment.owner_email}
-              </div>
-            )}
+            <div className="flex items-center gap-2 text-sm text-stone-700 dark:text-stone-300">
+              <svg className="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+              </svg>
+              {formatPhone(appointment.owner_phone)}
+            </div>
           </div>
         )}
       </div>

@@ -1,13 +1,28 @@
-import { useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { PrescriptionPreviewDocument } from '../components/PrescriptionPreviewDocument'
 import { useAppointmentDetail } from '../hooks/useVetAppointments'
+import {
+  PRESCRIPTION_SHEET_WIDTH_PX,
+  prescriptionPreviewScale,
+} from '../utils/prescriptionPreview'
 
 export function PrescriptionPreviewPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { data: appointment, isLoading, error } = useAppointmentDetail(id ?? '')
+  const [previewScale, setPreviewScale] = useState(1)
+
+  const measurePreview = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return
+    const update = () => setPreviewScale(prescriptionPreviewScale(node.clientWidth))
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(update)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -115,10 +130,20 @@ export function PrescriptionPreviewPage() {
         </button>
       </div>
 
-      <PrescriptionPreviewDocument
-        appointment={appointment}
-        prescription={appointment.prescription}
-      />
+      <div
+        className="prescription-preview-viewport mx-auto w-full max-w-[210mm] print:max-w-none"
+        ref={measurePreview}
+      >
+        <div
+          className="prescription-preview-scale mx-auto"
+          style={{ width: PRESCRIPTION_SHEET_WIDTH_PX, zoom: previewScale }}
+        >
+          <PrescriptionPreviewDocument
+            appointment={appointment}
+            prescription={appointment.prescription}
+          />
+        </div>
+      </div>
     </div>
   )
 }

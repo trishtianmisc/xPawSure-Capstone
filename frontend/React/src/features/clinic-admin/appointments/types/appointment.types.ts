@@ -19,6 +19,8 @@ export type ClinicAdminVetRequest = Omit<VetRequest, 'reason' | 'decline_note'>
 /** Clinic Admin oversight view: no clinical records, so no AI screening. */
 export interface ClinicAdminAppointmentDetail
   extends Omit<AppointmentDetail, 'vet_request'> {
+  pet_profile_image: string | null
+  owner_profile_image: string | null
   created_by_role: CreatedByRole
   status_change: AppointmentStatusChange | null
   vet_request: ClinicAdminVetRequest | null
