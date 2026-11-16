@@ -79,8 +79,9 @@ input {
   animation: slide-in 0.25s ease-out;
 }
 
-/* Prescription document, mirroring the mobile A4 PDF: 12mm page margins,
-   10pt system body text, 54/46 medication columns, 9mm brand bar. */
+/* Prescription document, mirroring the mobile A4 prescription preview:
+   12mm padding, Poppins typography, 20pt vet name, 8pt medication table,
+   9mm brand bar. */
 .prescription-preview-sheet {
   -webkit-print-color-adjust: exact;
   background: #ffffff;
@@ -88,7 +89,7 @@ input {
   color: #1c1917;
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: Poppins, ui-sans-serif, system-ui, sans-serif;
   font-size: 10pt;
   line-height: 1.45;
   max-width: 100%;
@@ -206,7 +207,7 @@ input {
   background: #1f6f8b;
   height: 2px;
   margin-bottom: 12px;
-  margin-top: 14px;
+  margin-top: 5px;
 }
 
 .rx-doc-rx-section {
@@ -318,12 +319,13 @@ input {
 .rx-doc-empty {
   color: #78716c;
   font-size: 8pt;
+  font-style: italic;
   line-height: 1.45;
   padding: 12px 0;
 }
 
 .rx-doc-instructions {
-  color: #44403c;
+  color: #57534e;
   font-size: 8pt;
   line-height: 1.45;
   margin: 12px 0 0;
@@ -332,19 +334,14 @@ input {
 
 .rx-doc-instructions-label {
   color: #1c1917;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .rx-doc-signature {
   align-items: flex-end;
-  color: #57534e;
   display: flex;
   flex-direction: column;
-  font-size: 8pt;
-  margin-left: auto;
   margin-top: 24px;
-  text-align: right;
-  width: 240px;
 }
 
 .rx-doc-signature-line {
@@ -377,6 +374,7 @@ input {
   border-bottom: 1px solid #78716c;
   color: #1c1917;
   font-size: 8pt;
+  font-weight: 500;
   line-height: 1.45;
   margin-left: 4px;
   min-width: 130px;
