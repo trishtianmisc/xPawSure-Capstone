@@ -2615,6 +2615,11 @@ Clinic Admin.
 
 Returns staff members within the admin's own clinic.
 
+Responses include `profile_picture` — the staff member's uploaded profile
+picture URL (saved through `PUT /api/auth/profile/`), or `null` when no
+picture has been uploaded. `GET /api/staff/{staff_id}/` returns the same
+field.
+
 Query parameters: `page`, `page_size`, `role`, `search`, `status`, and `sort`.
 `sort` accepts `first_name` (default, A→Z) or `-first_name` (Z→A); unknown
 values fall back to the default ordering. Ordering happens in SQL before

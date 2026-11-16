@@ -126,3 +126,31 @@ describe('StaffDetailPage activity summary visibility', () => {
     expect(screen.getAllByText('—')).toHaveLength(3)
   })
 })
+
+describe('StaffDetailPage avatar', () => {
+  beforeEach(() => {
+    vi.mocked(useStaffAction).mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useStaffAction>)
+    mockActivity(undefined)
+    mockStaff({})
+  })
+
+  it('shows the uploaded profile picture', () => {
+    mockStaff({ profile_picture: 'https://cdn.example.com/staff/sam.png' })
+    renderPage()
+
+    const img = screen.getByRole('img', { name: 'Sam Staff' })
+    expect(img).toHaveAttribute(
+      'src', 'https://cdn.example.com/staff/sam.png',
+    )
+  })
+
+  it('falls back to initials when no picture was uploaded', () => {
+    mockStaff({ profile_picture: null })
+    renderPage()
+
+    expect(screen.getByText('SS')).toBeInTheDocument()
+  })
+})

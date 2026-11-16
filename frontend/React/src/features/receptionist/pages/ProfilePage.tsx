@@ -177,7 +177,7 @@ export function ProfilePage() {
 
   return (
     <div className="p-6">
-      <div className="mx-auto max-w-4xl space-y-8">
+      <div className="mx-auto max-w-7xl space-y-8">
         <PageHero
           title={`${user?.first_name ?? ''} ${user?.last_name ?? ''}`.trim() || 'My Profile'}
           subtitle={user?.email ?? ''}

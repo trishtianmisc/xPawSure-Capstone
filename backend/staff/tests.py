@@ -313,6 +313,42 @@ class StaffListTests(StaffAPITestCase):
         self.assertEqual(response.data['total'], 4)
         self.assertEqual(len(response.data['results']), 4)
 
+    def test_list_includes_profile_picture(self):
+        with_pic = User.objects.create(
+            usr_email='pic@test.com',
+            usr_first_name='Pic',
+            usr_last_name='Tured',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=with_pic,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+            stf_profile_image='https://cdn.example.com/staff/pic.png',
+        )
+        without_pic = User.objects.create(
+            usr_email='nopicture@test.com',
+            usr_first_name='No',
+            usr_last_name='Picture',
+            usr_role=UserRole.RECEPTIONIST,
+        )
+        StaffProfile.objects.create(
+            usr_id=without_pic,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.RECEPTIONIST,
+        )
+
+        response = self.client.get(
+            self.list_url, **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        by_email = {r['email']: r for r in response.data['results']}
+        self.assertEqual(
+            by_email['pic@test.com']['profile_picture'],
+            'https://cdn.example.com/staff/pic.png',
+        )
+        self.assertIsNone(by_email['nopicture@test.com']['profile_picture'])
+
     def test_list_filter_by_role(self):
         vet_user = User.objects.create(
             usr_email='vet@test.com',
@@ -556,6 +592,30 @@ class StaffDetailTests(StaffAPITestCase):
         self.assertEqual(response.data['license_number'], 'LIC-DTL')
         self.assertEqual(response.data['license_expiration_date'], '2028-03-15')
         self.assertIn('clinic_id', response.data)
+
+    def test_get_detail_includes_profile_picture(self):
+        user = User.objects.create(
+            usr_email='avatar@test.com',
+            usr_first_name='Avatar',
+            usr_last_name='Staff',
+            usr_role=UserRole.VETERINARIAN,
+        )
+        profile = StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+            stf_profile_image='https://cdn.example.com/staff/avatar.png',
+        )
+
+        response = self.client.get(
+            self._detail_url(str(profile.usr_id.usr_id)),
+            **self._auth_header(self.clinic_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data['profile_picture'],
+            'https://cdn.example.com/staff/avatar.png',
+        )
 
     def test_get_detail_not_found(self):
         response = self.client.get(

@@ -171,11 +171,19 @@ export function StaffDetailPage() {
           title={`${staff.first_name} ${staff.last_name}`}
           subtitle={staff.email}
           avatar={
-            <span
-              className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold ring-2 ring-white/20 ${avatarBg}`}
-            >
-              {getInitials(staff.first_name, staff.last_name)}
-            </span>
+            staff.profile_picture ? (
+              <img
+                alt={`${staff.first_name} ${staff.last_name}`}
+                className="inline-flex h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/20"
+                src={staff.profile_picture}
+              />
+            ) : (
+              <span
+                className={`inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-bold ring-2 ring-white/20 ${avatarBg}`}
+              >
+                {getInitials(staff.first_name, staff.last_name)}
+              </span>
+            )
           }
           meta={
             <>
