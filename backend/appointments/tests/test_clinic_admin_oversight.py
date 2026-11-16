@@ -69,9 +69,9 @@ class OversightBase(TestCase):
         self.owner = self._create_user(
             OWNER_EMAIL, UserRole.OWNER, 'Olivia', 'Owner',
         )
-        owner_profile = OwnerProfile.objects.create(usr_id=self.owner)
+        self.owner_profile = OwnerProfile.objects.create(usr_id=self.owner)
         self.pet = Pet.objects.create(
-            own_id=owner_profile,
+            own_id=self.owner_profile,
             pet_name='Rex',
             pet_sex=Sex.MALE,
         )
@@ -463,6 +463,24 @@ class AppointmentDetailTests(OversightBase):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertIn('owner_phone', response.data)
         self.assertIn('owner_email', response.data)
+
+    def test_admin_detail_includes_profile_images(self):
+        self.pet.pet_profile_image = 'https://example.com/rex.jpg'
+        self.pet.save(update_fields=['pet_profile_image'])
+        self.owner_profile.own_profile_image = 'https://example.com/olivia.jpg'
+        self.owner_profile.save(update_fields=['own_profile_image'])
+
+        response = self._detail(self.apt_oct3, self.admin)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data['pet_profile_image'],
+            'https://example.com/rex.jpg',
+        )
+        self.assertEqual(
+            response.data['owner_profile_image'],
+            'https://example.com/olivia.jpg',
+        )
 
     def test_receptionist_detail_contract_unchanged(self):
         response = self._detail(self.apt_oct3, self.receptionist)

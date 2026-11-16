@@ -20,6 +20,8 @@ export function useVetAppointments() {
   return useQuery({
     queryKey: ['veterinarian', 'appointments'],
     queryFn: () => dashboardService.listAppointments(),
+    select: (appointments) =>
+      appointments.filter((appointment) => appointment.apt_status !== 'PENDING'),
     staleTime: 30_000,
   })
 }

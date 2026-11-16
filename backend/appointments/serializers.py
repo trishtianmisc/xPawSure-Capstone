@@ -458,12 +458,16 @@ class ClinicAdminAppointmentDetailSerializer(ReceptionistAppointmentDetailSerial
     created_by_role = serializers.SerializerMethodField()
     status_change = serializers.SerializerMethodField()
     vet_request = serializers.SerializerMethodField()
+    owner_profile_image = serializers.CharField(
+        source='pet_id.own_id.own_profile_image', read_only=True, allow_null=True
+    )
 
     class Meta(AppointmentDetailSerializer.Meta):
         fields = [
             'apt_id', 'pet_id', 'pet_name', 'pet_breed', 'pet_sex',
+            'pet_profile_image',
             'cln_id', 'clinic_name', 'stf_id', 'vet_name',
-            'owner_name', 'owner_phone', 'owner_email',
+            'owner_name', 'owner_phone', 'owner_email', 'owner_profile_image',
             'apt_type', 'apt_status', 'apt_scheduled_at',
             'apt_reason', 'created_by_name', 'created_by_role',
             'status_change', 'screening_status', 'vet_request',
