@@ -121,7 +121,8 @@ export default function BookAppointmentScreen() {
 
   const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError } = useClinics()
   // No date here: the veterinarian is picked before the schedule, so the
-  // backend lists every active vet at the clinic (available_count is null).
+  // backend lists every bookable vet at the clinic (available_count is null).
+  // Vets whose account setup is unfinished are not included.
   const { data: vets = [], isLoading: vetsLoading, isError: vetsError } = useVets(
     clinicId ?? undefined,
   )
