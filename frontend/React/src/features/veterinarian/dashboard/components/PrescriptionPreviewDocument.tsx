@@ -156,47 +156,56 @@ export function PrescriptionPreviewDocument({
         <section className="rx-doc-rx-section">
           <div className="rx-doc-rx-mark">Rx</div>
           <div className="rx-doc-rx-body">
-            <div className="rx-doc-table-header">
-              <span className="rx-doc-table-header-text rx-doc-medicine-col">
-                Medicine
-              </span>
-              <span className="rx-doc-table-header-text rx-doc-schedule-col">
-                Dosage &amp; schedule
-              </span>
-            </div>
+            <table className="rx-doc-table">
+              <colgroup>
+                <col className="rx-doc-col-medicine" />
+                <col className="rx-doc-col-schedule" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Medicine</th>
+                  <th scope="col">Dosage &amp; schedule</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prescription.items.length === 0 ? (
+                  <tr>
+                    <td className="rx-doc-empty" colSpan={2}>
+                      No medications listed.
+                    </td>
+                  </tr>
+                ) : (
+                  prescription.items.map((item) => {
+                    const genericName = item.generic_name?.trim()
+                    const notes = item.notes?.trim()
 
-            {prescription.items.length === 0 ? (
-              <p className="rx-doc-empty">No medications listed.</p>
-            ) : (
-              prescription.items.map((item) => {
-                const genericName = item.generic_name?.trim()
-                const notes = item.notes?.trim()
-
-                return (
-                  <div className="rx-doc-med-row" key={item.id}>
-                    <div className="rx-doc-medicine-col">
-                      <p className="rx-doc-med-name">{item.medicine_name}</p>
-                      {genericName ? (
-                        <p className="rx-doc-med-generic">{genericName}</p>
-                      ) : null}
-                      {notes ? (
-                        <p className="rx-doc-med-notes">Notes: {notes}</p>
-                      ) : null}
-                    </div>
-                    <div className="rx-doc-schedule-col">
-                      <p className="rx-doc-schedule-primary">{item.dosage}</p>
-                      <p className="rx-doc-schedule-secondary">
-                        {item.frequency} · {item.duration}
-                      </p>
-                      <p className="rx-doc-schedule-secondary">
-                        {routeLabel(item.route)} · Qty:{' '}
-                        {item.quantity == null ? EM_DASH : item.quantity}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })
-            )}
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <p className="rx-doc-med-name">{item.medicine_name}</p>
+                          {genericName ? (
+                            <p className="rx-doc-med-generic">{genericName}</p>
+                          ) : null}
+                          {notes ? (
+                            <p className="rx-doc-med-notes">Notes: {notes}</p>
+                          ) : null}
+                        </td>
+                        <td>
+                          <p className="rx-doc-schedule-primary">{item.dosage}</p>
+                          <p className="rx-doc-schedule-secondary">
+                            {item.frequency} · {item.duration}
+                          </p>
+                          <p className="rx-doc-schedule-secondary">
+                            {routeLabel(item.route)} · Qty:{' '}
+                            {item.quantity == null ? EM_DASH : item.quantity}
+                          </p>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
 
             {instructions ? (
               <p className="rx-doc-instructions">
