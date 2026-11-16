@@ -192,6 +192,55 @@ class GeocodingServiceTests(SimpleTestCase):
 class ClinicGeocodingTests(ClinicAPITestCase):
 
     @patch('clinics.services.geocode_address')
+    def test_create_clinic_uses_manual_coordinates_without_geocoding(self, mock_geocode):
+        response = self.client.post(
+            self.list_url,
+            {
+                'name': 'Manual Coordinates Clinic',
+                'address': '123 Main Street, Manila',
+                'latitude': 14.599512,
+                'longitude': 120.984222,
+            },
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['latitude'], 14.599512)
+        self.assertEqual(response.data['longitude'], 120.984222)
+        clinic = Clinic.objects.get(cln_name='Manual Coordinates Clinic')
+        self.assertEqual(clinic.cln_latitude, Decimal('14.599512'))
+        self.assertEqual(clinic.cln_longitude, Decimal('120.984222'))
+        mock_geocode.assert_not_called()
+
+    def test_create_clinic_requires_both_coordinates(self):
+        response = self.client.post(
+            self.list_url,
+            {'name': 'Incomplete Coordinates Clinic', 'latitude': 14.599512},
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('latitude', response.data)
+        self.assertIn('longitude', response.data)
+
+    def test_create_clinic_rejects_out_of_range_coordinates(self):
+        response = self.client.post(
+            self.list_url,
+            {
+                'name': 'Invalid Coordinates Clinic',
+                'latitude': 91,
+                'longitude': 120.984222,
+            },
+            format='json',
+            **self._auth_header(self.super_admin),
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('latitude', response.data)
+
+    @patch('clinics.services.geocode_address')
     def test_create_clinic_stores_coordinates(self, mock_geocode):
         mock_geocode.return_value = (
             Decimal('14.599512'),

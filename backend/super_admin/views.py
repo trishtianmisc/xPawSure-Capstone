@@ -1,11 +1,13 @@
 from datetime import datetime
 
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from clinics.models import Clinic
+from core.storage_service import SupabaseStorageError
 from core.permissions import IsSuperAdmin
 from staff.serializers import StaffListSerializer
 from staff.services import StaffService
@@ -18,6 +20,7 @@ from super_admin.serializers import (
 from super_admin.services import (
     AccuracyReportService,
     ClinicAdminService,
+    ConsultationOutcomeReportService,
     CrossClinicAuditService,
     CrossClinicReadService,
     DiseaseReportService,
@@ -387,3 +390,84 @@ class DiseaseReportView(APIView):
             date_to=_parse_date(request.query_params.get('date_to'), end_of_day=True),
         )
         return Response(report)
+
+
+class ConsultationOutcomeReportView(APIView):
+    permission_classes = [IsSuperAdmin]
+
+    def _params(self, request):
+        clinic_id = request.query_params.get('clinic_id') or None
+        if clinic_id and _get_clinic(clinic_id) is None:
+            return None, Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        disease_code = request.query_params.get('disease_code') or None
+        if disease_code and disease_code not in {
+            'ALLERGIC_DERMATITIS', 'BACTERIAL', 'FUNGAL', 'HOTSPOT', 'MANGE',
+        }:
+            return None, Response({'detail': 'Unsupported disease code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        outcome = request.query_params.get('outcome', 'matched')
+        if outcome not in {'matched', 'not_matched'}:
+            return None, Response({'detail': 'Outcome must be matched or not_matched.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        dates = {}
+        for name, end_of_day in (('date_from', False), ('date_to', True)):
+            raw = request.query_params.get(name)
+            parsed = _parse_date(raw, end_of_day=end_of_day)
+            if raw and parsed is None:
+                return None, Response(
+                    {'detail': f"Invalid '{name}'; expected YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            dates[name] = parsed
+        if dates['date_from'] and dates['date_to'] and dates['date_from'] > dates['date_to']:
+            return None, Response(
+                {'detail': "'date_from' cannot be after 'date_to'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return {
+            'clinic_id': clinic_id,
+            'disease_code': disease_code,
+            'outcome': outcome,
+            **dates,
+        }, None
+
+    def get(self, request):
+        params, error = self._params(request)
+        if error:
+            return error
+        page, page_size = _parse_page(request)
+        return Response(ConsultationOutcomeReportService.get_report(
+            **params, page=page, page_size=page_size,
+        ))
+
+    def post(self, request):
+        params, error = self._params(request)
+        if error:
+            return error
+        if not params['disease_code']:
+            return Response(
+                {'detail': 'Choose a disease before downloading images.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            result = ConsultationOutcomeReportService.create_zip(
+                **params,
+                user_id=str(request.user.usr_id),
+                ip_address=request.META.get('REMOTE_ADDR'),
+            )
+        except (SupabaseStorageError, OSError, ValueError):
+            return Response(
+                {'detail': 'One or more screening images could not be retrieved for export.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        if result is None:
+            return Response(
+                {'detail': 'This download exceeds the 50-image or 50 MB limit. Narrow the filters and try again.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+        content, filename = result
+        response = HttpResponse(content, content_type='application/zip')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response

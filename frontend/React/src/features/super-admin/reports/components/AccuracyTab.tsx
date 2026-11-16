@@ -1,6 +1,7 @@
 import { Alert, Badge, Card } from '../../../../components/ui'
 import { apiErrorMessage } from '../../../../utils/error'
 import { useAccuracyReport } from '../hooks/useReports'
+import { formatReportMonth } from '../utils/dateFormat'
 
 import type { AccuracyReportParams } from '../types/report.types'
 
@@ -191,7 +192,9 @@ export function AccuracyTab({ params }: AccuracyTabProps) {
             <tbody className="divide-y divide-stone-100 dark:divide-stone-700">
               {data.trend.map((point) => (
                 <tr key={point.month}>
-                  <td className="py-2.5 pr-3 text-stone-700 dark:text-stone-300">{point.month}</td>
+                  <td className="py-2.5 pr-3 text-stone-700 dark:text-stone-300">
+                    {formatReportMonth(point.month)}
+                  </td>
                   <td className="py-2.5 pr-3 text-stone-500 dark:text-stone-400">{point.compared}</td>
                   <td className="py-2.5 pr-3 text-stone-500 dark:text-stone-400">{point.correct}</td>
                   <td className="py-2.5 text-stone-800 dark:text-stone-200">

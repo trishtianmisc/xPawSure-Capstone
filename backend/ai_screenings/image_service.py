@@ -143,3 +143,22 @@ def store_screening_image(screening, image: ScreeningImageData) -> AiScreeningIm
         except Exception as cleanup_error:  # pragma: no cover - defensive
             logger.warning('Screening image cleanup failed: %s', cleanup_error)
         raise
+
+
+def read_stored_screening_image(image: AiScreeningImage) -> bytes:
+    """Read the stored image for an authorized backend export."""
+    bucket = settings.SUPABASE_STORAGE_BUCKET_SCREENING_IMAGES
+    supabase_public_prefix = (
+        f'{settings.SUPABASE_URL.rstrip("/")}/storage/v1/object/public/{bucket}/'
+        if settings.SUPABASE_URL
+        else ''
+    )
+    if supabase_public_prefix and image.asi_url.startswith(supabase_public_prefix):
+        return SupabaseStorageService.download(
+            bucket,
+            image.asi_storage_path,
+            settings.SCREENING_IMAGE_MAX_BYTES,
+        )
+
+    with default_storage.open(image.asi_storage_path, 'rb') as stored_file:
+        return stored_file.read(settings.SCREENING_IMAGE_MAX_BYTES + 1)

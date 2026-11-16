@@ -5,6 +5,8 @@ export interface CreateClinicPayload {
   email: string
   phone?: string
   address?: string
+  latitude?: number
+  longitude?: number
   license_number?: string
 }
 
@@ -22,6 +24,8 @@ export interface ClinicResponse {
   email: string
   phone: string
   address: string
+  latitude: number | null
+  longitude: number | null
   license_number: string
   status: string
   created_at: string

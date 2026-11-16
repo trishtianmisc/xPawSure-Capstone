@@ -2717,6 +2717,23 @@ Cross-clinic disease distribution. Query params: `clinic_id`, `date_from` /
 with severity), `confirmed_by_disease` (consultation free text grouped
 case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
 
+## GET /api/super-admin/analytics/consultation-outcomes/
+
+Super Admin only. Paginated, read-only comparison of the on-device AI
+prediction with the veterinarian's primary diagnosis. Claude image-review
+results are not included. Only linked consultations with an image, a saved
+comparison, and one of the five supported primary diagnoses (Allergic
+Dermatitis, Bacterial, Fungal, Hotspot, Mange) are returned. Query params:
+`clinic_id`, `disease_code`, `outcome` (`matched` or `not_matched`),
+`date_from` / `date_to` (consultation creation date), `page`, `page_size`.
+
+## POST /api/super-admin/analytics/consultation-outcomes/
+
+Super Admin only. Downloads a ZIP for the requested `disease_code` and
+`outcome`, with screening images and a `manifest.csv` containing consultation
+and prediction metadata. Accepts the same clinic/date filters. Exports are
+limited to 50 images and 50 MB, and each export is audit-logged.
+
 ---
 
 # 11. User Management Endpoints (Clinic Admin)

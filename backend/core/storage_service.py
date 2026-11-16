@@ -106,6 +106,37 @@ class SupabaseStorageService:
         )
         return False
 
+    @classmethod
+    def download(cls, bucket: str, object_path: str, max_bytes: int) -> bytes:
+        """Read an object using the server-only Storage credentials."""
+        url = f'{cls._get_base_url()}/storage/v1/object/{bucket}/{object_path}'
+        try:
+            response = http_requests.get(
+                url, headers=cls._get_headers(), timeout=30, stream=True,
+            )
+        except http_requests.RequestException as exc:
+            raise SupabaseStorageError('Storage download failed.') from exc
+
+        if response.status_code != 200:
+            response.close()
+            raise SupabaseStorageError(
+                f'Storage download returned status {response.status_code}.',
+                status_code=response.status_code,
+            )
+        content = bytearray()
+        try:
+            for chunk in response.iter_content(chunk_size=64 * 1024):
+                if not chunk:
+                    continue
+                content.extend(chunk)
+                if len(content) > max_bytes:
+                    raise SupabaseStorageError('Stored object exceeds the allowed image size.')
+        except http_requests.RequestException as exc:
+            raise SupabaseStorageError('Storage download failed.') from exc
+        finally:
+            response.close()
+        return bytes(content)
+
     @staticmethod
     def build_object_path(prefix: str, extension: str) -> str:
         """Generate a UUID-based object path.

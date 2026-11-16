@@ -28,8 +28,16 @@ class ClinicSerializer(serializers.ModelSerializer):
     address = serializers.CharField(
         source='cln_address', required=False, allow_blank=True, allow_null=True,
     )
-    latitude = serializers.FloatField(source='cln_latitude', read_only=True)
-    longitude = serializers.FloatField(source='cln_longitude', read_only=True)
+    latitude = serializers.DecimalField(
+        source='cln_latitude', max_digits=9, decimal_places=6,
+        min_value=-90, max_value=90, required=False, allow_null=True,
+        coerce_to_string=False,
+    )
+    longitude = serializers.DecimalField(
+        source='cln_longitude', max_digits=9, decimal_places=6,
+        min_value=-180, max_value=180, required=False, allow_null=True,
+        coerce_to_string=False,
+    )
     license_number = serializers.CharField(
         source='cln_license_no', required=False, allow_blank=True, allow_null=True,
     )
@@ -50,6 +58,23 @@ class ClinicSerializer(serializers.ModelSerializer):
         if User.objects.filter(usr_email__iexact=value).exists():
             raise serializers.ValidationError('This email is already registered as a user.')
         return value
+
+    def validate(self, attrs):
+        has_latitude = attrs.get('cln_latitude') is not None
+        has_longitude = attrs.get('cln_longitude') is not None
+        if has_latitude != has_longitude:
+            raise serializers.ValidationError({
+                'latitude': 'Enter both latitude and longitude, or leave both blank.',
+                'longitude': 'Enter both latitude and longitude, or leave both blank.',
+            })
+        return attrs
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        for field in ('latitude', 'longitude'):
+            if representation[field] is not None:
+                representation[field] = float(representation[field])
+        return representation
 
 
 class ClinicUpdateSerializer(serializers.ModelSerializer):
