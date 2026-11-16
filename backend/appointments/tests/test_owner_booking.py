@@ -86,6 +86,18 @@ class OwnerBookingBase(TestCase):
             pet_sex=Sex.MALE,
         )
 
+    def _create_pending_vet(self, email='pending@example.com'):
+        user = self._create_user(
+            email, UserRole.VETERINARIAN, 'Pia', 'Pending',
+        )
+        user.usr_must_change_password = True
+        user.save(update_fields=['usr_must_change_password'])
+        return StaffProfile.objects.create(
+            usr_id=user,
+            cln_id=self.clinic,
+            stf_position=StaffPosition.VETERINARIAN,
+        )
+
     def _create_user(self, email, role, first_name, last_name):
         user = User.objects.create(
             usr_email=email,
@@ -106,7 +118,49 @@ class OwnerBookingBase(TestCase):
         self.assertEqual(response.status_code, 200, response.data)
         return {'HTTP_AUTHORIZATION': f"Bearer {response.data['access']}"}
 
+    def _seed_slots(self, vet=None):
+        """Publish the day's slots the way the clinic does before owners browse.
+
+        Owner-facing reads only ever see slots that already exist; they never
+        create them, so every owner test starts from a generated schedule.
+        """
+        return VetSlotService.get_or_generate_slots(
+            self.clinic.cln_id, (vet or self.vet).stf_id, self.date,
+        )
+
+    def _open_today(self):
+        """Open the clinic's hours for today so dated vet lookups match."""
+        today = datetime.now(get_clinic_timezone(self.clinic.cln_id)).date()
+        ClinicOperatingHours.objects.get_or_create(
+            cln_id=self.clinic,
+            day_of_week=DAY_CODES[today.weekday()],
+            defaults={
+                'day_index': today.weekday() + 1,
+                'opening_time': time(9, 0),
+                'closing_time': time(17, 0),
+                'is_closed': False,
+            },
+        )
+
+    def _clinic_now(self):
+        return datetime.now(get_clinic_timezone(self.clinic.cln_id))
+
+    def _open_today(self):
+        """Open operating hours for today so dated vet lookups match it."""
+        today = datetime.now(get_clinic_timezone(self.clinic.cln_id)).date()
+        ClinicOperatingHours.objects.get_or_create(
+            cln_id=self.clinic,
+            day_of_week=DAY_CODES[today.weekday()],
+            defaults={
+                'day_index': today.weekday() + 1,
+                'opening_time': time(9, 0),
+                'closing_time': time(17, 0),
+                'is_closed': False,
+            },
+        )
+
     def _get_slots(self, email=OWNER_EMAIL):
+        self._seed_slots()
         response = self.client.get(
             '/api/owner/slots/',
             {'vet_id': str(self.vet.stf_id), 'date': self.date.isoformat()},
@@ -195,6 +249,8 @@ class OwnerDiscoveryTests(OwnerBookingBase):
         self.assertIn('Fresh Clinic', names)
 
     def test_vet_list_returns_vet_with_free_slots(self):
+        self._seed_slots()
+
         response = self.client.get(
             '/api/owner/vets/',
             {'clinic_id': str(self.clinic.cln_id), 'date': self.date.isoformat()},
@@ -248,6 +304,151 @@ class OwnerDiscoveryTests(OwnerBookingBase):
         slots = self._get_slots()
         self.assertTrue(all(s['vsl_appointment'] is None for s in slots))
 
+    def test_vet_list_excludes_pending_setup_vet(self):
+        pending = self._create_pending_vet()
+
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id)},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        listed = [vet['stf_id'] for vet in response.data]
+        self.assertIn(str(self.vet.stf_id), listed)
+        self.assertNotIn(str(pending.stf_id), listed)
+
+    def test_dated_vet_list_excludes_pending_setup_vet(self):
+        pending = self._create_pending_vet()
+        self._seed_slots()
+        self._seed_slots(vet=pending)
+
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id), 'date': self.date.isoformat()},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        listed = [vet['stf_id'] for vet in response.data]
+        self.assertIn(str(self.vet.stf_id), listed)
+        self.assertNotIn(str(pending.stf_id), listed)
+
+    def test_slots_are_not_generated_for_vet_without_a_schedule(self):
+        VetSlot.objects.filter(stf_id=self.vet, vsl_date=self.date).delete()
+
+        response = self.client.get(
+            '/api/owner/slots/',
+            {'vet_id': str(self.vet.stf_id), 'date': self.date.isoformat()},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, [])
+        self.assertFalse(
+            VetSlot.objects.filter(stf_id=self.vet, vsl_date=self.date).exists()
+        )
+
+    def test_slots_endpoint_rejects_pending_setup_vet(self):
+        pending = self._create_pending_vet()
+        VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=pending,
+            vsl_date=self.date,
+            vsl_start_time=time(9, 0),
+            vsl_end_time=time(9, 30),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+        response = self.client.get(
+            '/api/owner/slots/',
+            {'vet_id': str(pending.stf_id), 'date': self.date.isoformat()},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(
+            response.data['detail'],
+            'This veterinarian is not available for booking yet.',
+        )
+
+    def test_owner_slots_endpoint_hides_slots_within_lead_time(self):
+        now = self._clinic_now()
+        today = now.date()
+        if (now + timedelta(hours=2)).date() != today:
+            self.skipTest('too close to midnight for a same-day future slot')
+
+        started = VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=today,
+            vsl_start_time=time(0, 0),
+            vsl_end_time=time(0, 30),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+        too_soon = VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=today,
+            vsl_start_time=now.time(),
+            vsl_end_time=(now + timedelta(minutes=30)).time(),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+        later = VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=today,
+            vsl_start_time=(now + timedelta(hours=2)).time(),
+            vsl_end_time=(now + timedelta(hours=2, minutes=30)).time(),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+        response = self.client.get(
+            '/api/owner/slots/',
+            {'vet_id': str(self.vet.stf_id), 'date': today.isoformat()},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        returned = [slot['vsl_id'] for slot in response.data]
+        self.assertNotIn(str(started.vsl_id), returned)
+        self.assertNotIn(str(too_soon.vsl_id), returned)
+        self.assertIn(str(later.vsl_id), returned)
+
+    def test_dated_vet_list_excludes_within_lead_time(self):
+        now = self._clinic_now()
+        today = now.date()
+        if (now + timedelta(hours=2)).date() != today:
+            self.skipTest('too close to midnight for a same-day future slot')
+        self._open_today()
+
+        VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=today,
+            vsl_start_time=now.time(),
+            vsl_end_time=(now + timedelta(minutes=30)).time(),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+        VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=today,
+            vsl_start_time=(now + timedelta(hours=2)).time(),
+            vsl_end_time=(now + timedelta(hours=2, minutes=30)).time(),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id), 'date': today.isoformat()},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        counts = {vet['stf_id']: vet['available_count'] for vet in response.data}
+        self.assertEqual(counts.get(str(self.vet.stf_id)), 1)
+
     def test_receptionist_cannot_use_owner_endpoints(self):
         response = self.client.get('/api/owner/appointments/', **self._auth(RECEPTIONIST_EMAIL))
         self.assertEqual(response.status_code, 403)
@@ -288,6 +489,45 @@ class OwnerBookingTests(OwnerBookingBase):
                 self.owner_user, NotificationType.APPOINTMENT_CREATED,
             ).exists(),
         )
+
+    def test_booking_slot_of_pending_setup_vet_is_rejected(self):
+        pending = self._create_pending_vet()
+        slot = VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=pending,
+            vsl_date=self.date,
+            vsl_start_time=time(9, 0),
+            vsl_end_time=time(9, 30),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+        response = self._book(slot_id=slot.vsl_id)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(
+            response.data['detail'],
+            'This veterinarian is not available for bookings yet.',
+        )
+        slot.refresh_from_db()
+        self.assertEqual(slot.vsl_status, SlotStatus.AVAILABLE)
+
+    def test_booking_slot_within_lead_time_is_rejected(self):
+        start = self._clinic_now() + timedelta(minutes=10)
+        slot = VetSlot.objects.create(
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            vsl_date=start.date(),
+            vsl_start_time=start.time(),
+            vsl_end_time=(start + timedelta(minutes=30)).time(),
+            vsl_status=SlotStatus.AVAILABLE,
+        )
+
+        response = self._book(slot_id=slot.vsl_id)
+
+        self.assertEqual(response.status_code, 409, response.data)
+        self.assertEqual(response.data['code'], 'SLOT_TOO_SOON')
+        slot.refresh_from_db()
+        self.assertEqual(slot.vsl_status, SlotStatus.AVAILABLE)
 
     def test_double_booking_same_slot_conflicts(self):
         slot = self._get_slots()[0]

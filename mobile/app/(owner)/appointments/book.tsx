@@ -133,7 +133,8 @@ export default function BookAppointmentScreen() {
 
   const { data: clinics = [], isLoading: clinicsLoading, isError: clinicsError } = useClinics()
   // No date here: the veterinarian is picked before the schedule, so the
-  // backend lists every active vet at the clinic (available_count is null).
+  // backend lists every bookable vet at the clinic (available_count is null).
+  // Vets whose account setup is unfinished are not included.
   const { data: vets = [], isLoading: vetsLoading, isError: vetsError } = useVets(
     clinicId ?? undefined,
   )
@@ -316,6 +317,13 @@ export default function BookAppointmentScreen() {
         handleGoScan()
         return
       }
+      case 'SLOT_TOO_SOON':
+        // The picked time entered the no-booking window while the owner was
+        // in the flow: send them back to the schedule to pick a later slot.
+        Alert.alert('Time no longer available', detail)
+        setSlot(null)
+        setStep(3)
+        return
       default:
         Alert.alert('Booking failed', detail)
     }

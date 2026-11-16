@@ -316,6 +316,12 @@ No Show
 
 Appointments cannot overlap for the same veterinarian.
 
+Owner bookings must start at least 30 minutes from now in the clinic
+timezone. Slots that already started or start within that lead time are
+hidden from the owner booking flow and rejected if submitted anyway.
+This rule applies only to owner bookings; staff-initiated scheduling is
+unaffected.
+
 Completed appointments cannot be edited except by a Super Admin.
 
 ## Reschedule Acknowledgement

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from django.db import transaction
@@ -17,11 +17,14 @@ from appointments.serializers import (
     VetSlotSerializer,
 )
 from appointments.services import (
+    BOOKABLE_VET_FILTERS,
+    OWNER_BOOKING_LEAD_MINUTES,
     AppointmentService,
     InvalidRequestError,
     InvalidTransitionError,
     SlotUnavailableError,
     VetSlotService,
+    get_clinic_timezone,
 )
 from clinics.models import Clinic, ClinicSettings
 from core.permissions import IsOwner
@@ -83,7 +86,7 @@ class OwnerVetListView(APIView):
 
         # The date is optional: the owner booking wizard picks the
         # veterinarian before the schedule, so the undated list returns
-        # every active vet and availability is resolved per date later.
+        # every bookable vet and availability is resolved per date later.
         date = None
         if date_str:
             date = _parse_date(date_str)
@@ -122,11 +125,13 @@ class OwnerVetListView(APIView):
                 for vet in VetSlotService.get_clinic_vets(clinic_id=clinic_id)
             ])
 
-        vets = VetSlotService.get_vets_for_date(clinic_id=clinic_id, date=date)
+        vets = VetSlotService.get_vets_for_date(
+            clinic_id=clinic_id, date=date,
+        ).filter(**BOOKABLE_VET_FILTERS)
 
         data = []
         for vet in vets:
-            available = VetSlotService.get_available_slots(
+            available = VetSlotService.get_existing_available_slots(
                 clinic_id=clinic_id, vet_id=vet.stf_id, date=date,
             )
             count = available.count()
@@ -165,15 +170,17 @@ class OwnerAvailableSlotsView(APIView):
         vet = StaffProfile.objects.filter(
             stf_id=vet_id,
             stf_position=StaffPosition.VETERINARIAN,
-            usr_id__usr_is_active=True,
+            **BOOKABLE_VET_FILTERS,
         ).select_related('cln_id').first()
         if not vet:
             return Response(
-                {'detail': 'Veterinarian not found.'},
+                {'detail': 'This veterinarian is not available for booking yet.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        slots = VetSlotService.get_available_slots(
+        # Only slots the clinic already generated are offered; opening this
+        # endpoint never creates a schedule for the vet.
+        slots = VetSlotService.get_existing_available_slots(
             clinic_id=vet.cln_id_id, vet_id=vet.stf_id, date=date,
         )
         serializer = VetSlotSerializer(slots, many=True)
@@ -268,6 +275,22 @@ class OwnerAppointmentListCreateView(APIView):
         if not slot:
             return Response(
                 {'detail': 'This slot is no longer available.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        clinic_tz = get_clinic_timezone(slot.cln_id_id)
+        slot_start = datetime.combine(slot.vsl_date, slot.vsl_start_time, tzinfo=clinic_tz)
+        if slot_start <= datetime.now(clinic_tz) + timedelta(
+            minutes=OWNER_BOOKING_LEAD_MINUTES,
+        ):
+            return Response(
+                {
+                    'detail': (
+                        'This time slot is no longer bookable. '
+                        'Please pick a later slot.'
+                    ),
+                    'code': 'SLOT_TOO_SOON',
+                },
                 status=status.HTTP_409_CONFLICT,
             )
 

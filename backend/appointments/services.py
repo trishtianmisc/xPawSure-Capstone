@@ -227,6 +227,20 @@ def _notify_assigned_vet(appointment, *, title, message, ntf_type):
     )
 
 
+# A veterinarian is only bookable once their account is set up. Staff creation
+# leaves usr_must_change_password=True until the vet logs in for the first time,
+# so an "active" account that still holds the temporary password cannot serve
+# appointments yet.
+BOOKABLE_VET_FILTERS = {
+    'usr_id__usr_is_active': True,
+    'usr_id__usr_must_change_password': False,
+}
+
+# Owner bookings must start this many minutes from now (clinic timezone);
+# slots that already started or start sooner are neither listed nor accepted.
+OWNER_BOOKING_LEAD_MINUTES = 30
+
+
 DAY_MAP = {
     0: 'MON',
     1: 'TUE',
@@ -304,6 +318,31 @@ class VetSlotService:
         ).filter(vsl_status=SlotStatus.AVAILABLE)
 
     @staticmethod
+    def get_existing_available_slots(clinic_id, vet_id, date):
+        """Available slots the clinic has already generated for this vet/date.
+
+        Owner-facing reads never create slots, so a vet without a published
+        schedule shows no times instead of silently being handed a full day.
+        Slots that already started or start within the owner booking lead
+        time are never offered.
+        """
+        slots = VetSlot.objects.filter(
+            cln_id_id=clinic_id,
+            stf_id_id=vet_id,
+            vsl_date=date,
+            vsl_status=SlotStatus.AVAILABLE,
+        ).order_by('vsl_start_time')
+
+        cutoff = datetime.now(get_clinic_timezone(clinic_id)) + timedelta(
+            minutes=OWNER_BOOKING_LEAD_MINUTES,
+        )
+        if date < cutoff.date():
+            return slots.none()
+        if date == cutoff.date():
+            return slots.filter(vsl_start_time__gt=cutoff.time())
+        return slots
+
+    @staticmethod
     def get_vets_for_date(clinic_id, date):
         day_of_week = DAY_MAP[date.weekday()]
         return StaffProfile.objects.filter(
@@ -316,17 +355,18 @@ class VetSlotService:
 
     @staticmethod
     def get_clinic_vets(clinic_id):
-        """Every active veterinarian at the clinic, undated.
+        """Every bookable veterinarian at the clinic, undated.
 
         Used by the owner booking wizard when the veterinarian is chosen
         before the schedule: without a date there is no operating-hours
         filter and no per-day slot count, so availability is decided per
-        date on the schedule step instead.
+        date on the schedule step instead. Vets whose account setup is not
+        finished are excluded so an owner can never book them.
         """
         return StaffProfile.objects.filter(
             cln_id_id=clinic_id,
             stf_position=StaffPosition.VETERINARIAN,
-            usr_id__usr_is_active=True,
+            **BOOKABLE_VET_FILTERS,
         ).select_related('usr_id')
 
     @staticmethod
@@ -612,6 +652,18 @@ class AppointmentService:
             )
         except VetSlot.DoesNotExist:
             raise SlotUnavailableError('This slot is no longer available.')
+
+        vet = StaffProfile.objects.select_related('usr_id').filter(
+            stf_id=slot.stf_id_id,
+        ).first()
+        if (
+            vet is None
+            or not vet.usr_id.usr_is_active
+            or vet.usr_id.usr_must_change_password
+        ):
+            raise SlotUnavailableError(
+                'This veterinarian is not available for bookings yet.'
+            )
 
         day_of_week = DAY_MAP[slot.vsl_date.weekday()]
         try:
