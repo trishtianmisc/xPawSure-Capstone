@@ -13,6 +13,8 @@ from rest_framework import status
 from ai_screenings.claude_service import (
     FINDINGS_TOOL,
     TOOL_NAME,
+    MalformedClaudeResponse,
+    USER_PROMPT,
     ClaudeVisionOutcome,
     ClaudeVisionService,
     _normalize_result,
@@ -156,6 +158,21 @@ class ClaudeVisionServiceTests(OwnerScreeningBase):
         self.assertEqual(call_kwargs['headers']['anthropic-version'], '2023-06-01')
         payload = call_kwargs['json']
         self.assertEqual(payload['model'], 'test-model')
+        self.assertIn(
+            'NOT_DOG_SKIN only when no dog is visible', USER_PROMPT,
+        )
+        self.assertIn('covered by fur', USER_PROMPT)
+        self.assertIn(
+            'NO_VISIBLE_LESIONS only when canine skin is clearly visible',
+            USER_PROMPT,
+        )
+        suitability_description = payload['tools'][0]['input_schema']['properties'][
+            'image_suitability'
+        ]['description']
+        self.assertIn(
+            'NOT_DOG_SKIN only when no dog is visible', suitability_description,
+        )
+        self.assertIn('obscured by fur', suitability_description)
         image_block = payload['messages'][0]['content'][0]
         self.assertEqual(image_block['type'], 'image')
         self.assertEqual(image_block['source']['media_type'], 'image/jpeg')
@@ -264,10 +281,10 @@ class ClaudeVisionServiceTests(OwnerScreeningBase):
     def test_non_eligible_gate_statuses_are_normalized(self):
         cases = (
             ('POOR_QUALITY', False, 'UNCLEAR', True, 'too blurred'),
-            ('NOT_DOG_SKIN', True, 'UNCLEAR', True, 'does not appear to show dog skin'),
-            ('NO_VISIBLE_LESIONS', True, 'UNCLEAR', True, 'skin appears healthy'),
+            ('NOT_DOG_SKIN', True, 'UNCLEAR', True, 'No dog is visible'),
+            ('NO_VISIBLE_LESIONS', True, 'UNCLEAR', True, 'No visible skin concerns'),
             ('WOUND_OR_INJURY', True, 'OTHER', False, 'wound or injury'),
-            ('UNCERTAIN', True, 'UNCLEAR', True, 'could not be confidently assessed'),
+            ('UNCERTAIN', True, 'UNCLEAR', True, 'A dog is visible, but its skin cannot be assessed'),
         )
 
         for suitability, adequate, label, unclear, phrase in cases:
@@ -293,6 +310,22 @@ class ClaudeVisionServiceTests(OwnerScreeningBase):
                     self.assertNotIn('healthy', normalized['screening_message'].lower())
                 for feature in normalized['visible_features']:
                     self.assertIsInstance(feature, str)
+
+    def test_no_visible_lesions_requires_adequate_skin_visibility(self):
+        with self.assertRaisesRegex(
+            MalformedClaudeResponse,
+            'NO_VISIBLE_LESIONS requires clearly visible skin',
+        ):
+            _normalize_result(tool_input(
+                image_suitability='NO_VISIBLE_LESIONS',
+                screening_eligibility='NOT_ELIGIBLE',
+                image_quality={
+                    'adequate': False,
+                    'observations': ['Fur obscures the skin.'],
+                },
+                comparison_label='UNCLEAR',
+                unclear=True,
+            ))
 
     @override_settings(ANTHROPIC_API_KEY='secret-test-key')
     @patch('ai_screenings.claude_service.requests.post')

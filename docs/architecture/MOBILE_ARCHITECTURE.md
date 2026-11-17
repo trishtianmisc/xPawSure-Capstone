@@ -179,8 +179,8 @@ The wizard runs five steps (the payment step is skipped when the clinic
 charges no fee):
 
 1. Choose a clinic
-2. Choose a veterinarian (every active vet at the clinic; availability is
-   resolved per date later)
+2. Choose a veterinarian (every active vet at the clinic; their profile photo
+   is shown when available; availability is resolved per date later)
 3. Select a schedule (date strip plus the chosen veterinarian's free slots)
 4. Appointment details (summary plus optional reason; owner appointments are
    always `CONSULTATION` — there is no type picker)
@@ -273,6 +273,18 @@ plus a **View consultation record** link into
 `/(owner)/records/consultations/{id}`. The card appears only once the appointment
 is `COMPLETED`, so a consultation the veterinarian is still writing is never
 surfaced.
+
+The consultation record also shows the linked follow-up appointment summary
+when one exists. It links to the appointment once the clinic has scheduled it,
+and to the follow-up consultation record only after the appointment is completed
+and its consultation has been saved.
+
+Pet-profile **See all** actions open the Records list scoped to that pet for
+consultations, medications, and vaccinations. Screening history applies the
+same pet filter. The Records screen remains cross-pet when opened without a
+`petId`. The public QR profile includes vaccine names, dates given, next due
+dates, and record source, but not vaccine batch, dosage, route, or notes; anyone
+with the QR link can view those listed fields.
 
 ---
 

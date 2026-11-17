@@ -604,7 +604,15 @@ export default function BookAppointmentScreen() {
                     style={[styles.optionCard, selected && styles.optionCardSelected]}
                   >
                     <View style={styles.optionIcon}>
-                      <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={20} />
+                      {vet.profile_picture ? (
+                        <Image
+                          accessibilityLabel={`${vet.full_name}'s profile picture`}
+                          source={{ uri: vet.profile_picture }}
+                          style={styles.vetProfileImage}
+                        />
+                      ) : (
+                        <MaterialCommunityIcons color={colors.primary} name="stethoscope" size={20} />
+                      )}
                     </View>
                     <View style={styles.optionBody}>
                       <Text style={styles.optionTitle}>{vet.full_name}</Text>
@@ -1061,6 +1069,7 @@ const createStyles = (colors: AppColors) => StyleSheet.create({
     width: 42,
   },
   clinicLogoImage: { borderRadius: 12, height: '100%', width: '100%' },
+  vetProfileImage: { borderRadius: 21, height: 42, width: 42 },
   optionBody: { flex: 1, gap: 2 },
   optionTitle: { ...font.semibold, color: colors.text, fontSize: 15 },
   optionSubtitle: { ...font.regular, color: colors.textSecondary, fontSize: 12.5 },

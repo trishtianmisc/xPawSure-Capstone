@@ -386,12 +386,18 @@ Before the final create request, the mobile app must call
 
 The gate distinguishes these owner-facing outcomes:
 
-- `NOT_DOG_SKIN` → `Not a Skin Image`
-- `NO_VISIBLE_LESIONS` → `Skin Appears Healthy` (with a caveat that this does
-  not rule out disease)
+- `NOT_DOG_SKIN` → `Not a Dog Image` (only when no dog is visible)
+- `NO_VISIBLE_LESIONS` → `No Visible Skin Concerns` (only when dog skin is
+  clearly visible and no obvious lesions are present; this does not rule out
+  disease)
 - `WOUND_OR_INJURY` → `Possible Wound or Injury` (never described as healthy)
 - `POOR_QUALITY` → `Photo Not Clear Enough`
 - `UNCERTAIN` → `Unable to Assess`
+
+A visible dog whose skin cannot be assessed, for example because fur covers the
+skin or the affected area is out of frame, must receive `UNCERTAIN` rather than
+`NOT_DOG_SKIN` or `NO_VISIBLE_LESIONS`. These non-eligible results do not run
+the on-device classifier.
 
 None of these outcomes runs the classifier or displays a disease prediction.
 

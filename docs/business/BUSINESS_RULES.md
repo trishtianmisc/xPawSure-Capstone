@@ -232,6 +232,9 @@ Owners may:
 - View vaccination history
 - Add, edit, and delete their own self-reported vaccination records
 - Choose whether their phone number appears on public pet QR profiles
+- Public pet QR profiles display the pet's vaccination names, dates given, next
+  due dates, and whether a record was owner-reported or veterinarian-entered;
+  batch, dose, route, and notes remain private
 - View AI screening history
 - Pay the clinic's consultation fee and then book an appointment
 

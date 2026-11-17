@@ -5,7 +5,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useTheme, type AppColors } from '../../../src/context/ThemeContext'
 import { font } from '../../../src/theme/typography'
 import { formatDate } from '../../../src/utils/datetime'
-import type { ConsultationRecord, VaccinationRecordItem } from '../../../src/services/records'
+import type {
+  ConsultationRecord,
+  PrescriptionRecord,
+  VaccinationRecordItem,
+} from '../../../src/services/records'
 import { VaccinationStatusPill } from '../../records/components/VaccinationStatusPill'
 import { screeningStatusPill } from '../../screening/constants'
 import type { Screening } from '../../screening/types'
@@ -65,6 +69,26 @@ export function ConsultationRow({
   return (
     <RowShell
       title={record.diagnosis || record.chief_complaint || 'Consultation'}
+      meta={`${record.veterinarian} · ${formatDate(record.created_at)}`}
+      onPress={onPress}
+    />
+  )
+}
+
+export function PrescriptionRow({
+  record,
+  onPress,
+}: {
+  record: PrescriptionRecord
+  onPress: () => void
+}) {
+  const medicationLabel = record.items.length === 1
+    ? record.items[0].medicine_name
+    : `${record.items.length} medications`
+
+  return (
+    <RowShell
+      title={medicationLabel}
       meta={`${record.veterinarian} · ${formatDate(record.created_at)}`}
       onPress={onPress}
     />

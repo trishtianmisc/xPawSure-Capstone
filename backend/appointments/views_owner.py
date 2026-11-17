@@ -120,6 +120,7 @@ class OwnerVetListView(APIView):
                     'stf_id': str(vet.stf_id),
                     'full_name': f'{vet.usr_id.usr_first_name} {vet.usr_id.usr_last_name}',
                     'email': vet.usr_id.usr_email,
+                    'profile_picture': vet.stf_profile_image or None,
                     'available_count': None,
                 }
                 for vet in VetSlotService.get_clinic_vets(clinic_id=clinic_id)
@@ -141,6 +142,7 @@ class OwnerVetListView(APIView):
                 'stf_id': str(vet.stf_id),
                 'full_name': f'{vet.usr_id.usr_first_name} {vet.usr_id.usr_last_name}',
                 'email': vet.usr_id.usr_email,
+                'profile_picture': vet.stf_profile_image or None,
                 'available_count': count,
             })
 

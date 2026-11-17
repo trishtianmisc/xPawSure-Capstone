@@ -80,7 +80,9 @@ export default function RecordsScreen() {
   const queryClient = useQueryClient()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const params = useLocalSearchParams<{ tab?: string }>()
+  const params = useLocalSearchParams<{ tab?: string; petId?: string; petName?: string }>()
+  const petId = typeof params.petId === 'string' ? params.petId : undefined
+  const petName = typeof params.petName === 'string' ? params.petName : undefined
   const [tab, setTab] = useState<RecordsTab>(() => parseTab(params.tab) ?? 'consultations')
   const [refreshing, setRefreshing] = useState(false)
 
@@ -104,10 +106,10 @@ export default function RecordsScreen() {
     }, [queryClient, router]),
   )
 
-  const consultations = useConsultations()
-  const prescriptions = usePrescriptions()
-  const vaccinations = useVaccinations()
-  const screenings = useAllScreenings()
+  const consultations = useConsultations(petId)
+  const prescriptions = usePrescriptions(petId)
+  const vaccinations = useVaccinations(petId)
+  const screenings = useAllScreenings(petId)
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -244,7 +246,9 @@ export default function RecordsScreen() {
       <View style={styles.content}>
         <View style={styles.header}>
 
-          <Text style={styles.title}>Records</Text>
+          <Text style={styles.title}>
+            {petId ? `${petName || 'Pet'}'s Records` : 'Records'}
+          </Text>
         </View>
 
         <View style={styles.tabs}>
@@ -277,7 +281,10 @@ export default function RecordsScreen() {
           {tab === 'vaccinations' ? (
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/(owner)/records/vaccinations/new')}
+              onPress={() => router.push({
+                pathname: '/(owner)/records/vaccinations/new',
+                params: petId ? { petId } : undefined,
+              })}
               style={styles.addButton}
             >
               <MaterialCommunityIcons color={colors.primary} name="plus" size={18} />

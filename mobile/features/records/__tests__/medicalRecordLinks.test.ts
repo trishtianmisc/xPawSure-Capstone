@@ -86,9 +86,25 @@ describe('consultation and screening navigation', () => {
   it('exposes screening history as a Scans section inside the Records tab', () => {
     const records = readSource('../screens/RecordsScreen.tsx')
     assert.match(records, /value: 'screenings', label: 'Scans'/)
-    assert.match(records, /useAllScreenings\(\)/)
+    assert.match(records, /useAllScreenings\(petId\)/)
+    assert.match(records, /useConsultations\(petId\)/)
+    assert.match(records, /usePrescriptions\(petId\)/)
+    assert.match(records, /useVaccinations\(petId\)/)
     assert.match(records, /pathname: '\/\(owner\)\/screenings\/\[id\]'/)
     const nav = readSource('../lib/recordNavigation.ts')
     assert.match(nav, /'screenings'/)
+  })
+
+  it('loads screening history using the selected pet filter', () => {
+    const history = readSource('../../screening/screens/ScreeningHistoryScreen.tsx')
+    assert.match(history, /useAllScreenings\(petId\)/)
+  })
+
+  it('opens every pet-profile record list with that pet selected', () => {
+    const profile = readSource('../../pet/screens/PetProfileScreen.tsx')
+    for (const tab of ['vaccinations', 'consultations', 'prescriptions']) {
+      assert.match(profile, new RegExp(`tab: '${tab}', petId: pet.id`))
+    }
+    assert.match(profile, /pathname: '\/\(owner\)\/screenings',\s*params: \{ petId: pet.id/)
   })
 })

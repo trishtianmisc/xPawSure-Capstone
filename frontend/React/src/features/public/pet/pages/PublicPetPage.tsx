@@ -109,6 +109,7 @@ export function PublicPetPage() {
   pet.vaccination_statuses.forEach((status) => {
     statusCounts[status] += 1
   })
+  const vaccinations = pet.vaccinations ?? []
 
   return (
     <PageShell>
@@ -182,6 +183,53 @@ export function PublicPetPage() {
                   </li>
                 )
               })}
+          </ul>
+        )}
+      </Card>
+
+      <Card className="mt-4">
+        <h2 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
+          Vaccination records
+        </h2>
+        <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+          Public record shared by the pet owner. Owner-reported entries are labeled.
+        </p>
+        {vaccinations.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-dashed border-stone-300 px-4 py-6 text-center text-sm text-stone-500 dark:border-stone-600 dark:text-stone-400">
+            No vaccination records on file.
+          </p>
+        ) : (
+          <ul className="mt-4 divide-y divide-stone-200 dark:divide-stone-700">
+            {vaccinations.map((vaccination, index) => (
+              <li
+                className="flex flex-col gap-2 py-4 sm:flex-row sm:items-start sm:justify-between"
+                key={`${vaccination.name}-${vaccination.date_given}-${index}`}
+              >
+                <div>
+                  <p className="font-semibold text-stone-900 dark:text-stone-100">
+                    {vaccination.name}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-500 dark:text-stone-400">
+                    Given {formatDate(vaccination.date_given)}
+                  </p>
+                  <p className="text-sm text-stone-500 dark:text-stone-400">
+                    {vaccination.next_due
+                      ? `Next due ${formatDate(vaccination.next_due)}`
+                      : 'No next due date recorded'}
+                  </p>
+                  {vaccination.source === 'OWNER' && (
+                    <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
+                      Owner-reported
+                    </p>
+                  )}
+                </div>
+                {vaccination.is_latest_in_series && vaccination.status ? (
+                  <Badge variant={statusStyles[vaccination.status].variant}>
+                    {statusStyles[vaccination.status].label}
+                  </Badge>
+                ) : null}
+              </li>
+            ))}
           </ul>
         )}
       </Card>
