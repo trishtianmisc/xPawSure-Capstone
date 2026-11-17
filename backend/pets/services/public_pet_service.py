@@ -3,6 +3,7 @@ from datetime import date
 from django.utils import timezone
 
 from pets.models import Pet
+from vaccinations.models import VaccinationRecord
 from vaccinations.services import VaccinationService
 
 DUE_SOON_DAYS = 30
@@ -47,6 +48,7 @@ class PublicPetService:
         except Pet.DoesNotExist:
             return None
 
+        vaccinations = PublicPetService.public_vaccinations(pet)
         return {
             'qr_code': pet.pet_qr_code,
             'name': pet.pet_name,
@@ -57,7 +59,10 @@ class PublicPetService:
             'color': pet.pet_color or None,
             'profile_picture': pet.pet_profile_image,
             'owner_contact_number': PublicPetService.owner_contact_number(pet),
-            'vaccination_statuses': PublicPetService.vaccination_statuses(pet),
+            'vaccinations': vaccinations,
+            'vaccination_statuses': PublicPetService.vaccination_statuses(
+                pet, vaccinations=vaccinations,
+            ),
         }
 
     @staticmethod
@@ -107,13 +112,39 @@ class PublicPetService:
         return OVERALL_UP_TO_DATE
 
     @staticmethod
-    def vaccination_statuses(pet: Pet) -> list[str]:
-        next_due_dates = [
-            vaccination.vac_next_due
-            for vaccination in VaccinationService.latest_for_pet(pet)
-        ]
+    def vaccination_statuses(
+        pet: Pet,
+        *,
+        vaccinations: list[dict] | None = None,
+    ) -> list[str]:
+        if vaccinations is None:
+            vaccinations = PublicPetService.public_vaccinations(pet)
         statuses = [
-            PublicPetService.vaccination_status(next_due)
-            for next_due in next_due_dates
+            record['status']
+            for record in vaccinations
+            if record['is_latest_in_series']
         ]
         return sorted(statuses, key=_STATUS_PRIORITY.__getitem__)
+
+    @staticmethod
+    def public_vaccinations(pet: Pet) -> list[dict]:
+        records = VaccinationService.annotate_latest_in_series(
+            VaccinationRecord.objects.filter(pet_id=pet).order_by(
+                '-vac_date_given', '-vac_created_at', '-vac_id',
+            ),
+        )
+        return [
+            {
+                'name': record.vac_name,
+                'date_given': record.vac_date_given,
+                'next_due': record.vac_next_due,
+                'status': (
+                    PublicPetService.vaccination_status(record.vac_next_due)
+                    if record.is_latest_in_series
+                    else None
+                ),
+                'is_latest_in_series': record.is_latest_in_series,
+                'source': record.vac_source,
+            }
+            for record in records
+        ]

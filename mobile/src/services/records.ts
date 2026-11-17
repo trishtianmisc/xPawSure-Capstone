@@ -15,7 +15,15 @@ export interface ConsultationRecord {
   notes: string | null
   follow_up_required: boolean
   follow_up_target_date: string | null
+  follow_up_appointment?: FollowUpAppointmentSummary | null
   created_at: string
+}
+
+export interface FollowUpAppointmentSummary {
+  id: string
+  status: 'REVIEW' | 'CONFIRMATION' | 'PENDING' | 'CONFIRMED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW'
+  scheduled_at: string
+  consultation_id: string | null
 }
 
 export interface PrescriptionItemRecord {

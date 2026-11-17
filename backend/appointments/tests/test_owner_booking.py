@@ -285,6 +285,23 @@ class OwnerDiscoveryTests(OwnerBookingBase):
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['stf_id'], str(self.vet.stf_id))
         self.assertIsNone(response.data[0]['available_count'])
+        self.assertIsNone(response.data[0]['profile_picture'])
+
+    def test_vet_list_includes_profile_picture_for_booking_card(self):
+        self.vet.stf_profile_image = 'https://images.example.com/vet.jpg'
+        self.vet.save(update_fields=['stf_profile_image'])
+
+        response = self.client.get(
+            '/api/owner/vets/',
+            {'clinic_id': str(self.clinic.cln_id)},
+            **self._auth(OWNER_EMAIL),
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data[0]['profile_picture'],
+            'https://images.example.com/vet.jpg',
+        )
 
     def test_vet_list_still_requires_clinic_id(self):
         response = self.client.get('/api/owner/vets/', **self._auth(OWNER_EMAIL))

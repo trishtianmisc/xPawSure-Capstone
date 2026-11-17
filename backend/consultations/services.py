@@ -228,7 +228,10 @@ class ConsultationService:
 
         queryset = Consultation.objects.filter(
             apt_id__pet_id__own_id=owner_profile,
-        ).select_related('apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id', 'prescription')
+        ).select_related(
+            'apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id',
+            'prescription', 'follow_up_appointment__consultation',
+        )
 
         if pet_id is not None:
             queryset = queryset.filter(apt_id__pet_id=pet_id)
@@ -240,7 +243,10 @@ class ConsultationService:
         return Consultation.objects.filter(
             con_id=con_id,
             apt_id__pet_id__own_id=owner_profile,
-        ).select_related('apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id', 'prescription').first()
+        ).select_related(
+            'apt_id__pet_id', 'apt_id__apt_screening', 'stf_id__usr_id',
+            'prescription', 'follow_up_appointment__consultation',
+        ).first()
 
     @staticmethod
     @transaction.atomic

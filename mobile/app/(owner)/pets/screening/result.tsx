@@ -62,12 +62,12 @@ const GATE_META: Record<
   NOT_DOG_SKIN: {
     color: '#E67E22',
     icon: 'image-off-outline',
-    title: 'Not a Dog Skin Image',
+    title: 'Not a Dog Image',
   },
   NO_VISIBLE_LESIONS: {
     color: '#27AE60',
     icon: 'check-circle-outline',
-    title: 'Skin Appears Healthy',
+    title: 'No Visible Skin Concerns',
   },
   WOUND_OR_INJURY: {
     color: '#C0392B',

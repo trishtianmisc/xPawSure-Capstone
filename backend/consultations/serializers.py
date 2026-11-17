@@ -1,8 +1,24 @@
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers
 
+from appointments.models import AppointmentStatus
 from consultations.models import Consultation
 from consultations.services import ConsultationService
+
+
+class FollowUpAppointmentSummarySerializer(serializers.Serializer):
+    id = serializers.UUIDField(source='apt_id', read_only=True)
+    status = serializers.CharField(source='apt_status', read_only=True)
+    scheduled_at = serializers.DateTimeField(source='apt_scheduled_at', read_only=True)
+    consultation_id = serializers.SerializerMethodField()
+
+    def get_consultation_id(self, obj) -> str | None:
+        if obj.apt_status != AppointmentStatus.COMPLETED:
+            return None
+        try:
+            return str(obj.consultation.con_id)
+        except ObjectDoesNotExist:
+            return None
 
 
 class ConsultationResponseSerializer(serializers.ModelSerializer):
@@ -26,6 +42,7 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
     follow_up_target_date = serializers.DateField(
         source='con_follow_up_target_date', read_only=True, allow_null=True,
     )
+    follow_up_appointment = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(source='con_created_at', read_only=True)
 
     class Meta:
@@ -34,7 +51,8 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
             'id', 'appointment_id', 'screening_id', 'pet_id', 'pet_name', 'veterinarian',
             'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
             'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
-            'follow_up_required', 'follow_up_target_date', 'created_at',
+            'follow_up_required', 'follow_up_target_date', 'follow_up_appointment',
+            'created_at',
         ]
 
     def get_veterinarian(self, obj) -> str:
@@ -50,6 +68,15 @@ class ConsultationResponseSerializer(serializers.ModelSerializer):
         except ObjectDoesNotExist:
             return None
         return str(prescription.prs_id)
+
+    def get_follow_up_appointment(self, obj):
+        try:
+            appointment = obj.follow_up_appointment
+        except ObjectDoesNotExist:
+            return None
+        if appointment.apt_deleted_at is not None:
+            return None
+        return FollowUpAppointmentSummarySerializer(appointment).data
 
 
 class VetConsultationHistorySerializer(ConsultationResponseSerializer):

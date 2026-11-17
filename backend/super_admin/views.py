@@ -24,7 +24,9 @@ from super_admin.services import (
     CrossClinicAuditService,
     CrossClinicReadService,
     DiseaseReportService,
+    OTHER_VET_DIAGNOSIS_CODE,
     PlatformAnalyticsService,
+    SUPPORTED_VET_DIAGNOSES,
     SuperAdminOwnerService,
     VaccinationReadService,
 )
@@ -401,9 +403,11 @@ class ConsultationOutcomeReportView(APIView):
             return None, Response({'detail': 'Clinic not found.'}, status=status.HTTP_404_NOT_FOUND)
 
         disease_code = request.query_params.get('disease_code') or None
-        if disease_code and disease_code not in {
-            'ALLERGIC_DERMATITIS', 'BACTERIAL', 'FUNGAL', 'HOTSPOT', 'MANGE',
-        }:
+        allowed_disease_codes = {
+            *SUPPORTED_VET_DIAGNOSES,
+            OTHER_VET_DIAGNOSIS_CODE,
+        }
+        if disease_code and disease_code not in allowed_disease_codes:
             return None, Response({'detail': 'Unsupported disease code.'}, status=status.HTTP_400_BAD_REQUEST)
 
         outcome = request.query_params.get('outcome', 'matched')

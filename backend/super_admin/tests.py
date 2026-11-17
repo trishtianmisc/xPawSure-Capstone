@@ -224,6 +224,18 @@ class ClinicOverviewTests(SuperAdminTestBase):
         self.assertEqual(data['pets'], 1)
         self.assertEqual(data['appointments']['total'], 1)
 
+    def test_overview_hides_internal_review_follow_up_status(self):
+        self._make_appointment(status_=AppointmentStatus.REVIEW)
+        self._make_appointment(status_=AppointmentStatus.PENDING)
+
+        url = self._url('super-admin-clinic-overview', str(self.clinic.cln_id))
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['appointments']['total'], 1)
+        self.assertNotIn('REVIEW', response.data['appointments']['by_status'])
+        self.assertEqual(response.data['appointments']['by_status']['PENDING'], 1)
+
     def test_overview_scoped_to_requested_clinic(self):
         other_owner_user = self._make_user('other@sample.com', UserRole.OWNER, 'Other', 'Owner')
         other_owner = OwnerProfile.objects.create(usr_id=other_owner_user)
@@ -516,6 +528,17 @@ class CrossClinicReadTests(SuperAdminTestBase):
         url = self._url('super-admin-clinic-appointments', str(self.clinic.cln_id))
         response = self.client.get(url, **self._auth_header(self.super_admin))
         self.assertEqual(response.data['total'], 1)
+
+    def test_appointments_listing_excludes_internal_review_follow_ups(self):
+        self._make_appointment(status_=AppointmentStatus.REVIEW)
+        self._make_appointment(status_=AppointmentStatus.PENDING)
+
+        url = self._url('super-admin-clinic-appointments', str(self.clinic.cln_id))
+        response = self.client.get(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        self.assertEqual(response.data['results'][0]['status'], 'PENDING')
 
     def test_drilldown_returns_404_for_unknown_clinic(self):
         for name in (
@@ -1064,6 +1087,33 @@ class ConsultationOutcomeReportTests(SuperAdminTestBase):
         self.assertEqual(row['ai_prediction'], 'Fungal')
         self.assertEqual(row['vet_diagnosis'], 'Mange')
 
+    def test_other_vet_diagnoses_are_grouped_as_not_matched(self):
+        other = self._make_case(
+            diagnosis='Canine sebaceous adenitis',
+            matched=True,
+            prediction=self.fungal,
+        )
+
+        response = self.client.get(
+            self._outcomes_url(),
+            {'disease_code': 'OTHER', 'outcome': 'not_matched'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 1)
+        row = response.data['results'][0]
+        self.assertEqual(row['screening_id'], str(other.ais_id))
+        self.assertEqual(row['vet_diagnosis'], 'Canine sebaceous adenitis')
+        self.assertEqual(row['outcome'], 'not_matched')
+
+        matched = self.client.get(
+            self._outcomes_url(),
+            {'disease_code': 'OTHER', 'outcome': 'matched'},
+            **self._auth_header(self.super_admin),
+        )
+        self.assertEqual(matched.status_code, status.HTTP_200_OK)
+        self.assertEqual(matched.data['total'], 0)
+
     @patch('super_admin.services.read_stored_screening_image', return_value=b'jpeg')
     def test_download_contains_images_and_manifest_for_selected_disease(self, mock_read):
         self._make_case(diagnosis='Mange', matched=False, prediction=self.fungal)
@@ -1084,9 +1134,27 @@ class ConsultationOutcomeReportTests(SuperAdminTestBase):
         mock_read.assert_called_once()
         self.assertTrue(AuditLog.objects.filter(adl_action=AuditAction.EXPORT_REPORT).exists())
 
+    @patch('super_admin.services.read_stored_screening_image', return_value=b'jpeg')
+    def test_other_skin_disease_can_be_downloaded_as_not_matched(self, mock_read):
+        self._make_case(
+            diagnosis='Canine sebaceous adenitis',
+            matched=True,
+            prediction=self.fungal,
+        )
+        url = f'{self._outcomes_url()}?disease_code=OTHER&outcome=not_matched'
+
+        response = self.client.post(url, **self._auth_header(self.super_admin))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+            manifest = archive.read('manifest.csv').decode()
+            self.assertIn('Canine sebaceous adenitis', manifest)
+            self.assertIn('not_matched', manifest)
+        mock_read.assert_called_once()
+
     def test_rejects_unsupported_download_disease(self):
         response = self.client.post(
-            f'{self._outcomes_url()}?disease_code=OTHER&outcome=matched',
+            f'{self._outcomes_url()}?disease_code=UNKNOWN&outcome=matched',
             **self._auth_header(self.super_admin),
         )
 

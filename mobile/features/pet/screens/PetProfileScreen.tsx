@@ -13,11 +13,17 @@ import { apiErrorMessage } from '../../../src/utils/error'
 import { font } from '../../../src/theme/typography'
 import { usePullToRefresh } from '../../../src/hooks/usePullToRefresh'
 import { useConsultations } from '../../records/hooks/useConsultations'
+import { usePrescriptions } from '../../records/hooks/usePrescriptions'
 import { useVaccinations } from '../../records/hooks/useVaccinations'
 import { useScreenings } from '../../screening/hooks/useScreenings'
 import { PetQrImageDocument } from '../components/PetQrImageDocument'
 import { PetRecordSection } from '../components/PetRecordSection'
-import { ConsultationRow, ScreeningRow, VaccinationRow } from '../components/PetRecordRows'
+import {
+  ConsultationRow,
+  PrescriptionRow,
+  ScreeningRow,
+  VaccinationRow,
+} from '../components/PetRecordRows'
 import { useDeletePet } from '../hooks/useDeletePet'
 import { usePet } from '../hooks/usePet'
 import { useQrImageDownload } from '../hooks/useQrImageDownload'
@@ -57,15 +63,17 @@ export default function PetProfileScreen() {
   const deletePet = useDeletePet(user?.id ?? '')
   const vaccinations = useVaccinations(pet?.id, !!pet)
   const consultations = useConsultations(pet?.id, !!pet)
+  const prescriptions = usePrescriptions(pet?.id, !!pet)
   const screenings = useScreenings(pet?.id, !!pet)
   const refreshPetProfile = useCallback(
     () => Promise.all([
       refetchPet(),
       vaccinations.refetch(),
       consultations.refetch(),
+      prescriptions.refetch(),
       screenings.refetch(),
     ]),
-    [consultations.refetch, refetchPet, screenings.refetch, vaccinations.refetch],
+    [consultations.refetch, prescriptions.refetch, refetchPet, screenings.refetch, vaccinations.refetch],
   )
   const { refreshing, onRefresh } = usePullToRefresh(refreshPetProfile)
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -307,7 +315,10 @@ export default function PetProfileScreen() {
             onPress: () => router.push(`/(owner)/records/vaccinations/new?petId=${pet.id}`),
           }}
           seeAllLabel="See all"
-          onSeeAll={() => router.push('/(owner)/records?tab=vaccinations')}
+          onSeeAll={() => router.push({
+            pathname: '/(owner)/records',
+            params: { tab: 'vaccinations', petId: pet.id, petName: pet.name },
+          })}
         >
           {(vaccinations.data ?? []).slice(0, 3).map((record) => (
             <VaccinationRow
@@ -319,20 +330,45 @@ export default function PetProfileScreen() {
         </PetRecordSection>
 
         <PetRecordSection
-          title="Medical Notes"
+          title="Consultation Records"
           isLoading={consultations.isLoading}
           isError={consultations.isError}
           itemCount={(consultations.data ?? []).length}
-          emptyIcon="note-text-outline"
-          emptyText="No medical notes yet."
+          emptyIcon="stethoscope"
+          emptyText="No consultation records yet."
           seeAllLabel="See all"
-          onSeeAll={() => router.push('/(owner)/records?tab=consultations')}
+          onSeeAll={() => router.push({
+            pathname: '/(owner)/records',
+            params: { tab: 'consultations', petId: pet.id, petName: pet.name },
+          })}
         >
           {(consultations.data ?? []).slice(0, 3).map((record) => (
             <ConsultationRow
               key={record.id}
               record={record}
               onPress={() => router.push(`/(owner)/records/consultations/${record.id}`, { withAnchor: true })}
+            />
+          ))}
+        </PetRecordSection>
+
+        <PetRecordSection
+          title="Medication Records"
+          isLoading={prescriptions.isLoading}
+          isError={prescriptions.isError}
+          itemCount={(prescriptions.data ?? []).length}
+          emptyIcon="pill"
+          emptyText="No medication records yet."
+          seeAllLabel="See all"
+          onSeeAll={() => router.push({
+            pathname: '/(owner)/records',
+            params: { tab: 'prescriptions', petId: pet.id, petName: pet.name },
+          })}
+        >
+          {(prescriptions.data ?? []).slice(0, 3).map((record) => (
+            <PrescriptionRow
+              key={record.id}
+              record={record}
+              onPress={() => router.push(`/(owner)/records/prescriptions/${record.id}`, { withAnchor: true })}
             />
           ))}
         </PetRecordSection>
@@ -350,7 +386,10 @@ export default function PetProfileScreen() {
           }}
           seeAllLabel="See all"
           onSeeAll={() =>
-            router.push({ pathname: '/(owner)/screenings', params: { petId: pet.id } })
+            router.push({
+              pathname: '/(owner)/screenings',
+              params: { petId: pet.id, petName: pet.name },
+            })
           }
         >
           {(screenings.data?.results ?? []).slice(0, 3).map((screening) => (

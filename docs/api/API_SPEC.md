@@ -435,19 +435,29 @@ Response (200):
   "color": "string | null",
   "profile_picture": "url | null",
   "owner_contact_number": "string | null",
+  "vaccinations": [
+    {
+      "name": "string",
+      "date_given": "YYYY-MM-DD",
+      "next_due": "YYYY-MM-DD | null",
+      "status": "OVERDUE | DUE_SOON | CURRENT | NO_DUE_DATE | null",
+      "is_latest_in_series": "boolean",
+      "source": "VET | OWNER"
+    }
+  ],
   "vaccination_statuses": ["OVERDUE", "CURRENT"]
 }
 
 `owner_contact_number` is shown only when the owner has opted in and has a
 non-empty phone number; otherwise it is `null`.
 
-The public QR profile exposes status values only; it never exposes vaccination
-names, administration dates, or due dates. Statuses are sorted by urgency:
-`OVERDUE`, `DUE_SOON`, `CURRENT`, `NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
-Each array item is one of `OVERDUE`, `DUE_SOON`, `CURRENT`, or `NO_DUE_DATE`.
-Statuses are computed from only the latest dose in each vaccine series, so a
-newly recorded dose clears the prior dose's overdue status while preserving the
-old dose in vaccination history.
+The public QR profile exposes the full vaccination list with vaccine name,
+administration date, next due date, and whether each record was reported by the
+owner or entered by a veterinarian. It does not expose brand, batch, dose,
+route, or notes. Per-record `status` is set only on the latest dose in a series;
+older doses have `status: null`. The summary `vaccination_statuses` contains one
+status per latest series, sorted by urgency: `OVERDUE`, `DUE_SOON`, `CURRENT`,
+`NO_DUE_DATE` (`DUE_SOON` = due within 30 days).
 
 ---
 
@@ -1652,6 +1662,13 @@ coordinates remains in the list and is still bookable; the mobile app simply
 does not render a pin for it. This endpoint only reads cached coordinates and
 never calls the geocoding provider.
 
+## GET /api/owner/vets/
+
+Returns bookable veterinarians at the requested clinic. Query params:
+`clinic_id` (required), `date` (optional). Each row includes `stf_id`,
+`full_name`, `email`, `profile_picture` (URL or `null`), and
+`available_count` (`null` when no date was supplied).
+
 ---
 
 # 6. Schedule Management
@@ -1854,7 +1871,7 @@ Query params:
 Response (200): Array of { id, appointment_id, screening_id, pet_id, pet_name, veterinarian,
 chief_complaint, subjective, objective, assessment, plan, diagnosis,
 specific_disease, prescription_id, treatment, notes, follow_up_required,
-follow_up_target_date, created_at }
+follow_up_target_date, follow_up_appointment, created_at }
 
 `specific_disease` is `null` when no specific disease/subtype is recorded.
 `prescription_id` is the linked prescription UUID when one exists, otherwise
@@ -1864,7 +1881,10 @@ or `null` if none is linked. A different pet's screening is never returned.
 The owner app uses it for **View Screening**. This is a read-only link and does
 not depend on prediction/diagnosis agreement or screening comparison metadata.
 `follow_up_required` defaults to `false`; `follow_up_target_date` is `null`
-when no follow-up is requested.
+when no follow-up is requested. `follow_up_appointment` is `null` until a
+non-deleted follow-up appointment exists; otherwise it contains its `id`,
+`status`, `scheduled_at`, and `consultation_id`. `consultation_id` is returned
+only after the follow-up appointment is completed and has a consultation.
 
 ---
 
@@ -2722,11 +2742,13 @@ case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
 
 Super Admin only. Paginated, read-only comparison of the on-device AI
 prediction with the veterinarian's primary diagnosis. Claude image-review
-results are not included. Only linked consultations with an image, a saved
-comparison, and one of the five supported primary diagnoses (Allergic
-Dermatitis, Bacterial, Fungal, Hotspot, Mange) are returned. Query params:
-`clinic_id`, `disease_code`, `outcome` (`matched` or `not_matched`),
-`date_from` / `date_to` (consultation creation date), `page`, `page_size`.
+results are not included. Linked consultations with an image and a saved
+comparison are returned. `disease_code` may be `ALLERGIC_DERMATITIS`,
+`BACTERIAL`, `FUNGAL`, `HOTSPOT`, `MANGE`, or `OTHER`. `OTHER` includes primary
+vet diagnoses outside the five supported classifier classes and appears only
+under `not_matched`. Query params: `clinic_id`, `disease_code`, `outcome`
+(`matched` or `not_matched`), `date_from` / `date_to` (consultation creation
+date), `page`, `page_size`.
 
 ## POST /api/super-admin/analytics/consultation-outcomes/
 

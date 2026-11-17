@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timedelta
 
 from django.test import TestCase
 from django.utils import timezone
@@ -21,7 +22,8 @@ LIST_FIELDS = {
     'id', 'appointment_id', 'screening_id', 'pet_id', 'pet_name', 'veterinarian',
     'chief_complaint', 'subjective', 'objective', 'assessment', 'plan',
     'diagnosis', 'specific_disease', 'prescription_id', 'treatment', 'notes',
-    'follow_up_required', 'follow_up_target_date', 'created_at',
+    'follow_up_required', 'follow_up_target_date', 'follow_up_appointment',
+    'created_at',
 }
 
 
@@ -123,6 +125,7 @@ class ConsultationListTests(ConsultationBase):
         self.assertIsNone(record['prescription_id'])
         self.assertFalse(record['follow_up_required'])
         self.assertIsNone(record['follow_up_target_date'])
+        self.assertIsNone(record['follow_up_appointment'])
 
     def test_list_excludes_other_owners_records(self):
         response = self.client.get('/api/consultations/', **self._auth(OWNER_EMAIL))
@@ -190,6 +193,45 @@ class ConsultationDetailTests(ConsultationBase):
         self.assertEqual(response.data['diagnosis'], 'Allergic dermatitis')
         self.assertEqual(response.data['veterinarian'], 'Vera Vet')
         self.assertIsNone(response.data['prescription_id'])
+        self.assertIsNone(response.data['follow_up_appointment'])
+
+    def test_follow_up_appointment_is_visible_and_links_consultation_only_when_completed(self):
+        follow_up = Appointment.objects.create(
+            pet_id=self.pet,
+            cln_id=self.clinic,
+            stf_id=self.vet,
+            apt_type=AppointmentType.FOLLOW_UP,
+            apt_status=AppointmentStatus.REVIEW,
+            apt_scheduled_at=timezone.now() + timedelta(days=30),
+            apt_source_consultation=self.consultation,
+        )
+
+        url = f'/api/consultations/{self.consultation.con_id}/'
+        response = self.client.get(url, **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        follow_up_summary = response.data['follow_up_appointment']
+        self.assertEqual(follow_up_summary['id'], str(follow_up.apt_id))
+        self.assertEqual(follow_up_summary['status'], AppointmentStatus.REVIEW)
+        self.assertEqual(
+            datetime.fromisoformat(follow_up_summary['scheduled_at'].replace('Z', '+00:00')),
+            follow_up.apt_scheduled_at,
+        )
+        self.assertIsNone(follow_up_summary['consultation_id'])
+
+        follow_up.apt_status = AppointmentStatus.COMPLETED
+        follow_up.save(update_fields=['apt_status', 'apt_updated_at'])
+        follow_up_consultation = Consultation.objects.create(
+            apt_id=follow_up,
+            stf_id=self.vet,
+            con_diagnosis='Follow-up diagnosis',
+        )
+
+        response = self.client.get(url, **self._auth(OWNER_EMAIL))
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(
+            response.data['follow_up_appointment']['consultation_id'],
+            str(follow_up_consultation.con_id),
+        )
 
     def test_owner_consultation_includes_linked_prescription_id(self):
         prescription = Prescription.objects.create(

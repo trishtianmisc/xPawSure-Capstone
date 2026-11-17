@@ -17,6 +17,30 @@ function formatLongDate(iso: string): string {
   return formatDate(iso, { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
+function formatFollowUpDateTime(iso: string): string {
+  return formatDate(iso, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function followUpStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    CONFIRMATION: 'Awaiting payment',
+    PENDING: 'Awaiting confirmation',
+    CONFIRMED: 'Confirmed',
+    CHECKED_IN: 'Checked in',
+    IN_PROGRESS: 'In progress',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+    NO_SHOW: 'No show',
+  }
+  return labels[status] ?? 'Appointment status updated'
+}
+
 function formatDateOnly(value: string): string {
   const parts = value.split('-')
   if (parts.length !== 3) return value
@@ -80,7 +104,11 @@ function ClinicalSection({ icon, title, value }: ClinicalSectionProps) {
 }
 
 export default function ConsultationDetailScreen() {
-  const { id, fromScreening } = useLocalSearchParams<{ id: string; fromScreening?: string }>()
+  const { id, fromScreening, fromConsultation } = useLocalSearchParams<{
+    id: string
+    fromScreening?: string
+    fromConsultation?: string
+  }>()
   const router = useRouter()
   const { colors } = useTheme()
   const { data: consultation, isLoading, isError, error, refetch } = useConsultation(id)
@@ -90,7 +118,11 @@ export default function ConsultationDetailScreen() {
   const { viewScreening } = useMedicalRecordLinks()
   const handleBack = useRecordDetailBack(
     'consultations',
-    fromScreening ? `/(owner)/screenings/${fromScreening}` : undefined,
+    fromScreening
+      ? `/(owner)/screenings/${fromScreening}`
+      : fromConsultation
+        ? `/(owner)/records/consultations/${fromConsultation}`
+        : undefined,
   )
 
   const renderHeader = () => (
@@ -141,6 +173,7 @@ export default function ConsultationDetailScreen() {
     makeSection('note-text-outline', 'Notes', consultation.notes),
   ].filter((section): section is ClinicalSectionProps => section !== null)
   const prescriptionId = consultation.prescription_id
+  const followUpAppointment = consultation.follow_up_appointment ?? null
 
   return (
     <View style={styles.screen}>
@@ -314,6 +347,49 @@ export default function ConsultationDetailScreen() {
             </Text>
           </View>
         </View>
+
+        {followUpAppointment ? (
+          <View style={[styles.followUpCard, styles.followUpCardActive]}>
+            <View style={styles.followUpIcon}>
+              <MaterialCommunityIcons color={colors.primary} name="calendar-clock-outline" size={20} />
+            </View>
+            <View style={styles.followUpCopy}>
+              <Text style={styles.followUpTitle}>Follow-up appointment</Text>
+              <Text style={styles.followUpText}>
+                {followUpAppointment.status === 'REVIEW'
+                  ? `Requested for ${formatFollowUpDateTime(followUpAppointment.scheduled_at)} · awaiting clinic scheduling`
+                  : `${formatFollowUpDateTime(followUpAppointment.scheduled_at)} · ${followUpStatusLabel(followUpAppointment.status)}`}
+              </Text>
+              {followUpAppointment.consultation_id ? (
+                <Pressable
+                  accessibilityLabel="View follow-up consultation record"
+                  accessibilityRole="button"
+                  onPress={() => router.push({
+                    pathname: '/(owner)/records/consultations/[id]',
+                    params: {
+                      id: followUpAppointment.consultation_id!,
+                      fromConsultation: consultation.id,
+                    },
+                  })}
+                  style={styles.followUpAction}
+                >
+                  <Text style={styles.followUpActionText}>View follow-up consultation record</Text>
+                  <MaterialCommunityIcons color={colors.primary} name="chevron-right" size={18} />
+                </Pressable>
+              ) : followUpAppointment.status !== 'REVIEW' ? (
+                <Pressable
+                  accessibilityLabel="View follow-up appointment"
+                  accessibilityRole="button"
+                  onPress={() => router.push(`/(owner)/appointments/${followUpAppointment.id}`)}
+                  style={styles.followUpAction}
+                >
+                  <Text style={styles.followUpActionText}>View follow-up appointment</Text>
+                  <MaterialCommunityIcons color={colors.primary} name="chevron-right" size={18} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
     </View>
   )
@@ -507,4 +583,11 @@ const createStyles = (colors: AppColors) =>
       lineHeight: 19,
       marginTop: 2,
     },
+    followUpAction: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 4,
+      marginTop: 10,
+    },
+    followUpActionText: { ...font.semibold, color: colors.primary, fontSize: 12 },
   })

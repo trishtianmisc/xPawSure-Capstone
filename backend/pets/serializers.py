@@ -3,6 +3,7 @@ from rest_framework import serializers
 
 from pets.models import Breed, Pet, Sex
 from pets.services.public_pet_service import STATUS_CHOICES
+from vaccinations.models import VaccinationSource
 
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 MAX_IMAGE_SIZE = 2 * 1024 * 1024  # 2 MB
@@ -127,6 +128,15 @@ class PetResponseSerializer(serializers.ModelSerializer):
         ]
 
 
+class PublicVaccinationSerializer(serializers.Serializer):
+    name = serializers.CharField()
+    date_given = serializers.DateField()
+    next_due = serializers.DateField(allow_null=True)
+    status = serializers.ChoiceField(choices=STATUS_CHOICES, allow_null=True)
+    is_latest_in_series = serializers.BooleanField()
+    source = serializers.ChoiceField(choices=VaccinationSource.choices)
+
+
 class PublicPetSerializer(serializers.Serializer):
     """Restricted payload exposed without authentication via the pet QR code."""
 
@@ -139,6 +149,7 @@ class PublicPetSerializer(serializers.Serializer):
     color = serializers.CharField(allow_null=True)
     profile_picture = serializers.CharField(allow_null=True)
     owner_contact_number = serializers.CharField(allow_null=True)
+    vaccinations = PublicVaccinationSerializer(many=True)
     vaccination_statuses = serializers.ListField(
         child=serializers.ChoiceField(choices=STATUS_CHOICES),
     )

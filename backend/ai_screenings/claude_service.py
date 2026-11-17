@@ -46,21 +46,20 @@ SCREENING_MESSAGES = {
         'clearer, well-lit photo.'
     ),
     'NOT_DOG_SKIN': (
-        "This does not appear to show dog skin. Please upload a close-up photo "
-        "of your dog's affected skin."
+        'No dog is visible in this photo. Please upload a photo that clearly '
+        'shows your dog.'
     ),
     'NO_VISIBLE_LESIONS': (
-        'The skin appears healthy in this photo, with no obvious signs of the skin '
-        'conditions this screening can assess. This does not rule out a skin '
-        'condition; consult a veterinarian if you are concerned.'
+        'No visible skin concerns are apparent in this photo. This does not rule '
+        'out a skin condition; consult a veterinarian if you are concerned.'
     ),
     'WOUND_OR_INJURY': (
         'This photo appears more consistent with a wound or injury than the skin '
         'conditions this screening can assess. A veterinarian should evaluate it.'
     ),
     'UNCERTAIN': (
-        'The photo could not be confidently assessed for screening. Please upload '
-        'a clearer or more suitable photo, or consult a veterinarian.'
+        'A dog is visible, but its skin cannot be assessed, such as when fur covers '
+        'it. Screening stops. Please try a clear close-up with the fur gently parted.'
     ),
 }
 
@@ -105,6 +104,8 @@ SYSTEM_PROMPT = (
     'Recommend professional veterinary evaluation when appropriate. '
     'Never prescribe medication or a treatment plan. Record every finding '
     'through the provided tool.'
+    ' Distinguish dog presence from visible skin: fur covering a visible dog is '
+    'not evidence that the photo contains no dog.'
 )
 
 USER_PROMPT = (
@@ -112,9 +113,11 @@ USER_PROMPT = (
     'choose image_suitability and screening_eligibility. Use SUITABLE and '
     'ELIGIBLE only when the photo is clear enough and shows a pattern that '
     'could be one of the supported canine skin conditions. Use POOR_QUALITY '
-    'for blurred or poorly lit photos. Use NOT_DOG_SKIN when the photo does not '
-    'contain a dog or no canine skin is visible. Use NO_VISIBLE_LESIONS only '
-    'when canine skin is clearly visible and appears normal, with no wound, '
+    'for blurred or poorly lit photos. Use NOT_DOG_SKIN only when no dog is '
+    'visible. A visible dog whose skin is covered by fur, out of frame, or '
+    'otherwise not assessable must use UNCERTAIN, not NOT_DOG_SKIN or '
+    'NO_VISIBLE_LESIONS. Use NO_VISIBLE_LESIONS only when canine skin is clearly '
+    'visible, the image is adequate, and the skin appears normal with no wound, '
     'cut, injury, or visible lesion. A wound, cut, or injury is not healthy '
     'skin and must use WOUND_OR_INJURY. Use UNCERTAIN when the image cannot be '
     'confidently assessed. All non-SUITABLE '
@@ -164,9 +167,11 @@ FINDINGS_TOOL = {
                     'Whether the photo is suitable for canine skin disease '
                     'screening. Use SUITABLE only when the image is adequate and '
                     'shows a pattern that could be one of the supported conditions. '
-                    'Use NOT_DOG_SKIN when no dog or no canine skin is visible. Use '
-                    'NO_VISIBLE_LESIONS only when canine skin is clearly visible and '
-                    'appears normal, with no wound, cut, injury, or lesion. Use '
+                    'Use NOT_DOG_SKIN only when no dog is visible. If a dog is '
+                    'visible but its skin is obscured by fur or otherwise cannot be '
+                    'assessed, use UNCERTAIN. Use NO_VISIBLE_LESIONS only when '
+                    'canine skin is clearly visible, image quality is adequate, and '
+                    'it appears normal, with no wound, cut, injury, or lesion. Use '
                     'WOUND_OR_INJURY for a wound, cut, or injury; never describe a '
                     'wound as healthy.'
                 ),
@@ -384,6 +389,10 @@ def _normalize_result(tool_input: dict) -> dict:
     elif image_suitability == 'POOR_QUALITY' and adequate:
         raise MalformedClaudeResponse(
             'A POOR_QUALITY image cannot have adequate image quality.',
+        )
+    elif image_suitability == 'NO_VISIBLE_LESIONS' and not adequate:
+        raise MalformedClaudeResponse(
+            'NO_VISIBLE_LESIONS requires clearly visible skin and adequate image quality.',
         )
 
     vet_recommendation = _text(

@@ -25,6 +25,7 @@ EXPECTED_PUBLIC_FIELDS = {
     'color',
     'profile_picture',
     'owner_contact_number',
+    'vaccinations',
     'vaccination_statuses',
 }
 
@@ -201,7 +202,7 @@ class PublicPetAPITest(TestCase):
         response = self.client.get(self._url(self.pet.pet_qr_code))
         self.assertEqual(response.status_code, 404)
 
-    def test_public_profile_exposes_only_vaccination_statuses(self):
+    def test_public_profile_exposes_vaccination_list_and_status_summaries(self):
         today = date.today()
         for name, next_due in [
             ('Current shot', today + timedelta(days=200)),
@@ -218,7 +219,7 @@ class PublicPetAPITest(TestCase):
                 vac_next_due=next_due,
             )
 
-        # Owner-reported data is also summarized without exposing its details.
+        # Owner-reported entries are public but clearly identified as such.
         VaccinationRecord.objects.filter(vac_name='Overdue shot').update(vac_source='OWNER')
 
         response = self.client.get(self._url(self.pet.pet_qr_code))
@@ -228,10 +229,17 @@ class PublicPetAPITest(TestCase):
             response.data['vaccination_statuses'],
             ['OVERDUE', 'DUE_SOON', 'CURRENT', 'NO_DUE_DATE'],
         )
-        self.assertNotIn('vaccinations', response.data)
-        self.assertNotIn('Overdue shot', response.content.decode())
-        self.assertNotIn('next_due', response.content.decode())
-        self.assertNotIn('date_given', response.content.decode())
+        vaccination = next(
+            item for item in response.data['vaccinations']
+            if item['name'] == 'Overdue shot'
+        )
+        self.assertEqual(vaccination['source'], 'OWNER')
+        self.assertEqual(vaccination['status'], 'OVERDUE')
+        self.assertEqual(vaccination['date_given'], (today - timedelta(days=400)).isoformat())
+        self.assertEqual(vaccination['next_due'], (today - timedelta(days=10)).isoformat())
+        self.assertNotIn('vac_batch_no', response.content.decode())
+        self.assertNotIn('vac_dose', response.content.decode())
+        self.assertNotIn('vac_notes', response.content.decode())
 
     def test_public_status_uses_only_latest_dose_in_each_series(self):
         today = date.today()
@@ -259,7 +267,18 @@ class PublicPetAPITest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['vaccination_statuses'], ['CURRENT'])
-        self.assertNotIn('Rabies', response.content.decode())
+        self.assertEqual(len(response.data['vaccinations']), 2)
+        latest = next(
+            item for item in response.data['vaccinations']
+            if item['is_latest_in_series']
+        )
+        historical = next(
+            item for item in response.data['vaccinations']
+            if not item['is_latest_in_series']
+        )
+        self.assertEqual(latest['name'], 'Rabies')
+        self.assertEqual(latest['status'], 'CURRENT')
+        self.assertIsNone(historical['status'])
 
 
 class QRPublicUrlTest(TestCase):

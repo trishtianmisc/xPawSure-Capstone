@@ -118,7 +118,7 @@ export default function CaptureScreen() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: false,
+        allowsEditing: true,
         allowsMultipleSelection: false,
         quality: 1,
         exif: false,
@@ -138,7 +138,7 @@ export default function CaptureScreen() {
     setPickerLoading(true)
     try {
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
+        allowsEditing: true,
         quality: 1,
         exif: false,
       })
@@ -400,7 +400,7 @@ export default function CaptureScreen() {
           </View>
           <Text style={styles.slotHint}>
             One photo is checked first for screening suitability, then analyzed on-device
-            only if it is eligible.
+            only if it is eligible. You can crop the photo to focus on the affected skin area.
           </Text>
         </View>
 

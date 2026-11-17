@@ -10,6 +10,16 @@ const APPOINTMENT_STATUS_COLORS: Record<string, string> = {
   NO_SHOW: 'bg-stone-100 text-stone-800 dark:bg-stone-700 dark:text-stone-300',
 }
 
+const APPOINTMENT_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Awaiting confirmation',
+  CONFIRMED: 'Confirmed',
+  CHECKED_IN: 'Checked in',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+  NO_SHOW: 'No show',
+}
+
 function Metric({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-md border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-800">
@@ -80,12 +90,14 @@ export function ClinicOverviewTab({ clinicId }: { clinicId: string }) {
             <p className="mt-4 text-sm text-stone-400 dark:text-stone-500">No appointments yet.</p>
           ) : (
             <div className="mt-4 flex flex-wrap gap-2">
-              {Object.entries(data.appointments.by_status).map(([status, count]) => (
+              {Object.entries(data.appointments.by_status)
+                .filter(([status]) => status !== 'REVIEW')
+                .map(([status, count]) => (
                 <span
                   key={status}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${APPOINTMENT_STATUS_COLORS[status] ?? 'bg-stone-100 text-stone-700 dark:bg-stone-700 dark:text-stone-300'}`}
                 >
-                  {status.replace('_', ' ')}
+                  {APPOINTMENT_STATUS_LABELS[status] ?? status.replaceAll('_', ' ').toLowerCase()}
                   <span className="font-bold">{count as number}</span>
                 </span>
               ))}

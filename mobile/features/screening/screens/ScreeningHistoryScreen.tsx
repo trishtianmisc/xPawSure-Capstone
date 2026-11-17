@@ -14,10 +14,10 @@ export default function ScreeningHistoryScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const styles = useMemo(() => createStyles(colors), [colors])
-  const { data, isLoading, isError, refetch } = useAllScreenings()
+  const { petId, petName } = useLocalSearchParams<{ petId?: string; petName?: string }>()
+  const { data, isLoading, isError, refetch } = useAllScreenings(petId)
   const refreshScreenings = useCallback(() => refetch(), [refetch])
   const { refreshing, onRefresh } = usePullToRefresh(refreshScreenings)
-  const { petId } = useLocalSearchParams<{ petId?: string }>()
 
   const handleBack = () => {
     if (petId) {
@@ -37,7 +37,9 @@ export default function ScreeningHistoryScreen() {
         <Pressable onPress={handleBack} style={styles.headerBack}>
           <MaterialCommunityIcons color={colors.text} name="arrow-left" size={22} />
         </Pressable>
-        <Text style={styles.headerTitle}>Screening History</Text>
+        <Text style={styles.headerTitle}>
+          {petId ? `${petName || 'Pet'}'s Screening History` : 'Screening History'}
+        </Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -108,7 +110,10 @@ export default function ScreeningHistoryScreen() {
             <Text style={styles.statusText}>No screenings yet.</Text>
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push('/(owner)/pets/screening', { withAnchor: true })}
+              onPress={() => router.push({
+                pathname: '/(owner)/pets/screening',
+                params: petId ? { petId } : undefined,
+              }, { withAnchor: true })}
               style={styles.emptyButton}
             >
               <Text style={styles.emptyButtonText}>Start a skin screening</Text>
