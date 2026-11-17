@@ -41,6 +41,7 @@ SUPPORTED_VET_DIAGNOSES = {
     'HOTSPOT': 'Hotspot',
     'MANGE': 'Mange',
 }
+OTHER_VET_DIAGNOSIS_CODE = 'OTHER'
 MAX_OUTCOME_EXPORT_IMAGES = 50
 MAX_OUTCOME_EXPORT_BYTES = 50 * 1024 * 1024
 
@@ -156,7 +157,7 @@ class PlatformAnalyticsService:
         appointments = Appointment.objects.filter(
             cln_id=clinic_id,
             apt_deleted_at__isnull=True,
-        )
+        ).exclude(apt_status=AppointmentStatus.REVIEW)
         pets = Pet.objects.filter(
             appointments__cln_id_id=clinic_id,
             appointments__apt_deleted_at__isnull=True,
@@ -188,7 +189,11 @@ class PlatformAnalyticsService:
             'pets': pets.count(),
             'appointments': {
                 'total': appointments.count(),
-                'by_status': _status_counts(appointments, 'apt_status', AppointmentStatus),
+                'by_status': _status_counts(
+                    appointments,
+                    'apt_status',
+                    [choice for choice in AppointmentStatus if choice != AppointmentStatus.REVIEW],
+                ),
                 'this_month': appointments.filter(apt_created_at__gte=month_start).count(),
             },
             'consultations': Consultation.objects.filter(apt_id__cln_id=clinic_id).count(),
@@ -497,6 +502,8 @@ class CrossClinicReadService:
         queryset = Appointment.objects.filter(
             cln_id=clinic_id,
             apt_deleted_at__isnull=True,
+        ).exclude(
+            apt_status=AppointmentStatus.REVIEW,
         ).select_related('pet_id__own_id__usr_id', 'stf_id__usr_id')
 
         if status:
@@ -957,7 +964,7 @@ class DiseaseReportService:
 
 
 class ConsultationOutcomeReportService:
-    """Read-only cases where a supported vet diagnosis can be compared to AI."""
+    """Read-only AI prediction comparisons with consultation diagnoses."""
 
     @staticmethod
     def _queryset(*, clinic_id=None, disease_code=None, outcome=None,
@@ -968,21 +975,39 @@ class ConsultationOutcomeReportService:
             con_id__apt_id__apt_deleted_at__isnull=True,
             image__isnull=False,
             ais_compared_at__isnull=False,
-        )
-        diagnosis_filter = Q()
-        for label in SUPPORTED_VET_DIAGNOSES.values():
-            diagnosis_filter |= Q(con_id__con_diagnosis__iexact=label)
-        queryset = queryset.filter(diagnosis_filter)
+        ).annotate(
+            vet_diagnosis_key=Lower(Trim('con_id__con_diagnosis')),
+        ).exclude(vet_diagnosis_key='')
+
+        supported_diagnoses = [
+            label.casefold() for label in SUPPORTED_VET_DIAGNOSES.values()
+        ]
+        supported_filter = Q(vet_diagnosis_key__in=supported_diagnoses)
 
         if clinic_id:
             queryset = queryset.filter(con_id__apt_id__cln_id_id=clinic_id)
-        if disease_code:
+        if disease_code == OTHER_VET_DIAGNOSIS_CODE:
+            queryset = queryset.exclude(supported_filter)
+        elif disease_code:
             label = SUPPORTED_VET_DIAGNOSES[disease_code]
-            queryset = queryset.filter(con_id__con_diagnosis__iexact=label)
+            queryset = queryset.filter(vet_diagnosis_key=label.casefold())
+
         if outcome == 'matched':
-            queryset = queryset.filter(ais_is_correct=True)
+            if disease_code == OTHER_VET_DIAGNOSIS_CODE:
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(supported_filter, ais_is_correct=True)
         elif outcome == 'not_matched':
-            queryset = queryset.filter(ais_is_correct=False)
+            if disease_code == OTHER_VET_DIAGNOSIS_CODE:
+                # The on-device classifier only supports the five known labels,
+                # so a different vet diagnosis is an out-of-class mismatch.
+                pass
+            elif disease_code:
+                queryset = queryset.filter(ais_is_correct=False)
+            else:
+                queryset = queryset.filter(
+                    (supported_filter & Q(ais_is_correct=False)) | ~supported_filter,
+                )
         if date_from:
             queryset = queryset.filter(con_id__con_created_at__gte=date_from)
         if date_to:
@@ -1022,7 +1047,15 @@ class ConsultationOutcomeReportService:
                 'ai_prediction_code': screening.dis_id.dis_code,
                 'confidence': float(screening.ais_confidence),
                 'model_version': screening.ais_model_version,
-                'outcome': 'matched' if screening.ais_is_correct else 'not_matched',
+                'outcome': (
+                    'matched'
+                    if (
+                        screening.ais_is_correct
+                        and screening.con_id.con_diagnosis.strip().casefold()
+                        in {label.casefold() for label in SUPPORTED_VET_DIAGNOSES.values()}
+                    )
+                    else 'not_matched'
+                ),
                 'image_url': screening.image.asi_url,
             })
 

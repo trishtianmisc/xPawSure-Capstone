@@ -21,6 +21,7 @@ const DISEASES = [
   { code: 'FUNGAL', label: 'Fungal' },
   { code: 'HOTSPOT', label: 'Hotspot' },
   { code: 'MANGE', label: 'Mange' },
+  { code: 'OTHER', label: 'Other skin disease' },
 ]
 
 const OUTCOMES: { key: ConsultationOutcome; label: string }[] = [
@@ -76,20 +77,26 @@ export function ConsultationOutcomesTab({ params }: ConsultationOutcomesTabProps
     <div className="space-y-5">
       <p className="rounded-lg bg-stone-100 px-4 py-3 text-sm text-stone-600 dark:bg-stone-800 dark:text-stone-300">
         AI prediction is compared with the veterinarian’s primary diagnosis. Claude results are not used.
-        Only linked consultations in the five supported disease categories with an image are included.
+        Includes linked consultations for the five supported classes and other vet diagnoses, with images.
       </p>
 
       <Card padding="md">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex gap-2" role="tablist" aria-label="Consultation outcome">
-            {OUTCOMES.map((item) => (
+            {OUTCOMES.map((item) => {
+              const disabled = diseaseCode === 'OTHER' && item.key === 'matched'
+              return (
               <button
                 key={item.key}
                 aria-selected={outcome === item.key}
-                className={`rounded-lg px-4 py-2 text-sm font-semibold ${outcome === item.key
+                aria-disabled={disabled}
+                className={`rounded-lg px-4 py-2 text-sm font-semibold ${disabled
+                  ? 'cursor-not-allowed text-stone-300 dark:text-stone-600'
+                  : outcome === item.key
                   ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200'
                   : 'text-stone-500 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-700'
                 }`}
+                disabled={disabled}
                 onClick={() => {
                   setOutcome(item.key)
                   setPage(1)
@@ -99,7 +106,8 @@ export function ConsultationOutcomesTab({ params }: ConsultationOutcomesTabProps
               >
                 {item.label}
               </button>
-            ))}
+              )
+            })}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -110,6 +118,7 @@ export function ConsultationOutcomesTab({ params }: ConsultationOutcomesTabProps
               value={diseaseCode}
               onChange={(event) => {
                 setDiseaseCode(event.target.value)
+                if (event.target.value === 'OTHER') setOutcome('not_matched')
                 setPage(1)
               }}
             >
@@ -132,6 +141,11 @@ export function ConsultationOutcomesTab({ params }: ConsultationOutcomesTabProps
           Choose a disease to download its {outcome === 'matched' ? 'matched' : 'not matched'} cases and images.
           Each ZIP includes a CSV manifest. Downloads are limited to 50 images / 50 MB.
         </p>
+        {diseaseCode === 'OTHER' && (
+          <p className="mt-1 text-xs text-stone-500 dark:text-stone-400">
+            Diagnoses outside the five model classes are grouped as not matched.
+          </p>
+        )}
       </Card>
 
       {downloadError && <Alert variant="error">{downloadError}</Alert>}

@@ -2741,11 +2741,13 @@ case-insensitively, top 20), `severity_breakdown`, and a monthly `trend`.
 
 Super Admin only. Paginated, read-only comparison of the on-device AI
 prediction with the veterinarian's primary diagnosis. Claude image-review
-results are not included. Only linked consultations with an image, a saved
-comparison, and one of the five supported primary diagnoses (Allergic
-Dermatitis, Bacterial, Fungal, Hotspot, Mange) are returned. Query params:
-`clinic_id`, `disease_code`, `outcome` (`matched` or `not_matched`),
-`date_from` / `date_to` (consultation creation date), `page`, `page_size`.
+results are not included. Linked consultations with an image and a saved
+comparison are returned. `disease_code` may be `ALLERGIC_DERMATITIS`,
+`BACTERIAL`, `FUNGAL`, `HOTSPOT`, `MANGE`, or `OTHER`. `OTHER` includes primary
+vet diagnoses outside the five supported classifier classes and appears only
+under `not_matched`. Query params: `clinic_id`, `disease_code`, `outcome`
+(`matched` or `not_matched`), `date_from` / `date_to` (consultation creation
+date), `page`, `page_size`.
 
 ## POST /api/super-admin/analytics/consultation-outcomes/
 

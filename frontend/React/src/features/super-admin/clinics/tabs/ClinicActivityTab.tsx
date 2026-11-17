@@ -14,6 +14,25 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
   NO_SHOW: 'default',
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  PENDING: 'Awaiting confirmation',
+  CONFIRMED: 'Confirmed',
+  CHECKED_IN: 'Checked in',
+  IN_PROGRESS: 'In progress',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+  NO_SHOW: 'No show',
+  REVIEW: 'Awaiting scheduling',
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  CONSULTATION: 'Consultation',
+  FOLLOW_UP: 'Follow-up',
+  VACCINATION: 'Vaccination',
+  AI_REVIEW: 'AI review',
+  EMERGENCY: 'Emergency',
+}
+
 export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
   return (
     <ReadTab
@@ -26,12 +45,18 @@ export function ClinicActivityTab({ clinicId }: { clinicId: string }) {
         },
         { key: 'owner_name', label: 'Owner' },
         { key: 'veterinarian_name', label: 'Veterinarian' },
-        { key: 'type', label: 'Type' },
+        {
+          key: 'type',
+          label: 'Type',
+          render: (row) => TYPE_LABELS[row.type] ?? row.type.replaceAll('_', ' ').toLowerCase(),
+        },
         {
           key: 'status',
           label: 'Status',
           render: (row) => (
-            <Badge variant={STATUS_VARIANTS[row.status] ?? 'default'}>{row.status.replace('_', ' ')}</Badge>
+            <Badge variant={STATUS_VARIANTS[row.status] ?? 'default'}>
+              {STATUS_LABELS[row.status] ?? row.status.replaceAll('_', ' ').toLowerCase()}
+            </Badge>
           ),
         },
         {

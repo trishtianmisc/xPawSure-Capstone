@@ -36,6 +36,13 @@ const STATUS_VARIANTS: Record<string, 'success' | 'warning' | 'error' | 'info' |
   ARCHIVED: 'default',
 }
 
+const CLINIC_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: 'Active',
+  INACTIVE: 'Inactive',
+  SUSPENDED: 'Suspended',
+  ARCHIVED: 'Archived',
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="sm:grid sm:grid-cols-3 sm:gap-4 sm:px-0">
@@ -156,18 +163,31 @@ export function ClinicDetailPage() {
     <DashboardLayout>
       <div className="mx-auto max-w-6xl">
         <div className="mb-8">
-          <div className="rounded-md bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
-            <div>
-              <h1 className="truncate text-3xl font-bold tracking-tight text-white">
-                {clinic.name}
-              </h1>
-              <div className="mt-2 flex items-center gap-3">
+          <div className="rounded-2xl bg-gradient-to-br from-amber-900 to-amber-950 p-7 sm:p-9">
+            <button
+              className="mb-5 flex items-center gap-2 text-sm font-semibold text-amber-200/80 transition hover:text-white"
+              onClick={() => navigate('/super-admin/clinics')}
+              type="button"
+            >
+              <span aria-hidden="true">←</span>
+              Back to clinics
+            </button>
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-200/70">
+                  Clinic profile
+                </p>
+                <h1 className="mt-1 break-words text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+                  {clinic.name}
+                </h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
                 <Badge variant={STATUS_VARIANTS[clinic.status] ?? 'default'}>
-                  {clinic.status}
+                  {CLINIC_STATUS_LABELS[clinic.status] ?? clinic.status}
                 </Badge>
                 {clinic.license_number && (
-                  <span className="text-sm text-amber-200/70">
-                    License: {clinic.license_number}
+                  <span className="rounded-full border border-amber-200/20 bg-white/5 px-3 py-1.5 text-sm text-amber-100/80">
+                    License {clinic.license_number}
                   </span>
                 )}
               </div>
